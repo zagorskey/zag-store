@@ -8,10 +8,14 @@
 import SwiftUI
 import CoreData
 import NimbleViews
+import NukeUI
 
 // MARK: - View
 struct LibraryView: View {
 	@StateObject var downloadManager = DownloadManager.shared
+	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	@StateObject private var updateManager = UpdateManager.shared
+	@State private var _updatePulse = false
 	
 	@State private var _selectedInfoAppPresenting: AnyApp?
 	@State private var _selectedSigningAppPresenting: AnyApp?
@@ -63,14 +67,18 @@ struct LibraryView: View {
 	var body: some View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
+			if !updateManager.updates.isEmpty {
+				FeatherUpdatesSection(
+					updates: updateManager.updates,
+					isPulsing: $_updatePulse
+				)
+			}
+
 				if
 					!_filteredSignedApps.isEmpty,
 					_selectedScope == .all || _selectedScope == .signed
 				{
-					NBSection(
-						.localized("Signed"),
-						secondary: _filteredSignedApps.count.description
-					) {
+					Section {
 						ForEach(_filteredSignedApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
@@ -81,6 +89,11 @@ struct LibraryView: View {
 							)
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
 						}
+					} header: {
+						FeatherLibraryHeader(
+							title: .localized("Signed"),
+							count: _filteredSignedApps.count
+						)
 					}
 				}
 				
@@ -88,10 +101,7 @@ struct LibraryView: View {
 					!_filteredImportedApps.isEmpty,
 					_selectedScope == .all || _selectedScope == .imported
 				{
-					NBSection(
-						.localized("Imported"),
-						secondary: _filteredImportedApps.count.description
-					) {
+					Section {
 						ForEach(_filteredImportedApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
@@ -102,6 +112,11 @@ struct LibraryView: View {
 							)
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
 						}
+					} header: {
+						FeatherLibraryHeader(
+							title: .localized("Imported"),
+							count: _filteredImportedApps.count
+						)
 					}
 				}
 			}
@@ -196,7 +211,19 @@ struct LibraryView: View {
 					}
 				}
 			}
-			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { _ in
+			.task {
+			_updateRepositoryUpdates()
+		}
+		.onReceive(sourcesViewModel.$sources) { _ in
+			_updateRepositoryUpdates()
+		}
+		.onChange(of: _signedApps.map { $0.uuid }) { _ in
+			_updateRepositoryUpdates()
+		}
+		.onChange(of: _importedApps.map { $0.uuid }) { _ in
+			_updateRepositoryUpdates()
+		}
+		.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { _ in
 				if let latest = _signedApps.first {
 					_selectedInstallAppPresenting = AnyApp(base: latest)
 				}
@@ -212,6 +239,14 @@ struct LibraryView: View {
 
 // MARK: - Extension: View
 extension LibraryView {
+	private func _updateRepositoryUpdates() {
+		UpdateManager.shared.refresh(
+			repositories: Array(sourcesViewModel.sources.values),
+			signedApps: Array(_signedApps),
+			importedApps: Array(_importedApps)
+		)
+	}
+
 	@ViewBuilder
 	private func _importActions() -> some View {
 		Button(.localized("Import from Files"), systemImage: "folder") {
@@ -269,5 +304,142 @@ extension LibraryView {
 			case .imported: return .localized("Imported")
 			}
 		}
+	}
+}
+
+
+// MARK: - Repository Updates UI
+
+private struct FeatherUpdatesHeader: View {
+	let count: Int
+	@Binding var isPulsing: Bool
+
+	var body: some View {
+		HStack(spacing: 8) {
+			Circle()
+				.fill(Color.green)
+				.frame(width: 9, height: 9)
+				.opacity(isPulsing ? 1.0 : 0.25)
+				.scaleEffect(isPulsing ? 1.0 : 0.78)
+				.shadow(
+					color: Color.green.opacity(isPulsing ? 0.65 : 0),
+					radius: 4
+				)
+
+			Text(.localized("Updates Available"))
+
+			FeatherLabCountBadge(count: count)
+
+			Spacer(minLength: 0)
+		}
+		.onAppear {
+			isPulsing = false
+
+			withAnimation(
+				.easeInOut(duration: 0.8)
+					.repeatForever(autoreverses: true)
+			) {
+				isPulsing = true
+			}
+		}
+	}
+}
+
+
+private struct FeatherUpdateRow: View {
+	let update: UpdateManager.AvailableUpdate
+
+	var body: some View {
+		HStack(spacing: 12) {
+			appIcon
+
+			VStack(alignment: .leading, spacing: 4) {
+				Text(update.app.currentName)
+					.font(.headline)
+
+				Text("\(update.installedVersion) → \(update.availableVersion)")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+
+			Spacer()
+
+			DownloadButtonView(
+				app: update.app,
+				title: .localized("Update")
+			)
+		}
+	}
+
+	@ViewBuilder
+	private var appIcon: some View {
+		LazyImage(url: update.app.iconURL) { state in
+			if let image = state.image {
+				image
+					.resizable()
+					.aspectRatio(contentMode: .fill)
+			} else {
+				Image(systemName: "app.fill")
+					.resizable()
+					.scaledToFit()
+					.padding(10)
+					.foregroundStyle(.secondary)
+					.background(Color(uiColor: .secondarySystemBackground))
+			}
+		}
+		.frame(width: 48, height: 48)
+		.clipShape(
+			RoundedRectangle(
+				cornerRadius: 11,
+				style: .continuous
+			)
+		)
+	}
+}
+
+
+private struct FeatherUpdatesSection: View {
+	let updates: [UpdateManager.AvailableUpdate]
+	@Binding var isPulsing: Bool
+
+	var body: some View {
+		Section {
+			ForEach(updates) { update in
+				FeatherUpdateRow(update: update)
+			}
+		} header: {
+			FeatherUpdatesHeader(
+				count: updates.count,
+				isPulsing: $isPulsing
+			)
+		}
+	}
+}
+
+
+private struct FeatherLibraryHeader: View {
+	let title: String
+	let count: Int
+
+	var body: some View {
+		FeatherLabSectionHeader(
+			title: title,
+			count: count
+		)
+	}
+}
+
+private struct FeatherCountBadge: View {
+	let count: Int
+
+	var body: some View {
+		Text(count.description)
+			.font(.system(size: 14, weight: .bold))
+			.foregroundStyle(Color.white)
+			.frame(width: 22, height: 22)
+			.background(
+				Circle()
+					.fill(Color.red)
+			)
 	}
 }

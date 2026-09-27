@@ -88,6 +88,12 @@ struct AppearanceView: View {
 				.labelsHidden()
 				.pickerStyle(.inline)
 			}
+
+			NBSection("Developer") {
+				NavigationLink(destination: UILabView()) {
+					Label("UI Lab", systemImage: "slider.horizontal.3")
+				}
+			}
 		}
 		.onChange(of: _userIntefacerStyle) { value in
 			if let style = UIUserInterfaceStyle(rawValue: value) {

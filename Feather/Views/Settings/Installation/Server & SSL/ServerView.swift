@@ -53,7 +53,6 @@ struct ServerView: View {
 	private let _serverMethods: [String] = [.localized("Fully Local"), .localized("Semi Local")]
 	
 	private let _dataService = NBFetchService()
-	private let _serverPackUrl = "https://backloop.dev/pack.json"
 	
 	// MARK: Body
 	var body: some View {
@@ -69,24 +68,17 @@ struct ServerView: View {
 			}
 			
 			Section {
-				Button(.localized("Update SSL Certificates"), systemImage: "arrow.down.doc") {
-					FR.downloadSSLCertificates(from: _serverPackUrl) { success in
-						if success {
-							DispatchQueue.main.async {
-								UIAlertController.showAlertWithOk(
-									title: .localized("SSL Certificates"),
-									message: .localized("Certificates updated successfully.")
-								)
-							}
-						} else {
-							DispatchQueue.main.async {
-								UIAlertController.showAlertWithOk(
-									title: .localized("SSL Certificates"),
-									message: .localized("Failed to download, check your internet connection and try again.")
-								)
-							}
+				Button(.localized("Restore Local SSL Certificate"), systemImage: "arrow.counterclockwise") {
+					let fm = FileManager.default
+					if let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
+						for name in ["server.crt", "server.pem", "commonName.txt"] {
+							try? fm.removeItem(at: documents.appendingPathComponent(name))
 						}
 					}
+					UIAlertController.showAlertWithOk(
+						title: .localized("SSL Certificates"),
+						message: .localized("Local SSL certificate restored successfully.")
+					)
 				}
 			}
 		}

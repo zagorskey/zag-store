@@ -12,6 +12,7 @@ import NimbleViews
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
+	var title: String = .localized("Get")
 	@ObservedObject private var downloadManager = DownloadManager.shared
 
 	@State private var downloadProgress: Double = 0
@@ -44,7 +45,7 @@ struct DownloadButtonView: View {
 						_ = downloadManager.startDownload(from: url, id: app.currentUniqueId)
 					}
 				} label: {
-					Text(.localized("Get"))
+					Text(title)
 						.lineLimit(0)
 						.font(.headline.bold())
 						.foregroundStyle(Color.accentColor)

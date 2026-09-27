@@ -79,3 +79,146 @@ final class SourcesViewModel: ObservableObject {
 		}
 	}
 }
+
+// MARK: - Petar: Repository Update Detection
+
+@MainActor
+final class UpdateManager: ObservableObject {
+	static let shared = UpdateManager()
+
+	struct AvailableUpdate: Identifiable {
+		let app: ASRepository.App
+		let source: ASRepository
+		let installedVersion: String
+		let availableVersion: String
+
+		var id: String {
+			app.id ?? app.currentUniqueId
+		}
+	}
+
+	@Published private(set) var updates: [AvailableUpdate] = []
+
+	var updateCount: Int {
+		updates.count
+	}
+
+	private init() {}
+
+	func refresh(
+		repositories: [ASRepository],
+		signedApps: [Signed],
+		importedApps: [Imported]
+	) {
+		var localVersions: [String: String] = [:]
+
+		for app in signedApps {
+			_addLocalVersion(
+				identifier: app.identifier,
+				version: app.version,
+				to: &localVersions
+			)
+		}
+
+		for app in importedApps {
+			_addLocalVersion(
+				identifier: app.identifier,
+				version: app.version,
+				to: &localVersions
+			)
+		}
+
+		var foundUpdates: [AvailableUpdate] = []
+		var seenIdentifiers = Set<String>()
+
+		for repository in repositories {
+			for app in repository.apps {
+				guard
+					let identifier = app.id,
+					!identifier.isEmpty,
+					let availableVersion = app.currentVersion,
+					!availableVersion.isEmpty,
+					let installedVersion = localVersions[identifier],
+					_compareVersions(availableVersion, installedVersion) == .orderedDescending
+				else {
+					continue
+				}
+
+				guard seenIdentifiers.insert(identifier).inserted else {
+					continue
+				}
+
+				foundUpdates.append(
+					AvailableUpdate(
+						app: app,
+						source: repository,
+						installedVersion: installedVersion,
+						availableVersion: availableVersion
+					)
+				)
+			}
+		}
+
+		updates = foundUpdates.sorted {
+			$0.app.currentName.localizedCaseInsensitiveCompare(
+				$1.app.currentName
+			) == .orderedAscending
+		}
+
+		print("[Feather Updates] Check complete: \(updates.count) update(s)")
+
+		for update in updates {
+			print(
+				"[Feather Updates] \(update.app.currentName): " +
+				"\(update.installedVersion) -> \(update.availableVersion)"
+			)
+		}
+	}
+
+	func update(for identifier: String?) -> AvailableUpdate? {
+		guard let identifier else {
+			return nil
+		}
+
+		return updates.first {
+			$0.app.id == identifier
+		}
+	}
+
+	func hasUpdate(for identifier: String?) -> Bool {
+		update(for: identifier) != nil
+	}
+
+	private func _addLocalVersion(
+		identifier: String?,
+		version: String?,
+		to versions: inout [String: String]
+	) {
+		guard
+			let identifier,
+			!identifier.isEmpty,
+			let version,
+			!version.isEmpty
+		else {
+			return
+		}
+
+		if let existing = versions[identifier] {
+			if _compareVersions(version, existing) == .orderedDescending {
+				versions[identifier] = version
+			}
+		} else {
+			versions[identifier] = version
+		}
+	}
+
+	private func _compareVersions(
+		_ lhs: String,
+		_ rhs: String
+	) -> ComparisonResult {
+		lhs.compare(
+			rhs,
+			options: [.numeric, .caseInsensitive]
+		)
+	}
+}

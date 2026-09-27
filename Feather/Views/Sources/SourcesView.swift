@@ -59,10 +59,7 @@ struct SourcesView: View {
 						.buttonStyle(.plain)
 					}
 					
-					NBSection(
-						.localized("Repositories"),
-						secondary: _filteredSources.count.description
-					) {
+					Section {
 						ForEach(_filteredSources) { source in
 							NavigationLink {
 								SourceAppsView(object: [source], viewModel: viewModel)
@@ -71,6 +68,10 @@ struct SourcesView: View {
 							}
 							.buttonStyle(.plain)
 						}
+					} header: {
+						FeatherRepositoriesHeader(
+							count: _filteredSources.count
+						)
 					}
 				}
 			}
@@ -130,5 +131,34 @@ struct SourcesView: View {
 				)
 			}
 		#endif
+	}
+}
+
+
+// MARK: - Repository Count Header
+
+private struct FeatherRepositoriesHeader: View {
+	let count: Int
+
+	var body: some View {
+		FeatherLabSectionHeader(
+			title: .localized("Repositories"),
+			count: count
+		)
+	}
+}
+
+private struct FeatherRepositoriesCountBadge: View {
+	let count: Int
+
+	var body: some View {
+		Text(count.description)
+			.font(.system(size: 14, weight: .bold))
+			.foregroundStyle(Color.white)
+			.frame(width: 22, height: 22)
+			.background(
+				Circle()
+					.fill(Color.red)
+			)
 	}
 }

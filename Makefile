@@ -15,13 +15,11 @@ clean:
 	rm -rf Payload
 
 deps:
-	rm -rf deps || true
-	mkdir -p deps
-
-	curl -fsSL "$(CERT_JSON_URL)" -o cert.json
-	jq -r '.cert' cert.json > deps/server.crt
-	jq -r '.key1, .key2' cert.json > deps/server.pem
-	jq -r '.info.domains.commonName' cert.json > deps/commonName.txt
+	@test -f deps/server.crt || (echo "Missing deps/server.crt" && exit 1)
+	@test -f deps/server.pem || (echo "Missing deps/server.pem" && exit 1)
+	@test -f deps/commonName.txt || (echo "Missing deps/commonName.txt" && exit 1)
+	@echo "Using Petar Feather private TLS certificate"
+	@echo "Hostname: $$(cat deps/commonName.txt)"
 
 
 $(PLATFORMS): deps
