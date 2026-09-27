@@ -69,7 +69,7 @@ struct SourcesView: View {
 							.buttonStyle(.plain)
 						}
 					} header: {
-						FeatherRepositoriesHeader(
+						ZagRepositoriesHeader(
 							count: _filteredSources.count
 						)
 					}
@@ -137,18 +137,18 @@ struct SourcesView: View {
 
 // MARK: - Repository Count Header
 
-private struct FeatherRepositoriesHeader: View {
+private struct ZagRepositoriesHeader: View {
 	let count: Int
 
 	var body: some View {
-		FeatherLabSectionHeader(
+		ZagSectionHeader(
 			title: .localized("Repositories"),
 			count: count
 		)
 	}
 }
 
-private struct FeatherRepositoriesCountBadge: View {
+private struct ZagRepositoriesCountBadge: View {
 	let count: Int
 
 	var body: some View {

@@ -1,7 +1,7 @@
 import SwiftUI
 import NimbleViews
 
-struct UILabView: View {
+struct ZagStoreDesignerView: View {
 	// MARK: - Badges
 
 	@AppStorage("petar.uiLab.badgeSize")
@@ -61,7 +61,7 @@ struct UILabView: View {
 	private var updatePulseSpeed: Double = 0.8
 
 	var body: some View {
-		NBList("UI Lab") {
+		NBList("Zag Store Designer") {
 			previewSection
 			badgeSection
 			headerSection
@@ -280,7 +280,7 @@ struct UILabView: View {
 	private var resetSection: some View {
 		Section {
 			Button(
-				"Reset UI Lab",
+				"Reset Designer",
 				role: .destructive
 			) {
 				resetDefaults()

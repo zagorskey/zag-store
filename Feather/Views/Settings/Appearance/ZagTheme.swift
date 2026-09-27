@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum FeatherUIStyle {
+enum ZagTheme {
 	// MARK: Badge
 
 	static var badgeSize: Double {

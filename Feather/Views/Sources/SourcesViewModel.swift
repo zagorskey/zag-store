@@ -165,11 +165,11 @@ final class UpdateManager: ObservableObject {
 			) == .orderedAscending
 		}
 
-		print("[Feather Updates] Check complete: \(updates.count) update(s)")
+		print("[Zag Store Updates] Check complete: \(updates.count) update(s)")
 
 		for update in updates {
 			print(
-				"[Feather Updates] \(update.app.currentName): " +
+				"[Zag Store Updates] \(update.app.currentName): " +
 				"\(update.installedVersion) -> \(update.availableVersion)"
 			)
 		}

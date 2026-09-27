@@ -89,9 +89,9 @@ struct AppearanceView: View {
 				.pickerStyle(.inline)
 			}
 
-			NBSection("Developer") {
-				NavigationLink(destination: UILabView()) {
-					Label("UI Lab", systemImage: "slider.horizontal.3")
+			NBSection("Zag Store") {
+				NavigationLink(destination: ZagStoreDesignerView()) {
+					Label("Zag Store Designer", systemImage: "slider.horizontal.3")
 				}
 			}
 		}

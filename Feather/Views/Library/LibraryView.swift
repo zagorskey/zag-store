@@ -68,7 +68,7 @@ struct LibraryView: View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
 			if !updateManager.updates.isEmpty {
-				FeatherUpdatesSection(
+				ZagUpdatesSection(
 					updates: updateManager.updates,
 					isPulsing: $_updatePulse
 				)
@@ -90,7 +90,7 @@ struct LibraryView: View {
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
 						}
 					} header: {
-						FeatherLibraryHeader(
+						ZagLibraryHeader(
 							title: .localized("Signed"),
 							count: _filteredSignedApps.count
 						)
@@ -113,7 +113,7 @@ struct LibraryView: View {
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
 						}
 					} header: {
-						FeatherLibraryHeader(
+						ZagLibraryHeader(
 							title: .localized("Imported"),
 							count: _filteredImportedApps.count
 						)
@@ -310,7 +310,7 @@ extension LibraryView {
 
 // MARK: - Repository Updates UI
 
-private struct FeatherUpdatesHeader: View {
+private struct ZagUpdatesHeader: View {
 	let count: Int
 	@Binding var isPulsing: Bool
 
@@ -328,7 +328,7 @@ private struct FeatherUpdatesHeader: View {
 
 			Text(.localized("Updates Available"))
 
-			FeatherLabCountBadge(count: count)
+			ZagUpdateBadge(count: count)
 
 			Spacer(minLength: 0)
 		}
@@ -346,7 +346,7 @@ private struct FeatherUpdatesHeader: View {
 }
 
 
-private struct FeatherUpdateRow: View {
+private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
 
 	var body: some View {
@@ -398,17 +398,17 @@ private struct FeatherUpdateRow: View {
 }
 
 
-private struct FeatherUpdatesSection: View {
+private struct ZagUpdatesSection: View {
 	let updates: [UpdateManager.AvailableUpdate]
 	@Binding var isPulsing: Bool
 
 	var body: some View {
 		Section {
 			ForEach(updates) { update in
-				FeatherUpdateRow(update: update)
+				ZagUpdateRow(update: update)
 			}
 		} header: {
-			FeatherUpdatesHeader(
+			ZagUpdatesHeader(
 				count: updates.count,
 				isPulsing: $isPulsing
 			)
@@ -417,12 +417,12 @@ private struct FeatherUpdatesSection: View {
 }
 
 
-private struct FeatherLibraryHeader: View {
+private struct ZagLibraryHeader: View {
 	let title: String
 	let count: Int
 
 	var body: some View {
-		FeatherLabSectionHeader(
+		ZagSectionHeader(
 			title: title,
 			count: count
 		)
