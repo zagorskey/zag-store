@@ -21,6 +21,7 @@ final class SourcesViewModel: ObservableObject {
 	private let _dataService = NBFetchService()
 
 	var isFinished = true
+	@Published private(set) var isRefreshing = false
 	@Published var sources: [AltSource: ASRepository] = [:]
 
 	func fetchSources(
@@ -38,7 +39,18 @@ final class SourcesViewModel: ObservableObject {
 
 		// Prevent multiple fetches at the same time.
 		isFinished = false
-		defer { isFinished = true }
+
+		await MainActor.run {
+			self.isRefreshing = true
+		}
+
+		defer {
+			isFinished = true
+
+			Task { @MainActor in
+				self.isRefreshing = false
+			}
+		}
 
 		await MainActor.run {
 			self.sources = [:]

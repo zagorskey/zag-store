@@ -94,6 +94,34 @@ struct SourcesView: View {
 				}
 			}
 			.toolbar {
+				ToolbarItem(placement: .topBarLeading) {
+					Button {
+						Task {
+							await viewModel.fetchSources(
+								_sources,
+								refresh: true
+							)
+						}
+					} label: {
+						ZStack {
+							if viewModel.isRefreshing {
+								ProgressView()
+									.controlSize(.regular)
+							} else {
+								Image(systemName: "arrow.clockwise")
+									.font(.system(size: 17, weight: .semibold))
+							}
+						}
+						.frame(width: 22, height: 22)
+					}
+					.disabled(viewModel.isRefreshing)
+					.accessibilityLabel(
+						viewModel.isRefreshing
+							? "Refreshing Repositories"
+							: "Refresh Repositories"
+					)
+				}
+
 				NBToolbarButton(
 					systemImage: "plus",
 					style: .icon,

@@ -212,7 +212,6 @@ struct LibraryView: View {
 				}
 			}
 			.task {
-				await updateManager.requestBadgePermission()
 				_updateRepositoryUpdates()
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
