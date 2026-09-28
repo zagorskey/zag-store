@@ -1,131 +1,141 @@
 import SwiftUI
 
 enum ZagTheme {
-	// MARK: Badge
+	// MARK: - Standard Badge
 
-	static var badgeSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.badgeSize") as? Double ?? 22
+	static var standardBadgeSize: Double {
+		UserDefaults.standard.object(forKey: "zagStore.designer.standardBadge.size") as? Double ?? 22
 	}
 
-	static var badgeFontSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.badgeFontSize") as? Double ?? 14
+	static var standardBadgeFontSize: Double {
+		UserDefaults.standard.object(forKey: "zagStore.designer.standardBadge.fontSize") as? Double ?? 14
 	}
 
-	static var badgeFontWeight: Int {
-		UserDefaults.standard.object(forKey: "petar.uiLab.badgeFontWeight") as? Int ?? 6
+	static var standardBadgeColorHex: String {
+		UserDefaults.standard.string(forKey: "zagStore.designer.standardBadge.background") ?? "#8E8E93"
 	}
 
-	static var badgeColorHex: String {
-		UserDefaults.standard.string(forKey: "petar.uiLab.badgeColor") ?? "#FF3B30"
+	static var standardBadgeTextColorHex: String {
+		UserDefaults.standard.string(forKey: "zagStore.designer.standardBadge.foreground") ?? "#FFFFFF"
 	}
 
-	static var badgeTextColorHex: String {
-		UserDefaults.standard.string(forKey: "petar.uiLab.badgeTextColor") ?? "#FFFFFF"
+	// MARK: - Update Badge
+
+	static var updateBadgeSize: Double {
+		UserDefaults.standard.object(forKey: "zagStore.designer.updateBadge.size") as? Double ?? 22
 	}
 
-	// MARK: Header
+	static var updateBadgeFontSize: Double {
+		UserDefaults.standard.object(forKey: "zagStore.designer.updateBadge.fontSize") as? Double ?? 14
+	}
+
+	static var updateBadgeColorHex: String {
+		UserDefaults.standard.string(forKey: "zagStore.designer.updateBadge.background") ?? "#FF3B30"
+	}
+
+	static var updateBadgeTextColorHex: String {
+		UserDefaults.standard.string(forKey: "zagStore.designer.updateBadge.foreground") ?? "#FFFFFF"
+	}
+
+	// MARK: - Header
 
 	static var headerFontSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.headerFontSize") as? Double ?? 13
-	}
-
-	static var headerFontWeight: Int {
-		UserDefaults.standard.object(forKey: "petar.uiLab.headerFontWeight") as? Int ?? 4
+		UserDefaults.standard.object(forKey: "zagStore.designer.header.fontSize") as? Double ?? 13
 	}
 
 	static var headerColorHex: String {
-		UserDefaults.standard.string(forKey: "petar.uiLab.headerColor") ?? "#8E8E93"
+		UserDefaults.standard.string(forKey: "zagStore.designer.header.color") ?? "#8E8E93"
 	}
 
 	static var headerGap: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.headerGap") as? Double ?? 8
+		UserDefaults.standard.object(forKey: "zagStore.designer.header.gap") as? Double ?? 8
 	}
 
 	static var headerAlignment: Int {
-		UserDefaults.standard.object(forKey: "petar.uiLab.headerAlignment") as? Int ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.header.alignment") as? Int ?? 0
 	}
 
 	static var headerVerticalPadding: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.headerVerticalPadding") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.header.verticalPadding") as? Double ?? 0
 	}
 
-	// MARK: Library rows
+	// MARK: - Rows
 
 	static var rowSpacing: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowSpacing") as? Double ?? 18
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.spacing") as? Double ?? 18
 	}
 
 	static var rowIconSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowIconSize") as? Double ?? 57
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.iconSize") as? Double ?? 57
 	}
 
 	static var rowIconRadius: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowIconRadius") as? Double ?? 12
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.iconRadius") as? Double ?? 12
 	}
 
 	static var rowHorizontalPadding: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowHorizontalPadding") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.horizontalPadding") as? Double ?? 0
 	}
 
 	static var rowVerticalPadding: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowVerticalPadding") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.verticalPadding") as? Double ?? 0
 	}
 
 	static var rowMinHeight: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.rowMinHeight") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.row.minHeight") as? Double ?? 0
 	}
 
-	// MARK: Separators
+	// MARK: - Separators
 
 	static var separatorsEnabled: Bool {
-		if UserDefaults.standard.object(forKey: "petar.uiLab.separatorsEnabled") == nil {
+		if UserDefaults.standard.object(forKey: "zagStore.designer.separator.enabled") == nil {
 			return true
 		}
-		return UserDefaults.standard.bool(forKey: "petar.uiLab.separatorsEnabled")
+		return UserDefaults.standard.bool(forKey: "zagStore.designer.separator.enabled")
 	}
 
 	static var separatorOpacity: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.separatorOpacity") as? Double ?? 1
+		UserDefaults.standard.object(forKey: "zagStore.designer.separator.opacity") as? Double ?? 1
 	}
 
 	static var separatorColorHex: String {
-		UserDefaults.standard.string(forKey: "petar.uiLab.separatorColor") ?? "#3C3C43"
+		UserDefaults.standard.string(forKey: "zagStore.designer.separator.color") ?? "#3C3C43"
 	}
 
 	static var separatorLeadingInset: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.separatorLeadingInset") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.separator.leadingInset") as? Double ?? 0
 	}
 
 	static var separatorTrailingInset: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.separatorTrailingInset") as? Double ?? 0
+		UserDefaults.standard.object(forKey: "zagStore.designer.separator.trailingInset") as? Double ?? 0
 	}
 
-	// MARK: Updates
+	// MARK: - Updates
 
 	static var updateDotSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.updateDotSize") as? Double ?? 9
+		UserDefaults.standard.object(forKey: "zagStore.designer.update.dotSize") as? Double ?? 9
 	}
 
 	static var updateDotColorHex: String {
-		UserDefaults.standard.string(forKey: "petar.uiLab.updateDotColor") ?? "#34C759"
+		UserDefaults.standard.string(forKey: "zagStore.designer.update.dotColor") ?? "#34C759"
 	}
 
 	static var updatePulseEnabled: Bool {
-		if UserDefaults.standard.object(forKey: "petar.uiLab.updatePulseEnabled") == nil {
+		if UserDefaults.standard.object(forKey: "zagStore.designer.update.pulseEnabled") == nil {
 			return true
 		}
-		return UserDefaults.standard.bool(forKey: "petar.uiLab.updatePulseEnabled")
+		return UserDefaults.standard.bool(forKey: "zagStore.designer.update.pulseEnabled")
 	}
 
 	static var updatePulseSpeed: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.updatePulseSpeed") as? Double ?? 0.8
+		UserDefaults.standard.object(forKey: "zagStore.designer.update.pulseSpeed") as? Double ?? 0.8
 	}
 
 	static var updateIconSize: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.updateIconSize") as? Double ?? 48
+		UserDefaults.standard.object(forKey: "zagStore.designer.update.iconSize") as? Double ?? 48
 	}
 
 	static var updateIconRadius: Double {
-		UserDefaults.standard.object(forKey: "petar.uiLab.updateIconRadius") as? Double ?? 11
+		UserDefaults.standard.object(forKey: "zagStore.designer.update.iconRadius") as? Double ?? 11
 	}
 }

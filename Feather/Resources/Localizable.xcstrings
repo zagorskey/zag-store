@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@"
+          }
+        }
+      }
+    },
     "%lld Apps" : {
       "comment" : "Repository app count",
       "extractionState" : "manual",
@@ -629,6 +639,9 @@
         }
       }
     },
+    "2.0.0 → 2.0.1" : {
+
+    },
     "About" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1101,6 +1114,9 @@
           }
         }
       }
+    },
+    "Alignment" : {
+
     },
     "All" : {
       "extractionState" : "manual",
@@ -1748,6 +1764,9 @@
         }
       }
     },
+    "Background" : {
+
+    },
     "Bad Password" : {
       "comment" : "Bad certificate password",
       "extractionState" : "manual",
@@ -2256,6 +2275,9 @@
           }
         }
       }
+    },
+    "Centre" : {
+
     },
     "Certificate" : {
       "extractionState" : "manual",
@@ -4945,6 +4967,9 @@
         }
       }
     },
+    "Example App" : {
+
+    },
     "Executable" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6624,6 +6649,9 @@
           }
         }
       }
+    },
+    "Headers" : {
+
     },
     "Heartbeat" : {
       "extractionState" : "manual",
@@ -8447,6 +8475,9 @@
         }
       }
     },
+    "Left" : {
+
+    },
     "Less" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8607,6 +8638,9 @@
         }
       }
     },
+    "Library Headers" : {
+
+    },
     "Light" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8653,6 +8687,9 @@
           }
         }
       }
+    },
+    "Live Preview" : {
+
     },
     "Minimum Requirement" : {
       "comment" : "Minimum app version",
@@ -11024,6 +11061,9 @@
         }
       }
     },
+    "Preview" : {
+
+    },
     "Previous Versions" : {
       "comment" : "Repository app previous versions",
       "extractionState" : "manual",
@@ -11456,6 +11496,9 @@
           }
         }
       }
+    },
+    "Pulse" : {
+
     },
     "Re-sign" : {
       "extractionState" : "manual",
@@ -12826,6 +12869,9 @@
         }
       }
     },
+    "Reset Zag Store Designer" : {
+
+    },
     "Restart Heartbeat" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12996,6 +13042,12 @@
           }
         }
       }
+    },
+    "Right" : {
+
+    },
+    "Rows" : {
+
     },
     "Save" : {
       "extractionState" : "manual",
@@ -13549,6 +13601,9 @@
         }
       }
     },
+    "Separators" : {
+
+    },
     "Server" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13850,6 +13905,9 @@
           }
         }
       }
+    },
+    "Show Separators" : {
+
     },
     "Show Sheet when Exporting" : {
       "comment" : "Archiving opens share sheet",
@@ -14904,6 +14962,9 @@
         }
       }
     },
+    "Standard Badges" : {
+
+    },
     "Start Signing" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14974,6 +15035,9 @@
           }
         }
       }
+    },
+    "Status Dot Colour" : {
+
     },
     "Store Cell Appearance" : {
       "extractionState" : "manual",
@@ -15423,6 +15487,9 @@
           }
         }
       }
+    },
+    "Text" : {
+
     },
     "The heartbeat is activated in the background, it will restart when the app is re-opened or prompted. If the status below is pulsing, that means its healthy." : {
       "extractionState" : "manual",
@@ -16226,6 +16293,15 @@
         }
       }
     },
+    "Update" : {
+
+    },
+    "Update Badge" : {
+
+    },
+    "Update Indicator" : {
+
+    },
     "Update SSL Certificates" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16331,6 +16407,12 @@
           }
         }
       }
+    },
+    "Updates Available" : {
+
+    },
+    "Updates Header" : {
+
     },
     "URL" : {
       "extractionState" : "manual",
@@ -16942,6 +17024,9 @@
           }
         }
       }
+    },
+    "Zag Store Designer" : {
+
     }
   },
   "version" : "1.0"

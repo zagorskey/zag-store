@@ -2,72 +2,93 @@ import SwiftUI
 import NimbleViews
 
 struct ZagStoreDesignerView: View {
-	// MARK: - Badges
+	// MARK: - Standard Badge
 
-	@AppStorage("petar.uiLab.badgeSize")
-	private var badgeSize: Double = 22
+	@AppStorage("zagStore.designer.standardBadge.size")
+	private var standardBadgeSize: Double = 22
 
-	@AppStorage("petar.uiLab.badgeFontSize")
-	private var badgeFontSize: Double = 14
+	@AppStorage("zagStore.designer.standardBadge.fontSize")
+	private var standardBadgeFontSize: Double = 14
 
-	@AppStorage("petar.uiLab.badgeColor")
-	private var badgeColorHex: String = "#FF3B30"
+	@AppStorage("zagStore.designer.standardBadge.background")
+	private var standardBadgeColor: String = "#8E8E93"
 
-	@AppStorage("petar.uiLab.badgeTextColor")
-	private var badgeTextColorHex: String = "#FFFFFF"
+	@AppStorage("zagStore.designer.standardBadge.foreground")
+	private var standardBadgeTextColor: String = "#FFFFFF"
+
+	// MARK: - Update Badge
+
+	@AppStorage("zagStore.designer.updateBadge.size")
+	private var updateBadgeSize: Double = 22
+
+	@AppStorage("zagStore.designer.updateBadge.fontSize")
+	private var updateBadgeFontSize: Double = 14
+
+	@AppStorage("zagStore.designer.updateBadge.background")
+	private var updateBadgeColor: String = "#FF3B30"
+
+	@AppStorage("zagStore.designer.updateBadge.foreground")
+	private var updateBadgeTextColor: String = "#FFFFFF"
 
 	// MARK: - Headers
 
-	@AppStorage("petar.uiLab.headerGap")
+	@AppStorage("zagStore.designer.header.gap")
 	private var headerGap: Double = 8
 
-	@AppStorage("petar.uiLab.headerAlignment")
+	@AppStorage("zagStore.designer.header.alignment")
 	private var headerAlignment: Int = 0
 
 	// MARK: - Rows
 
-	@AppStorage("petar.uiLab.rowSpacing")
+	@AppStorage("zagStore.designer.row.spacing")
 	private var rowSpacing: Double = 18
 
-	@AppStorage("petar.uiLab.rowIconSize")
+	@AppStorage("zagStore.designer.row.iconSize")
 	private var rowIconSize: Double = 57
 
-	@AppStorage("petar.uiLab.rowHorizontalPadding")
+	@AppStorage("zagStore.designer.row.horizontalPadding")
 	private var rowHorizontalPadding: Double = 0
 
-	@AppStorage("petar.uiLab.rowVerticalPadding")
+	@AppStorage("zagStore.designer.row.verticalPadding")
 	private var rowVerticalPadding: Double = 0
 
 	// MARK: - Separators
 
-	@AppStorage("petar.uiLab.separatorsEnabled")
+	@AppStorage("zagStore.designer.separator.enabled")
 	private var separatorsEnabled: Bool = true
 
-	@AppStorage("petar.uiLab.separatorOpacity")
+	@AppStorage("zagStore.designer.separator.opacity")
 	private var separatorOpacity: Double = 1
 
-	@AppStorage("petar.uiLab.separatorLeadingInset")
+	@AppStorage("zagStore.designer.separator.leadingInset")
 	private var separatorLeadingInset: Double = 0
 
-	@AppStorage("petar.uiLab.separatorTrailingInset")
+	@AppStorage("zagStore.designer.separator.trailingInset")
 	private var separatorTrailingInset: Double = 0
 
 	// MARK: - Updates
 
-	@AppStorage("petar.uiLab.updateDotSize")
+	@AppStorage("zagStore.designer.update.dotSize")
 	private var updateDotSize: Double = 9
 
-	@AppStorage("petar.uiLab.updatePulseSpeed")
+	@AppStorage("zagStore.designer.update.dotColor")
+	private var updateDotColor: String = "#34C759"
+
+	@AppStorage("zagStore.designer.update.pulseEnabled")
+	private var updatePulseEnabled: Bool = true
+
+	@AppStorage("zagStore.designer.update.pulseSpeed")
 	private var updatePulseSpeed: Double = 0.8
 
 	var body: some View {
 		NBList("Zag Store Designer") {
 			previewSection
-			badgeSection
+			standardBadgeSection
+			updateBadgeSection
 			headerSection
 			rowSection
 			separatorSection
-			updateSection
+			updateIndicatorSection
 			resetSection
 		}
 	}
@@ -76,105 +97,168 @@ struct ZagStoreDesignerView: View {
 
 	private var previewSection: some View {
 		Section("Live Preview") {
-			HStack(spacing: headerGap) {
-				if headerAlignment > 0 {
-					Spacer(minLength: 0)
+			VStack(alignment: .leading, spacing: 16) {
+				Text("Library Headers")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+
+				ZagSectionHeader(
+					title: "Signed",
+					count: 3
+				)
+
+				ZagSectionHeader(
+					title: "Repositories",
+					count: 5
+				)
+
+				Divider()
+
+				Text("Updates Header")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+
+				HStack(spacing: headerGap) {
+					if headerAlignment == 1 || headerAlignment == 2 {
+						Spacer(minLength: 0)
+					}
+
+					Circle()
+						.fill(Color(hex: updateDotColor))
+						.frame(
+							width: updateDotSize,
+							height: updateDotSize
+						)
+
+					Text("Updates Available")
+
+					ZagUpdateBadge(count: 2)
+
+					if headerAlignment == 0 || headerAlignment == 1 {
+						Spacer(minLength: 0)
+					}
 				}
 
-				Circle()
-					.fill(Color.green)
+				Divider()
+
+				HStack(spacing: rowSpacing) {
+					RoundedRectangle(
+						cornerRadius: 12,
+						style: .continuous
+					)
+					.fill(Color.accentColor.opacity(0.2))
 					.frame(
-						width: updateDotSize,
-						height: updateDotSize
+						width: rowIconSize,
+						height: rowIconSize
 					)
+					.overlay {
+						Image(systemName: "app.fill")
+							.foregroundStyle(Color.accentColor)
+					}
 
-				Text("Updates Available")
+					VStack(alignment: .leading) {
+						Text("Example App")
+							.font(.headline)
 
-				Text("1")
-					.font(.system(
-						size: badgeFontSize,
-						weight: .bold
-					))
-					.foregroundStyle(Color(hex: badgeTextColorHex))
-					.frame(
-						width: badgeSize,
-						height: badgeSize
-					)
-					.background(
-						Circle()
-							.fill(Color(hex: badgeColorHex))
-					)
+						Text("2.0.0 → 2.0.1")
+							.font(.caption)
+							.foregroundStyle(.secondary)
+					}
 
-				if headerAlignment < 2 {
-					Spacer(minLength: 0)
-				}
-			}
+					Spacer()
 
-			HStack(spacing: rowSpacing) {
-				RoundedRectangle(
-					cornerRadius: 12,
-					style: .continuous
-				)
-				.fill(Color.accentColor.opacity(0.2))
-				.frame(
-					width: rowIconSize,
-					height: rowIconSize
-				)
-				.overlay {
-					Image(systemName: "app.fill")
+					Text("Update")
 						.foregroundStyle(Color.accentColor)
 				}
-
-				VStack(alignment: .leading) {
-					Text("Example App")
-						.font(.headline)
-
-					Text("2.0.0 → 2.0.1")
-						.font(.caption)
-						.foregroundStyle(.secondary)
-				}
-
-				Spacer()
-
-				Text("Update")
-					.foregroundStyle(Color.accentColor)
+				.padding(.horizontal, rowHorizontalPadding)
+				.padding(.vertical, rowVerticalPadding)
 			}
-			.padding(.horizontal, rowHorizontalPadding)
-			.padding(.vertical, rowVerticalPadding)
 		}
 	}
 
-	// MARK: - Controls
+	// MARK: - Standard Badges
 
-	private var badgeSection: some View {
-		Section("Badges") {
-			labSlider(
+	private var standardBadgeSection: some View {
+		Section("Standard Badges") {
+			HStack {
+				Text("Preview")
+				.foregroundStyle(.secondary)
+
+				Spacer()
+
+				ZagCountBadge(count: 8)
+			}
+
+			designerSlider(
 				"Diameter",
-				value: $badgeSize,
+				value: $standardBadgeSize,
 				range: 16...36,
 				step: 1
 			)
 
-			labSlider(
+			designerSlider(
 				"Font Size",
-				value: $badgeFontSize,
+				value: $standardBadgeFontSize,
 				range: 8...24,
 				step: 1
 			)
 
 			ColorPicker(
-				"Badge Colour",
-				selection: colorBinding($badgeColorHex),
+				"Background",
+				selection: colorBinding($standardBadgeColor),
 				supportsOpacity: false
 			)
 
 			ColorPicker(
-				"Text Colour",
-				selection: colorBinding($badgeTextColorHex),
+				"Text",
+				selection: colorBinding($standardBadgeTextColor),
 				supportsOpacity: false
 			)
 		}
 	}
+
+	// MARK: - Update Badge
+
+	private var updateBadgeSection: some View {
+		Section("Update Badge") {
+			HStack {
+				Text("Preview")
+					.foregroundStyle(.secondary)
+
+				Spacer()
+
+				ZagUpdateBadge(count: 2)
+			}
+
+			designerSlider(
+				"Diameter",
+				value: $updateBadgeSize,
+				range: 16...36,
+				step: 1
+			)
+
+			designerSlider(
+				"Font Size",
+				value: $updateBadgeFontSize,
+				range: 8...24,
+				step: 1
+			)
+
+			ColorPicker(
+				"Background",
+				selection: colorBinding($updateBadgeColor),
+				supportsOpacity: false
+			)
+
+			ColorPicker(
+				"Text",
+				selection: colorBinding($updateBadgeTextColor),
+				supportsOpacity: false
+			)
+		}
+	}
+
+	// MARK: - Headers
 
 	private var headerSection: some View {
 		Section("Headers") {
@@ -185,7 +269,7 @@ struct ZagStoreDesignerView: View {
 			}
 			.pickerStyle(.segmented)
 
-			labSlider(
+			designerSlider(
 				"Badge Gap",
 				value: $headerGap,
 				range: 0...30,
@@ -194,30 +278,32 @@ struct ZagStoreDesignerView: View {
 		}
 	}
 
+	// MARK: - Rows
+
 	private var rowSection: some View {
 		Section("Rows") {
-			labSlider(
+			designerSlider(
 				"Content Spacing",
 				value: $rowSpacing,
 				range: 0...40,
 				step: 1
 			)
 
-			labSlider(
+			designerSlider(
 				"Icon Size",
 				value: $rowIconSize,
 				range: 30...90,
 				step: 1
 			)
 
-			labSlider(
+			designerSlider(
 				"Horizontal Padding",
 				value: $rowHorizontalPadding,
 				range: 0...30,
 				step: 1
 			)
 
-			labSlider(
+			designerSlider(
 				"Vertical Padding",
 				value: $rowVerticalPadding,
 				range: 0...30,
@@ -226,6 +312,8 @@ struct ZagStoreDesignerView: View {
 		}
 	}
 
+	// MARK: - Separators
+
 	private var separatorSection: some View {
 		Section("Separators") {
 			Toggle(
@@ -233,7 +321,7 @@ struct ZagStoreDesignerView: View {
 				isOn: $separatorsEnabled
 			)
 
-			labSlider(
+			designerSlider(
 				"Opacity",
 				value: $separatorOpacity,
 				range: 0...1,
@@ -241,7 +329,7 @@ struct ZagStoreDesignerView: View {
 			)
 			.disabled(!separatorsEnabled)
 
-			labSlider(
+			designerSlider(
 				"Leading Inset",
 				value: $separatorLeadingInset,
 				range: 0...120,
@@ -249,7 +337,7 @@ struct ZagStoreDesignerView: View {
 			)
 			.disabled(!separatorsEnabled)
 
-			labSlider(
+			designerSlider(
 				"Trailing Inset",
 				value: $separatorTrailingInset,
 				range: 0...120,
@@ -259,28 +347,44 @@ struct ZagStoreDesignerView: View {
 		}
 	}
 
-	private var updateSection: some View {
-		Section("Updates") {
-			labSlider(
+	// MARK: - Update Indicator
+
+	private var updateIndicatorSection: some View {
+		Section("Update Indicator") {
+			Toggle(
+				"Pulse",
+				isOn: $updatePulseEnabled
+			)
+
+			designerSlider(
 				"Status Dot Size",
 				value: $updateDotSize,
 				range: 4...20,
 				step: 1
 			)
 
-			labSlider(
+			ColorPicker(
+				"Status Dot Colour",
+				selection: colorBinding($updateDotColor),
+				supportsOpacity: false
+			)
+
+			designerSlider(
 				"Pulse Speed",
 				value: $updatePulseSpeed,
 				range: 0.2...2,
 				step: 0.1
 			)
+			.disabled(!updatePulseEnabled)
 		}
 	}
+
+	// MARK: - Reset
 
 	private var resetSection: some View {
 		Section {
 			Button(
-				"Reset Designer",
+				"Reset Zag Store Designer",
 				role: .destructive
 			) {
 				resetDefaults()
@@ -290,7 +394,7 @@ struct ZagStoreDesignerView: View {
 
 	// MARK: - Helpers
 
-	private func labSlider(
+	private func designerSlider(
 		_ title: String,
 		value: Binding<Double>,
 		range: ClosedRange<Double>,
@@ -304,8 +408,8 @@ struct ZagStoreDesignerView: View {
 
 				Text(
 					value.wrappedValue.rounded() == value.wrappedValue
-					? "\(Int(value.wrappedValue))"
-					: String(format: "%.1f", value.wrappedValue)
+						? "\(Int(value.wrappedValue))"
+						: String(format: "%.1f", value.wrappedValue)
 				)
 				.foregroundStyle(.secondary)
 				.monospacedDigit()
@@ -333,10 +437,15 @@ struct ZagStoreDesignerView: View {
 	}
 
 	private func resetDefaults() {
-		badgeSize = 22
-		badgeFontSize = 14
-		badgeColorHex = "#FF3B30"
-		badgeTextColorHex = "#FFFFFF"
+		standardBadgeSize = 22
+		standardBadgeFontSize = 14
+		standardBadgeColor = "#8E8E93"
+		standardBadgeTextColor = "#FFFFFF"
+
+		updateBadgeSize = 22
+		updateBadgeFontSize = 14
+		updateBadgeColor = "#FF3B30"
+		updateBadgeTextColor = "#FFFFFF"
 
 		headerGap = 8
 		headerAlignment = 0
@@ -352,6 +461,8 @@ struct ZagStoreDesignerView: View {
 		separatorTrailingInset = 0
 
 		updateDotSize = 9
+		updateDotColor = "#34C759"
+		updatePulseEnabled = true
 		updatePulseSpeed = 0.8
 	}
 }

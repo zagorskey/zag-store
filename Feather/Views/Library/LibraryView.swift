@@ -212,7 +212,8 @@ struct LibraryView: View {
 				}
 			}
 			.task {
-			_updateRepositoryUpdates()
+				await updateManager.requestBadgePermission()
+				_updateRepositoryUpdates()
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
 			_updateRepositoryUpdates()
@@ -443,3 +444,11 @@ private struct FeatherCountBadge: View {
 			)
 	}
 }
+
+#if DEBUG
+
+#Preview("Zag Store — Library") {
+	LibraryView()
+}
+
+#endif
