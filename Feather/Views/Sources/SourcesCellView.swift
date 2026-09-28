@@ -1,6 +1,6 @@
 //
 //  SourcesCellView.swift
-//  Feather
+//  Zag Store
 //
 //  Created by samara on 1.05.2025.
 //
@@ -8,26 +8,78 @@
 import SwiftUI
 import NimbleViews
 import NukeUI
+import AltSourceKit
 
 // MARK: - View
+
 struct SourcesCellView: View {
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
-	
+
 	var source: AltSource
-	
+	var repository: ASRepository?
+
+	private var appCount: Int {
+		repository?.apps.count ?? 0
+	}
+
+	private var lastUpdatedDate: Date? {
+		repository?.apps
+			.compactMap { $0.currentDate?.date }
+			.max()
+	}
+
+	private var lastUpdatedText: String {
+		guard let date = lastUpdatedDate else {
+			return "Last Updated: Unknown"
+		}
+
+		return "Last Updated: \(Self.dateFormatter.string(from: date))"
+	}
+
+	private static let dateFormatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.locale = Locale(identifier: "en_GB")
+		formatter.dateFormat = "dd/MM/yyyy"
+		return formatter
+	}()
+
 	// MARK: Body
+
 	var body: some View {
 		let isRegular = horizontalSizeClass != .compact
-		
-		FRIconCellView(
-			title: source.name ?? .localized("Unknown"),
-			subtitle: source.sourceURL?.absoluteString ?? "",
-			iconUrl: source.iconURL
-		)
+
+		HStack(spacing: 18) {
+			repositoryIcon
+
+			VStack(
+				alignment: .leading,
+				spacing: 3
+			) {
+				Text(
+					source.name ?? .localized("Unknown")
+				)
+				.font(.headline)
+				.foregroundStyle(.primary)
+				.lineLimit(1)
+
+				Text(lastUpdatedText)
+					.font(.subheadline)
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+			}
+
+			Spacer(minLength: 8)
+
+			ZagCountBadge(count: appCount)
+		}
+		.contentShape(Rectangle())
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
-				? RoundedRectangle(cornerRadius: 18, style: .continuous)
+				? RoundedRectangle(
+					cornerRadius: 18,
+					style: .continuous
+				)
 				.fill(Color(.quaternarySystemFill))
 				: nil
 		)
@@ -37,25 +89,63 @@ struct SourcesCellView: View {
 		}
 		.contextMenu {
 			_contextActions(for: source)
+
 			Divider()
+
 			_actions(for: source)
 		}
 	}
+
+	// MARK: Repository Icon
+
+	@ViewBuilder
+	private var repositoryIcon: some View {
+		if let iconURL = source.iconURL {
+			LazyImage(url: iconURL) { state in
+				if let image = state.image {
+					image.appIconStyle(size: 56)
+				} else {
+					standardIcon
+				}
+			}
+		} else {
+			standardIcon
+		}
+	}
+
+	private var standardIcon: some View {
+		Image("App_Unknown")
+			.appIconStyle(size: 56)
+	}
 }
 
-// MARK: - Extension: View
+
+// MARK: - Extension: Actions
+
 extension SourcesCellView {
 	@ViewBuilder
-	private func _actions(for source: AltSource) -> some View {
-		Button(.localized("Delete"), systemImage: "trash", role: .destructive) {
+	private func _actions(
+		for source: AltSource
+	) -> some View {
+		Button(
+			.localized("Delete"),
+			systemImage: "trash",
+			role: .destructive
+		) {
 			Storage.shared.deleteSource(for: source)
 		}
 	}
-	
+
 	@ViewBuilder
-	private func _contextActions(for source: AltSource) -> some View {
-		Button(.localized("Copy"), systemImage: "doc.on.clipboard") {
-			UIPasteboard.general.string = source.sourceURL?.absoluteString
+	private func _contextActions(
+		for source: AltSource
+	) -> some View {
+		Button(
+			.localized("Copy"),
+			systemImage: "doc.on.clipboard"
+		) {
+			UIPasteboard.general.string =
+				source.sourceURL?.absoluteString
 		}
 	}
 }
