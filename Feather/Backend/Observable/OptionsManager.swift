@@ -167,7 +167,7 @@ struct Options: Codable, Equatable {
 
 		var localizedDescription: String {
 			switch self {
-			case .default: .localized("Default")
+			case .default: .localized("Auto")
 			case .light: .localized("Light")
 			case .dark: .localized("Dark")
 			}

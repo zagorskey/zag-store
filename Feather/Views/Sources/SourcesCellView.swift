@@ -132,6 +132,12 @@ extension SourcesCellView {
 			systemImage: "trash",
 			role: .destructive
 		) {
+			// Remove the downloaded repository from Zag Store's
+			// live cache first. This immediately causes UpdateManager
+			// to recalculate without apps from the deleted source.
+			SourcesViewModel.shared.removeSource(source)
+
+			// Then remove the persistent Core Data source.
 			Storage.shared.deleteSource(for: source)
 		}
 	}

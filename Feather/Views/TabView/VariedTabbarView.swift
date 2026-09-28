@@ -24,20 +24,6 @@ struct VariedTabbarView: View {
 	)
 	private var sources: FetchedResults<AltSource>
 
-	@FetchRequest(
-		entity: Signed.entity(),
-		sortDescriptors: [],
-		animation: .snappy
-	)
-	private var signedApps: FetchedResults<Signed>
-
-	@FetchRequest(
-		entity: Imported.entity(),
-		sortDescriptors: [],
-		animation: .snappy
-	)
-	private var importedApps: FetchedResults<Imported>
-
 	init() {}
 
 	var body: some View {
@@ -61,21 +47,13 @@ struct VariedTabbarView: View {
 		.onReceive(sourcesViewModel.$sources) { _ in
 			refreshUpdates()
 		}
-		.onChange(of: signedApps.map { $0.uuid }) { _ in
-			refreshUpdates()
-		}
-		.onChange(of: importedApps.map { $0.uuid }) { _ in
-			refreshUpdates()
-		}
 	}
 
 	private func refreshUpdates() {
 		updateManager.refresh(
 			repositories: Array(
 				sourcesViewModel.sources.values
-			),
-			signedApps: Array(signedApps),
-			importedApps: Array(importedApps)
+			)
 		)
 	}
 }

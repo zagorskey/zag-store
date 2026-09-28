@@ -10,6 +10,7 @@ import AltSourceKit
 import SwiftUI
 import NimbleJSON
 import UserNotifications
+import CoreData
 
 // MARK: - Class
 
@@ -29,15 +30,38 @@ final class SourcesViewModel: ObservableObject {
 		refresh: Bool = false,
 		batchSize: Int = 4
 	) async {
+		let currentSourceURLs = Set(
+			sources.compactMap {
+				$0.sourceURL?.absoluteString
+			}
+		)
+
+		await MainActor.run {
+			self.sources = self.sources.filter { source, _ in
+				guard
+					let sourceURL = source.sourceURL?.absoluteString
+				else {
+					return false
+				}
+
+				return currentSourceURLs.contains(sourceURL)
+			}
+		}
+
+		await MainActor.run {
+			UpdateManager.shared.refresh(
+				repositories: Array(self.sources.values)
+			)
+		}
+
 		guard isFinished else { return }
 
-		// Check if sources to be fetched are the same as before.
-		// Skip this check if refresh is true.
-		if !refresh, sources.allSatisfy({ self.sources[$0] != nil }) {
+		if !refresh, sources.allSatisfy({
+			self.sources[$0] != nil
+		}) {
 			return
 		}
 
-		// Prevent multiple fetches at the same time.
 		isFinished = false
 
 		await MainActor.run {
@@ -52,8 +76,10 @@ final class SourcesViewModel: ObservableObject {
 			}
 		}
 
-		await MainActor.run {
-			self.sources = [:]
+		if refresh {
+			await MainActor.run {
+				self.sources = [:]
+			}
 		}
 
 		let sourcesArray = Array(sources)
@@ -115,11 +141,60 @@ final class SourcesViewModel: ObservableObject {
 			}
 
 			await MainActor.run {
-				for (source, repo) in batchResults {
-					self.sources[source] = repo
+			let savedSourceURLs = Set(
+				Storage.shared.getSources().compactMap {
+					$0.sourceURL?.absoluteString
 				}
+			)
+
+			for (source, repo) in batchResults {
+				guard
+					let url = source.sourceURL?.absoluteString,
+					savedSourceURLs.contains(url)
+				else {
+					continue
+				}
+
+				self.sources[source] = repo
+			}
+
+			self.sources = self.sources.filter {
+				source, _ in
+
+				guard
+					let url = source.sourceURL?.absoluteString
+				else {
+					return false
+				}
+
+				return savedSourceURLs.contains(url)
 			}
 		}
+		}
+	}
+
+	// MARK: - Source Cache Management
+
+	@MainActor
+	func removeSource(_ source: AltSource) {
+		let removedURL = source.sourceURL?.absoluteString
+
+		sources = sources.filter { cachedSource, _ in
+			if let removedURL {
+				return cachedSource.sourceURL?.absoluteString != removedURL
+			}
+
+			return cachedSource != source
+		}
+
+		UpdateManager.shared.refresh(
+			repositories: Array(sources.values)
+		)
+
+		print(
+			"[Zag Store Sources] Removed source from cache: " +
+				(removedURL ?? "unknown")
+		)
 	}
 }
 
@@ -141,6 +216,12 @@ final class UpdateManager: ObservableObject {
 		}
 	}
 
+	private struct LocalApp {
+		let name: String
+		let identifier: String
+		let version: String
+	}
+
 	@Published private(set) var updates: [AvailableUpdate] = []
 
 	var updateCount: Int {
@@ -159,7 +240,7 @@ final class UpdateManager: ObservableObject {
 
 			print(
 				"[Zag Store Badge] Permission " +
-				(granted ? "granted" : "not granted")
+					(granted ? "granted" : "not granted")
 			)
 
 			if granted {
@@ -168,7 +249,7 @@ final class UpdateManager: ObservableObject {
 		} catch {
 			print(
 				"[Zag Store Badge] Permission error: " +
-				error.localizedDescription
+					error.localizedDescription
 			)
 		}
 	}
@@ -184,7 +265,46 @@ final class UpdateManager: ObservableObject {
 		} catch {
 			print(
 				"[Zag Store Badge] Failed to set badge: " +
-				error.localizedDescription
+					error.localizedDescription
+			)
+		}
+	}
+
+
+	// MARK: - Global Update Check
+
+	func refresh(repositories: [ASRepository]) {
+		let context = Storage.shared.context
+
+		do {
+			let signedRequest = Signed.fetchRequest()
+			let importedRequest = Imported.fetchRequest()
+
+			let signedApps = try context.fetch(signedRequest)
+			let importedApps = try context.fetch(importedRequest)
+
+			print(
+				"[Zag Store Updates] Global check: " +
+					"\(repositories.count) repositories, " +
+					"\(signedApps.count) signed, " +
+					"\(importedApps.count) imported"
+			)
+
+			refresh(
+				repositories: repositories,
+				signedApps: signedApps,
+				importedApps: importedApps
+			)
+		} catch {
+			updates = []
+
+			Task {
+				await syncAppIconBadge()
+			}
+
+			print(
+				"[Zag Store Updates] Core Data fetch failed: " +
+					error.localizedDescription
 			)
 		}
 	}
@@ -197,26 +317,41 @@ final class UpdateManager: ObservableObject {
 		signedApps: [Signed],
 		importedApps: [Imported]
 	) {
-		var localVersions: [String: String] = [:]
+		var localApps: [LocalApp] = []
 
 		for app in signedApps {
-			_addLocalVersion(
+			_addLocalApp(
+				name: app.name,
 				identifier: app.identifier,
 				version: app.version,
-				to: &localVersions
+				to: &localApps
 			)
 		}
 
 		for app in importedApps {
-			_addLocalVersion(
+			_addLocalApp(
+				name: app.name,
 				identifier: app.identifier,
 				version: app.version,
-				to: &localVersions
+				to: &localApps
+			)
+		}
+
+		print(
+			"[Zag Store Updates] Local identities: \(localApps.count)"
+		)
+
+		for localApp in localApps {
+			print(
+				"[Zag Store Updates] LOCAL: " +
+					"\(localApp.name) | " +
+					"id=\(localApp.identifier) | " +
+					"version=\(localApp.version)"
 			)
 		}
 
 		var foundUpdates: [AvailableUpdate] = []
-		var seenIdentifiers = Set<String>()
+		var seenLocalApps = Set<String>()
 
 		for repository in repositories {
 			for app in repository.apps {
@@ -224,30 +359,63 @@ final class UpdateManager: ObservableObject {
 					let identifier = app.id,
 					!identifier.isEmpty,
 					let availableVersion = app.currentVersion,
-					!availableVersion.isEmpty,
-					let installedVersion = localVersions[identifier],
-					_compareVersions(
+					!availableVersion.isEmpty
+				else {
+					continue
+				}
+
+				let candidates = localApps.filter {
+					$0.identifier == identifier
+				}
+
+				guard !candidates.isEmpty else {
+					continue
+				}
+
+				for localApp in candidates {
+					guard _sameAppIdentity(
+						installedName: localApp.name,
+						repositoryName: app.currentName
+					) else {
+						print(
+							"[Zag Store Updates] " +
+								"IGNORED COLLISION: " +
+								"installed=\(localApp.name) | " +
+								"candidate=\(app.currentName) | " +
+								"id=\(identifier) | " +
+								"repo=\(repository.name)"
+						)
+						continue
+					}
+
+					guard _compareVersions(
 						availableVersion,
-						installedVersion
-					) == .orderedDescending
-				else {
-					continue
-				}
+						localApp.version
+					) == .orderedDescending else {
+						continue
+					}
 
-				guard
-					seenIdentifiers.insert(identifier).inserted
-				else {
-					continue
-				}
+					let localKey =
+						identifier.lowercased() + "|" +
+						_normalizedAppName(localApp.name)
 
-				foundUpdates.append(
-					AvailableUpdate(
-						app: app,
-						source: repository,
-						installedVersion: installedVersion,
-						availableVersion: availableVersion
+					guard
+						seenLocalApps.insert(localKey).inserted
+					else {
+						continue
+					}
+
+					foundUpdates.append(
+						AvailableUpdate(
+							app: app,
+							source: repository,
+							installedVersion: localApp.version,
+							availableVersion: availableVersion
+						)
 					)
-				)
+
+					break
+				}
 			}
 		}
 
@@ -257,22 +425,23 @@ final class UpdateManager: ObservableObject {
 			) == .orderedAscending
 		}
 
-		// Keep the real iOS Home Screen badge synchronized
-		// with Zag Store's detected update count.
 		Task {
 			await syncAppIconBadge()
 		}
 
 		print(
 			"[Zag Store Updates] Check complete: " +
-			"\(updates.count) update(s)"
+				"\(updates.count) update(s)"
 		)
 
 		for update in updates {
 			print(
-				"[Zag Store Updates] \(update.app.currentName): " +
-				"\(update.installedVersion) -> " +
-				"\(update.availableVersion)"
+				"[Zag Store Updates] MATCH: " +
+					"\(update.app.currentName) | " +
+					"id=\(update.app.id ?? "nil") | " +
+					"\(update.installedVersion) -> " +
+					"\(update.availableVersion) | " +
+					"repo=\(update.source.name)"
 			)
 		}
 	}
@@ -299,14 +468,17 @@ final class UpdateManager: ObservableObject {
 	}
 
 
-	// MARK: - Local Version Helpers
+	// MARK: - Local App Helpers
 
-	private func _addLocalVersion(
+	private func _addLocalApp(
+		name: String?,
 		identifier: String?,
 		version: String?,
-		to versions: inout [String: String]
+		to apps: inout [LocalApp]
 	) {
 		guard
+			let name,
+			!name.isEmpty,
 			let identifier,
 			!identifier.isEmpty,
 			let version,
@@ -315,17 +487,63 @@ final class UpdateManager: ObservableObject {
 			return
 		}
 
-		if let existing = versions[identifier] {
+		let normalizedName = _normalizedAppName(name)
+
+		if let index = apps.firstIndex(where: {
+			$0.identifier == identifier &&
+				_normalizedAppName($0.name) == normalizedName
+		}) {
 			if _compareVersions(
 				version,
-				existing
+				apps[index].version
 			) == .orderedDescending {
-				versions[identifier] = version
+				apps[index] = LocalApp(
+					name: name,
+					identifier: identifier,
+					version: version
+				)
 			}
 		} else {
-			versions[identifier] = version
+			apps.append(
+				LocalApp(
+					name: name,
+					identifier: identifier,
+					version: version
+				)
+			)
 		}
 	}
+
+
+	// MARK: - App Identity
+
+	private func _sameAppIdentity(
+		installedName: String,
+		repositoryName: String
+	) -> Bool {
+		_normalizedAppName(installedName) ==
+			_normalizedAppName(repositoryName)
+	}
+
+	private func _normalizedAppName(
+		_ name: String
+	) -> String {
+		name
+			.folding(
+				options: [
+					.caseInsensitive,
+					.diacriticInsensitive
+				],
+				locale: .current
+			)
+			.lowercased()
+			.filter {
+				$0.isLetter || $0.isNumber
+			}
+	}
+
+
+	// MARK: - Version Comparison
 
 	private func _compareVersions(
 		_ lhs: String,
@@ -333,7 +551,10 @@ final class UpdateManager: ObservableObject {
 	) -> ComparisonResult {
 		lhs.compare(
 			rhs,
-			options: [.numeric, .caseInsensitive]
+			options: [
+				.numeric,
+				.caseInsensitive
+			]
 		)
 	}
 }
