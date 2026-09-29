@@ -1314,7 +1314,7 @@ private struct ZagUpdateRow: View {
 		ZagUpdateTransactionManager.shared
 
 	var body: some View {
-		HStack(spacing: 12) {
+		HStack(spacing: 10) {
 			appIcon
 
 			VStack(alignment: .leading, spacing: 4) {
@@ -1335,8 +1335,15 @@ private struct ZagUpdateRow: View {
 	@ViewBuilder
 	private var zagUpdateButton: some View {
 		let stage = transactionManager.stage(for: update)
+		let isBusy =
+			stage == .downloading ||
+			stage == .importing ||
+			stage == .signing
 
-		Button {
+		ZagActionPill(
+			title: stage?.title ?? .localized("Update"),
+			showsProgress: isBusy
+		) {
 			transactionManager.prepare(update) { result in
 				switch result {
 				case .success(let signedUUID):
@@ -1349,37 +1356,9 @@ private struct ZagUpdateRow: View {
 					)
 				}
 			}
-		} label: {
-			HStack(spacing: 6) {
-				if stage == .downloading ||
-					stage == .importing ||
-					stage == .signing
-				{
-					ProgressView()
-						.controlSize(.small)
-				}
-
-				Text(stage?.title ?? .localized("Update"))
-					.lineLimit(1)
-					.font(.headline.bold())
-			}
-			.foregroundStyle(Color.accentColor)
-			.padding(.horizontal, 18)
-			.padding(.vertical, 6)
-			.background(
-				Color(
-					red: 28.0 / 255.0,
-					green: 28.0 / 255.0,
-					blue: 30.0 / 255.0
-				)
-			)
-			.clipShape(Capsule())
 		}
-		.buttonStyle(.borderless)
 		.disabled(
-			stage == .downloading ||
-			stage == .importing ||
-			stage == .signing ||
+			isBusy ||
 			stage == .readyToInstall
 		)
 	}
