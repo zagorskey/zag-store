@@ -26,6 +26,7 @@ struct SourcesView: View {
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
 	@State private var _searchActive = false
+	@State private var _searchPinned = false
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
 	@State private var _selectedSearchRoute:
@@ -109,10 +110,14 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
+			.zagTrackSearchPin($_searchPinned)
 			.safeAreaInset(edge: .top, spacing: 8) {
 				ZagLiquidGlassSearchBar(
 					text: $_searchText,
-					isActive: $_searchActive
+					isActive: $_searchActive,
+					isPinned: _searchPinned,
+					prompt: "Repos, Apps, Games and More",
+					activePrompt: "Repos, Apps and More"
 				)
 					.padding(.horizontal, 16)
 					.padding(.top, 4)
@@ -121,6 +126,7 @@ struct SourcesView: View {
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
+			.animation(.snappy(duration: 0.35), value: _searchActive)
 			.overlay {
 				emptyState
 			}
@@ -685,7 +691,9 @@ struct SourcesView: View {
 struct ZagLiquidGlassSearchBar: View {
 	@Binding var text: String
 	@Binding var isActive: Bool
-	var prompt: String = "Repos, Apps and More"
+	var isPinned: Bool = false
+	var prompt: String = "Repos, Apps, Games and More"
+	var activePrompt: String? = "Repos, Apps and More"
 
 	@Environment(\.scenePhase)
 	private var scenePhase
@@ -705,7 +713,7 @@ struct ZagLiquidGlassSearchBar: View {
 
 				ZStack(alignment: .leading) {
 					if text.isEmpty {
-						Text(prompt)
+						Text(isActive ? (activePrompt ?? prompt) : prompt)
 							.font(.system(size: 17, weight: .semibold))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
@@ -761,7 +769,7 @@ struct ZagLiquidGlassSearchBar: View {
 			}
 			.padding(.horizontal, 16)
 			.frame(height: 50)
-			.zagSearchBackground(isActive: isActive)
+			.zagSearchBackground(isGlass: isActive || isPinned)
 
 			if isActive {
 				Button {
@@ -811,15 +819,48 @@ struct ZagLiquidGlassSearchBar: View {
 	}
 }
 
-extension View {
+private struct ZagSearchPinTrackingModifier: ViewModifier {
+	@Binding var isPinned: Bool
+
 	@ViewBuilder
-	func zagSearchBackground(isActive: Bool) -> some View {
-		if isActive {
+	func body(content: Content) -> some View {
+		if #available(iOS 18.0, *) {
+			content.onScrollGeometryChange(
+				for: Bool.self,
+				of: { geometry in
+					geometry.contentOffset.y + geometry.contentInsets.top >= 48
+				},
+				action: { _, pinned in
+					if isPinned != pinned {
+						withAnimation(.snappy(duration: 0.25)) {
+							isPinned = pinned
+						}
+					}
+				}
+			)
+		} else {
+			content
+		}
+	}
+}
+
+extension View {
+	func zagTrackSearchPin(_ isPinned: Binding<Bool>) -> some View {
+		modifier(ZagSearchPinTrackingModifier(isPinned: isPinned))
+	}
+
+	@ViewBuilder
+	func zagSearchBackground(isGlass: Bool) -> some View {
+		if isGlass {
 			self.zagSearchGlass()
 		} else {
 			self
 				.background(
-					Color(uiColor: .secondarySystemFill),
+					Color(
+						uiColor: UITraitCollection.current.userInterfaceStyle == .dark
+							? UIColor.systemGray6
+							: UIColor.systemGray6
+					),
 					in: Capsule()
 				)
 		}
