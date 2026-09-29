@@ -127,3 +127,14 @@ struct ZagActionPill: View {
 		.buttonStyle(.borderless)
 	}
 }
+
+
+// MARK: - Standard Zag Store Content Title
+
+extension View {
+	func zagContentTitleStyle() -> some View {
+		self
+			.font(.system(size: 17, weight: .regular))
+			.foregroundStyle(.primary)
+	}
+}
