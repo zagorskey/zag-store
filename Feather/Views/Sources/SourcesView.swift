@@ -720,7 +720,7 @@ struct ZagLiquidGlassSearchBar: View {
 				ZStack(alignment: .leading) {
 					if text.isEmpty {
 						Text(isActive ? (activePrompt ?? prompt) : prompt)
-							.font(.system(size: 18, weight: .semibold))
+							.font(.system(size: 19, weight: .semibold))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.allowsHitTesting(false)
@@ -789,10 +789,18 @@ struct ZagLiquidGlassSearchBar: View {
 				}
 				.buttonStyle(.plain)
 				.accessibilityLabel("Close Search")
-				.transition(.scale.combined(with: .opacity))
+				.transition(
+					.asymmetric(
+						insertion: .opacity.combined(with: .move(edge: .trailing)),
+						removal: .opacity.combined(with: .move(edge: .trailing))
+					)
+				)
 			}
 		}
-		.animation(.smooth(duration: 0.5), value: isActive)
+		.animation(
+			.spring(response: 0.38, dampingFraction: 0.88),
+			value: isActive
+		)
 		.onChange(of: isFocused) { focused in
 			if focused {
 				isActive = true
