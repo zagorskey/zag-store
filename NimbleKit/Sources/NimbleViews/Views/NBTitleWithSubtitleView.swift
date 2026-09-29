@@ -21,8 +21,7 @@ public struct NBTitleWithSubtitleView: View {
 	public var body: some View {
 		VStack(alignment: .leading, spacing: 2) {
 			Text(_title)
-				.font(.system(size: 17, weight: .regular))
-				.foregroundColor(.primary)
+				.zagContentTitleStyle()
 			Text(_subtitle)
 				.font(.subheadline)
 				.foregroundColor(.secondary)
