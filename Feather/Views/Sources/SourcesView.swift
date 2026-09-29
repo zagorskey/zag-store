@@ -122,10 +122,16 @@ struct SourcesView: View {
 					.padding(.horizontal, 16)
 					.padding(.top, 4)
 			}
+			.navigationBarTitleDisplayMode(
+				_searchActive ? .inline : .large
+			)
 			.toolbar(
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
+			.transaction { transaction in
+				transaction.animation = .smooth(duration: 0.5)
+			}
 			.overlay {
 				emptyState
 			}
@@ -536,6 +542,7 @@ struct SourcesView: View {
 				}
 				.buttonStyle(.plain)
 			}
+			.listSectionSeparator(.hidden, edges: .all)
 			Section {
 				ForEach(
 					_filteredSources
@@ -786,7 +793,7 @@ struct ZagLiquidGlassSearchBar: View {
 				.transition(.scale.combined(with: .opacity))
 			}
 		}
-		.animation(.smooth(duration: 0.42), value: isActive)
+		.animation(.smooth(duration: 0.5), value: isActive)
 		.onChange(of: isFocused) { focused in
 			if focused {
 				isActive = true
