@@ -252,7 +252,7 @@ extension LibraryCellView {
 				spacing: 3
 			) {
 				if let id = app.identifier {
-					ZagLibraryActionPill(title: .localized("Open")) {
+					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: id)
 					}
 				}
@@ -282,44 +282,9 @@ extension LibraryCellView {
 				}
 			}
 		} else {
-			ZagLibraryActionPill(title: .localized("Sign")) {
+			ZagActionPill(title: .localized("Sign")) {
 				selectedSigningAppPresenting = AnyApp(base: app)
 			}
 		}
-	}
-}
-
-private struct ZagLibraryActionPill: View {
-	let title: String
-	let action: () -> Void
-
-	@Environment(\.colorScheme)
-	private var colorScheme
-
-	@AppStorage("Feather.userTintColor")
-	private var userTintColor: String = "#4395F8"
-
-	private var pillBackground: Color {
-		colorScheme == .dark
-			? Color(hex: "#1C1C1E")
-			: Color(hex: "#F2F2F7")
-	}
-
-	private var pillForeground: Color {
-		Color(hex: userTintColor)
-	}
-
-	var body: some View {
-		Button(action: action) {
-			Text(title)
-				.font(.system(size: 15, weight: .bold))
-				.lineLimit(1)
-				.frame(width: 88, height: 34)
-				.foregroundStyle(pillForeground)
-				.background(pillBackground)
-				.clipShape(Capsule())
-				.contentShape(Capsule())
-		}
-		.buttonStyle(.borderless)
 	}
 }
