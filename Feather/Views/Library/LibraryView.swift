@@ -495,7 +495,6 @@ struct LibraryView: View {
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
-			.animation(.snappy(duration: 0.35), value: _searchActive)
 
 
 
