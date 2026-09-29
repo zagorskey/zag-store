@@ -328,14 +328,8 @@ final class UpdateManager: ObservableObject {
 			)
 		}
 
-		for app in importedApps {
-			_addLocalApp(
-				name: app.name,
-				identifier: app.identifier,
-				version: app.version,
-				to: &localApps
-			)
-		}
+		// Zag Store: Imported packages are not installed-state evidence.
+		// Signed records are authoritative for update detection.
 
 		print(
 			"[Zag Store Updates] Local identities: \(localApps.count)"
