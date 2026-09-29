@@ -714,7 +714,7 @@ struct ZagLiquidGlassSearchBar: View {
 				ZStack(alignment: .leading) {
 					if text.isEmpty {
 						Text(isActive ? (activePrompt ?? prompt) : prompt)
-							.font(.system(size: 16, weight: .semibold))
+							.font(.system(size: 18, weight: .semibold))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.allowsHitTesting(false)
