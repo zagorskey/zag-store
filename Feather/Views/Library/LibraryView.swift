@@ -120,6 +120,7 @@ struct LibraryView: View {
 	@State private var _searchText = ""
 
 	@State private var _searchActive = false
+	@State private var _searchPinned = false
 
 
 
@@ -478,11 +479,14 @@ struct LibraryView: View {
 
 
 			}
+			.zagTrackSearchPin($_searchPinned)
 .safeAreaInset(edge: .top, spacing: 8) {
 				ZagLiquidGlassSearchBar(
 					text: $_searchText,
 					isActive: $_searchActive,
-					prompt: "Apps, Games and More"
+					isPinned: _searchPinned,
+					prompt: "Apps, Games and More",
+					activePrompt: "Apps, Games and More"
 				)
 				.padding(.horizontal, 16)
 				.padding(.top, 4)
@@ -491,6 +495,7 @@ struct LibraryView: View {
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
+			.animation(.snappy(duration: 0.35), value: _searchActive)
 
 
 
