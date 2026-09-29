@@ -31,3 +31,14 @@ public struct NBTitleWithSubtitleView: View {
 		.frame(maxWidth: .infinity, alignment: .leading)
 	}
 }
+
+
+// MARK: - Standard Zag Store Content Title
+
+public extension View {
+	func zagContentTitleStyle() -> some View {
+		self
+			.font(.system(size: 17, weight: .regular))
+			.foregroundStyle(.primary)
+	}
+}
