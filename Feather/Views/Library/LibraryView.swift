@@ -297,6 +297,203 @@ struct LibraryView: View {
 
 			zagUpdatesContent
 
+				if
+
+
+
+					!_filteredSignedApps.isEmpty,
+
+
+
+					_selectedScope == .all || _selectedScope == .signed
+
+
+
+				{
+
+
+
+					Section {
+
+
+
+						ForEach(_filteredSignedApps, id: \.uuid) { app in
+
+
+
+							LibraryCellView(
+
+
+
+								app: app,
+
+
+
+								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+
+
+
+								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+
+
+
+								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+
+
+
+								selectedAppUUIDs: $_selectedAppUUIDs
+
+
+
+							)
+
+
+
+							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+
+
+
+						}
+
+
+
+					} header: {
+
+
+
+						ZagLibraryHeader(
+
+
+
+							title: .localized("Signed"),
+
+
+
+							count: _filteredSignedApps.count
+
+
+
+						)
+
+
+
+					}
+
+
+
+				}
+
+
+
+
+
+
+
+				if
+
+
+
+					!_filteredImportedApps.isEmpty,
+
+
+
+					_selectedScope == .all || _selectedScope == .imported
+
+
+
+				{
+
+
+
+					Section {
+
+
+
+						ForEach(_filteredImportedApps, id: \.uuid) { app in
+
+
+
+							LibraryCellView(
+
+
+
+								app: app,
+
+
+
+								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+
+
+
+								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+
+
+
+								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+
+
+
+								selectedAppUUIDs: $_selectedAppUUIDs
+
+
+
+							)
+
+
+
+							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+
+
+
+						}
+
+
+
+					} header: {
+
+
+
+						ZagLibraryHeader(
+
+
+
+							title: .localized("Imported"),
+
+
+
+							count: _filteredImportedApps.count
+
+
+
+						)
+
+
+
+					}
+
+
+
+				}
+
+
+
+			}
+.safeAreaInset(edge: .top, spacing: 8) {
+				ZagLiquidGlassSearchBar(
+					text: $_searchText,
+					isActive: $_searchActive,
+					prompt: "Apps, Games and More"
+				)
+				.padding(.horizontal, 16)
+				.padding(.top, 4)
+			}
+			.toolbar(
+				_searchActive ? .hidden : .visible,
+				for: .navigationBar
+			)
+
+
+
 			.compatSearchScopes($_selectedScope) {
 				librarySearchScopes
 			}
@@ -539,7 +736,7 @@ struct LibraryView: View {
 
 
 
-					allowedContentTypes:  [.ipa, .tipa],
+					allowedContentTypes: [.ipa, .tipa],
 
 
 
@@ -628,7 +825,7 @@ struct LibraryView: View {
 
 
 
-						_ = downloadManager.startDownload(from: url, id: "FeatherManualDownload_\\(UUID().uuidString)")
+						_ = downloadManager.startDownload(from: url, id: "FeatherManualDownload_\(UUID().uuidString)")
 
 
 
@@ -748,7 +945,7 @@ struct LibraryView: View {
 
 
 
-}
+
 
 // MARK: - Extension: View
 
