@@ -119,6 +119,7 @@ struct LibraryView: View {
 
 	@State private var _searchText = ""
 
+	@State private var _searchActive = false
 
 
 
@@ -477,12 +478,19 @@ struct LibraryView: View {
 
 
 			}
-.searchable(
-				text: $_searchText,
-				placement: .automatic,
-				prompt: "Apps, Games and More"
+.safeAreaInset(edge: .top, spacing: 8) {
+				ZagLiquidGlassSearchBar(
+					text: $_searchText,
+					isActive: $_searchActive,
+					prompt: "Apps, Games and More"
+				)
+				.padding(.horizontal, 16)
+				.padding(.top, 4)
+			}
+			.toolbar(
+				_searchActive ? .hidden : .visible,
+				for: .navigationBar
 			)
-			.zagSearchDictation()
 
 
 
