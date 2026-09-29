@@ -66,7 +66,6 @@ struct LibraryView: View {
 
 
 
-	@State private var _updatePulse = false
 
 
 
@@ -264,6 +263,26 @@ struct LibraryView: View {
 
 
 
+	@ViewBuilder
+	private var zagUpdatesContent: some View {
+		if !updateManager.updates.isEmpty {
+			ZagUpdatesSection(
+				updates: updateManager.updates,
+				onPreparedForInstall: handlePreparedUpdate
+			)
+		}
+	}
+
+	private func handlePreparedUpdate(_ signedUUID: String) {
+		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
+			uuid: signedUUID
+		) else {
+			return
+		}
+
+		_selectedInstallAppPresenting = AnyApp(base: signed)
+	}
+
 	var body: some View {
 
 
@@ -276,247 +295,10 @@ struct LibraryView: View {
 
 
 
-			if !updateManager.updates.isEmpty {
-
-
-
-				ZagUpdatesSection(
-
-
-
-					updates: updateManager.updates,
-
-
-
-					isPulsing: $_updatePulse
-
-
-
-				)
-
-
-
-			}
-
-
-
-
-
-
-
-				if
-
-
-
-					!_filteredSignedApps.isEmpty,
-
-
-
-					_selectedScope == .all || _selectedScope == .signed
-
-
-
-				{
-
-
-
-					Section {
-
-
-
-						ForEach(_filteredSignedApps, id: \.uuid) { app in
-
-
-
-							LibraryCellView(
-
-
-
-								app: app,
-
-
-
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-
-
-
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
-
-
-
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-
-
-
-								selectedAppUUIDs: $_selectedAppUUIDs
-
-
-
-							)
-
-
-
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-
-
-
-						}
-
-
-
-					} header: {
-
-
-
-						ZagLibraryHeader(
-
-
-
-							title: .localized("Signed"),
-
-
-
-							count: _filteredSignedApps.count
-
-
-
-						)
-
-
-
-					}
-
-
-
-				}
-
-
-
-
-
-
-
-				if
-
-
-
-					!_filteredImportedApps.isEmpty,
-
-
-
-					_selectedScope == .all || _selectedScope == .imported
-
-
-
-				{
-
-
-
-					Section {
-
-
-
-						ForEach(_filteredImportedApps, id: \.uuid) { app in
-
-
-
-							LibraryCellView(
-
-
-
-								app: app,
-
-
-
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-
-
-
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
-
-
-
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-
-
-
-								selectedAppUUIDs: $_selectedAppUUIDs
-
-
-
-							)
-
-
-
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-
-
-
-						}
-
-
-
-					} header: {
-
-
-
-						ZagLibraryHeader(
-
-
-
-							title: .localized("Imported"),
-
-
-
-							count: _filteredImportedApps.count
-
-
-
-						)
-
-
-
-					}
-
-
-
-				}
-
-
-
-			}
-			.safeAreaInset(edge: .top, spacing: 8) {
-				ZagLiquidGlassSearchBar(
-					text: $_searchText,
-					isActive: $_searchActive,
-					prompt: "Apps, Games and More"
-				)
-				.padding(.horizontal, 16)
-				.padding(.top, 4)
-			}
-			.toolbar(
-				_searchActive ? .hidden : .visible,
-				for: .navigationBar
-			)
-
-
+			zagUpdatesContent
 
 			.compatSearchScopes($_selectedScope) {
-
-
-
-				ForEach(Scope.allCases, id: \.displayName) { scope in
-
-
-
-					Text(scope.displayName).tag(scope)
-
-
-
-				}
-
-
-
+				librarySearchScopes
 			}
 
 
@@ -781,7 +563,8 @@ struct LibraryView: View {
 
 
 
-							let id = "FeatherManualDownload_\\(UUID().uuidString)"
+							let downloadUUID = UUID().uuidString
+						let id = "FeatherManualDownload_" + downloadUUID
 
 
 
@@ -965,11 +748,22 @@ struct LibraryView: View {
 
 
 
+}
+
 // MARK: - Extension: View
 
 
 
 extension LibraryView {
+
+	@ViewBuilder
+	private var librarySearchScopes: some View {
+		ForEach(Scope.allCases, id: \.displayName) { scope in
+			Text(scope.displayName)
+				.tag(scope)
+		}
+	}
+
 
 
 
@@ -1261,428 +1055,162 @@ extension LibraryView {
 
 
 private struct ZagUpdatesHeader: View {
-
-
-
 	let count: Int
 
-
-
-	@Binding var isPulsing: Bool
-
-
-
-
-
-
-
 	var body: some View {
-
-
-
-		HStack(spacing: 8) {
-
-
-
-			Circle()
-
-
-
-				.fill(Color.green)
-
-
-
-				.frame(width: 9, height: 9)
-
-
-
-				.opacity(isPulsing ? 1.0 : 0.25)
-
-
-
-				.scaleEffect(isPulsing ? 1.0 : 0.78)
-
-
-
-				.shadow(
-
-
-
-					color: Color.green.opacity(isPulsing ? 0.65 : 0),
-
-
-
-					radius: 4
-
-
-
-				)
-
-
-
-
-
-
-
-			Text(.localized("Updates Available"))
-
-
-
-
-
-
-
-			ZagUpdateBadge(count: count)
-
-
-
-
-
-
-
-			Spacer(minLength: 0)
-
-
-
-		}
-
-
-
-		.onAppear {
-
-
-
-			isPulsing = false
-
-
-
-
-
-
-
-			withAnimation(
-
-
-
-				.easeInOut(duration: 0.8)
-
-
-
-					.repeatForever(autoreverses: true)
-
-
-
-			) {
-
-
-
-				isPulsing = true
-
-
-
+		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+			let phase = context.date.timeIntervalSinceReferenceDate
+			let wave = (sin(phase * .pi * 1.25) + 1.0) / 2.0
+			let opacity = 0.25 + (wave * 0.75)
+			let scale = 0.78 + (wave * 0.22)
+
+			HStack(spacing: 8) {
+				Circle()
+					.fill(Color.green)
+					.frame(width: 9, height: 9)
+					.opacity(opacity)
+					.scaleEffect(scale)
+					.shadow(
+						color: Color.green.opacity(wave * 0.65),
+						radius: 4
+					)
+
+				Text(.localized("Updates Available"))
+
+				ZagUpdateBadge(count: count)
+
+				Spacer(minLength: 0)
 			}
-
-
-
 		}
-
-
-
 	}
-
-
-
 }
 
-
-
-
-
-
-
-
-
-
-
 private struct ZagUpdateRow: View {
-
-
-
 	let update: UpdateManager.AvailableUpdate
+	let onPreparedForInstall: (String) -> Void
 
-
-
-
-
-
+	@ObservedObject private var transactionManager =
+		ZagUpdateTransactionManager.shared
 
 	var body: some View {
-
-
-
 		HStack(spacing: 12) {
-
-
-
 			appIcon
 
-
-
-
-
-
-
 			VStack(alignment: .leading, spacing: 4) {
-
-
-
 				Text(update.app.currentName)
-
-
-
 					.font(.headline)
 
-
-
-
-
-
-
 				Text("\(update.installedVersion) → \(update.availableVersion)")
-
-
-
 					.font(.caption)
-
-
-
 					.foregroundStyle(.secondary)
 			}
-
-
-
-
-
-
 
 			Spacer()
 
-
-
-
-
-
-
-			DownloadButtonView(
-
-
-
-				app: update.app,
-
-
-
-				title: .localized("Update")
-
-
-
-			)
-
-
-
+			zagUpdateButton
 		}
-
-
-
 	}
-
-
-
-
-
-
 
 	@ViewBuilder
+	private var zagUpdateButton: some View {
+		let stage = transactionManager.stage(for: update)
 
+		Button {
+			transactionManager.prepare(update) { result in
+				switch result {
+				case .success(let signedUUID):
+					onPreparedForInstall(signedUUID)
 
-
-	private var appIcon: some View {
-
-
-
-		LazyImage(url: update.app.iconURL) { state in
-
-
-
-			if let image = state.image {
-
-
-
-				image
-
-
-
-					.resizable()
-
-
-
-					.aspectRatio(contentMode: .fill)
-
-
-
-			} else {
-
-
-
-				Image(systemName: "app.fill")
-
-
-
-					.resizable()
-
-
-
-					.scaledToFit()
-
-
-
-					.padding(10)
-
-
-
-					.foregroundStyle(.secondary)
-
-
-
-					.background(Color(uiColor: .secondarySystemBackground))
-
-
-
+				case .failure(let error):
+					UIAlertController.showAlertWithOk(
+						title: .localized("Update Failed"),
+						message: error.localizedDescription
+					)
+				}
 			}
+		} label: {
+			HStack(spacing: 6) {
+				if stage == .downloading ||
+					stage == .importing ||
+					stage == .signing
+				{
+					ProgressView()
+						.controlSize(.small)
+				}
 
-
-
-		}
-
-
-
-		.frame(width: 48, height: 48)
-
-
-
-		.clipShape(
-
-
-
-			RoundedRectangle(
-
-
-
-				cornerRadius: 11,
-
-
-
-				style: .continuous
-
-
-
+				Text(stage?.title ?? .localized("Update"))
+					.lineLimit(1)
+					.font(.headline.bold())
+			}
+			.foregroundStyle(Color.accentColor)
+			.padding(.horizontal, 18)
+			.padding(.vertical, 6)
+			.background(
+				Color(
+					red: 28.0 / 255.0,
+					green: 28.0 / 255.0,
+					blue: 30.0 / 255.0
+				)
 			)
-
-
-
+			.clipShape(Capsule())
+		}
+		.buttonStyle(.borderless)
+		.disabled(
+			stage == .downloading ||
+			stage == .importing ||
+			stage == .signing ||
+			stage == .readyToInstall
 		)
-
-
-
 	}
 
-
-
+	@ViewBuilder
+	private var appIcon: some View {
+		LazyImage(url: update.app.iconURL) { state in
+			if let image = state.image {
+				image
+					.resizable()
+					.aspectRatio(contentMode: .fill)
+			} else {
+				Image(systemName: "app.fill")
+					.resizable()
+					.scaledToFit()
+					.padding(10)
+					.foregroundStyle(.secondary)
+					.background(
+						Color(uiColor: .secondarySystemBackground)
+					)
+			}
+		}
+		.frame(width: 48, height: 48)
+		.clipShape(
+			RoundedRectangle(
+				cornerRadius: 11,
+				style: .continuous
+			)
+		)
+	}
 }
-
-
-
-
-
-
-
-
-
 
 
 private struct ZagUpdatesSection: View {
-
-
-
 	let updates: [UpdateManager.AvailableUpdate]
-
-
-
-	@Binding var isPulsing: Bool
-
-
-
-
-
-
+	let onPreparedForInstall: (String) -> Void
 
 	var body: some View {
-
-
-
 		Section {
-
-
-
 			ForEach(updates) { update in
-
-
-
-				ZagUpdateRow(update: update)
-
-
-
+				ZagUpdateRow(
+					update: update,
+					onPreparedForInstall: onPreparedForInstall
+				)
 			}
-
-
-
 		} header: {
-
-
-
 			ZagUpdatesHeader(
-
-
-
-				count: updates.count,
-
-
-
-				isPulsing: $isPulsing
-
-
-
+				count: updates.count
 			)
-
-
-
 		}
-
-
-
 	}
-
-
-
 }
-
-
-
-
-
-
-
-
-
 
 
 private struct ZagLibraryHeader: View {
@@ -1865,4 +1393,201 @@ private extension View {
 
 	}
 
+}
+
+// MARK: - Zag Store Transactional Updates
+
+@MainActor
+final class ZagUpdateTransactionManager: ObservableObject {
+	static let shared = ZagUpdateTransactionManager()
+
+	enum Stage: Equatable {
+		case downloading
+		case importing
+		case signing
+		case readyToInstall
+		case failed(String)
+
+		var title: String {
+			switch self {
+			case .downloading:
+				return "Downloading"
+			case .importing:
+				return "Importing"
+			case .signing:
+				return "Signing"
+			case .readyToInstall:
+				return "Install"
+			case .failed:
+				return "Retry"
+			}
+		}
+	}
+
+	@Published private(set) var stages: [String: Stage] = [:]
+
+	private init() {}
+
+	func stage(for update: UpdateManager.AvailableUpdate) -> Stage? {
+		stages[update.id]
+	}
+
+	func prepare(
+		_ update: UpdateManager.AvailableUpdate,
+		completion: @escaping (Result<String, Error>) -> Void
+	) {
+		guard stages[update.id] == nil || isRetryable(update) else {
+			return
+		}
+
+		guard let downloadURL = update.app.currentDownloadUrl else {
+			let error = ZagUpdateTransactionError.missingDownloadURL
+			stages[update.id] = .failed(error.localizedDescription)
+			completion(.failure(error))
+			return
+		}
+
+		stages[update.id] = .downloading
+
+		Task {
+			var downloadedFile: URL?
+
+			do {
+				let (temporaryURL, _) = try await URLSession.shared.download(from: downloadURL)
+
+				let localURL = FileManager.default.temporaryDirectory
+					.appendingPathComponent("ZagUpdate_\(UUID().uuidString).ipa")
+
+				try? FileManager.default.removeItem(at: localURL)
+				try FileManager.default.moveItem(at: temporaryURL, to: localURL)
+				downloadedFile = localURL
+
+				stages[update.id] = .importing
+
+				let importHandler = AppFileHandler(file: localURL)
+
+				try await importHandler.copy()
+				try await importHandler.extract()
+				try await importHandler.move()
+				try await importHandler.addToDatabase()
+				try? await importHandler.clean()
+
+				guard let imported = importedApp(uuid: importHandler.uuid) else {
+					throw ZagUpdateTransactionError.importedRecordNotFound
+				}
+
+				stages[update.id] = .signing
+
+				let certificateIndex = UserDefaults.standard.integer(
+					forKey: "feather.selectedCert"
+				)
+
+				guard let certificate = Storage.shared.getCertificate(
+					for: certificateIndex
+				) else {
+					throw ZagUpdateTransactionError.missingCertificate
+				}
+
+				var options = OptionsManager.shared.options
+
+				if
+					options.ppqProtection,
+					let identifier = imported.identifier,
+					certificate.ppQCheck
+				{
+					options.appIdentifier =
+						"\(identifier).\(OptionsManager.shared.options.ppqString)"
+				}
+
+				if
+					let identifier = imported.identifier,
+					let mappedIdentifier = options.identifiers[identifier]
+				{
+					options.appIdentifier = mappedIdentifier
+				}
+
+				if
+					let name = imported.name,
+					let mappedName = options.displayNames[name]
+				{
+					options.appName = mappedName
+				}
+
+				let signingHandler = SigningHandler(
+					app: imported,
+					options: options
+				)
+
+				signingHandler.appCertificate = certificate
+
+				try await signingHandler.copy()
+				try await signingHandler.modify()
+				try? await signingHandler.clean()
+
+				guard signedApp(uuid: signingHandler.uuid) != nil else {
+					throw ZagUpdateTransactionError.signedRecordNotFound
+				}
+
+				try? FileManager.default.removeItem(at: localURL)
+
+				stages[update.id] = .readyToInstall
+				completion(.success(signingHandler.uuid))
+			} catch {
+				if let downloadedFile {
+					try? FileManager.default.removeItem(at: downloadedFile)
+				}
+
+				stages[update.id] = .failed(error.localizedDescription)
+				completion(.failure(error))
+			}
+		}
+	}
+
+	func reset(_ update: UpdateManager.AvailableUpdate) {
+		stages[update.id] = nil
+	}
+
+	private func isRetryable(_ update: UpdateManager.AvailableUpdate) -> Bool {
+		if case .failed = stages[update.id] {
+			return true
+		}
+
+		return false
+	}
+
+	private func importedApp(uuid: String) -> Imported? {
+		let request = Imported.fetchRequest()
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "uuid == %@", uuid)
+
+		return try? Storage.shared.context.fetch(request).first
+	}
+
+	func signedApp(uuid: String) -> Signed? {
+		let request = Signed.fetchRequest()
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "uuid == %@", uuid)
+
+		return try? Storage.shared.context.fetch(request).first
+	}
+}
+
+private enum ZagUpdateTransactionError: LocalizedError {
+	case missingDownloadURL
+	case missingCertificate
+	case importedRecordNotFound
+	case signedRecordNotFound
+
+	var errorDescription: String? {
+		switch self {
+		case .missingDownloadURL:
+			return "The repository did not provide a download URL."
+		case .missingCertificate:
+			return "No signing certificate is selected."
+		case .importedRecordNotFound:
+			return "The imported update could not be found."
+		case .signedRecordNotFound:
+			return "The signed update could not be found."
+		}
+	}
 }

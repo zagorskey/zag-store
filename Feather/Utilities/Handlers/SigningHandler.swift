@@ -13,6 +13,7 @@ import OSLog
 final class SigningHandler: NSObject {
 	private let _fileManager = FileManager.default
 	private let _uuid = UUID().uuidString
+	var uuid: String { _uuid }
 	private var _movedAppPath: URL?
 	// using uuid string is the best way to find the
 	// app we want to sign, it does not matter what
@@ -119,12 +120,12 @@ final class SigningHandler: NSObject {
 			throw SigningFileHandlerError.missingCertifcate
 		}
 		
-		try await self.move()
-		try await self.addToDatabase()
-		
 		if let error = handler.hadError {
 			throw error
 		}
+
+		try await self.move()
+		try await self.addToDatabase()
 	}
 	
 	func move() async throws {

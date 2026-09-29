@@ -13,6 +13,7 @@ import OSLog
 final class AppFileHandler: NSObject, @unchecked Sendable {
 	private let _fileManager = FileManager.default
 	private let _uuid = UUID().uuidString
+	var uuid: String { _uuid }
 	private let _uniqueWorkDir: URL
 	var uniqueWorkDirPayload: URL?
 
@@ -114,15 +115,18 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		}
 		
 		let bundle = Bundle(url: appUrl)
-		
-		Storage.shared.addImported(
-			uuid: _uuid,
-			appName: bundle?.name,
-			appIdentifier: bundle?.bundleIdentifier,
-			appVersion: bundle?.version,
-			appIcon: bundle?.iconFileName
-		) { _ in
-			Logger.misc.info("[\(self._uuid)] Added to database")
+
+		await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+			Storage.shared.addImported(
+				uuid: _uuid,
+				appName: bundle?.name,
+				appIdentifier: bundle?.bundleIdentifier,
+				appVersion: bundle?.version,
+				appIcon: bundle?.iconFileName
+			) { _ in
+				Logger.misc.info("[\(self._uuid)] Added to database")
+				continuation.resume()
+			}
 		}
 	}
 	
