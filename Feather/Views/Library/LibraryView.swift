@@ -491,15 +491,14 @@ struct LibraryView: View {
 				.padding(.horizontal, 16)
 				.padding(.top, 4)
 			}
-			.navigationBarTitleDisplayMode(
-				_searchActive ? .inline : .large
-			)
 			.toolbar(
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
 			.transaction { transaction in
-				transaction.animation = .smooth(duration: 0.5)
+				if _searchActive {
+					transaction.animation = nil
+				}
 			}
 
 
