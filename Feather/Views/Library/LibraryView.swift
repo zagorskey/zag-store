@@ -1319,7 +1319,7 @@ private struct ZagUpdateRow: View {
 
 			VStack(alignment: .leading, spacing: 4) {
 				Text(update.app.currentName)
-					.font(.system(size: 17, weight: .regular))
+					.zagContentTitleStyle()
 
 				Text("\(update.installedVersion) → \(update.availableVersion)")
 					.font(.caption)
