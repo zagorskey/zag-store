@@ -10,8 +10,6 @@ import SwiftUI
 import NimbleViews
 import UIKit
 import UniformTypeIdentifiers
-import Speech
-import AVFoundation
 // MARK: - View
 struct SourcesView: View {
 	@Environment(\.horizontalSizeClass)
@@ -25,7 +23,6 @@ struct SourcesView: View {
 	@State private var _isAddingPresenting = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
-	@State private var _searchActive = false
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
 	@State private var _selectedSearchRoute:
@@ -109,18 +106,12 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
-			.safeAreaInset(edge: .top, spacing: 8) {
-				ZagLiquidGlassSearchBar(
-					text: $_searchText,
-					isActive: $_searchActive
-				)
-					.padding(.horizontal, 16)
-					.padding(.top, 4)
-			}
-			.toolbar(
-				_searchActive ? .hidden : .visible,
-				for: .navigationBar
+			.searchable(
+				text: $_searchText,
+				placement: .automatic,
+				prompt: "Repos, Apps and More"
 			)
+			.zagNativeSearchDictation()
 			.overlay {
 				emptyState
 			}
@@ -680,358 +671,24 @@ struct SourcesView: View {
 		}
 	}
 }
-// MARK: - Zag Store Liquid Glass Search
+// MARK: - Native Search Dictation
 
-struct ZagLiquidGlassSearchBar: View {
-	@Binding var text: String
-	@Binding var isActive: Bool
-	var prompt: String = "Repos, Apps and More"
-
-	@Environment(\.scenePhase)
-	private var scenePhase
-
-	@FocusState
-	private var isFocused: Bool
-
-	@StateObject
-	private var speech = ZagSpeechRecognizer()
-
-	var body: some View {
-		HStack(spacing: 10) {
-			HStack(spacing: 10) {
-				Image(systemName: "magnifyingglass")
-					.font(.system(size: 19, weight: .regular))
-					.foregroundStyle(.primary)
-
-				ZStack(alignment: .leading) {
-					if text.isEmpty {
-						Text(prompt)
-							.font(.system(size: 17, weight: .regular))
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-							.allowsHitTesting(false)
-					}
-
-					TextField("", text: $text)
-						.focused($isFocused)
-						.textInputAutocapitalization(.never)
-						.autocorrectionDisabled()
-						.submitLabel(.search)
-				}
-
-				Button {
-					if speech.isListening {
-						speech.stop()
-					} else {
-						isActive = true
-						isFocused = true
-						speech.start { transcript in
-							text = transcript
-						}
-					}
-				} label: {
-					Image(
-						systemName:
-							speech.isListening
-								? "waveform"
-								: "mic.fill"
-					)
-					.font(.system(size: 21, weight: .regular))
-					.foregroundStyle(.primary)
-					.frame(width: 28, height: 28)
-				}
-				.buttonStyle(.plain)
-				.accessibilityLabel(
-					speech.isListening
-						? "Stop Dictation"
-						: "Start Dictation"
-				)
-
-				if isActive && !text.isEmpty {
-					Button {
-						text = ""
-					} label: {
-						Image(systemName: "xmark.circle.fill")
-							.font(.system(size: 17))
-							.foregroundStyle(.secondary)
-					}
-					.buttonStyle(.plain)
-					.accessibilityLabel("Clear Search")
-				}
-			}
-			.padding(.horizontal, 16)
-			.frame(height: 50)
-			.zagSearchBackground(isActive: isActive)
-
-			if isActive {
-				Button {
-					closeSearch()
-				} label: {
-					Image(systemName: "xmark")
-						.font(.system(size: 22, weight: .semibold))
-						.foregroundStyle(Color.white)
-						.frame(width: 50, height: 50)
-						.zagSearchGlass()
-				}
-				.buttonStyle(.plain)
-				.accessibilityLabel("Close Search")
-				.transition(.scale.combined(with: .opacity))
-			}
-		}
-		.animation(.snappy, value: isActive)
-		.onChange(of: isFocused) { focused in
-			if focused {
-				isActive = true
-			}
-		}
-		.onChange(of: isActive) { active in
-			if !active {
-				isFocused = false
-				speech.stop()
-			}
-		}
-		.onChange(of: scenePhase) { phase in
-			if phase != .active {
-				speech.stop()
-				isFocused = false
-				isActive = false
-			}
-		}
-		.onDisappear {
-			speech.stop()
-			isFocused = false
-			isActive = false
-		}
-	}
-
-	private func closeSearch() {
-		speech.stop()
-		isFocused = false
-		isActive = false
-	}
-}
-
-extension View {
+private struct ZagNativeSearchDictationModifier: ViewModifier {
 	@ViewBuilder
-	func zagSearchBackground(isActive: Bool) -> some View {
-		if isActive {
-			self.zagSearchGlass()
-		} else {
-			self
-				.background(
-					Color(uiColor: .secondarySystemFill),
-					in: Capsule()
-				)
-		}
-	}
-
-	@ViewBuilder
-	func zagSearchGlass() -> some View {
-		if #available(iOS 26.0, *) {
-			self.glassEffect(
-				.regular.interactive(),
-				in: Capsule()
+	func body(content: Content) -> some View {
+		if #available(iOS 17.0, *) {
+			content.searchDictationBehavior(
+				.inline(activation: .onSelect)
 			)
 		} else {
-			self
-				.background(
-					.ultraThinMaterial,
-					in: Capsule()
-				)
-				.overlay {
-					Capsule()
-						.strokeBorder(
-							Color.primary.opacity(0.08),
-							lineWidth: 0.5
-						)
-				}
+			content
 		}
 	}
 }
 
-@MainActor
-final class ZagSpeechRecognizer: ObservableObject {
-	@Published private(set)
-	var isListening = false
-
-	private let recognizer = SFSpeechRecognizer()
-	private var request:
-		SFSpeechAudioBufferRecognitionRequest?
-	private var recognitionTask:
-		SFSpeechRecognitionTask?
-	private let audioEngine = AVAudioEngine()
-	private var transcriptHandler: ((String) -> Void)?
-	private var silenceTask: Task<Void, Never>?
-
-	func start(
-		onTranscript: @escaping (String) -> Void
-	) {
-		if isListening {
-			stop()
-			return
-		}
-
-		transcriptHandler = onTranscript
-
-		SFSpeechRecognizer.requestAuthorization { status in
-			Task { @MainActor in
-				guard status == .authorized else {
-					self.stop()
-					return
-				}
-
-				AVAudioSession.sharedInstance()
-					.requestRecordPermission { granted in
-						Task { @MainActor in
-							guard granted else {
-								self.stop()
-								return
-							}
-
-							self.beginRecognition()
-						}
-					}
-			}
-		}
-	}
-
-	private func beginRecognition() {
-		stopAudioOnly()
-
-		guard
-			let recognizer,
-			recognizer.isAvailable
-		else {
-			return
-		}
-
-		let session = AVAudioSession.sharedInstance()
-
-		do {
-			try session.setCategory(
-				.record,
-				mode: .measurement,
-				options: .duckOthers
-			)
-			try session.setActive(
-				true,
-				options: .notifyOthersOnDeactivation
-			)
-
-			let request =
-				SFSpeechAudioBufferRecognitionRequest()
-
-			request.shouldReportPartialResults = true
-			self.request = request
-
-			let input = audioEngine.inputNode
-			let format = input.outputFormat(forBus: 0)
-
-			input.removeTap(onBus: 0)
-			input.installTap(
-				onBus: 0,
-				bufferSize: 1024,
-				format: format
-			) { buffer, _ in
-				request.append(buffer)
-			}
-
-			recognitionTask = recognizer
-				.recognitionTask(with: request) {
-					[weak self] result, error in
-
-					guard let self else {
-						return
-					}
-
-					Task { @MainActor in
-						if let result {
-							self.transcriptHandler?(
-								result.bestTranscription
-									.formattedString
-							)
-
-							self.scheduleSilenceStop()
-						}
-
-						if error != nil ||
-							result?.isFinal == true {
-							self.stop()
-						}
-					}
-				}
-
-			audioEngine.prepare()
-			try audioEngine.start()
-			isListening = true
-
-			scheduleInitialTimeout()
-		} catch {
-			stop()
-		}
-	}
-
-	private func scheduleInitialTimeout() {
-		silenceTask?.cancel()
-		silenceTask = Task { [weak self] in
-			try? await Task.sleep(
-				for: .seconds(8)
-			)
-
-			guard !Task.isCancelled else {
-				return
-			}
-
-			await MainActor.run {
-				self?.stop()
-			}
-		}
-	}
-
-	private func scheduleSilenceStop() {
-		silenceTask?.cancel()
-		silenceTask = Task { [weak self] in
-			try? await Task.sleep(
-				for: .seconds(1.8)
-			)
-
-			guard !Task.isCancelled else {
-				return
-			}
-
-			await MainActor.run {
-				self?.stop()
-			}
-		}
-	}
-
-	private func stopAudioOnly() {
-		silenceTask?.cancel()
-		silenceTask = nil
-
-		if audioEngine.isRunning {
-			audioEngine.stop()
-		}
-
-		audioEngine.inputNode.removeTap(
-			onBus: 0
-		)
-
-		request?.endAudio()
-		recognitionTask?.cancel()
-		recognitionTask = nil
-		request = nil
-		isListening = false
-
-		try? AVAudioSession.sharedInstance()
-			.setActive(
-				false,
-				options: .notifyOthersOnDeactivation
-			)
-	}
-
-	func stop() {
-		stopAudioOnly()
+private extension View {
+	func zagNativeSearchDictation() -> some View {
+		modifier(ZagNativeSearchDictationModifier())
 	}
 }
 
