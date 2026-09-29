@@ -58,8 +58,7 @@ struct SourcesCellView: View {
 				Text(
 					source.name ?? .localized("Unknown")
 				)
-				.font(.system(size: 17, weight: .regular))
-				.foregroundStyle(.primary)
+				.zagContentTitleStyle()
 				.lineLimit(1)
 
 				Text(lastUpdatedText)
