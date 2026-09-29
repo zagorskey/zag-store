@@ -700,14 +700,14 @@ struct ZagLiquidGlassSearchBar: View {
 		HStack(spacing: 10) {
 			HStack(spacing: 10) {
 				Image(systemName: "magnifyingglass")
-					.font(.system(size: 19, weight: .medium))
-					.foregroundStyle(Color.white)
+					.font(.system(size: 19, weight: .regular))
+					.foregroundStyle(.primary)
 
 				ZStack(alignment: .leading) {
 					if text.isEmpty {
 						Text(prompt)
-							.fontWeight(.semibold)
-							.foregroundStyle(Color.white)
+							.font(.system(size: 17, weight: .regular))
+							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.allowsHitTesting(false)
 					}
@@ -736,8 +736,8 @@ struct ZagLiquidGlassSearchBar: View {
 								? "waveform"
 								: "mic.fill"
 					)
-					.font(.system(size: 17, weight: .semibold))
-					.foregroundStyle(Color.white)
+					.font(.system(size: 21, weight: .regular))
+					.foregroundStyle(.primary)
 					.frame(width: 28, height: 28)
 				}
 				.buttonStyle(.plain)
@@ -761,7 +761,7 @@ struct ZagLiquidGlassSearchBar: View {
 			}
 			.padding(.horizontal, 16)
 			.frame(height: 50)
-			.zagSearchGlass()
+			.zagSearchBackground(isActive: isActive)
 
 			if isActive {
 				Button {
@@ -812,6 +812,19 @@ struct ZagLiquidGlassSearchBar: View {
 }
 
 extension View {
+	@ViewBuilder
+	func zagSearchBackground(isActive: Bool) -> some View {
+		if isActive {
+			self.zagSearchGlass()
+		} else {
+			self
+				.background(
+					Color(uiColor: .secondarySystemFill),
+					in: Capsule()
+				)
+		}
+	}
+
 	@ViewBuilder
 	func zagSearchGlass() -> some View {
 		if #available(iOS 26.0, *) {
