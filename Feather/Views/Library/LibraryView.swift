@@ -696,7 +696,16 @@ struct LibraryView: View {
 
 
 
-				InstallPreviewView(app: app.base, isSharing: app.archive)
+				InstallPreviewView(
+					app: app.base,
+					isSharing: app.archive,
+					onInstallCompleted: {
+						guard let signedUUID = app.base.uuid else { return }
+						ZagUpdateTransactionManager.shared.completeInstallation(
+							signedUUID: signedUUID
+						)
+					}
+				)
 
 
 
@@ -1623,6 +1632,15 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 	@Published private(set) var stages: [String: Stage] = [:]
 
+	private struct PendingUpdate {
+		let updateID: String
+		let importedUUID: String
+		let signedUUID: String
+		let supersededSignedUUIDs: [String]
+	}
+
+	private var pendingBySignedUUID: [String: PendingUpdate] = [:]
+
 	private init() {}
 
 	func stage(for update: UpdateManager.AvailableUpdate) -> Stage? {
@@ -1721,9 +1739,23 @@ final class ZagUpdateTransactionManager: ObservableObject {
 				try await signingHandler.modify()
 				try? await signingHandler.clean()
 
-				guard signedApp(uuid: signingHandler.uuid) != nil else {
+				guard let newSigned = signedApp(uuid: signingHandler.uuid) else {
 					throw ZagUpdateTransactionError.signedRecordNotFound
 				}
+
+				let supersededSignedUUIDs = signedApps(
+					matchingIdentifier: newSigned.identifier,
+					name: newSigned.name,
+					version: update.installedVersion,
+					excludingUUID: signingHandler.uuid
+				).compactMap(\.uuid)
+
+				pendingBySignedUUID[signingHandler.uuid] = PendingUpdate(
+					updateID: update.id,
+					importedUUID: importHandler.uuid,
+					signedUUID: signingHandler.uuid,
+					supersededSignedUUIDs: supersededSignedUUIDs
+				)
 
 				try? FileManager.default.removeItem(at: localURL)
 
@@ -1738,6 +1770,25 @@ final class ZagUpdateTransactionManager: ObservableObject {
 				completion(.failure(error))
 			}
 		}
+	}
+
+	func completeInstallation(signedUUID: String) {
+		guard let pending = pendingBySignedUUID.removeValue(forKey: signedUUID) else {
+			return
+		}
+
+		if let imported = importedApp(uuid: pending.importedUUID) {
+			Storage.shared.deleteApp(for: imported)
+		}
+
+		for oldUUID in pending.supersededSignedUUIDs {
+			guard oldUUID != pending.signedUUID else { continue }
+			if let oldSigned = signedApp(uuid: oldUUID) {
+				Storage.shared.deleteApp(for: oldSigned)
+			}
+		}
+
+		stages[pending.updateID] = nil
 	}
 
 	func reset(_ update: UpdateManager.AvailableUpdate) {
@@ -1766,6 +1817,38 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		request.predicate = NSPredicate(format: "uuid == %@", uuid)
 
 		return try? Storage.shared.context.fetch(request).first
+	}
+
+	private func signedApps(
+		matchingIdentifier identifier: String?,
+		name: String?,
+		version: String,
+		excludingUUID: String
+	) -> [Signed] {
+		guard let identifier, let name else { return [] }
+
+		let request = Signed.fetchRequest()
+		request.predicate = NSPredicate(
+			format: "identifier == %@ AND version == %@ AND uuid != %@",
+			identifier,
+			version,
+			excludingUUID
+		)
+
+		let normalizedName = normalizeAppName(name)
+
+		return (try? Storage.shared.context.fetch(request))?.filter {
+			guard let candidateName = $0.name else { return false }
+			return normalizeAppName(candidateName) == normalizedName
+		} ?? []
+	}
+
+	private func normalizeAppName(_ value: String) -> String {
+		value
+			.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+			.components(separatedBy: CharacterSet.alphanumerics.inverted)
+			.joined()
+			.lowercased()
 	}
 }
 

@@ -19,16 +19,23 @@ struct InstallPreviewView: View {
 	@AppStorage("Feather.serverMethod") private var _serverMethod: Int = 0
 	@State private var _isWebviewPresenting = false
 	@State private var progressTask: Task<Void, Never>?
+	@State private var _didReportInstallSuccess = false
 	
 	var app: AppInfoPresentable
 	@StateObject var viewModel: InstallerStatusViewModel
 	@StateObject var installer: ServerInstaller
 	
 	@State var isSharing: Bool
+	let onInstallCompleted: (() -> Void)?
 	
-	init(app: AppInfoPresentable, isSharing: Bool = false) {
+	init(
+		app: AppInfoPresentable,
+		isSharing: Bool = false,
+		onInstallCompleted: (() -> Void)? = nil
+	) {
 		self.app = app
 		self.isSharing = isSharing
+		self.onInstallCompleted = onInstallCompleted
 		let viewModel = InstallerStatusViewModel(isIdevice: UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1)
 		self._viewModel = StateObject(wrappedValue: viewModel)
 		self._installer = StateObject(wrappedValue: try! ServerInstaller(app: app, viewModel: viewModel))
@@ -57,6 +64,10 @@ struct InstallPreviewView: View {
 			SafariRepresentableView(url: installer.pageEndpoint).ignoresSafeArea()
 		}
 		.onReceive(viewModel.$status) { newStatus in
+			if case .completed(.success(())) = newStatus {
+				_reportInstallSuccessIfNeeded()
+			}
+
 			if _installationMethod == 0 {
 				if case .ready = newStatus {
 					if _serverMethod == 0 {
@@ -109,6 +120,12 @@ struct InstallPreviewView: View {
 		}
 	}
 	
+	private func _reportInstallSuccessIfNeeded() {
+		guard !_didReportInstallSuccess else { return }
+		_didReportInstallSuccess = true
+		onInstallCompleted?()
+	}
+
 	@ViewBuilder
 	private func _status() -> some View {
 		Label(viewModel.statusLabel, systemImage: viewModel.statusImage)
