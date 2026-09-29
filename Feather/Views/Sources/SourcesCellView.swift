@@ -48,7 +48,7 @@ struct SourcesCellView: View {
 	var body: some View {
 		let isRegular = horizontalSizeClass != .compact
 
-		HStack(spacing: 18) {
+		HStack(spacing: 10) {
 			repositoryIcon
 
 			VStack(
@@ -58,7 +58,7 @@ struct SourcesCellView: View {
 				Text(
 					source.name ?? .localized("Unknown")
 				)
-				.font(.headline)
+				.font(.system(size: 17, weight: .regular))
 				.foregroundStyle(.primary)
 				.lineLimit(1)
 

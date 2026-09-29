@@ -6,3 +6,5 @@ xcuserdata/
 deps
 cert.json
 _build
+
+*.bak-pass10b1

@@ -83,18 +83,20 @@ struct LibraryCellView: View {
 				.buttonStyle(.borderless)
 			}
 
-			FRAppIconView(
-				app: app,
-				size: 57
-			)
+			HStack(spacing: 10) {
+				FRAppIconView(
+					app: app,
+					size: 62
+				)
 
-			NBTitleWithSubtitleView(
-				title:
-					app.name ??
-					.localized("Unknown"),
-				subtitle: _desc,
-				linelimit: 0
-			)
+				NBTitleWithSubtitleView(
+					title:
+						app.name ??
+						.localized("Unknown"),
+					subtitle: _desc,
+					linelimit: 0
+				)
+			}
 
 			Spacer(minLength: 6)
 
@@ -265,6 +267,7 @@ extension LibraryCellView {
 						)
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
+						.padding(.top, 4)
 				} else if let certInfo {
 					Text(certInfo.formatted)
 						.font(
@@ -275,6 +278,7 @@ extension LibraryCellView {
 						)
 						.foregroundStyle(certInfo.color)
 						.lineLimit(1)
+						.padding(.top, 4)
 				}
 			}
 		} else {
@@ -289,20 +293,33 @@ private struct ZagLibraryActionPill: View {
 	let title: String
 	let action: () -> Void
 
+	@Environment(\.colorScheme)
+	private var colorScheme
+
+	@AppStorage("Feather.userTintColor")
+	private var userTintColor: String = "#4395F8"
+
+	private var pillBackground: Color {
+		colorScheme == .dark
+			? Color(hex: "#1C1C1E")
+			: Color(hex: "#F2F2F7")
+	}
+
+	private var pillForeground: Color {
+		Color(hex: userTintColor)
+	}
+
 	var body: some View {
 		Button(action: action) {
 			Text(title)
-				.font(.system(size: 15, weight: .semibold))
+				.font(.system(size: 15, weight: .bold))
 				.lineLimit(1)
-				.frame(width: 70, height: 30)
+				.frame(width: 88, height: 34)
+				.foregroundStyle(pillForeground)
+				.background(pillBackground)
+				.clipShape(Capsule())
 				.contentShape(Capsule())
 		}
-		.foregroundStyle(Color.accentColor)
-		.background(
-			Color(uiColor: .quaternarySystemFill)
-		)
-		.clipShape(Capsule())
-		.contentShape(Capsule())
 		.buttonStyle(.borderless)
 	}
 }

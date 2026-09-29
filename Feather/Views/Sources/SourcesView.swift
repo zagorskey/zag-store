@@ -473,16 +473,42 @@ struct SourcesView: View {
 					let isRegular =
 						horizontalSizeClass
 							!= .compact
-					HStack(spacing: 18) {
-						Image("Repositories")
-							.appIconStyle()
-						NBTitleWithSubtitleView(
-							title: .localized(
-								"All Repositories"
-							),
-							subtitle: .localized(
-								"See all apps from your sources"
+					HStack(spacing: 10) {
+						Image(systemName: "globe")
+							.resizable()
+							.scaledToFit()
+							.frame(width: 42, height: 42)
+							.foregroundStyle(.primary)
+							.frame(width: 62, height: 62)
+
+						VStack(
+							alignment: .leading,
+							spacing: 2
+						) {
+							Text(
+								.localized(
+									"All Repositories"
+								)
 							)
+							.font(
+								.system(
+									size: 17,
+									weight: .regular
+								)
+							)
+							.foregroundStyle(.primary)
+
+							Text(
+								.localized(
+									"See all apps from your sources"
+								)
+							)
+							.font(.subheadline)
+							.foregroundStyle(.secondary)
+						}
+						.frame(
+							maxWidth: .infinity,
+							alignment: .leading
 						)
 					}
 					.padding(

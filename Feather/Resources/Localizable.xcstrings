@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
     "%@ → %@" : {
       "localizations" : {
         "en" : {
@@ -879,6 +882,9 @@
         }
       }
     },
+    "Add Repository" : {
+
+    },
     "Add Source" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1698,6 +1704,9 @@
           }
         }
       }
+    },
+    "Apps" : {
+
     },
     "Archive & Compression" : {
       "extractionState" : "manual",
@@ -2748,6 +2757,9 @@
         }
       }
     },
+    "Clear Search" : {
+
+    },
     "Close" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2812,6 +2824,9 @@
           }
         }
       }
+    },
+    "Close Search" : {
+
     },
     "Completed" : {
       "extractionState" : "manual",
@@ -5408,6 +5423,9 @@
         }
       }
     },
+    "Export File" : {
+
+    },
     "Failed to download, check your internet connection and try again." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5987,6 +6005,9 @@
           }
         }
       }
+    },
+    "From Clipboard" : {
+
     },
     "Fully Local" : {
       "extractionState" : "manual",
@@ -7350,6 +7371,9 @@
           }
         }
       }
+    },
+    "Import File" : {
+
     },
     "Import from Files" : {
       "comment" : "Select an app from files to import",
@@ -11618,6 +11642,12 @@
         }
       }
     },
+    "Refresh Repositories" : {
+
+    },
+    "Refreshing Repositories" : {
+
+    },
     "Removal" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12308,6 +12338,9 @@
           }
         }
       }
+    },
+    "Repository Transfer" : {
+
     },
     "Reset" : {
       "extractionState" : "manual",
@@ -14965,6 +14998,9 @@
     "Standard Badges" : {
 
     },
+    "Start Dictation" : {
+
+    },
     "Start Signing" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15037,6 +15073,9 @@
       }
     },
     "Status Dot Colour" : {
+
+    },
+    "Stop Dictation" : {
 
     },
     "Store Cell Appearance" : {
@@ -16019,6 +16058,9 @@
           }
         }
       }
+    },
+    "To Clipboard" : {
+
     },
     "Toggling show sheet will present a share sheet after exporting to your files." : {
       "extractionState" : "manual",

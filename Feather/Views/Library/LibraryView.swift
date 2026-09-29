@@ -1270,7 +1270,7 @@ private struct ZagUpdatesHeader: View {
 			let opacity = 0.25 + (wave * 0.75)
 			let scale = 0.78 + (wave * 0.22)
 
-			HStack(spacing: 8) {
+			HStack(spacing: 10) {
 				Circle()
 					.fill(Color.green)
 					.frame(width: 9, height: 9)
@@ -1293,6 +1293,21 @@ private struct ZagUpdatesHeader: View {
 
 private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
+	@Environment(\.colorScheme) private var colorScheme
+
+	@AppStorage("Feather.userTintColor")
+	private var selectedColorHex: String = "#4395F8"
+
+	@AppStorage("Feather.shouldTintIcons")
+	private var shouldTintIcons: Bool = false
+
+	@AppStorage("Feather.shouldChangeIconsBasedOffStyle")
+	private var shouldChangeIconsBasedOffStyle: Bool = false
+
+	private var useDarkIconAppearance: Bool {
+		shouldChangeIconsBasedOffStyle &&
+		colorScheme == .dark
+	}
 	let onPreparedForInstall: (String) -> Void
 
 	@ObservedObject private var transactionManager =
@@ -1373,9 +1388,28 @@ private struct ZagUpdateRow: View {
 	private var appIcon: some View {
 		LazyImage(url: update.app.iconURL) { state in
 			if let image = state.image {
-				image
-					.resizable()
-					.aspectRatio(contentMode: .fill)
+				if shouldTintIcons {
+					image
+			.resizable()
+			.aspectRatio(contentMode: .fill)
+			.saturation(0)
+			.contrast(1.25)
+			.overlay(
+				Color(hex: selectedColorHex)
+					.opacity(0.82)
+					.blendMode(.color)
+			)
+			} else if useDarkIconAppearance {
+					image
+						.resizable()
+						.aspectRatio(contentMode: .fill)
+						.brightness(-0.18)
+						.contrast(1.08)
+				} else {
+					image
+						.resizable()
+						.aspectRatio(contentMode: .fill)
+				}
 			} else {
 				Image(systemName: "app.fill")
 					.resizable()
@@ -1387,7 +1421,7 @@ private struct ZagUpdateRow: View {
 					)
 			}
 		}
-		.frame(width: 48, height: 48)
+		.frame(width: 62, height: 62)
 		.clipShape(
 			RoundedRectangle(
 				cornerRadius: 11,

@@ -11,65 +11,153 @@ import NimbleViews
 import Combine
 import NukeUI
 
-// thats a whole pharaghraph of codes
 struct SourceAppsCellView: View {
-	@AppStorage("Feather.storeCellAppearance") private var _storeCellAppearance: Int = 0
-	
+	@AppStorage("Feather.storeCellAppearance")
+	private var _storeCellAppearance: Int = 0
+
 	var source: ASRepository
 	var app: ASRepository.App
-	
+
 	var body: some View {
 		VStack {
-			HStack(spacing: 2) {
-				FRIconCellView(
-					title: app.currentName,
-					subtitle: Self.appDescription(app: app),
-					iconUrl: app.iconURL
-				)
-				.overlay(alignment: .bottomLeading) {
-					if let iconURL = source.currentIconURL {
-						LazyImage(url: iconURL) { state in
-							if let image = state.image {
-								image
-									.appIconStyle(size: 20, isCircle: true, background: Color(uiColor: .secondarySystemBackground))
-									.offset(x: 41, y: 4)
-							}
-						}
-					}
-				}
+			HStack(spacing: 10) {
+				appInformation
+
 				DownloadButtonView(app: app)
 			}
-			
+
 			if
 				_storeCellAppearance != 0,
 				let desc = app.localizedDescription
 			{
 				Text(desc)
-					.frame(maxWidth: .infinity, alignment: .leading)
+					.frame(
+						maxWidth: .infinity,
+						alignment: .leading
+					)
 					.font(.subheadline)
 					.foregroundStyle(.secondary)
 					.padding(.top, 2)
 			}
 		}
 	}
-	
-	static func appDescription(app: ASRepository.App) -> String {
+
+	private var appInformation: some View {
+		HStack(spacing: 10) {
+			appIcon
+
+			VStack(
+				alignment: .leading,
+				spacing: 2
+			) {
+				Text(app.currentName)
+					.font(
+						.system(
+							size: 17,
+							weight: .regular
+						)
+					)
+					.foregroundStyle(.primary)
+					.lineLimit(1)
+
+				Text(
+					Self.appDescription(
+						app: app
+					)
+				)
+				.font(.subheadline)
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+			}
+			.frame(
+				maxWidth: .infinity,
+				alignment: .leading
+			)
+		}
+	}
+
+	@ViewBuilder
+	private var appIcon: some View {
+		ZStack(alignment: .bottomLeading) {
+			if let iconURL = app.iconURL {
+				LazyImage(url: iconURL) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 62
+							)
+					} else {
+						standardIcon
+					}
+				}
+			} else {
+				standardIcon
+			}
+
+			if let sourceIconURL =
+				source.currentIconURL
+			{
+				LazyImage(
+					url: sourceIconURL
+				) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 20,
+								isCircle: true,
+								background:
+									Color(
+										uiColor:
+											.secondarySystemBackground
+									)
+							)
+							.offset(
+								x: 46,
+								y: 4
+							)
+					}
+				}
+			}
+		}
+	}
+
+	private var standardIcon: some View {
+		Image("App_Unknown")
+			.appIconStyle(size: 62)
+	}
+
+	static func appDescription(
+		app: ASRepository.App
+	) -> String {
 		let optionalComponents: [String?] = [
 			app.currentVersion,
-			app.currentDescription ?? .localized("An awesome application")
+			app.currentDescription
+				?? .localized(
+					"An awesome application"
+				)
 		]
-		
-		let components: [String] = optionalComponents.compactMap { value in
-			guard
-				let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-				!trimmed.isEmpty
-			else {
-				return nil
+
+		let components: [String] =
+			optionalComponents.compactMap {
+				value in
+
+				guard
+					let trimmed =
+						value?
+						.trimmingCharacters(
+							in:
+								.whitespacesAndNewlines
+						),
+					!trimmed.isEmpty
+				else {
+					return nil
+				}
+
+				return trimmed
 			}
-			
-			return trimmed
-		}
-		
-		return components.joined(separator: " • ")
+
+		return components.joined(
+			separator: " • "
+		)
 	}
 }
