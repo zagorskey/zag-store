@@ -88,3 +88,42 @@ struct ZagSectionHeader: View {
 		}
 	}
 }
+
+
+// MARK: - Standard Zag Store Action Pill
+
+struct ZagActionPill: View {
+	let title: String
+	var showsProgress: Bool = false
+	let action: () -> Void
+
+	@Environment(\.colorScheme)
+	private var colorScheme
+
+	private var pillBackground: Color {
+		colorScheme == .dark
+			? Color(hex: "#1C1C1E")
+			: Color(hex: "#F2F2F7")
+	}
+
+	var body: some View {
+		Button(action: action) {
+			HStack(spacing: 6) {
+				if showsProgress {
+					ProgressView()
+						.controlSize(.small)
+				}
+
+				Text(title)
+					.font(.headline)
+					.lineLimit(1)
+			}
+			.frame(width: 88, height: 34)
+			.foregroundStyle(Color.accentColor)
+			.background(pillBackground)
+			.clipShape(Capsule())
+			.contentShape(Capsule())
+		}
+		.buttonStyle(.borderless)
+	}
+}
