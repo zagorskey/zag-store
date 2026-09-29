@@ -126,7 +126,6 @@ struct SourcesView: View {
 				_searchActive ? .hidden : .visible,
 				for: .navigationBar
 			)
-			.animation(.snappy(duration: 0.35), value: _searchActive)
 			.overlay {
 				emptyState
 			}
@@ -520,6 +519,7 @@ struct SourcesView: View {
 					.padding(
 						isRegular ? 12 : 0
 					)
+					.listRowSeparator(.hidden)
 					.background(
 						isRegular
 							? RoundedRectangle(
@@ -714,7 +714,7 @@ struct ZagLiquidGlassSearchBar: View {
 				ZStack(alignment: .leading) {
 					if text.isEmpty {
 						Text(isActive ? (activePrompt ?? prompt) : prompt)
-							.font(.system(size: 17, weight: .semibold))
+							.font(.system(size: 16, weight: .semibold))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.allowsHitTesting(false)
@@ -786,7 +786,7 @@ struct ZagLiquidGlassSearchBar: View {
 				.transition(.scale.combined(with: .opacity))
 			}
 		}
-		.animation(.snappy, value: isActive)
+		.animation(.smooth(duration: 0.42), value: isActive)
 		.onChange(of: isFocused) { focused in
 			if focused {
 				isActive = true
