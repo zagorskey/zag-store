@@ -38,7 +38,7 @@ public struct NBTitleWithSubtitleView: View {
 public extension View {
 	func zagContentTitleStyle() -> some View {
 		self
-			.font(.system(size: 17, weight: .regular))
+			.font(.system(size: 19, weight: .regular))
 			.foregroundStyle(.primary)
 	}
 }
