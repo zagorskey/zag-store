@@ -81,7 +81,7 @@ struct AppearanceView: View {
 	// MARK: Body
 
 	var body: some View {
-		NBList(.localized("Appearance")) {
+		NBList(.localized("Appearance"), transparentBackground: true) {
 			Section {
 				Picker(
 					.localized("Appearance"),
@@ -176,6 +176,9 @@ struct AppearanceView: View {
 				.labelsHidden()
 				.pickerStyle(.inline)
 			}
+		}
+		.background {
+			ZagWallpaperBackground()
 		}
 		.sheet(isPresented: $_wallpaperPickerPresenting) {
 			ZagWallpaperPicker { image in
