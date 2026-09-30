@@ -137,11 +137,18 @@ async fn run_pairing(
     mdns.register(service_info)
         .map_err(|error| format!("Unable to advertise RPPairing: {error}"))?;
 
-    emit(
-        callback,
-        2,
-        format!("Advertising on port {port}. Waiting for this iPhone…"),
-    );
+    // Hand the already-bound listener's Bonjour metadata to Swift. On iOS we
+    // publish with Foundation's NetService so the advertisement participates in
+    // the system Local Network privacy path instead of relying on a raw mDNS
+    // socket from the Rust process.
+    let mut native_bonjour = format!("{port}\n{service_identifier}");
+    for (key, value) in &txt {
+        native_bonjour.push('\n');
+        native_bonjour.push_str(key);
+        native_bonjour.push('=');
+        native_bonjour.push_str(value);
+    }
+    emit(callback, 2, native_bonjour);
 
     let (stream, peer_address) = listener
         .accept()
