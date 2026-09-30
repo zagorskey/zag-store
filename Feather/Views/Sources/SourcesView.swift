@@ -236,6 +236,7 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
+			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
 				placement: .platform(),
@@ -770,6 +771,11 @@ struct SourcesView: View {
 			}
 			.listSectionSeparator(.hidden, edges: .all)
 			Section {
+				ZagRepositoriesHeader(
+					count: _displayedSources.count
+				)
+				.listRowSeparator(.hidden)
+
 				ForEach(
 					_displayedSources
 				) { source in
@@ -798,11 +804,6 @@ struct SourcesView: View {
 					}
 				}
 				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
-			} header: {
-				ZagRepositoriesHeader(
-					count:
-						_displayedSources.count
-				)
 			}
 		}
 	}
@@ -812,6 +813,13 @@ struct SourcesView: View {
 		some View {
 		if !_matchingApps.isEmpty {
 			Section {
+				HStack {
+					Text("Apps")
+					Spacer()
+					ZagCountBadge(count: _matchingApps.count)
+				}
+				.listRowSeparator(.hidden)
+
 				ForEach(
 					_matchingApps
 				) { route in
@@ -828,20 +836,15 @@ struct SourcesView: View {
 					}
 					.buttonStyle(.plain)
 				}
-			} header: {
-				HStack {
-					Text("Apps")
-					Spacer()
-					ZagCountBadge(
-						count:
-							_matchingApps
-								.count
-					)
-				}
 			}
 		}
 		if !_filteredSources.isEmpty {
 			Section {
+				ZagRepositoriesHeader(
+					count: _displayedSources.count
+				)
+				.listRowSeparator(.hidden)
+
 				ForEach(
 					_displayedSources
 				) { source in
@@ -868,11 +871,6 @@ struct SourcesView: View {
 						.opacity(0)
 					}
 				}
-			} header: {
-				ZagRepositoriesHeader(
-					count:
-						_displayedSources.count
-				)
 			}
 		}
 	}
