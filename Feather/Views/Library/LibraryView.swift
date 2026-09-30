@@ -287,6 +287,8 @@ struct LibraryView: View {
 
 					ZagUpdateTransferParticles()
 
+					Spacer(minLength: 12)
+
 					ZStack {
 						ZagUpdatesPillSurface(baseColorHex: "#202022")
 
@@ -1331,32 +1333,36 @@ private struct ZagUpdateTransferParticles: View {
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
 			let cycle = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 4.9)
-			let active = min(max(cycle / 1.35, 0), 1)
-			let visible = cycle < 1.35
+				.truncatingRemainder(dividingBy: 4.6)
+			let active = min(max(cycle / 1.55, 0), 1)
+			let visible = cycle < 1.55
 
 			ZStack {
-				ForEach(0..<3, id: \.self) { index in
-					let delay = Double(index) * 0.16
+				ForEach(0..<6, id: \.self) { index in
+					let delay = Double(index) * 0.075
 					let local = min(max((active - delay) / (1 - delay), 0), 1)
 					let eased = local * local * (3 - 2 * local)
+					let size = 2.2 + Double(index % 2) * 0.7
 
 					Circle()
 						.fill(Color(hex: themeColorHex))
-						.frame(width: 3, height: 3)
-						.opacity(visible ? sin(local * .pi) * (0.9 - Double(index) * 0.18) : 0)
-						.offset(x: CGFloat(9 - eased * 18))
+						.frame(width: size, height: size)
+						.opacity(
+							visible
+								? sin(local * .pi) * (0.95 - Double(index) * 0.075)
+								: 0
+						)
+						.offset(x: CGFloat(13 - eased * 26))
 						.shadow(
-							color: Color(hex: themeColorHex).opacity(0.35),
-							radius: 2
+							color: Color(hex: themeColorHex).opacity(0.48),
+							radius: 2.4
 						)
 				}
 			}
-			.frame(width: 24, height: 46)
+			.frame(width: 30, height: 46)
 		}
 	}
 }
-
 
 private struct ZagUpdatesPillSurface: View {
 	var baseColorHex: String = "#2C2C2E"
@@ -1380,8 +1386,8 @@ private struct ZagUpdatesPillSurface: View {
 							offset: -0.075,
 							length: 0.24,
 							color: Color(hex: themeColorHex),
-							opacity: 0.14,
-							lineWidth: 3.2
+							opacity: 0.24,
+							lineWidth: 3.6
 						)
 						.blur(radius: 2.5)
 
@@ -1391,8 +1397,8 @@ private struct ZagUpdatesPillSurface: View {
 							offset: -0.035,
 							length: 0.14,
 							color: Color(hex: themeColorHex),
-							opacity: 0.30,
-							lineWidth: 1.15
+							opacity: 0.46,
+							lineWidth: 1.25
 						)
 
 						// Tight specular hotspot.
@@ -1401,8 +1407,8 @@ private struct ZagUpdatesPillSurface: View {
 							offset: 0,
 							length: 0.026,
 							color: .white,
-							opacity: 0.82,
-							lineWidth: 0.7
+							opacity: 0.96,
+							lineWidth: 0.8
 						)
 
 						// Very short leading feather prevents a hard front edge.
@@ -1411,8 +1417,8 @@ private struct ZagUpdatesPillSurface: View {
 							offset: 0.022,
 							length: 0.045,
 							color: Color(hex: themeColorHex),
-							opacity: 0.20,
-							lineWidth: 0.8
+							opacity: 0.30,
+							lineWidth: 0.9
 						)
 					}
 					// A stationary lighting mask makes the top/right reflection
