@@ -750,6 +750,7 @@ struct SourcesView: View {
 						isRegular ? 12 : 0
 					)
 					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 					.background(
 						isRegular
 							? RoundedRectangle(
@@ -780,6 +781,7 @@ struct SourcesView: View {
 					count: _displayedSources.count
 				)
 				.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 
 				ForEach(
 					_displayedSources
@@ -824,6 +826,7 @@ struct SourcesView: View {
 					ZagCountBadge(count: _matchingApps.count)
 				}
 				.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 
 				ForEach(
 					_matchingApps
@@ -849,6 +852,7 @@ struct SourcesView: View {
 					count: _displayedSources.count
 				)
 				.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 
 				ForEach(
 					_displayedSources
