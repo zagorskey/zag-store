@@ -91,6 +91,7 @@ struct LibraryView: View {
 
 	@State private var _isDownloadingPresenting = false
 	@State private var _isUpdatesPresenting = false
+	@State private var _installedApplicationIdentifiers = Set<String>()
 
 
 
@@ -186,7 +187,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return false
 			}
-			return UIApplication.shared.canOpenURL(URL(string: "\(identifier)://")!)
+			return _installedApplicationIdentifiers.contains(identifier)
 		}
 	}
 
@@ -195,7 +196,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return true
 			}
-			return !UIApplication.shared.canOpenURL(URL(string: "\(identifier)://")!)
+			return !_installedApplicationIdentifiers.contains(identifier)
 		}
 	}
 
@@ -593,6 +594,7 @@ struct LibraryView: View {
 
 			.onAppear {
 				_probeSystemDictation()
+				_refreshInstalledApplicationIdentifiers()
 			}
 
 			.compatSearchScopes($_selectedScope) {
@@ -1076,6 +1078,11 @@ struct LibraryView: View {
 
 
 extension LibraryView {
+
+	private func _refreshInstalledApplicationIdentifiers() {
+		_installedApplicationIdentifiers =
+			UIApplication.installedApplicationIdentifiers()
+	}
 
 	@ViewBuilder
 	private var librarySearchScopes: some View {
