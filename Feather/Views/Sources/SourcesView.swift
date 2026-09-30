@@ -777,28 +777,25 @@ struct ZagLiquidGlassSearchBar: View {
 			.frame(height: 50)
 			.zagSearchBackground(isGlass: isActive || isPinned)
 
-			if isActive {
-				Button {
-					closeSearch()
-				} label: {
-					Image(systemName: "xmark")
-						.font(.system(size: 22, weight: .semibold))
-						.foregroundStyle(Color.white)
-						.frame(width: 50, height: 50)
-						.zagSearchGlass()
-				}
-				.buttonStyle(.plain)
-				.accessibilityLabel("Close Search")
-				.transition(
-					.asymmetric(
-						insertion: .opacity.combined(with: .move(edge: .trailing)),
-						removal: .opacity.combined(with: .move(edge: .trailing))
-					)
-				)
+			Button {
+				closeSearch()
+			} label: {
+				Image(systemName: "xmark")
+					.font(.system(size: 22, weight: .semibold))
+					.foregroundStyle(Color.white)
+					.frame(width: 50, height: 50)
+					.zagSearchGlass()
 			}
+			.buttonStyle(.plain)
+			.accessibilityLabel("Close Search")
+			.frame(width: isActive ? 50 : 0, alignment: .trailing)
+			.opacity(isActive ? 1 : 0)
+			.scaleEffect(isActive ? 1 : 0.86, anchor: .trailing)
+			.clipped()
+			.allowsHitTesting(isActive)
 		}
 		.animation(
-			.spring(response: 0.38, dampingFraction: 0.88),
+			.interpolatingSpring(stiffness: 300, damping: 30),
 			value: isActive
 		)
 		.onChange(of: isFocused) { focused in
