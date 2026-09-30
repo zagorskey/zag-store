@@ -312,11 +312,17 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		@objc private func searchFocusBegan(_ field: UISearchTextField) {
-			applyPlaceholderStyle(to: field, focused: true)
+			DispatchQueue.main.async {
+				guard field.isFirstResponder else { return }
+				self.applyPlaceholderStyle(to: field, focused: true)
+			}
 		}
 
 		@objc private func searchFocusEnded(_ field: UISearchTextField) {
-			applyPlaceholderStyle(to: field, focused: false)
+			DispatchQueue.main.async {
+				guard !field.isFirstResponder else { return }
+				self.applyPlaceholderStyle(to: field, focused: false)
+			}
 		}
 
 		private func applyPlaceholderStyle(
