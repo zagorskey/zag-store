@@ -5,6 +5,13 @@ import UIKit
 
 private let zagRPPairingLog = Logger(subsystem: "com.cwd43.gu29.rppairing", category: "Transport")
 
+private func zagGate2Callback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveGate2(code: code, message: text)
+	}
+}
+
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -27,6 +34,20 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var state: State = .idle
+
+	enum Gate2State: Equatable {
+		case idle
+		case starting
+		case lockdown(String)
+		case pairing(String)
+		case pairRecord(String)
+		case coreDevice(String)
+		case rsd(String)
+		case complete(name: String, model: String, version: String, build: String)
+		case failed(String)
+	}
+
+	@Published private(set) var gate2State: Gate2State = .idle
 	private let advertiser = ZagPairableHostAdvertiser()
 	private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -40,6 +61,61 @@ final class ZagRPPairingCore: ObservableObject {
 		switch state {
 		case .starting, .advertising, .connected, .pin: return true
 		default: return false
+		}
+	}
+
+	var isGate2Running: Bool {
+		switch gate2State {
+		case .starting, .lockdown, .pairing, .pairRecord, .coreDevice, .rsd:
+			return true
+		default:
+			return false
+		}
+	}
+
+	var lockdownPairingFileExists: Bool {
+		FileManager.default.fileExists(atPath: Self.lockdownPairingFileURL.path)
+	}
+
+	func startGate2Probe(deviceIP: String = "10.7.0.1") {
+		guard !isGate2Running else { return }
+		gate2State = .starting
+		let started = deviceIP.withCString { ip in
+			Self.lockdownPairingFileURL.path.withCString { outputPath in
+				zag_gate2_probe(ip, outputPath, zagGate2Callback)
+			}
+		}
+		if !started {
+			gate2State = .failed("The Gate 2 probe could not be started.")
+		}
+	}
+
+	fileprivate func receiveGate2(code: Int32, message: String) {
+		switch code {
+		case 101:
+			gate2State = .starting
+		case 102:
+			gate2State = .lockdown(message)
+		case 103:
+			gate2State = .pairing(message)
+		case 104:
+			gate2State = .pairRecord(message)
+		case 105:
+			gate2State = .coreDevice(message)
+		case 106:
+			gate2State = .rsd(message)
+		case 107:
+			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+			gate2State = .complete(
+				name: fields.indices.contains(0) ? fields[0] : "This iPhone",
+				model: fields.indices.contains(1) ? fields[1] : "",
+				version: fields.indices.contains(2) ? fields[2] : "",
+				build: fields.indices.contains(3) ? fields[3] : ""
+			)
+		case -2:
+			gate2State = .failed(message)
+		default:
+			break
 		}
 	}
 
@@ -154,6 +230,13 @@ final class ZagRPPairingCore: ObservableObject {
 		guard backgroundTask != .invalid else { return }
 		UIApplication.shared.endBackgroundTask(backgroundTask)
 		backgroundTask = .invalid
+	}
+
+	private static var lockdownPairingFileURL: URL {
+		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+		return base
+			.appendingPathComponent("ZagStore", isDirectory: true)
+			.appendingPathComponent("lockdown-pairing.plist", isDirectory: false)
 	}
 
 	private static var pairingFileURL: URL {
