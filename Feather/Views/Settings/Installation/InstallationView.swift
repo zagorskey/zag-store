@@ -175,99 +175,14 @@ private struct RPPairingView: View {
 			}
 		}
 
-		Section {
-			gate2Row("Pairing Credentials", complete: pairingCore.pairingFileExists)
-			gate2Row("LocalDevVPN / RPPairing", stage: .lockdown)
-			gate2Row("RPPairing Pair-Verify", stage: .pairRecord)
-			gate2Row("TLS-PSK Device Tunnel", stage: .coreDevice)
-			gate2Row("RSD", stage: .rsd)
-			gate2Row("Installation Proxy", stage: .installationProxy)
-			gate2Row("Installed Apps Lookup", stage: .installedApps)
-			gate2Row("AFC", stage: .afc)
-			gate2Row("PublicStaging Write", stage: .stagingWrite)
-			gate2Row("PublicStaging Verify", stage: .stagingVerify)
-			gate2Row("Cleanup", stage: .cleanup)
-
-			if case .complete(let name, let model, let version, let build, let userAppCount, let zagStoreFound) = pairingCore.gate2State {
-				LabeledContent("Device") {
-					VStack(alignment: .trailing, spacing: 2) {
-						Text(name)
-						if !model.isEmpty {
-							Text(model)
-								.font(.caption)
-								.foregroundStyle(.secondary)
-						}
-						if !version.isEmpty {
-							Text("iOS \(version)\(build.isEmpty ? "" : " (\(build))")")
-								.font(.caption)
-								.foregroundStyle(.secondary)
-						}
-					}
-				}
-				LabeledContent("User Apps") {
-					Text("\(userAppCount)")
-				}
-				LabeledContent("Zag Store") {
-					Label(
-						zagStoreFound ? "Found" : "Not Found",
-						systemImage: zagStoreFound ? "checkmark.circle.fill" : "exclamationmark.circle"
-					)
-					.foregroundStyle(zagStoreFound ? .green : .orange)
-				}
-			}
-
-			if case .failed(let error) = pairingCore.gate2State {
-				Text(error)
-					.font(.footnote)
-					.foregroundStyle(.red)
-					.textSelection(.enabled)
-			}
-
-			Button {
-				pairingCore.startGate2Probe()
+		Section("Diagnostics") {
+			NavigationLink {
+				RPPairingDiagnosticsView()
 			} label: {
-				Label(
-					pairingCore.isGate2Running ? "Running Health Check…" : "Run Health Check",
-					systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope"
-				)
+				Label("Diagnostics & Health Checks", systemImage: "stethoscope")
 			}
-			.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
-		} header: {
-			Text("Health Checks")
 		} footer: {
-			Text("Connect LocalDevVPN first, then run the health check. It verifies saved pairing credentials, Pair-Verify, the TLS-PSK tunnel, RSD, Installation Proxy, installed-app lookup, and the AFC/PublicStaging write-read-cleanup path. The staging check uses only a tiny temporary marker and does not install, remove, upgrade, or modify apps.")
-		}
-		Section {
-			LabeledContent("Status") {
-				Text(gate4StatusText)
-					.foregroundStyle(gate4StatusColor)
-			}
-
-			if case .progress(let percent) = pairingCore.gate4State {
-				ProgressView(value: Double(percent), total: 100) {
-					Text("Installing")
-				} currentValueLabel: {
-					Text("\(percent)%")
-				}
-			}
-
-			if case .failed(let error) = pairingCore.gate4State {
-				Text(error)
-					.font(.footnote)
-					.foregroundStyle(.red)
-					.textSelection(.enabled)
-			}
-
-			Button {
-				showGate4Importer = true
-			} label: {
-				Label("Run Installation Test…", systemImage: "shippingbox")
-			}
-			.disabled(pairingCore.isGate4Running || !pairingCore.pairingFileExists)
-		} header: {
-			Text("Tests")
-		} footer: {
-			Text("Installation Test runs the complete direct-install path with a signed disposable IPA: Pair-Verify → TLS-PSK tunnel → RSD → AFC/PublicStaging → Installation Proxy → installd. Use an app that is not already installed when validating a differently signed build. Do not select Zag Store itself.")
+			Text("Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test.")
 		}
 
 
@@ -337,6 +252,132 @@ private struct RPPairingView: View {
 		}
 		.padding(.horizontal, 16)
 		.frame(minHeight: 50)
+	}
+
+	private var statusText: String {
+		switch pairingCore.state {
+		case .idle:
+			return "Ready for on-device Remote Pairing"
+		case .starting:
+			return "Starting pairing host…"
+		case .advertising:
+			return "Advertising — waiting for this iPhone"
+		case .connected:
+			return "This iPhone connected"
+		case .pin:
+			return "Enter the code when iOS asks"
+		case .paired:
+			return "Remote Pairing complete"
+		case .failed:
+			return "Remote Pairing failed"
+		}
+	}
+
+	private var statusIcon: String {
+		switch pairingCore.state {
+		case .paired:
+			return "checkmark.circle.fill"
+		case .failed:
+			return "exclamationmark.triangle.fill"
+		case .starting, .advertising, .connected, .pin:
+			return "antenna.radiowaves.left.and.right"
+		case .idle:
+			return "network"
+		}
+	}
+
+	private var statusColor: Color {
+		switch pairingCore.state {
+		case .paired:
+			return .green
+		case .failed:
+			return .red
+		default:
+			return .secondary
+		}
+	}
+}
+
+private struct RPPairingDiagnosticsView: View {
+	@StateObject private var pairingCore = ZagRPPairingCore.shared
+	@State private var showGate4Importer = false
+
+	var body: some View {
+		NBList("Diagnostics") {
+			Section {
+				gate2Row("Pairing Credentials", complete: pairingCore.pairingFileExists)
+				gate2Row("LocalDevVPN / RPPairing", stage: .lockdown)
+				gate2Row("RPPairing Pair-Verify", stage: .pairRecord)
+				gate2Row("TLS-PSK Device Tunnel", stage: .coreDevice)
+				gate2Row("RSD", stage: .rsd)
+				gate2Row("Installation Proxy", stage: .installationProxy)
+				gate2Row("Installed Apps Lookup", stage: .installedApps)
+				gate2Row("AFC", stage: .afc)
+				gate2Row("PublicStaging Write", stage: .stagingWrite)
+				gate2Row("PublicStaging Verify", stage: .stagingVerify)
+				gate2Row("Cleanup", stage: .cleanup)
+
+				if case .complete(let name, let model, let version, let build, let userAppCount, let zagStoreFound) = pairingCore.gate2State {
+					LabeledContent("Device") {
+						VStack(alignment: .trailing, spacing: 2) {
+							Text(name)
+							if !model.isEmpty { Text(model).font(.caption).foregroundStyle(.secondary) }
+							if !version.isEmpty { Text("iOS \(version)\(build.isEmpty ? "" : " (\(build))")").font(.caption).foregroundStyle(.secondary) }
+						}
+					}
+					LabeledContent("User Apps") { Text("\(userAppCount)") }
+					LabeledContent("Zag Store") {
+						Label(zagStoreFound ? "Found" : "Not Found", systemImage: zagStoreFound ? "checkmark.circle.fill" : "exclamationmark.circle")
+							.foregroundStyle(zagStoreFound ? .green : .orange)
+					}
+				}
+
+				if case .failed(let error) = pairingCore.gate2State {
+					Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
+				}
+
+				Button {
+					pairingCore.startGate2Probe()
+				} label: {
+					Label(pairingCore.isGate2Running ? "Running Health Check…" : "Run Full Health Check", systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope")
+				}
+				.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
+			} header: {
+				Text("Health Checks")
+			} footer: {
+				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup.")
+			}
+
+			Section {
+				LabeledContent("Status") { Text(gate4StatusText).foregroundStyle(gate4StatusColor) }
+				if case .progress(let percent) = pairingCore.gate4State {
+					ProgressView(value: Double(percent), total: 100) { Text("Installing") } currentValueLabel: { Text("\(percent)%") }
+				}
+				if case .failed(let error) = pairingCore.gate4State {
+					Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
+				}
+				Button {
+					showGate4Importer = true
+				} label: {
+					Label("Run Installation Test…", systemImage: "shippingbox")
+				}
+				.disabled(pairingCore.isGate4Running || !pairingCore.pairingFileExists)
+			} header: {
+				Text("Installation Test")
+			} footer: {
+				Text("Runs the complete direct-install path with a signed disposable IPA. Do not select Zag Store itself.")
+			}
+		}
+		.fileImporter(isPresented: $showGate4Importer, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+			switch result {
+			case .success(let urls):
+				guard let url = urls.first else { return }
+				do { try pairingCore.installGate4IPA(at: url) }
+				catch { print("Gate 4 IPA import failed: \(error)") }
+			case .failure(let error):
+				print("Gate 4 file importer failed: \(error)")
+			}
+		}
 	}
 
 	private var gate4StatusText: String {
@@ -445,46 +486,5 @@ private struct RPPairingView: View {
 		return ("circle", .secondary, false)
 	}
 
-	private var statusText: String {
-		switch pairingCore.state {
-		case .idle:
-			return "Ready for on-device Remote Pairing"
-		case .starting:
-			return "Starting pairing host…"
-		case .advertising:
-			return "Advertising — waiting for this iPhone"
-		case .connected:
-			return "This iPhone connected"
-		case .pin:
-			return "Enter the code when iOS asks"
-		case .paired:
-			return "Remote Pairing complete"
-		case .failed:
-			return "Remote Pairing failed"
-		}
-	}
-
-	private var statusIcon: String {
-		switch pairingCore.state {
-		case .paired:
-			return "checkmark.circle.fill"
-		case .failed:
-			return "exclamationmark.triangle.fill"
-		case .starting, .advertising, .connected, .pin:
-			return "antenna.radiowaves.left.and.right"
-		case .idle:
-			return "network"
-		}
-	}
-
-	private var statusColor: Color {
-		switch pairingCore.state {
-		case .paired:
-			return .green
-		case .failed:
-			return .red
-		default:
-			return .secondary
-		}
-	}
 }
+
