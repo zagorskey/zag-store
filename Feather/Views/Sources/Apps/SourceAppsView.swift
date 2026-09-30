@@ -38,6 +38,8 @@ struct SourceAppsView: View {
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
 	@State private var _searchText = ""
+	@State private var _dictationAvailable = false
+	@State private var _dictationStatus = "Dictation unavailable"
 
 	private var _navigationTitle: String {
 		if object.count == 1 {
@@ -72,6 +74,24 @@ struct SourceAppsView: View {
 		}
 		.navigationTitle(_navigationTitle)
 		.searchable(text: $_searchText, placement: .platform())
+		.overlay(alignment: .topTrailing) {
+			if object.count == 1 {
+				Button {
+					_startSystemDictation()
+				} label: {
+					Image(systemName: "mic.fill")
+						.font(.system(size: 18, weight: .regular))
+						.foregroundStyle(.secondary)
+						.frame(width: 44, height: 44)
+						.contentShape(Rectangle())
+				}
+				.buttonStyle(.plain)
+				.padding(.top, 48)
+				.padding(.trailing, 22)
+				.opacity(_dictationAvailable ? 1 : 0.45)
+				.accessibilityLabel(_dictationStatus)
+			}
+		}
 		.toolbarTitleMenu {
 			if
 				let _sources,
@@ -119,6 +139,7 @@ struct SourceAppsView: View {
 			}
 		}
 		.onAppear {
+			_probeSystemDictation()
 			if !hasLoadedOnce, viewModel.isFinished {
 				_load()
 				hasLoadedOnce = true
@@ -134,6 +155,57 @@ struct SourceAppsView: View {
 		.navigationDestinationIfAvailable(item: $_selectedRoute) { route in
 			SourceAppsDetailView(source: route.source, app: route.app)
 		}
+	}
+
+	private func _probeSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type else {
+			_dictationAvailable = false
+			_dictationStatus = "UIDictationController unavailable"
+			return
+		}
+
+		let sharedSelector = NSSelectorFromString("sharedInstance")
+		guard cls.responds(to: sharedSelector),
+			  let controller = cls.perform(sharedSelector)?.takeUnretainedValue() as? NSObject
+		else {
+			_dictationAvailable = false
+			_dictationStatus = "System dictation controller unavailable"
+			return
+		}
+
+		let startSelector = NSSelectorFromString("startDictation")
+		_dictationAvailable = controller.responds(to: startSelector)
+		_dictationStatus = _dictationAvailable
+			? "Start Dictation"
+			: "startDictation unavailable"
+	}
+
+	private func _startSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type else {
+			_probeSystemDictation()
+			return
+		}
+
+		let sharedSelector = NSSelectorFromString("sharedInstance")
+		guard cls.responds(to: sharedSelector),
+			  let controller = cls.perform(sharedSelector)?.takeUnretainedValue() as? NSObject
+		else {
+			_probeSystemDictation()
+			return
+		}
+
+		let preheatSelector = NSSelectorFromString("preheatIfNecessary")
+		if controller.responds(to: preheatSelector) {
+			_ = controller.perform(preheatSelector)
+		}
+
+		let startSelector = NSSelectorFromString("startDictation")
+		guard controller.responds(to: startSelector) else {
+			_probeSystemDictation()
+			return
+		}
+
+		_ = controller.perform(startSelector)
 	}
 	
 	private func _load() {
