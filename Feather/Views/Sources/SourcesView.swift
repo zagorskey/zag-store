@@ -25,8 +25,8 @@ struct SourcesView: View {
 	@State private var _isAddingPresenting = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
-	@State private var _searchActive = false
-	@State private var _searchPinned = false
+	@State private var _dictationAvailable = false
+	@FocusState private var _searchFieldFocused: Bool
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
 	@State private var _selectedSearchRoute:
@@ -110,26 +110,24 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
-			.zagTrackSearchPin($_searchPinned)
-			.safeAreaInset(edge: .top, spacing: 8) {
-				ZagLiquidGlassSearchBar(
-					text: $_searchText,
-					isActive: $_searchActive,
-					isPinned: _searchPinned,
+			.searchable(
+				text: $_searchText,
+				placement: .platform(),
+				prompt: Text("Repos, Apps, Games and More")
+			)
+			.modifier(
+				ZagRepositorySearchFocusModifier(
+					isFocused: $_searchFieldFocused
+				)
+			)
+			.background {
+				ZagNativeSearchMicInstaller(
+					isAvailable: _dictationAvailable,
+					action: _startDictationFromSearchMic,
 					prompt: "Repos, Apps, Games and More",
 					activePrompt: "Repos, Apps and More"
 				)
-					.padding(.horizontal, 16)
-					.padding(.top, 4)
-			}
-			.toolbar(
-				_searchActive ? .hidden : .visible,
-				for: .navigationBar
-			)
-			.transaction { transaction in
-				if _searchActive {
-					transaction.animation = nil
-				}
+				.frame(width: 0, height: 0)
 			}
 			.overlay {
 				emptyState
@@ -183,6 +181,9 @@ struct SourcesView: View {
 				.ignoresSafeArea()
 			}
 		}
+		.onAppear {
+			_probeSystemDictation()
+		}
 		.task(id: Array(_sources)) {
 			await viewModel.fetchSources(
 				_sources
@@ -233,6 +234,36 @@ struct SourcesView: View {
 		}
 		#endif
 	}
+	private func _probeSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else {
+			_dictationAvailable = false
+			return
+		}
+		_dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+	}
+
+	private func _startDictationFromSearchMic() {
+		_searchFieldFocused = true
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+			_startSystemDictation()
+		}
+	}
+
+	private func _startSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else { return }
+
+		let preheat = NSSelectorFromString("preheatIfNecessary")
+		if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+		let start = NSSelectorFromString("startDictation")
+		if controller.responds(to: start) { _ = controller.perform(start) }
+	}
+
 	// MARK: - Toolbar
 	private var refreshButton: some View {
 		Button {
