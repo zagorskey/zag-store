@@ -41,6 +41,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		var action: () -> Void
 		private weak var installedField: UISearchTextField?
 		private weak var button: UIButton?
+		private var dictationObserversInstalled = false
 
 		init(action: @escaping () -> Void) {
 			self.action = action
@@ -68,7 +69,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 					),
 					for: .normal
 				)
-				mic.tintColor = .placeholderText
+				mic.tintColor = .label
 				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
 				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 				mic.accessibilityLabel = "Start Dictation"
@@ -79,12 +80,79 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				button = mic
 			}
 
+			button?.tintColor = field.traitCollection.userInterfaceStyle == .dark
+				? .white
+				: .black
 			button?.alpha = isAvailable ? 1.0 : 0.45
 			button?.isEnabled = isAvailable
+
+			installDictationObserversIfNeeded()
+		}
+
+		private func installDictationObserversIfNeeded() {
+			guard !dictationObserversInstalled else { return }
+			dictationObserversInstalled = true
+
+			let center = NotificationCenter.default
+			[
+				"UIDictationControllerWillStartDictationNotification",
+				"UIDictationControllerDidStartDictationNotification"
+			].forEach { name in
+				center.addObserver(
+					self,
+					selector: #selector(dictationStarted),
+					name: Notification.Name(name),
+					object: nil
+				)
+			}
+
+			[
+				"UIDictationControllerDidFinishDictationNotification",
+				"UIDictationControllerDidStopDictationNotification",
+				"UIDictationControllerDidCancelDictationNotification"
+			].forEach { name in
+				center.addObserver(
+					self,
+					selector: #selector(dictationEnded),
+					name: Notification.Name(name),
+					object: nil
+				)
+			}
 		}
 
 		@objc private func micPressed() {
+			setMicVisible(false, animated: true)
 			action()
+		}
+
+		@objc private func dictationStarted() {
+			setMicVisible(false, animated: true)
+		}
+
+		@objc private func dictationEnded() {
+			setMicVisible(true, animated: true)
+		}
+
+		private func setMicVisible(_ visible: Bool, animated: Bool) {
+			guard let button else { return }
+			let changes = {
+				button.alpha = visible ? 1.0 : 0.0
+				button.transform = visible
+					? .identity
+					: CGAffineTransform(scaleX: 0.82, y: 0.82)
+			}
+
+			if animated {
+				UIView.animate(
+					withDuration: 0.2,
+					delay: 0,
+					options: [.beginFromCurrentState, .curveEaseInOut],
+					animations: changes
+				)
+			} else {
+				changes()
+			}
+			button.isUserInteractionEnabled = visible
 		}
 
 		private static func findSearchField(in view: UIView) -> UISearchTextField? {
