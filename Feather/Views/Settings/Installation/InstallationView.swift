@@ -62,7 +62,7 @@ struct InstallationView: View {
 
 
 private struct RPPairingView: View {
-	@State private var isLocalDevVpnAvailable = false
+	@State private var isLocalDevVpnAvailable = true
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var showGate4Importer = false
 
@@ -76,18 +76,15 @@ private struct RPPairingView: View {
 				.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
 			}
 			LabeledContent("Local Tunnel") {
-				Label(
-					isLocalDevVpnAvailable ? "LocalDevVPN Available" : "LocalDevVPN Required",
-					systemImage: isLocalDevVpnAvailable ? "checkmark.circle.fill" : "exclamationmark.circle"
-				)
-				.foregroundStyle(isLocalDevVpnAvailable ? .green : .orange)
+				Label("Check on install", systemImage: "network")
+					.foregroundStyle(.secondary)
 			}
 			LabeledContent("Direct Install") {
 				Label(
-					pairingCore.pairingFileExists && isLocalDevVpnAvailable ? "Ready" : "Not Ready",
-					systemImage: pairingCore.pairingFileExists && isLocalDevVpnAvailable ? "checkmark.circle.fill" : "circle"
+					pairingCore.pairingFileExists ? "Ready" : "Setup Required",
+					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle"
 				)
-				.foregroundStyle(pairingCore.pairingFileExists && isLocalDevVpnAvailable ? .green : .secondary)
+				.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
 			}
 		} header: {
 			Text("Direct Install Status")
@@ -268,11 +265,7 @@ private struct RPPairingView: View {
 			Text("Installation Test runs the complete direct-install path with a signed disposable IPA: Pair-Verify → TLS-PSK tunnel → RSD → AFC/PublicStaging → Installation Proxy → installd. Use an app that is not already installed when validating a differently signed build. Do not select Zag Store itself.")
 		}
 
-		.onAppear {
-			if let url = URL(string: "localdevvpn://") {
-				isLocalDevVpnAvailable = UIApplication.shared.canOpenURL(url)
-			}
-		}
+
 		.fileImporter(
 			isPresented: $showGate4Importer,
 			allowedContentTypes: [.data],
