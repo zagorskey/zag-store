@@ -6,10 +6,10 @@ use std::{
 };
 
 use idevice::remote_pairing::{
-    PairableHost, PairableHostInfo, RpPairingFile, RpPairingSocket,
+    connect_tls_psk_tunnel_native, PairableHost, PairableHostInfo, RemotePairingClient,
+    RpPairingFile, RpPairingSocket,
 };
-use idevice::{RsdService};
-use idevice::remote_pairing::{RemotePairingClient, RpPairingFile, RpPairingSocket, connect_tls_psk_tunnel_native};
+use idevice::RsdService;
 use idevice::rsd::RsdHandshake;
 use idevice::services::lockdown::LockdownClient;
 use tokio::net::{TcpListener, TcpStream};
