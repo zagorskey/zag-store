@@ -23,8 +23,7 @@ public struct NBTitleWithSubtitleView: View {
 			Text(_title)
 				.zagContentTitleStyle()
 			Text(_subtitle)
-				.font(.subheadline)
-				.foregroundColor(.secondary)
+				.zagContentSubtitleStyle()
 		}
 		.padding(.vertical, 2)
 		.lineLimit(_linelimit)
@@ -40,5 +39,16 @@ public extension View {
 		self
 			.font(.system(size: 20, weight: .regular))
 			.foregroundStyle(.primary)
+	}
+}
+
+
+// MARK: - Standard Zag Store Content Subtitle
+
+public extension View {
+	func zagContentSubtitleStyle() -> some View {
+		self
+			.font(.system(size: 15, weight: .regular))
+			.foregroundStyle(Color(uiColor: .secondaryLabel))
 	}
 }
