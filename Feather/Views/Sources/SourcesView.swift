@@ -240,6 +240,7 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
+			.zagWallpaperListBackground()
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
