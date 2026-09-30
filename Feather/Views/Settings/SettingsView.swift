@@ -49,6 +49,8 @@ struct SettingsView: View {
 					NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
 						Label(.localized("App Icon"), systemImage: "app.badge")
 					}
+				} header: {
+					Text("Display")
 				}
                 
 				NBSection(.localized("Certificates")) {
@@ -69,14 +71,14 @@ struct SettingsView: View {
 				}
                 
 				NBSection(.localized("Features")) {
+					NavigationLink(destination: InstallationView()) {
+						Label(.localized("Installation"), systemImage: "arrow.down.circle")
+					}
 					NavigationLink(destination: ConfigurationView()) {
 						Label(.localized("Signing Options"), systemImage: "signature")
 					}
 					NavigationLink(destination: ArchiveView()) {
 						Label(.localized("Archive & Compression"), systemImage: "archivebox")
-					}
-					NavigationLink(destination: InstallationView()) {
-						Label(.localized("Installation"), systemImage: "arrow.down.circle")
 					}
 					NavigationLink(destination: RPPairingDiagnosticsView()) {
 						Label("Diagnostics & Health Checks", systemImage: "stethoscope")
