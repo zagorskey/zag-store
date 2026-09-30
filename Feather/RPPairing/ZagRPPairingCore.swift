@@ -75,6 +75,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var gate4State: Gate4State = .idle
+	private var gate4Completion: ((Result<Void, Error>) -> Void)?
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
 	private var gate2LastAppResult: (Int, Bool)?
 	private let advertiser = ZagPairableHostAdvertiser()
@@ -110,8 +111,11 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 	}
 
-	func installGate4IPA(at sourceURL: URL, deviceIP: String = "10.7.0.1") throws {
-		guard !isGate4Running else { return }
+	func installGate4IPA(at sourceURL: URL, deviceIP: String = "10.7.0.1", completion: ((Result<Void, Error>) -> Void)? = nil) throws {
+		guard !isGate4Running else {
+			throw Gate4InstallError.alreadyRunning
+		}
+		gate4Completion = completion
 		let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 			.appendingPathComponent("ZagStore/Gate4", isDirectory: true)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -131,7 +135,10 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
-			gate4State = .failed("The Gate 4 installer could not be started.")
+			let error = Gate4InstallError.couldNotStart
+			gate4State = .failed(error.localizedDescription)
+			gate4Completion?(.failure(error))
+			gate4Completion = nil
 		}
 	}
 
@@ -143,8 +150,15 @@ final class ZagRPPairingCore: ObservableObject {
 		case 204: gate4State = .rsd
 		case 205: gate4State = .installing
 		case 206: gate4State = .progress(Int(message) ?? 0)
-		case 207: gate4State = .complete
-		case -4: gate4State = .failed(message)
+		case 207:
+			gate4State = .complete
+			gate4Completion?(.success(()))
+			gate4Completion = nil
+		case -4:
+			gate4State = .failed(message)
+			let error = Gate4InstallError.installFailed(message)
+			gate4Completion?(.failure(error))
+			gate4Completion = nil
 		default: break
 		}
 	}
@@ -396,5 +410,23 @@ private final class ZagPairableHostAdvertiser: NSObject, NetServiceDelegate {
 		let callback = failure
 		stop()
 		callback?("RPPairing Bonjour advertisement failed (\(code)).")
+	}
+}
+
+
+private enum Gate4InstallError: LocalizedError {
+	case alreadyRunning
+	case couldNotStart
+	case installFailed(String)
+
+	var errorDescription: String? {
+		switch self {
+		case .alreadyRunning:
+			return "Another RPPairing installation is already running."
+		case .couldNotStart:
+			return "The RPPairing installer could not be started."
+		case .installFailed(let message):
+			return message
+		}
 	}
 }
