@@ -45,20 +45,21 @@ struct ZagWallpaperBackground: View {
 	@AppStorage(ZagWallpaperStore.enabledKey) private var enabled = false
 	@AppStorage(ZagWallpaperStore.blurKey) private var blurred = false
 	@State private var image: UIImage?
-	@State private var revision = UUID()
 
 	var body: some View {
-		Group {
+		GeometryReader { proxy in
 			if enabled, let image {
 				Image(uiImage: image)
 					.resizable()
 					.scaledToFill()
+					.frame(width: proxy.size.width, height: proxy.size.height)
+					.clipped()
 					.blur(radius: blurred ? 16 : 0)
 					.scaleEffect(blurred ? 1.08 : 1)
-					.ignoresSafeArea()
 			}
 		}
-		.id(revision)
+		.ignoresSafeArea()
+		.allowsHitTesting(false)
 		.onAppear(perform: reload)
 		.onReceive(NotificationCenter.default.publisher(for: .zagWallpaperChanged)) { _ in
 			reload()
@@ -67,7 +68,6 @@ struct ZagWallpaperBackground: View {
 
 	private func reload() {
 		image = ZagWallpaperStore.image()
-		revision = UUID()
 	}
 }
 
