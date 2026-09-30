@@ -23,8 +23,12 @@ struct ZagSourcesAtomIcon: View {
 
 	var body: some View {
 		ZStack {
-			RoundedRectangle(cornerRadius: 13.5, style: .continuous)
+			RoundedRectangle(cornerRadius: 11, style: .continuous)
 				.fill(Color(hex: themeColorHex))
+				.overlay {
+					RoundedRectangle(cornerRadius: 11, style: .continuous)
+						.stroke(Color.primary.opacity(0.16), lineWidth: 1)
+				}
 
 			if #available(iOS 26.0, *) {
 				Image(systemName: "atom")
