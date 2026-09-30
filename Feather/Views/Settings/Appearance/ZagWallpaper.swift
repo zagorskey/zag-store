@@ -131,4 +131,15 @@ extension View {
 	func zagWallpaperListBackground() -> some View {
 		modifier(ZagWallpaperListBackgroundModifier())
 	}
+
+	/// Places the wallpaper immediately behind the page's own scroll surface.
+	/// This deliberately avoids relying on transparency through TabView /
+	/// NavigationStack, whose system backgrounds can otherwise hide the root wallpaper.
+	func zagWallpaperSurface() -> some View {
+		self
+			.zagWallpaperListBackground()
+			.background {
+				ZagWallpaperBackground()
+			}
+	}
 }
