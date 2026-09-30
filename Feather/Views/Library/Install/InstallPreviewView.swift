@@ -205,7 +205,7 @@ struct InstallPreviewView: View {
 										viewModel.status = .completed(.success(()))
 										continuation.resume()
 									case .failure(let error):
-										viewModel.status = .broken(error.localizedDescription)
+										viewModel.status = .broken(error)
 										continuation.resume(throwing: error)
 									}
 								}
