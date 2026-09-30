@@ -195,7 +195,7 @@ struct InstallPreviewView: View {
 
 						try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
 							Task { @MainActor in
-								ZagRPPairingCore.shared.installGate4IPA(
+								try ZagRPPairingCore.shared.installGate4IPA(
 									at: packageUrl,
 									deviceIP: "10.7.0.1"
 								) { result in
