@@ -1333,39 +1333,65 @@ private struct ZagUpdateTransferParticles: View {
 		GeometryReader { proxy in
 			TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
 				let cycle = context.date.timeIntervalSinceReferenceDate
-					.truncatingRemainder(dividingBy: 4.8)
+					.truncatingRemainder(dividingBy: 5.4)
 				let width = max(proxy.size.width, 1)
+				let transmissionStart = 0.65
+				let transmissionDuration = 1.85
+				let transmission = min(
+					max((cycle - transmissionStart) / transmissionDuration, 0),
+					1
+				)
+				let connectionVisible = cycle >= 0.35 && cycle <= 3.05
+				let grow = min(max((cycle - 0.35) / 0.55, 0), 1)
+				let dissolve = min(max((cycle - 2.55) / 0.50, 0), 1)
+				let connectionOpacity = connectionVisible
+					? grow * (1 - dissolve)
+					: 0
 
 				ZStack {
-					// Three compact bursts cross almost the full bridge from
-					// the counter capsule toward the Updates capsule.
-					ForEach(0..<3, id: \.self) { burst in
-						ForEach(0..<5, id: \.self) { particle in
-							let launch = Double(burst) * 0.30 + Double(particle) * 0.045
-							let duration = 1.55
-							let local = min(max((cycle - launch) / duration, 0), 1)
-							let eased = local * local * (3 - 2 * local)
-							let visible = cycle >= launch && cycle <= launch + duration
-							let y = CGFloat(particle - 2) * 1.25
-							let size = 2.1 + Double((particle + burst) % 3) * 0.55
+					// Hairline connection grows out of the counter and reaches
+					// beneath the Updates capsule edge.
+					Capsule()
+						.fill(Color(hex: themeColorHex))
+						.frame(
+							width: max(0, (width + 6) * grow),
+							height: 1.0 / UIScreen.main.scale
+						)
+						.opacity(0.30 * connectionOpacity)
+						.shadow(
+							color: Color(hex: themeColorHex).opacity(0.22 * connectionOpacity),
+							radius: 2
+						)
+						.frame(maxWidth: .infinity, alignment: .trailing)
+						.offset(x: 3)
+
+					// Three energy packets launch right-to-left along the
+					// established filament.
+					ForEach(0..<3, id: \.self) { pulse in
+						let delay = Double(pulse) * 0.31
+						let local = min(
+							max((transmission - delay) / (1 - delay), 0),
+							1
+						)
+						let eased = local * local * (3 - 2 * local)
+						let visible = transmission > delay && transmission < 1
+
+						ZStack {
+							Capsule()
+								.fill(Color(hex: themeColorHex).opacity(0.30))
+								.frame(width: 17, height: 3)
+								.blur(radius: 2.2)
+
+							Capsule()
+								.fill(Color(hex: themeColorHex))
+								.frame(width: 10, height: 1.5)
 
 							Circle()
-								.fill(Color(hex: themeColorHex))
-								.frame(width: size, height: size)
-								.opacity(
-									visible
-										? sin(local * .pi) * (0.95 - Double(particle) * 0.07)
-										: 0
-								)
-								.offset(
-									x: (width / 2 - 5) - CGFloat(eased) * (width - 10),
-									y: y
-								)
-								.shadow(
-									color: Color(hex: themeColorHex).opacity(0.52),
-									radius: 2.5
-								)
+								.fill(Color.white)
+								.frame(width: 3.5, height: 3.5)
 						}
+						.opacity(visible ? sin(local * .pi) : 0)
+						.offset(x: (width / 2 + 3) - CGFloat(eased) * (width + 6))
 					}
 				}
 				.frame(width: proxy.size.width, height: proxy.size.height)
@@ -1511,22 +1537,24 @@ private struct ZagUpdatesEdgeGlint: View {
 private struct ZagFlashingUpdateDot: View {
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let phase = context.date.timeIntervalSinceReferenceDate
-			let wave = (sin(phase * .pi * 1.25) + 1.0) / 2.0
+			let time = context.date.timeIntervalSinceReferenceDate
+			let ambient = (sin(time * .pi * 1.25) + 1.0) / 2.0
+			let cycle = time.truncatingRemainder(dividingBy: 5.4)
+			let receive = exp(-pow((cycle - 2.48) / 0.16, 2))
+			let energy = min(1, ambient * 0.62 + receive)
 
 			Circle()
 				.fill(Color.green)
 				.frame(width: 9, height: 9)
-				.opacity(0.25 + (wave * 0.75))
-				.scaleEffect(0.78 + (wave * 0.22))
+				.opacity(0.30 + (energy * 0.70))
+				.scaleEffect(0.80 + (energy * 0.28))
 				.shadow(
-					color: Color.green.opacity(wave * 0.65),
-					radius: 4
+					color: Color.green.opacity(energy * 0.82),
+					radius: 4.5 + receive * 2
 				)
 		}
 	}
 }
-
 
 private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
