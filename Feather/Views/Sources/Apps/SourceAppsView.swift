@@ -10,6 +10,22 @@ import AltSourceKit
 import NimbleViews
 import UIKit
 
+
+// MARK: - Native Search Focus Compatibility
+
+private struct ZagRepositorySearchFocusModifier: ViewModifier {
+	let isFocused: FocusState<Bool>.Binding
+
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if #available(iOS 18.0, *) {
+			content.searchFocused(isFocused)
+		} else {
+			content
+		}
+	}
+}
+
 // MARK: - Extension: View (Enil)
 extension SourceAppsView {
 	enum SortOption: String, CaseIterable {
@@ -75,7 +91,7 @@ struct SourceAppsView: View {
 		}
 		.navigationTitle(_navigationTitle)
 		.searchable(text: $_searchText, placement: .platform())
-		.searchFocused($_searchFieldFocused)
+		.modifier(ZagRepositorySearchFocusModifier(isFocused: $_searchFieldFocused))
 		.overlay(alignment: .topTrailing) {
 			if object.count == 1 {
 				Button {
