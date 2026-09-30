@@ -43,7 +43,9 @@ final class ZagRPPairingCore: ObservableObject {
 		case pairRecord(String)
 		case coreDevice(String)
 		case rsd(String)
-		case complete(name: String, model: String, version: String, build: String)
+		case deviceInfo(name: String, model: String, version: String, build: String)
+		case installationProxy(String)
+		case complete(name: String, model: String, version: String, build: String, userAppCount: Int, zagStoreFound: Bool)
 		case failed(String)
 	}
 
@@ -66,7 +68,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	var isGate2Running: Bool {
 		switch gate2State {
-		case .starting, .lockdown, .pairing, .pairRecord, .coreDevice, .rsd:
+		case .starting, .lockdown, .pairing, .pairRecord, .coreDevice, .rsd, .deviceInfo, .installationProxy:
 			return true
 		default:
 			return false
@@ -103,11 +105,30 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .rsd(message)
 		case 107:
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-			gate2State = .complete(
+			gate2State = .deviceInfo(
 				name: fields.indices.contains(0) ? fields[0] : "This iPhone",
 				model: fields.indices.contains(1) ? fields[1] : "",
 				version: fields.indices.contains(2) ? fields[2] : "",
 				build: fields.indices.contains(3) ? fields[3] : ""
+			)
+		case 108:
+			gate2State = .installationProxy(message)
+		case 109:
+			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+			let previous: (String, String, String, String)
+			switch gate2State {
+			case .deviceInfo(let name, let model, let version, let build):
+				previous = (name, model, version, build)
+			default:
+				previous = ("This iPhone", "", "", "")
+			}
+			gate2State = .complete(
+				name: previous.0,
+				model: previous.1,
+				version: previous.2,
+				build: previous.3,
+				userAppCount: fields.indices.contains(0) ? (Int(fields[0]) ?? 0) : 0,
+				zagStoreFound: fields.indices.contains(1) ? fields[1] == "true" : false
 			)
 		case -2:
 			gate2State = .failed(message)
