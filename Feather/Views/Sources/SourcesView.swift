@@ -28,7 +28,7 @@ struct ZagSourcesAtomIcon: View {
 
 			if #available(iOS 26.0, *), animated {
 				Image(systemName: "atom")
-					.font(.system(size: 34, weight: .semibold))
+					.font(.system(size: 39, weight: .semibold))
 					.foregroundStyle(.white)
 					.symbolEffect(
 						.drawOff.wholeSymbol,
@@ -44,7 +44,7 @@ struct ZagSourcesAtomIcon: View {
 					}
 			} else {
 				Image(systemName: "atom")
-					.font(.system(size: 34, weight: .semibold))
+					.font(.system(size: 39, weight: .semibold))
 					.foregroundStyle(.white)
 			}
 		}
