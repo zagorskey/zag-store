@@ -9,7 +9,84 @@ import SwiftUI
 import AltSourceKit
 import NimbleViews
 import UIKit
+import ObjectiveC.runtime
 
+
+// MARK: - System Dictation Lifecycle Bridge
+
+private extension Notification.Name {
+	static let zagDictationDidStart = Notification.Name("ZagDictationDidStart")
+	static let zagDictationDidEnd = Notification.Name("ZagDictationDidEnd")
+}
+
+private extension NSObject {
+	@objc dynamic func zag_setupForDictationStart() {
+		// After method exchange this calls UIKit's original implementation.
+		zag_setupForDictationStart()
+		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
+	}
+
+	@objc dynamic func zag_stopDictation() {
+		zag_stopDictation()
+		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+	}
+
+	@objc dynamic func zag_cancelDictation() {
+		zag_cancelDictation()
+		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+	}
+}
+
+private enum ZagSystemDictationLifecycle {
+	private static var installed = false
+
+	static func install() {
+		guard !installed,
+			  let dictationClass = NSClassFromString("UIDictationController")
+		else { return }
+
+		installed = true
+		exchange(
+			on: dictationClass,
+			original: NSSelectorFromString("setupForDictationStart"),
+			replacement: #selector(NSObject.zag_setupForDictationStart)
+		)
+		exchange(
+			on: dictationClass,
+			original: NSSelectorFromString("stopDictation"),
+			replacement: #selector(NSObject.zag_stopDictation)
+		)
+		exchange(
+			on: dictationClass,
+			original: NSSelectorFromString("cancelDictation"),
+			replacement: #selector(NSObject.zag_cancelDictation)
+		)
+	}
+
+	private static func exchange(
+		on cls: AnyClass,
+		original: Selector,
+		replacement: Selector
+	) {
+		guard
+			let originalMethod = class_getInstanceMethod(cls, original),
+			let replacementMethod = class_getInstanceMethod(NSObject.self, replacement)
+		else { return }
+
+		class_addMethod(
+			cls,
+			replacement,
+			method_getImplementation(replacementMethod),
+			method_getTypeEncoding(replacementMethod)
+		)
+
+		guard
+			let installedReplacement = class_getInstanceMethod(cls, replacement)
+		else { return }
+
+		method_exchangeImplementations(originalMethod, installedReplacement)
+	}
+}
 
 // MARK: - Native Search Microphone
 
@@ -83,7 +160,9 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			button?.tintColor = field.traitCollection.userInterfaceStyle == .dark
 				? .white
 				: .black
-			button?.alpha = isAvailable ? 1.0 : 0.45
+			if button?.isUserInteractionEnabled != false {
+				button?.alpha = isAvailable ? 1.0 : 0.45
+			}
 			button?.isEnabled = isAvailable
 
 			installDictationObserversIfNeeded()
@@ -93,31 +172,20 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			guard !dictationObserversInstalled else { return }
 			dictationObserversInstalled = true
 
-			let center = NotificationCenter.default
-			[
-				"UIDictationControllerWillStartDictationNotification",
-				"UIDictationControllerDidStartDictationNotification"
-			].forEach { name in
-				center.addObserver(
-					self,
-					selector: #selector(dictationStarted),
-					name: Notification.Name(name),
-					object: nil
-				)
-			}
+			ZagSystemDictationLifecycle.install()
 
-			[
-				"UIDictationControllerDidFinishDictationNotification",
-				"UIDictationControllerDidStopDictationNotification",
-				"UIDictationControllerDidCancelDictationNotification"
-			].forEach { name in
-				center.addObserver(
-					self,
-					selector: #selector(dictationEnded),
-					name: Notification.Name(name),
-					object: nil
-				)
-			}
+			NotificationCenter.default.addObserver(
+				self,
+				selector: #selector(dictationStarted),
+				name: .zagDictationDidStart,
+				object: nil
+			)
+			NotificationCenter.default.addObserver(
+				self,
+				selector: #selector(dictationEnded),
+				name: .zagDictationDidEnd,
+				object: nil
+			)
 		}
 
 		@objc private func micPressed() {
