@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import Network
+import OSLog
+
+private let zagRPPairingLog = Logger(subsystem: "com.cwd43.gu29.rppairing", category: "Transport")
 
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
@@ -216,23 +219,23 @@ private final class ZagPairRelay: @unchecked Sendable {
 	}
 
 	func start() {
-		print("[RPPairing][Relay] start")
+		zagRPPairingLog.notice("relay start")
 		incoming.stateUpdateHandler = { [weak self] state in
-			print("[RPPairing][Relay] incoming state: \(state)")
+			zagRPPairingLog.notice("incoming state: \(String(describing: state), privacy: .public)")
 			if case .failed(let error) = state {
-				print("[RPPairing][Relay] incoming failed: \(error)")
+				zagRPPairingLog.error("incoming failed: \(String(describing: error), privacy: .public)")
 				self?.fail("incoming failed: \(error)")
 			}
 		}
 		outgoing.stateUpdateHandler = { [weak self] state in
-			print("[RPPairing][Relay] outgoing state: \(state)")
+			zagRPPairingLog.notice("outgoing state: \(String(describing: state), privacy: .public)")
 			guard let self else { return }
 			switch state {
 			case .ready:
 				self.pump(from: self.incoming, to: self.outgoing)
 				self.pump(from: self.outgoing, to: self.incoming)
 			case .failed(let error):
-				print("[RPPairing][Relay] outgoing failed: \(error)")
+				zagRPPairingLog.error("outgoing failed: \(String(describing: error), privacy: .public)")
 				self.fail("outgoing failed: \(error)")
 			default:
 				break
@@ -253,7 +256,7 @@ private final class ZagPairRelay: @unchecked Sendable {
 
 	private func fail(_ reason: String = "unspecified") {
 		guard !stopped else { return }
-		print("[RPPairing][Relay] FAIL: \(reason)")
+		zagRPPairingLog.error("relay FAIL: \(reason, privacy: .public)")
 		cancel()
 		failure()
 	}
@@ -262,11 +265,11 @@ private final class ZagPairRelay: @unchecked Sendable {
 		source.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
 			guard let self, !self.stopped else { return }
 			let byteCount = data?.count ?? 0
-			print("[RPPairing][Relay] receive bytes=\(byteCount) complete=\(complete) error=\(String(describing: error))")
+			zagRPPairingLog.notice("receive bytes=\(byteCount) complete=\(complete) error=\(String(describing: error), privacy: .public)")
 			guard error == nil else { self.fail("receive error: \(String(describing: error))"); return }
 			destination.send(content: data, isComplete: complete, completion: .contentProcessed { [weak self] error in
 				guard let self, !self.stopped else { return }
-				print("[RPPairing][Relay] send bytes=\(byteCount) complete=\(complete) error=\(String(describing: error))")
+				zagRPPairingLog.notice("send bytes=\(byteCount) complete=\(complete) error=\(String(describing: error), privacy: .public)")
 				if let error { self.fail("send error: \(error)"); return }
 				if !complete { self.pump(from: source, to: destination) }
 			})
