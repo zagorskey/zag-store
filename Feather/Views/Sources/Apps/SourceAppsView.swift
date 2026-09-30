@@ -135,6 +135,8 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 			guard let field = Self.findSearchField(in: window) else { return }
 
+			Self.applyAppStorePlaceholderStyle(to: field)
+
 			if yieldingToNativeClearButton {
 				if !(field.text ?? "").isEmpty {
 					if field.rightView === button {
@@ -151,7 +153,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 					UIImage(
 						systemName: "mic",
 						withConfiguration: UIImage.SymbolConfiguration(
-							pointSize: 17,
+							pointSize: 20,
 							weight: .regular,
 							scale: .medium
 						)
@@ -159,7 +161,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 					for: .normal
 				)
 				mic.tintColor = .label
-				mic.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
+				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
 				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 				mic.accessibilityLabel = "Start Dictation"
 
@@ -238,7 +240,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				UIImage(
 					systemName: "mic",
 					withConfiguration: UIImage.SymbolConfiguration(
-						pointSize: 17,
+						pointSize: 20,
 							weight: .regular,
 							scale: .medium
 					)
@@ -246,7 +248,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				for: .normal
 			)
 			mic.tintColor = .label
-			mic.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
+			mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
 			mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 			mic.accessibilityLabel = "Start Dictation"
 			mic.alpha = 0
@@ -287,6 +289,17 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				changes()
 			}
 			button.isUserInteractionEnabled = visible
+		}
+
+		private static func applyAppStorePlaceholderStyle(to field: UISearchTextField) {
+			guard let placeholder = field.placeholder, !placeholder.isEmpty else { return }
+
+			field.attributedPlaceholder = NSAttributedString(
+				string: placeholder,
+				attributes: [
+					.foregroundColor: UIColor.tertiaryLabel
+				]
+			)
 		}
 
 		private static func findSearchField(in view: UIView) -> UISearchTextField? {
