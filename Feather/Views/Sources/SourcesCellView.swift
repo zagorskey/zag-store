@@ -122,7 +122,6 @@ struct SourcesCellView: View {
 			ZagCountBadge(count: appCount)
 		}
 		.contentShape(Rectangle())
-		.listRowSeparatorTint(Color(uiColor: .separator).opacity(0.55))
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
