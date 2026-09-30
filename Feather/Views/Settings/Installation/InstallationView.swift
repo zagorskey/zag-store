@@ -68,28 +68,33 @@ private struct RPPairingView: View {
 
 	var body: some View {
 		Section {
-			LabeledContent("Pairing") {
-				Label(
-					pairingCore.pairingFileExists ? "Paired" : "Setup Required",
-					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle"
+			VStack(spacing: 0) {
+				directStatusRow(
+					"Pairing",
+					value: pairingCore.pairingFileExists ? "Paired" : "Setup Required",
+					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle",
+					color: pairingCore.pairingFileExists ? .green : .orange
 				)
-				.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
-			}
-			LabeledContent("Local Tunnel") {
-				Label("Check on install", systemImage: "network")
-					.foregroundStyle(.secondary)
-			}
-			LabeledContent("Direct Install") {
-				Label(
-					pairingCore.pairingFileExists ? "Ready" : "Setup Required",
-					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle"
+				Divider()
+				directStatusRow(
+					"Local Tunnel",
+					value: tunnelStatusText,
+					systemImage: tunnelStatusIcon,
+					color: tunnelStatusColor
 				)
-				.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
+				Divider()
+				directStatusRow(
+					"Direct Install",
+					value: directInstallStatusText,
+					systemImage: directInstallStatusIcon,
+					color: directInstallStatusColor
+				)
 			}
+			.listRowInsets(EdgeInsets())
 		} header: {
 			Text("Direct Install Status")
 		} footer: {
-			Text("RPPairing installs directly through this iPhone's device services. Pairing is stored by Zag Store; LocalDevVPN supplies the local tunnel when installing.")
+			Text("RPPairing installs directly through this iPhone's device services. Run Health Check to verify the LocalDevVPN tunnel and complete direct-install path.")
 		}
 
 		Section {
@@ -285,6 +290,53 @@ private struct RPPairingView: View {
 				print("Gate 4 file importer failed: \(error)")
 			}
 		}
+	}
+
+	private var tunnelVerified: Bool {
+		switch pairingCore.gate2State {
+		case .lockdown, .pairing, .pairRecord, .coreDevice, .rsd, .deviceInfo, .installationProxy, .installedApps, .afc, .stagingWrite, .stagingVerify, .complete:
+			return true
+		default:
+			return false
+		}
+	}
+
+	private var tunnelStatusText: String {
+		if tunnelVerified { return "Connected" }
+		if pairingCore.isGate2Running { return "Checking…" }
+		return "Run Health Check"
+	}
+
+	private var tunnelStatusIcon: String {
+		tunnelVerified ? "checkmark.circle.fill" : (pairingCore.isGate2Running ? "circle.dotted" : "network")
+	}
+
+	private var tunnelStatusColor: Color {
+		tunnelVerified ? .green : .secondary
+	}
+
+	private var directInstallStatusText: String {
+		pairingCore.pairingFileExists && tunnelVerified ? "Ready" : "Check Required"
+	}
+
+	private var directInstallStatusIcon: String {
+		pairingCore.pairingFileExists && tunnelVerified ? "checkmark.circle.fill" : "circle"
+	}
+
+	private var directInstallStatusColor: Color {
+		pairingCore.pairingFileExists && tunnelVerified ? .green : .secondary
+	}
+
+	@ViewBuilder
+	private func directStatusRow(_ title: String, value: String, systemImage: String, color: Color) -> some View {
+		HStack(spacing: 12) {
+			Text(title)
+			Spacer()
+			Label(value, systemImage: systemImage)
+				.foregroundStyle(color)
+		}
+		.padding(.horizontal, 16)
+		.frame(minHeight: 50)
 	}
 
 	private var gate4StatusText: String {
