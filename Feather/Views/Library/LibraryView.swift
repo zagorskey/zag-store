@@ -271,34 +271,37 @@ struct LibraryView: View {
 			Button {
 				_isUpdatesPresenting = true
 			} label: {
-				HStack(alignment: .center, spacing: 10) {
-					Image(systemName: "arrow.triangle.2.circlepath")
-						.font(.system(size: 21, weight: .regular))
-						.foregroundStyle(.primary)
-						.frame(width: 24, height: 24)
+				ZStack {
+					ZagUpdatesPillSurface()
 
-					Text(.localized("App Updates"))
-						.font(.system(size: 20, weight: .semibold))
-						.foregroundStyle(.primary)
+					HStack(alignment: .center, spacing: 10) {
+						Image(systemName: "arrow.triangle.2.circlepath")
+							.font(.system(size: 21, weight: .regular))
+							.foregroundStyle(.primary)
+							.frame(width: 24, height: 24)
 
-					ZagFlashingUpdateDot()
+						Text(.localized("App Updates"))
+							.font(.system(size: 20, weight: .semibold))
+							.foregroundStyle(.primary)
 
-					Spacer(minLength: 8)
+						ZagFlashingUpdateDot()
+							.frame(width: 9, height: 9)
 
-					Text(updateManager.updates.count.description)
-						.font(.system(size: 14, weight: .regular))
-						.foregroundStyle(.white)
-						.frame(width: 24, height: 24)
-						.background(
-							Circle()
-								.fill(Color(hex: "#E93323"))
-						)
+						Spacer(minLength: 8)
+
+						Text(updateManager.updates.count.description)
+							.font(.system(size: 14, weight: .regular))
+							.foregroundStyle(.white)
+							.frame(width: 24, height: 24)
+							.background(
+								Circle()
+									.fill(Color(hex: "#E93323"))
+							)
+					}
+					.padding(.horizontal, 16)
 				}
-				.padding(.horizontal, 16)
 				.frame(height: 50)
-				.padding(.top, -16)
-				.background(Color(hex: "#2C2C2E"))
-				.clipShape(Capsule())
+				.padding(.top, -20)
 				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
@@ -1319,6 +1322,37 @@ extension LibraryView {
 
 
 
+
+
+private struct ZagUpdatesPillSurface: View {
+	@AppStorage("Feather.userTintColor")
+	private var themeColorHex: String = "#3F8EF7"
+
+	var body: some View {
+		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+			let cycle = context.date.timeIntervalSinceReferenceDate
+				.truncatingRemainder(dividingBy: 5.2)
+			let progress = min(max((cycle - 4.0) / 1.2, 0), 1)
+			let travelling = progress > 0 && progress < 1
+
+			Capsule()
+				.fill(Color(hex: "#2C2C2E"))
+				.overlay {
+					Capsule()
+						.trim(from: max(0, progress - 0.10), to: min(1, progress + 0.10))
+						.stroke(
+							Color(hex: themeColorHex)
+								.opacity(travelling ? 0.34 : 0),
+							style: StrokeStyle(
+								lineWidth: 0.75,
+								lineCap: .round
+							)
+						)
+						.animation(.easeInOut(duration: 0.18), value: travelling)
+				}
+		}
+	}
+}
 
 
 private struct ZagFlashingUpdateDot: View {
