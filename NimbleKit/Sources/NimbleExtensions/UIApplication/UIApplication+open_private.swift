@@ -36,30 +36,6 @@ extension UIApplication {
 		_ = workspace.perform(NSSelectorFromString(openSelector), with: identifier)
 	}
 	
-	/// Returns whether an application with the bundle identifier is installed.
-	static public func isAppInstalled(with identifier: String) -> Bool {
-		let classNameBase64 = "TFNBcHBsaWNhdGlvbldvcmtzcGFjZQ==" // LSApplicationWorkspace
-		let defaultSelectorBase64 = "ZGVmYXVsdFdvcmtzcGFjZQ==" // defaultWorkspace
-		let proxySelectorBase64 = "YXBwbGljYXRpb25Qcm94eUZvcklkZW50aWZpZXI6" // applicationProxyForIdentifier:
-
-		guard
-			let classNameData = Data(base64Encoded: classNameBase64),
-			let defaultSelectorData = Data(base64Encoded: defaultSelectorBase64),
-			let proxySelectorData = Data(base64Encoded: proxySelectorBase64),
-			let className = String(data: classNameData, encoding: .utf8),
-			let defaultSelector = String(data: defaultSelectorData, encoding: .utf8),
-			let proxySelector = String(data: proxySelectorData, encoding: .utf8),
-			let workspaceClass = NSClassFromString(className) as? NSObject.Type,
-			let workspace = workspaceClass.perform(NSSelectorFromString(defaultSelector))?.takeUnretainedValue()
-		else {
-			return false
-		}
-
-		return workspace.perform(
-			NSSelectorFromString(proxySelector),
-			with: identifier
-		)?.takeUnretainedValue() != nil
-	}
 
 	/// Returns install progress for a bundle identifier (0.0 – 1.0)
 	/// - Parameters:
