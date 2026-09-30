@@ -106,7 +106,7 @@ struct ZagActionPill: View {
 	private var pillBackground: Color {
 		colorScheme == .dark
 			? Color(hex: "#1C1C1E")
-			: Color(hex: "#F2F2F7")
+			: Color(hex: "#EEEEF0")
 	}
 
 	var body: some View {
