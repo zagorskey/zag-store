@@ -30,16 +30,16 @@ struct SourcesCellView: View {
 
 	private var lastUpdatedText: String {
 		guard let date = lastUpdatedDate else {
-			return "Last Updated: Unknown"
+			return "Updated: Unknown"
 		}
 
-		return "Last Updated: \(Self.dateFormatter.string(from: date))"
+		return "Updated: \(Self.dateFormatter.string(from: date))"
 	}
 
 	private static let dateFormatter: DateFormatter = {
 		let formatter = DateFormatter()
 		formatter.locale = Locale(identifier: "en_GB")
-		formatter.dateFormat = "dd/MM/yyyy"
+		formatter.dateFormat = "d MMM yyyy 'at' HH:mm"
 		return formatter
 	}()
 
@@ -102,7 +102,7 @@ struct SourcesCellView: View {
 		if let iconURL = source.iconURL {
 			LazyImage(url: iconURL) { state in
 				if let image = state.image {
-					image.appIconStyle(size: 56)
+					image.appIconStyle(size: 62)
 				} else {
 					standardIcon
 				}
@@ -114,7 +114,7 @@ struct SourcesCellView: View {
 
 	private var standardIcon: some View {
 		Image("App_Unknown")
-			.appIconStyle(size: 56)
+			.appIconStyle(size: 62)
 	}
 }
 
