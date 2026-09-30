@@ -12,6 +12,13 @@ private func zagGate2Callback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	}
 }
 
+private func zagGate4Callback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveGate4(code: code, message: text)
+	}
+}
+
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -54,6 +61,20 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var gate2State: Gate2State = .idle
+
+	enum Gate4State: Equatable {
+		case idle
+		case starting
+		case pairVerified
+		case tunnel
+		case rsd
+		case installing
+		case progress(Int)
+		case complete
+		case failed(String)
+	}
+
+	@Published private(set) var gate4State: Gate4State = .idle
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
 	private var gate2LastAppResult: (Int, Bool)?
 	private let advertiser = ZagPairableHostAdvertiser()
@@ -81,6 +102,52 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 	}
 
+
+	var isGate4Running: Bool {
+		switch gate4State {
+		case .starting, .pairVerified, .tunnel, .rsd, .installing, .progress: return true
+		default: return false
+		}
+	}
+
+	func installGate4IPA(at sourceURL: URL, deviceIP: String = "10.7.0.1") throws {
+		guard !isGate4Running else { return }
+		let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+			.appendingPathComponent("ZagStore/Gate4", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		let localURL = directory.appendingPathComponent("gate4-test.ipa")
+		try? FileManager.default.removeItem(at: localURL)
+
+		let scoped = sourceURL.startAccessingSecurityScopedResource()
+		defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
+		try FileManager.default.copyItem(at: sourceURL, to: localURL)
+
+		gate4State = .starting
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				localURL.path.withCString { ipaPath in
+					zag_gate4_install(ip, pairingPath, ipaPath, zagGate4Callback)
+				}
+			}
+		}
+		if !started {
+			gate4State = .failed("The Gate 4 installer could not be started.")
+		}
+	}
+
+	fileprivate func receiveGate4(code: Int32, message: String) {
+		switch code {
+		case 201: gate4State = .starting
+		case 202: gate4State = .pairVerified
+		case 203: gate4State = .tunnel
+		case 204: gate4State = .rsd
+		case 205: gate4State = .installing
+		case 206: gate4State = .progress(Int(message) ?? 0)
+		case 207: gate4State = .complete
+		case -4: gate4State = .failed(message)
+		default: break
+		}
+	}
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
 		guard !isGate2Running else { return }
