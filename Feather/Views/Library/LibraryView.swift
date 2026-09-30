@@ -1333,66 +1333,88 @@ private struct ZagUpdateTransferParticles: View {
 		GeometryReader { proxy in
 			TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
 				let cycle = context.date.timeIntervalSinceReferenceDate
-					.truncatingRemainder(dividingBy: 5.4)
+					.truncatingRemainder(dividingBy: 6.3)
 				let width = max(proxy.size.width, 1)
-				let transmissionStart = 0.65
-				let transmissionDuration = 1.85
-				let transmission = min(
-					max((cycle - transmissionStart) / transmissionDuration, 0),
-					1
-				)
-				let connectionVisible = cycle >= 0.35 && cycle <= 3.05
-				let grow = min(max((cycle - 0.35) / 0.55, 0), 1)
-				let dissolve = min(max((cycle - 2.55) / 0.50, 0), 1)
-				let connectionOpacity = connectionVisible
-					? grow * (1 - dissolve)
-					: 0
+				let grow = min(max((cycle - 0.42) / 0.48, 0), 1)
+				let dissolve = min(max((cycle - 3.00) / 0.52, 0), 1)
+				let filament = grow * (1 - dissolve)
+				let launchFlare = exp(-pow((cycle - 0.92) / 0.13, 2))
+				let impactFlare = exp(-pow((cycle - 2.62) / 0.15, 2))
 
 				ZStack {
-					// Hairline connection grows out of the counter and reaches
-					// beneath the Updates capsule edge.
+					// The electrical path is visible enough to connect both
+					// controls, but remains subordinate to the moving energy.
 					Capsule()
 						.fill(Color(hex: themeColorHex))
 						.frame(
-							width: max(0, (width + 6) * grow),
+							width: max(0, (width + 8) * grow),
 							height: 1.0 / UIScreen.main.scale
 						)
-						.opacity(0.30 * connectionOpacity)
+						.opacity(0.43 * filament)
 						.shadow(
-							color: Color(hex: themeColorHex).opacity(0.22 * connectionOpacity),
-							radius: 2
+							color: Color(hex: themeColorHex).opacity(0.34 * filament),
+							radius: 2.4
 						)
 						.frame(maxWidth: .infinity, alignment: .trailing)
-						.offset(x: 3)
+						.offset(x: 4)
 
-					// Three energy packets launch right-to-left along the
-					// established filament.
+					// Launch flare lives just under the counter's left edge.
+					ZStack {
+						Circle()
+							.fill(Color(hex: themeColorHex).opacity(0.42))
+							.frame(width: 13, height: 13)
+							.blur(radius: 4)
+						Circle()
+							.fill(Color.white)
+							.frame(width: 3.5, height: 3.5)
+					}
+					.opacity(launchFlare)
+					.offset(x: width / 2 + 2)
+
+					// One dominant packet followed by two smaller echoes.
 					ForEach(0..<3, id: \.self) { pulse in
-						let delay = Double(pulse) * 0.31
-						let local = min(
-							max((transmission - delay) / (1 - delay), 0),
-							1
-						)
+						let launch = 0.92 + Double(pulse) * 0.28
+						let duration = 1.70
+						let local = min(max((cycle - launch) / duration, 0), 1)
 						let eased = local * local * (3 - 2 * local)
-						let visible = transmission > delay && transmission < 1
+						let visible = cycle >= launch && cycle <= launch + duration
+						let strength = pulse == 0 ? 1.0 : (pulse == 1 ? 0.68 : 0.46)
+						let tail = pulse == 0 ? 25.0 : (pulse == 1 ? 17.0 : 12.0)
+						let core = pulse == 0 ? 13.0 : (pulse == 1 ? 9.0 : 6.5)
 
 						ZStack {
 							Capsule()
-								.fill(Color(hex: themeColorHex).opacity(0.30))
-								.frame(width: 17, height: 3)
-								.blur(radius: 2.2)
+								.fill(Color(hex: themeColorHex).opacity(0.30 * strength))
+								.frame(width: tail, height: pulse == 0 ? 4 : 3)
+								.blur(radius: 2.4)
 
 							Capsule()
 								.fill(Color(hex: themeColorHex))
-								.frame(width: 10, height: 1.5)
+								.frame(width: core, height: pulse == 0 ? 1.8 : 1.3)
 
 							Circle()
 								.fill(Color.white)
-								.frame(width: 3.5, height: 3.5)
+								.frame(
+									width: pulse == 0 ? 4.2 : 3.0,
+									height: pulse == 0 ? 4.2 : 3.0
+								)
 						}
-						.opacity(visible ? sin(local * .pi) : 0)
-						.offset(x: (width / 2 + 3) - CGFloat(eased) * (width + 6))
+						.opacity(visible ? sin(local * .pi) * strength : 0)
+						.offset(x: (width / 2 + 4) - CGFloat(eased) * (width + 8))
 					}
+
+					// Reception flare is tucked beneath the Updates capsule.
+					ZStack {
+						Circle()
+							.fill(Color(hex: themeColorHex).opacity(0.52))
+							.frame(width: 15, height: 15)
+							.blur(radius: 4.5)
+						Circle()
+							.fill(Color.white)
+							.frame(width: 4, height: 4)
+					}
+					.opacity(impactFlare)
+					.offset(x: -width / 2 - 2)
 				}
 				.frame(width: proxy.size.width, height: proxy.size.height)
 			}
@@ -1400,6 +1422,7 @@ private struct ZagUpdateTransferParticles: View {
 		.frame(height: 46)
 	}
 }
+
 
 private struct ZagUpdatesPillSurface: View {
 	var baseColorHex: String = "#2C2C2E"
@@ -1409,57 +1432,61 @@ private struct ZagUpdatesPillSurface: View {
 
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			// Constant phase makes the lap seamless; there is no eased reset point.
-			let progress = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 6.8) / 6.8
+			let time = context.date.timeIntervalSinceReferenceDate
+			let cycle = time.truncatingRemainder(dividingBy: 6.3)
+			// Keep a slow ambient reflection, then concentrate light at the
+			// counter's left edge immediately before the transmission launches.
+			let progress = time.truncatingRemainder(dividingBy: 7.4) / 7.4
+			let charge = exp(-pow((cycle - 0.82) / 0.28, 2))
 
 			Capsule()
 				.fill(Color(hex: baseColorHex))
 				.overlay {
 					ZStack {
-						// Long, diffuse comet tail.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
-							offset: -0.075,
-							length: 0.24,
+							offset: -0.085,
+							length: 0.27,
 							color: Color(hex: themeColorHex),
-							opacity: 0.24,
-							lineWidth: 3.6
+							opacity: 0.20,
+							lineWidth: 3.8
 						)
-						.blur(radius: 2.5)
+						.blur(radius: 2.7)
 
-						// Coloured body, biased behind the hotspot.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
-							offset: -0.035,
-							length: 0.14,
+							offset: -0.038,
+							length: 0.15,
 							color: Color(hex: themeColorHex),
-							opacity: 0.46,
-							lineWidth: 1.25
+							opacity: 0.40,
+							lineWidth: 1.3
 						)
 
-						// Tight specular hotspot.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
 							offset: 0,
-							length: 0.026,
+							length: 0.024,
 							color: .white,
-							opacity: 0.96,
+							opacity: 0.92,
 							lineWidth: 0.8
 						)
 
-						// Very short leading feather prevents a hard front edge.
-						ZagUpdatesEdgeGlint(
-							progress: progress,
-							offset: 0.022,
-							length: 0.045,
-							color: Color(hex: themeColorHex),
-							opacity: 0.30,
-							lineWidth: 0.9
-						)
+						// Synchronized charge at the left side of the counter.
+						Capsule()
+							.trim(from: 0.43, to: 0.57)
+							.stroke(
+								Color(hex: themeColorHex).opacity(0.30 + charge * 0.55),
+								style: StrokeStyle(lineWidth: 1.5 + charge * 0.9, lineCap: .round)
+							)
+							.blur(radius: charge * 1.6)
+
+						Capsule()
+							.trim(from: 0.485, to: 0.515)
+							.stroke(
+								Color.white.opacity(charge * 0.92),
+								style: StrokeStyle(lineWidth: 0.8, lineCap: .round)
+							)
 					}
-					// A stationary lighting mask makes the top/right reflection
-					// stronger and the lower edge more restrained.
 					.mask {
 						Capsule()
 							.stroke(
@@ -1475,7 +1502,7 @@ private struct ZagUpdatesPillSurface: View {
 									],
 									center: .center
 								),
-								lineWidth: 6
+								lineWidth: 7
 							)
 					}
 					.clipShape(Capsule())
@@ -1534,27 +1561,29 @@ private struct ZagUpdatesEdgeGlint: View {
 	}
 }
 
+
 private struct ZagFlashingUpdateDot: View {
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
 			let time = context.date.timeIntervalSinceReferenceDate
-			let ambient = (sin(time * .pi * 1.25) + 1.0) / 2.0
-			let cycle = time.truncatingRemainder(dividingBy: 5.4)
-			let receive = exp(-pow((cycle - 2.48) / 0.16, 2))
-			let energy = min(1, ambient * 0.62 + receive)
+			let ambient = (sin(time * .pi * 1.05) + 1.0) / 2.0
+			let cycle = time.truncatingRemainder(dividingBy: 6.3)
+			let receive = exp(-pow((cycle - 2.62) / 0.15, 2))
+			let energy = min(1, ambient * 0.48 + receive)
 
 			Circle()
 				.fill(Color.green)
 				.frame(width: 9, height: 9)
 				.opacity(0.30 + (energy * 0.70))
-				.scaleEffect(0.80 + (energy * 0.28))
+				.scaleEffect(0.80 + (energy * 0.30))
 				.shadow(
-					color: Color.green.opacity(energy * 0.82),
-					radius: 4.5 + receive * 2
+					color: Color.green.opacity(energy * 0.88),
+					radius: 4.2 + receive * 3
 				)
 		}
 	}
 }
+
 
 private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
