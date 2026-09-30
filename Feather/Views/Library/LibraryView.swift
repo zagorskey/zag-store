@@ -272,14 +272,26 @@ struct LibraryView: View {
 				_isUpdatesPresenting = true
 			} label: {
 				HStack(spacing: 10) {
-					ZagFlashingUpdateDot()
+					Image(systemName: "arrow.triangle.2.circlepath")
+						.font(.system(size: 20, weight: .semibold))
+						.foregroundStyle(.primary)
+						.frame(width: 24)
 
 					Text(.localized("App Updates"))
 						.zagContentTitleStyle()
 
+					ZagFlashingUpdateDot()
+
 					Spacer(minLength: 8)
 
-					ZagUpdateBadge(count: updateManager.updates.count)
+					Text(updateManager.updates.count.description)
+						.font(.system(size: 14, weight: .regular))
+						.foregroundStyle(.white)
+						.frame(minWidth: 22, minHeight: 22)
+						.background(
+							Circle()
+								.fill(Color(hex: "#E93323"))
+						)
 				}
 				.padding(.horizontal, 16)
 				.frame(minHeight: 50)
@@ -289,7 +301,8 @@ struct LibraryView: View {
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
-			.padding(.vertical, 2)
+			.padding(.top, 14)
+			.padding(.bottom, 2)
 		}
 	}
 
