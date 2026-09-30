@@ -71,7 +71,7 @@ struct SourcesCellView: View {
 
 			VStack(
 				alignment: .leading,
-				spacing: 3
+				spacing: 2
 			) {
 				Text(
 					source.name ?? .localized("Unknown")
@@ -80,8 +80,8 @@ struct SourcesCellView: View {
 				.lineLimit(1)
 
 				Text(lastUpdatedText)
-					.font(.subheadline)
-					.foregroundStyle(.secondary)
+					.font(.system(size: 16, weight: .regular))
+					.foregroundStyle(Color(uiColor: .secondaryLabel))
 					.lineLimit(1)
 			}
 
@@ -90,6 +90,7 @@ struct SourcesCellView: View {
 			ZagCountBadge(count: appCount)
 		}
 		.contentShape(Rectangle())
+		.listRowSeparatorTint(Color(uiColor: .separator).opacity(0.55))
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
