@@ -250,8 +250,8 @@ struct SourcesView: View {
 				ToolbarItemGroup(
 					placement: .topBarLeading
 				) {
-					refreshButton
 					repositorySortMenu
+					refreshButton
 				}
 				ToolbarItemGroup(
 					placement: .topBarTrailing
@@ -665,7 +665,7 @@ struct SourcesView: View {
 						) {
 							Text(
 								.localized(
-									"Your Repos"
+									"Your Repositories"
 								)
 							)
 							.font(
@@ -679,17 +679,36 @@ struct SourcesView: View {
 							let totalApps = viewModel.sources.values.reduce(0) {
 								$0 + $1.apps.count
 							}
-							HStack(spacing: 0) {
-								Text("See all ")
+							if viewModel.isRefreshing {
+								Text("Loading apps…")
+									.font(.system(size: 16, weight: .regular))
 									.foregroundColor(Color(uiColor: .secondaryLabel))
-								Text(totalApps.formatted())
-									.fontWeight(.semibold)
-									.foregroundColor(.white)
-								Text(" apps from sources")
-									.foregroundColor(Color(uiColor: .secondaryLabel))
+									.lineLimit(1)
+							} else if totalApps == 0 {
+								HStack(spacing: 0) {
+									Text("You have ")
+										.foregroundColor(Color(uiColor: .secondaryLabel))
+									Text("0")
+										.fontWeight(.semibold)
+										.foregroundColor(.red)
+									Text(" apps")
+										.foregroundColor(Color(uiColor: .secondaryLabel))
+								}
+								.font(.system(size: 16, weight: .regular))
+								.lineLimit(1)
+							} else {
+								HStack(spacing: 0) {
+									Text("See ")
+										.foregroundColor(Color(uiColor: .secondaryLabel))
+									Text(totalApps.formatted())
+										.fontWeight(.semibold)
+										.foregroundColor(.green)
+									Text(totalApps == 1 ? " app from sources" : " apps from sources")
+										.foregroundColor(Color(uiColor: .secondaryLabel))
+								}
+								.font(.system(size: 16, weight: .regular))
+								.lineLimit(1)
 							}
-							.font(.system(size: 16, weight: .regular))
-							.lineLimit(1)
 						}
 						.frame(
 							maxWidth: .infinity,
@@ -697,8 +716,8 @@ struct SourcesView: View {
 						)
 
 						Image(systemName: "chevron.right")
-							.font(.system(size: 14, weight: .semibold))
-							.foregroundStyle(Color(uiColor: .secondaryLabel))
+							.font(.system(size: 15, weight: .bold))
+							.foregroundStyle(Color(uiColor: .systemGray2))
 					}
 					.padding(
 						isRegular ? 12 : 0
