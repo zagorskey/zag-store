@@ -9,6 +9,7 @@ import SwiftUI
 import CoreData
 
 struct VariedTabbarView: View {
+	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
 
@@ -32,6 +33,11 @@ struct VariedTabbarView: View {
 				ExtendedTabbarView()
 			} else {
 				TabbarView()
+			}
+		}
+		.background {
+			if wallpaperEnabled {
+				Color.clear
 			}
 		}
 		.task {
