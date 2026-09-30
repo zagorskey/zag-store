@@ -1444,7 +1444,7 @@ private struct ZagUpdatesPopup: View {
 							.font(.system(size: 13, weight: .bold))
 					}
 					.buttonStyle(.bordered)
-					.buttonBorderShape(.circle)
+					.clipShape(Circle())
 				}
 			}
 		}
