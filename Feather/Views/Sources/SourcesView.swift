@@ -502,7 +502,7 @@ struct SourcesView: View {
 							)
 							.font(
 								.system(
-									size: 17,
+									size: 20,
 									weight: .regular
 								)
 							)
@@ -721,7 +721,7 @@ struct ZagLiquidGlassSearchBar: View {
 					if text.isEmpty {
 						Text(isActive ? (activePrompt ?? prompt) : prompt)
 							.font(.system(size: 19, weight: .semibold))
-							.foregroundStyle(.secondary)
+							.foregroundStyle(Color(uiColor: .placeholderText))
 							.lineLimit(1)
 							.allowsHitTesting(false)
 					}
