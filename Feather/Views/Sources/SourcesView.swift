@@ -515,12 +515,17 @@ struct SourcesView: View {
 						horizontalSizeClass
 							!= .compact
 					HStack(spacing: 10) {
-						Image(systemName: "globe")
-							.resizable()
-							.scaledToFit()
-							.frame(width: 42, height: 42)
-							.foregroundStyle(.primary)
+						Image(systemName: "globe.desk.fill")
+							.font(.system(size: 29, weight: .regular))
+							.foregroundStyle(Color(uiColor: .secondaryLabel))
 							.frame(width: 62, height: 62)
+							.background(
+								RoundedRectangle(
+									cornerRadius: 13.5,
+									style: .continuous
+								)
+								.fill(Color(uiColor: .tertiarySystemFill))
+							)
 
 						VStack(
 							alignment: .leading,
