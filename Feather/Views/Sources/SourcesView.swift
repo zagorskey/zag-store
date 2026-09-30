@@ -698,7 +698,7 @@ struct SourcesView: View {
 								.lineLimit(1)
 							} else {
 								HStack(spacing: 0) {
-									Text("See ")
+									Text("See all ")
 										.foregroundColor(Color(uiColor: .secondaryLabel))
 									Text(totalApps.formatted())
 										.fontWeight(.semibold)
@@ -715,9 +715,9 @@ struct SourcesView: View {
 							alignment: .leading
 						)
 
-						Image(systemName: "chevron.right")
-							.font(.system(size: 15, weight: .bold))
-							.foregroundStyle(Color(uiColor: .systemGray2))
+						Image(systemName: "chevron.forward")
+							.font(.system(size: 17, weight: .semibold))
+							.foregroundStyle(Color(uiColor: .systemGray))
 					}
 					.padding(
 						isRegular ? 12 : 0
