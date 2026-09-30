@@ -481,9 +481,6 @@ struct LibraryView: View {
 
 
 			}
-			.listRowSeparatorTint(
-				Color(uiColor: .separator).opacity(0.32)
-			)
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
@@ -1339,8 +1336,7 @@ private struct ZagUpdateRow: View {
 					.zagContentTitleStyle()
 
 				Text("\(update.installedVersion) → \(update.availableVersion)")
-					.font(.caption)
-					.foregroundStyle(.secondary)
+					.zagContentSubtitleStyle()
 			}
 
 			Spacer()
