@@ -16,7 +16,7 @@ import AVFoundation
 
 struct ZagSourcesAtomIcon: View {
 	@AppStorage("Feather.userTintColor")
-	private var themeColorHex: String = "#4395F8"
+	private var themeColorHex: String = "#4497F7"
 
 	var animated: Bool = false
 	@State private var drawOut = false
@@ -737,7 +737,7 @@ struct SourcesView: View {
 						)
 
 						Image(systemName: "chevron.right")
-							.font(.system(size: 15, weight: .heavy))
+							.font(.system(size: 20, weight: .bold))
 							.foregroundStyle(Color(uiColor: .systemGray2))
 					}
 					.padding(
