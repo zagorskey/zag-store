@@ -13,7 +13,7 @@ struct ZagCountBadge: View {
 	private var badgeTextColorHex: String = "#FFFFFF"
 
 	@AppStorage("Feather.userTintColor")
-	private var themeColorHex: String = "#4395F8"
+	private var themeColorHex: String = "#4497F7"
 
 	let count: Int
 
