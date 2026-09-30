@@ -78,6 +78,7 @@ struct SourcesView: View {
 	@AppStorage("zagStore.sources.sortMode") private var _sortModeRaw = "default"
 	@AppStorage("zagStore.sources.customOrder") private var _customOrderData = ""
 	@State private var _isRearrangingRepositories = false
+	@State private var _showAllRepositories = false
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
 	@FetchRequest(
@@ -464,8 +465,8 @@ struct SourcesView: View {
 				Label("Rearrange", systemImage: "slider.horizontal.3")
 			}
 		} label: {
-			Image(systemName: "line.3.horizontal.decrease.circle")
-				.font(.system(size: 21, weight: .regular))
+			Image(systemName: "line.3.horizontal.decrease")
+				.font(.system(size: 19, weight: .semibold))
 				.frame(width: 26, height: 22)
 		}
 		.accessibilityLabel("Sort Repositories")
@@ -649,12 +650,8 @@ struct SourcesView: View {
 		some View {
 		if !_filteredSources.isEmpty {
 			Section {
-				NavigationLink {
-					SourceAppsView(
-						object:
-							Array(_sources),
-						viewModel: viewModel
-					)
+				Button {
+					_showAllRepositories = true
 				} label: {
 					let isRegular =
 						horizontalSizeClass
@@ -684,13 +681,17 @@ struct SourcesView: View {
 									"See all apps from your sources"
 								)
 							)
-							.font(.subheadline)
-							.foregroundStyle(.secondary)
+							.font(.system(size: 16, weight: .regular))
+							.foregroundStyle(Color(uiColor: .secondaryLabel))
 						}
 						.frame(
 							maxWidth: .infinity,
 							alignment: .leading
 						)
+
+						Image(systemName: "chevron.right")
+							.font(.system(size: 18, weight: .bold))
+							.foregroundStyle(Color(uiColor: .tertiaryLabel))
 					}
 					.padding(
 						isRegular ? 12 : 0
@@ -711,6 +712,14 @@ struct SourcesView: View {
 					)
 				}
 				.buttonStyle(.plain)
+			}
+			.navigationDestination(
+				isPresented: $_showAllRepositories
+			) {
+				SourceAppsView(
+					object: Array(_sources),
+					viewModel: viewModel
+				)
 			}
 			.listSectionSeparator(.hidden, edges: .all)
 			Section {
