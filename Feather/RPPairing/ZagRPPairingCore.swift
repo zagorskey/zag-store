@@ -216,17 +216,24 @@ private final class ZagPairRelay: @unchecked Sendable {
 	}
 
 	func start() {
+		print("[RPPairing][Relay] start")
 		incoming.stateUpdateHandler = { [weak self] state in
-			if case .failed = state { self?.fail() }
+			print("[RPPairing][Relay] incoming state: \(state)")
+			if case .failed(let error) = state {
+				print("[RPPairing][Relay] incoming failed: \(error)")
+				self?.fail("incoming failed: \(error)")
+			}
 		}
 		outgoing.stateUpdateHandler = { [weak self] state in
+			print("[RPPairing][Relay] outgoing state: \(state)")
 			guard let self else { return }
 			switch state {
 			case .ready:
 				self.pump(from: self.incoming, to: self.outgoing)
 				self.pump(from: self.outgoing, to: self.incoming)
-			case .failed:
-				self.fail()
+			case .failed(let error):
+				print("[RPPairing][Relay] outgoing failed: \(error)")
+				self.fail("outgoing failed: \(error)")
 			default:
 				break
 			}
@@ -244,8 +251,9 @@ private final class ZagPairRelay: @unchecked Sendable {
 		outgoing.cancel()
 	}
 
-	private func fail() {
+	private func fail(_ reason: String = "unspecified") {
 		guard !stopped else { return }
+		print("[RPPairing][Relay] FAIL: \(reason)")
 		cancel()
 		failure()
 	}
@@ -253,10 +261,13 @@ private final class ZagPairRelay: @unchecked Sendable {
 	private func pump(from source: NWConnection, to destination: NWConnection) {
 		source.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
 			guard let self, !self.stopped else { return }
-			guard error == nil else { self.fail(); return }
+			let byteCount = data?.count ?? 0
+			print("[RPPairing][Relay] receive bytes=\(byteCount) complete=\(complete) error=\(String(describing: error))")
+			guard error == nil else { self.fail("receive error: \(String(describing: error))"); return }
 			destination.send(content: data, isComplete: complete, completion: .contentProcessed { [weak self] error in
 				guard let self, !self.stopped else { return }
-				if error != nil { self.fail(); return }
+				print("[RPPairing][Relay] send bytes=\(byteCount) complete=\(complete) error=\(String(describing: error))")
+				if let error { self.fail("send error: \(error)"); return }
 				if !complete { self.pump(from: source, to: destination) }
 			})
 		}
