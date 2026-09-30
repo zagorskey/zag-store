@@ -740,13 +740,13 @@ struct SourcesView: View {
 						.opacity(0)
 					}
 				}
+				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 			} header: {
 				ZagRepositoriesHeader(
 					count:
 						_displayedSources.count
 				)
 			}
-			.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 		}
 	}
 	// MARK: - Global Search Results
