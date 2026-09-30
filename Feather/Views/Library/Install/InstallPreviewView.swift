@@ -188,6 +188,29 @@ struct InstallPreviewView: View {
 					} else if await _installationMethod == 1 {
 						let handler = await InstallationProxy(viewModel: viewModel)
 						try await handler.install(at: packageUrl, suspend: app.identifier == Bundle.main.bundleIdentifier!)
+					} else if await _installationMethod == 2 {
+						await MainActor.run {
+							viewModel.status = .installing
+						}
+
+						try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+							Task { @MainActor in
+								ZagRPPairingCore.shared.installGate4IPA(
+									at: packageUrl,
+									deviceIP: "10.7.0.1"
+								) { result in
+									switch result {
+									case .success:
+										viewModel.installProgress = 1.0
+										viewModel.status = .completed(.success(()))
+										continuation.resume()
+									case .failure(let error):
+										viewModel.status = .broken(error.localizedDescription)
+										continuation.resume(throwing: error)
+									}
+								}
+							}
+						}
 					}
 				} else {
 					let package = try await handler.moveToArchive(packageUrl, shouldOpen: !_useShareSheet)
