@@ -986,18 +986,6 @@ struct LibraryView: View {
 
 
 
-		.onReceive(sourcesViewModel.$sources) { _ in
-
-
-
-			_updateRepositoryUpdates()
-
-
-
-		}
-
-
-
 		.onChange(of: _signedApps.map { $0.uuid }) { _ in
 
 
