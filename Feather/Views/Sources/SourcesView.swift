@@ -12,6 +12,52 @@ import UIKit
 import UniformTypeIdentifiers
 import Speech
 import AVFoundation
+// MARK: - Zag Sources Atom Icon
+
+struct ZagSourcesAtomIcon: View {
+	@AppStorage("Feather.userTintColor")
+	private var themeColorHex: String = "#4395F8"
+
+	var animated: Bool = false
+	@State private var drawIn = true
+
+	var body: some View {
+		ZStack {
+			RoundedRectangle(cornerRadius: 13.5, style: .continuous)
+				.fill(Color(hex: themeColorHex))
+
+			if #available(iOS 26.0, *), animated {
+				Image(systemName: "atom")
+					.font(.system(size: 34, weight: .semibold))
+					.foregroundStyle(.white)
+					.symbolEffect(
+						drawIn ? .drawOn.wholeSymbol : .drawOff.wholeSymbol,
+						options: .nonRepeating,
+						value: drawIn
+					)
+					.task {
+						while !Task.isCancelled {
+							try? await Task.sleep(for: .seconds(1.15))
+							guard !Task.isCancelled else { break }
+							drawIn.toggle()
+						}
+					}
+			} else {
+				Image(systemName: "atom")
+					.font(.system(size: 34, weight: .semibold))
+					.foregroundStyle(.white)
+			}
+		}
+		.frame(width: 62, height: 62)
+	}
+}
+
+struct ZagSourcesTabIcon: View {
+	var body: some View {
+		Image(systemName: "atom")
+	}
+}
+
 // MARK: - View
 struct SourcesView: View {
 	@Environment(\.horizontalSizeClass)
@@ -515,17 +561,7 @@ struct SourcesView: View {
 						horizontalSizeClass
 							!= .compact
 					HStack(spacing: 10) {
-						Image(systemName: "globe.desk.fill")
-							.font(.system(size: 29, weight: .regular))
-							.foregroundStyle(Color(uiColor: .secondaryLabel))
-							.frame(width: 62, height: 62)
-							.background(
-								RoundedRectangle(
-									cornerRadius: 13.5,
-									style: .continuous
-								)
-								.fill(Color(uiColor: .tertiarySystemFill))
-							)
+						ZagSourcesAtomIcon(animated: true)
 
 						VStack(
 							alignment: .leading,
