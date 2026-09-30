@@ -271,18 +271,24 @@ struct LibraryView: View {
 			Button {
 				_isUpdatesPresenting = true
 			} label: {
-				ZStack {
-					ZagUpdatesPillSurface()
-
-					HStack(alignment: .center, spacing: 10) {
+				HStack(spacing: 12) {
+					HStack(spacing: 9) {
 						Text(.localized("App Updates"))
 							.font(.system(size: 20, weight: .semibold))
 							.foregroundStyle(.primary)
 
 						ZagFlashingUpdateDot()
 							.frame(width: 9, height: 9)
+					}
+					.padding(.horizontal, 14)
+					.frame(height: 46)
+					.background(Color(hex: "#242426"))
+					.clipShape(Capsule())
 
-						Spacer(minLength: 8)
+					ZagUpdateTransferParticles()
+
+					ZStack {
+						ZagUpdatesPillSurface(baseColorHex: "#202022")
 
 						Text(updateManager.updates.count.description)
 							.font(.system(size: 14, weight: .regular))
@@ -293,11 +299,10 @@ struct LibraryView: View {
 									.fill(Color(hex: "#E93323"))
 							)
 					}
-					.padding(.horizontal, 12)
+					.frame(width: 54, height: 46)
 				}
-				.frame(height: 46)
+				.frame(maxWidth: .infinity, alignment: .leading)
 				.padding(.top, -16)
-				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
@@ -1319,7 +1324,43 @@ extension LibraryView {
 
 
 
+private struct ZagUpdateTransferParticles: View {
+	@AppStorage("Feather.userTintColor")
+	private var themeColorHex: String = "#3F8EF7"
+
+	var body: some View {
+		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+			let cycle = context.date.timeIntervalSinceReferenceDate
+				.truncatingRemainder(dividingBy: 4.9)
+			let active = min(max(cycle / 1.35, 0), 1)
+			let visible = cycle < 1.35
+
+			ZStack {
+				ForEach(0..<3, id: \.self) { index in
+					let delay = Double(index) * 0.16
+					let local = min(max((active - delay) / (1 - delay), 0), 1)
+					let eased = local * local * (3 - 2 * local)
+
+					Circle()
+						.fill(Color(hex: themeColorHex))
+						.frame(width: 3, height: 3)
+						.opacity(visible ? sin(local * .pi) * (0.9 - Double(index) * 0.18) : 0)
+						.offset(x: CGFloat(9 - eased * 18))
+						.shadow(
+							color: Color(hex: themeColorHex).opacity(0.35),
+							radius: 2
+						)
+				}
+			}
+			.frame(width: 24, height: 46)
+		}
+	}
+}
+
+
 private struct ZagUpdatesPillSurface: View {
+	var baseColorHex: String = "#2C2C2E"
+
 	@AppStorage("Feather.userTintColor")
 	private var themeColorHex: String = "#3F8EF7"
 
@@ -1330,7 +1371,7 @@ private struct ZagUpdatesPillSurface: View {
 				.truncatingRemainder(dividingBy: 6.8) / 6.8
 
 			Capsule()
-				.fill(Color(hex: "#2C2C2E"))
+				.fill(Color(hex: baseColorHex))
 				.overlay {
 					ZStack {
 						// Long, diffuse comet tail.
