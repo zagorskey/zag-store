@@ -1,7 +1,7 @@
 import Foundation
 import Combine
-import Network
 import OSLog
+import UIKit
 
 private let zagRPPairingLog = Logger(subsystem: "com.cwd43.gu29.rppairing", category: "Transport")
 
@@ -28,6 +28,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	@Published private(set) var state: State = .idle
 	private let advertiser = ZagPairableHostAdvertiser()
+	private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
 	static var version: String {
 		guard let pointer = zag_rppairing_core_version() else { return "Unavailable" }
@@ -49,6 +50,7 @@ final class ZagRPPairingCore: ObservableObject {
 	func start() {
 		guard !isRunning else { return }
 		advertiser.stop()
+		beginPairingBackgroundTime()
 		state = .starting
 
 		let started = "Zag Store".withCString { hostName in
@@ -56,12 +58,16 @@ final class ZagRPPairingCore: ObservableObject {
 				zag_rppairing_start(hostName, outputPath, zagRPPairingCallback)
 			}
 		}
-		if !started { state = .failed("The RPPairing engine could not be started.") }
+		if !started {
+			endPairingBackgroundTime()
+			state = .failed("The RPPairing engine could not be started.")
+		}
 	}
 
 	func resetStatus() {
 		guard !isRunning else { return }
 		advertiser.stop()
+		endPairingBackgroundTime()
 		state = .idle
 	}
 
@@ -77,6 +83,7 @@ final class ZagRPPairingCore: ObservableObject {
 			state = .pin(message)
 		case 5:
 			advertiser.stop()
+			endPairingBackgroundTime()
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false)
 			state = .paired(
 				name: fields.indices.contains(0) ? String(fields[0]) : "This iPhone",
@@ -85,6 +92,7 @@ final class ZagRPPairingCore: ObservableObject {
 			)
 		case -1:
 			advertiser.stop()
+			endPairingBackgroundTime()
 			state = .failed(message)
 		default:
 			break
@@ -128,6 +136,26 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 	}
 
+	private func beginPairingBackgroundTime() {
+		guard backgroundTask == .invalid else { return }
+		backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Zag RPPairing") { [weak self] in
+			Task { @MainActor in
+				guard let self else { return }
+				self.advertiser.stop()
+				self.endPairingBackgroundTime()
+				if self.isRunning {
+					self.state = .failed("RPPairing background time expired. Keep Zag Store open and try again.")
+				}
+			}
+		}
+	}
+
+	private func endPairingBackgroundTime() {
+		guard backgroundTask != .invalid else { return }
+		UIApplication.shared.endBackgroundTask(backgroundTask)
+		backgroundTask = .invalid
+	}
+
 	private static var pairingFileURL: URL {
 		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 		return base
@@ -137,9 +165,9 @@ final class ZagRPPairingCore: ObservableObject {
 }
 
 @MainActor
-private final class ZagPairableHostAdvertiser {
-	private var listener: NWListener?
-	private var relay: ZagPairRelay?
+private final class ZagPairableHostAdvertiser: NSObject, NetServiceDelegate {
+	private var service: NetService?
+	private var failure: ((String) -> Void)?
 
 	func publish(
 		rustPort: UInt16,
@@ -148,131 +176,44 @@ private final class ZagPairableHostAdvertiser {
 		failure: @escaping (String) -> Void
 	) throws {
 		stop()
+		self.failure = failure
 
-		var record = NWTXTRecord()
-		for (key, value) in txt { record[key] = value }
+		var txtRecord: [String: Data] = [:]
+		for (key, value) in txt {
+			txtRecord[key] = Data(value.utf8)
+		}
 
-		let parameters = NWParameters.tcp
-		parameters.includePeerToPeer = true
-		let listener = try NWListener(using: parameters)
-		listener.service = NWListener.Service(
+		let service = NetService(
+			domain: "",
+			type: "_remotepairing-pairable-host._tcp.",
 			name: identifier,
-			type: "_remotepairing-pairable-host._tcp",
-			domain: "local",
-			txtRecord: record
+			port: Int32(rustPort)
 		)
-
-		listener.stateUpdateHandler = { [weak self, weak listener] state in
-			Task { @MainActor in
-				guard let self, let listener, self.listener === listener else { return }
-				switch state {
-				case .failed(let error):
-					failure("RPPairing Bonjour failed: \(error.localizedDescription)")
-				case .waiting(let error):
-					failure("RPPairing Bonjour is waiting: \(error.localizedDescription)")
-				default:
-					break
-				}
-			}
+		service.delegate = self
+		if !txtRecord.isEmpty {
+			service.setTXTRecord(NetService.data(fromTXTRecord: txtRecord))
 		}
-
-		listener.newConnectionHandler = { [weak self, weak listener] incoming in
-			Task { @MainActor in
-				guard let self, let listener, self.listener === listener, self.relay == nil,
-					  let port = NWEndpoint.Port(rawValue: rustPort) else {
-					incoming.cancel()
-					return
-				}
-				let outgoing = NWConnection(host: "127.0.0.1", port: port, using: .tcp)
-				let relay = ZagPairRelay(incoming: incoming, outgoing: outgoing) {
-					failure("RPPairing connection relay failed.")
-				}
-				self.relay = relay
-				relay.start()
-			}
-		}
-
-		self.listener = listener
-		listener.start(queue: .main)
+		self.service = service
+		zagRPPairingLog.notice("publishing Rust listener directly on port \(rustPort)")
+		service.publish()
 	}
 
 	func stop() {
-		listener?.stateUpdateHandler = nil
-		listener?.newConnectionHandler = nil
-		listener?.cancel()
-		listener = nil
-		relay?.cancel()
-		relay = nil
-	}
-}
-
-private final class ZagPairRelay: @unchecked Sendable {
-	private let incoming: NWConnection
-	private let outgoing: NWConnection
-	private let failure: () -> Void
-	private var stopped = false
-
-	init(incoming: NWConnection, outgoing: NWConnection, failure: @escaping () -> Void) {
-		self.incoming = incoming
-		self.outgoing = outgoing
-		self.failure = failure
+		service?.stop()
+		service?.delegate = nil
+		service = nil
+		failure = nil
 	}
 
-	func start() {
-		zagRPPairingLog.notice("relay start")
-		incoming.stateUpdateHandler = { [weak self] state in
-			zagRPPairingLog.notice("incoming state: \(String(describing: state), privacy: .public)")
-			if case .failed(let error) = state {
-				zagRPPairingLog.error("incoming failed: \(String(describing: error), privacy: .public)")
-				self?.fail("incoming failed: \(error)")
-			}
-		}
-		outgoing.stateUpdateHandler = { [weak self] state in
-			zagRPPairingLog.notice("outgoing state: \(String(describing: state), privacy: .public)")
-			guard let self else { return }
-			switch state {
-			case .ready:
-				self.pump(from: self.incoming, to: self.outgoing)
-				self.pump(from: self.outgoing, to: self.incoming)
-			case .failed(let error):
-				zagRPPairingLog.error("outgoing failed: \(String(describing: error), privacy: .public)")
-				self.fail("outgoing failed: \(error)")
-			default:
-				break
-			}
-		}
-		incoming.start(queue: .main)
-		outgoing.start(queue: .main)
+	func netServiceDidPublish(_ sender: NetService) {
+		zagRPPairingLog.notice("direct Bonjour published on port \(sender.port)")
 	}
 
-	func cancel() {
-		guard !stopped else { return }
-		stopped = true
-		incoming.stateUpdateHandler = nil
-		outgoing.stateUpdateHandler = nil
-		incoming.cancel()
-		outgoing.cancel()
-	}
-
-	private func fail(_ reason: String = "unspecified") {
-		guard !stopped else { return }
-		zagRPPairingLog.error("relay FAIL: \(reason, privacy: .public)")
-		cancel()
-		failure()
-	}
-
-	private func pump(from source: NWConnection, to destination: NWConnection) {
-		source.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
-			guard let self, !self.stopped else { return }
-			let byteCount = data?.count ?? 0
-			zagRPPairingLog.notice("receive bytes=\(byteCount) complete=\(complete) error=\(String(describing: error), privacy: .public)")
-			guard error == nil else { self.fail("receive error: \(String(describing: error))"); return }
-			destination.send(content: data, isComplete: complete, completion: .contentProcessed { [weak self] error in
-				guard let self, !self.stopped else { return }
-				zagRPPairingLog.notice("send bytes=\(byteCount) complete=\(complete) error=\(String(describing: error), privacy: .public)")
-				if let error { self.fail("send error: \(error)"); return }
-				if !complete { self.pump(from: source, to: destination) }
-			})
-		}
+	func netService(_ sender: NetService, didNotPublish errorDict: [String: NSNumber]) {
+		let code = errorDict[NetService.errorCode]?.intValue ?? -1
+		zagRPPairingLog.error("direct Bonjour failed: \(code)")
+		let callback = failure
+		stop()
+		callback?("RPPairing Bonjour advertisement failed (\(code)).")
 	}
 }
