@@ -145,9 +145,9 @@ private struct RPPairingView: View {
 
 		Section {
 			gate2Row("Pairing Credentials", complete: pairingCore.pairingFileExists)
-			gate2Row("LocalDevVPN / lockdownd", stage: .lockdown)
-			gate2Row("Classic Pair Record", stage: .pairRecord)
-			gate2Row("CoreDeviceProxy", stage: .coreDevice)
+			gate2Row("LocalDevVPN / RPPairing", stage: .lockdown)
+			gate2Row("RPPairing Pair-Verify", stage: .pairRecord)
+			gate2Row("TLS-PSK Device Tunnel", stage: .coreDevice)
 			gate2Row("RSD", stage: .rsd)
 
 			if case .complete(let name, let model, let version, let build) = pairingCore.gate2State {
@@ -187,7 +187,7 @@ private struct RPPairingView: View {
 		} header: {
 			Text("Gate 2 — Device Services")
 		} footer: {
-			Text("Connect LocalDevVPN first. This diagnostic talks to this iPhone through lockdownd, creates a separate classic pairing record if iOS permits it, then tests CoreDeviceProxy and RSD. It does not install, remove, or modify apps.")
+			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel and RSD. It does not create a classic pair record and does not install, remove, or modify apps.")
 		}
 		.onAppear {
 			if let url = URL(string: "localdevvpn://") {
