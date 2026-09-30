@@ -25,7 +25,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		7A0000020000000000000002 /* libzag_rppairing_core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libzag_rppairing_core.a; path = build/device/libzag_rppairing_core.a; sourceTree = "<group>"; };
+		7A0000020000000000000002 /* libzag_rppairing_core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libzag_rppairing_core.a; path = device/libzag_rppairing_core.a; sourceTree = "<group>"; };
 		336D43972DB7454A00206400 /* MobileCoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MobileCoreServices.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS18.2.sdk/System/Library/Frameworks/MobileCoreServices.framework; sourceTree = DEVELOPER_DIR; };
 		3379C1B92DA869A1004372DA /* Feather.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Feather.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		570920BD2F98A4F0008C4A83 /* Feather.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Feather.xcconfig; sourceTree = "<group>"; };
@@ -427,6 +427,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Feather/Resources",
 					"$(PROJECT_DIR)/Feather/Resources/idevice",
+					"$(PROJECT_DIR)/RPPairingCore/build/device",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
 				MARKETING_VERSION = "$(FEATHER_PROJECT_VERSION)-debug";
@@ -492,6 +493,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/Feather/Resources",
 					"$(PROJECT_DIR)/Feather/Resources/idevice",
+					"$(PROJECT_DIR)/RPPairingCore/build/device",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
 				MARKETING_VERSION = "$(FEATHER_PROJECT_VERSION)";
