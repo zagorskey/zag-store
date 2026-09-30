@@ -37,6 +37,61 @@ extension UIApplication {
 	}
 	
 
+	/// Returns the bundle identifiers visible to LaunchServices.
+	///
+	/// The inventory is fetched once and converted to strings before it leaves
+	/// this method so SwiftUI never retains or repeatedly queries private proxy
+	/// objects while rendering rows.
+	static public func installedApplicationIdentifiers() -> Set<String> {
+		let classNameBase64 = "TFNBcHBsaWNhdGlvbldvcmtzcGFjZQ==" // LSApplicationWorkspace
+		let defaultSelectorBase64 = "ZGVmYXVsdFdvcmtzcGFjZQ==" // defaultWorkspace
+		let allAppsSelectorBase64 = "YWxsQXBwbGljYXRpb25z" // allApplications
+		let identifierSelectorBase64 = "YXBwbGljY2F0aW9uSWRlbnRpZmllcg==" // applicationIdentifier
+
+		guard
+			let className = String(
+				data: Data(base64Encoded: classNameBase64)!,
+				encoding: .utf8
+			),
+			let defaultSelector = String(
+				data: Data(base64Encoded: defaultSelectorBase64)!,
+				encoding: .utf8
+			),
+			let allAppsSelector = String(
+				data: Data(base64Encoded: allAppsSelectorBase64)!,
+				encoding: .utf8
+			),
+			let identifierSelector = String(
+				data: Data(base64Encoded: identifierSelectorBase64)!,
+				encoding: .utf8
+			),
+			let workspaceClass = NSClassFromString(className) as? NSObject.Type,
+			let workspace = workspaceClass
+				.perform(NSSelectorFromString(defaultSelector))?
+				.takeUnretainedValue() as? NSObject,
+			workspace.responds(to: NSSelectorFromString(allAppsSelector)),
+			let unmanaged = workspace.perform(NSSelectorFromString(allAppsSelector)),
+			let applications = unmanaged.takeUnretainedValue() as? [NSObject]
+		else {
+			return []
+		}
+
+		let selector = NSSelectorFromString(identifierSelector)
+		var identifiers = Set<String>()
+
+		for application in applications where application.responds(to: selector) {
+			if
+				let value = application.perform(selector)?.takeUnretainedValue(),
+				let identifier = value as? String,
+				!identifier.isEmpty
+			{
+				identifiers.insert(identifier)
+			}
+		}
+
+		return identifiers
+	}
+
 	/// Returns install progress for a bundle identifier (0.0 – 1.0)
 	/// - Parameters:
 	///   - identifier: Bundle identifier
