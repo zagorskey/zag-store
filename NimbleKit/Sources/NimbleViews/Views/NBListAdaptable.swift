@@ -23,6 +23,7 @@ public struct NBListAdaptable<Content>: View where Content: View {
 			}
 			.listStyle(.plain)
 			.listRowSeparator(.hidden)
+			.zagWallpaperListBackground()
 		} else {
 			NBGrid {
 				_content
