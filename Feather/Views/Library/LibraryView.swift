@@ -178,13 +178,25 @@ struct LibraryView: View {
 
 
 	private var _filteredSignedApps: [Signed] {
-
-
-
 		filteredAndSortedApps(from: _signedApps)
+	}
 
+	private var _filteredInstalledApps: [Signed] {
+		_filteredSignedApps.filter { app in
+			guard let identifier = app.identifier, !identifier.isEmpty else {
+				return false
+			}
+			return UIApplication.isAppInstalled(with: identifier)
+		}
+	}
 
-
+	private var _filteredSignedOnlyApps: [Signed] {
+		_filteredSignedApps.filter { app in
+			guard let identifier = app.identifier, !identifier.isEmpty else {
+				return true
+			}
+			return !UIApplication.isAppInstalled(with: identifier)
+		}
 	}
 
 
@@ -386,33 +398,46 @@ struct LibraryView: View {
 			zagUpdatesContent
 
 				if
-
-
-
-					!_filteredSignedApps.isEmpty,
-
-
-
-					_selectedScope == .all || _selectedScope == .signed
-
-
-
+					!_filteredInstalledApps.isEmpty,
+					_selectedScope == .all || _selectedScope == .installed
 				{
+					Section {
+						ZagLibraryHeader(
+							title: .localized("Installed"),
+							count: _filteredInstalledApps.count
+						)
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
 
+						ForEach(_filteredInstalledApps, id: \.uuid) { app in
+							LibraryCellView(
+								app: app,
+								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+								selectedAppUUIDs: $_selectedAppUUIDs
+							)
+							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+						}
+					}
+				}
 
-
+				if
+					!_filteredSignedOnlyApps.isEmpty,
+					_selectedScope == .all || _selectedScope == .signed
+				{
 					Section {
 
 						ZagLibraryHeader(
 							title: .localized("Signed"),
-							count: _filteredSignedApps.count
+							count: _filteredSignedOnlyApps.count
 						)
 						.listRowSeparator(.hidden)
 			.listRowBackground(Color.clear)
 
 
 
-						ForEach(_filteredSignedApps, id: \.uuid) { app in
+						ForEach(_filteredSignedOnlyApps, id: \.uuid) { app in
 
 
 
@@ -1222,14 +1247,12 @@ extension LibraryView {
 
 
 
+		if _selectedScope == .all || _selectedScope == .installed {
+			allApps.append(contentsOf: _filteredInstalledApps)
+		}
+
 		if _selectedScope == .all || _selectedScope == .signed {
-
-
-
-			allApps.append(contentsOf: _filteredSignedApps)
-
-
-
+			allApps.append(contentsOf: _filteredSignedOnlyApps)
 		}
 
 
@@ -1284,11 +1307,9 @@ extension LibraryView {
 
 		case all
 
-
+		case installed
 
 		case signed
-
-
 
 		case imported
 
@@ -1308,7 +1329,7 @@ extension LibraryView {
 
 			case .all: return .localized("All")
 
-
+			case .installed: return .localized("Installed")
 
 			case .signed: return .localized("Signed")
 
