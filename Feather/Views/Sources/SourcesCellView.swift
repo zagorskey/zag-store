@@ -122,6 +122,7 @@ struct SourcesCellView: View {
 			ZagCountBadge(count: appCount)
 		}
 		.contentShape(Rectangle())
+		.zagAppStoreRowSeparator()
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
