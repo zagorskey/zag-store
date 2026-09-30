@@ -50,6 +50,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var gate2State: Gate2State = .idle
+	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
 	private let advertiser = ZagPairableHostAdvertiser()
 	private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -105,28 +106,24 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .rsd(message)
 		case 107:
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-			gate2State = .deviceInfo(
+			let info = (
 				name: fields.indices.contains(0) ? fields[0] : "This iPhone",
 				model: fields.indices.contains(1) ? fields[1] : "",
 				version: fields.indices.contains(2) ? fields[2] : "",
 				build: fields.indices.contains(3) ? fields[3] : ""
 			)
+			gate2DeviceInfo = info
+			gate2State = .deviceInfo(name: info.name, model: info.model, version: info.version, build: info.build)
 		case 108:
 			gate2State = .installationProxy(message)
 		case 109:
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
-			let previous: (String, String, String, String)
-			switch gate2State {
-			case .deviceInfo(let name, let model, let version, let build):
-				previous = (name, model, version, build)
-			default:
-				previous = ("This iPhone", "", "", "")
-			}
+			let previous = gate2DeviceInfo ?? (name: "This iPhone", model: "", version: "", build: "")
 			gate2State = .complete(
-				name: previous.0,
-				model: previous.1,
-				version: previous.2,
-				build: previous.3,
+				name: previous.name,
+				model: previous.model,
+				version: previous.version,
+				build: previous.build,
 				userAppCount: fields.indices.contains(0) ? (Int(fields[0]) ?? 0) : 0,
 				zagStoreFound: fields.indices.contains(1) ? fields[1] == "true" : false
 			)
