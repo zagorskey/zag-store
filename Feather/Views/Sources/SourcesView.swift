@@ -31,9 +31,9 @@ struct ZagSourcesAtomIcon: View {
 					.font(.system(size: 34, weight: .semibold))
 					.foregroundStyle(.white)
 					.symbolEffect(
-						drawIn ? .drawOn.wholeSymbol : .drawOff.wholeSymbol,
+						.drawOff.wholeSymbol,
 						options: .nonRepeating,
-						value: drawIn
+						isActive: !drawIn
 					)
 					.task {
 						while !Task.isCancelled {
