@@ -757,7 +757,8 @@ struct SourcesView: View {
 						repository:
 							viewModel.sources[
 								source
-							]
+							],
+						isRefreshing: viewModel.isRefreshing
 					)
 					.moveDisabled(!_isRearrangingRepositories)
 					.background {
@@ -828,7 +829,8 @@ struct SourcesView: View {
 						repository:
 							viewModel.sources[
 								source
-							]
+							],
+						isRefreshing: viewModel.isRefreshing
 					)
 					.background {
 						NavigationLink {
