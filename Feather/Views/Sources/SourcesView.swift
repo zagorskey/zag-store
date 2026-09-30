@@ -679,15 +679,15 @@ struct SourcesView: View {
 							let totalApps = viewModel.sources.values.reduce(0) {
 								$0 + $1.apps.count
 							}
-							(
+							HStack(spacing: 0) {
 								Text("See all ")
-									.foregroundStyle(Color(uiColor: .secondaryLabel))
-								+ Text(totalApps.formatted())
+									.foregroundColor(Color(uiColor: .secondaryLabel))
+								Text(totalApps.formatted())
 									.fontWeight(.semibold)
-									.foregroundStyle(.white)
-								+ Text(" apps from sources")
-									.foregroundStyle(Color(uiColor: .secondaryLabel))
-							)
+									.foregroundColor(.white)
+								Text(" apps from sources")
+									.foregroundColor(Color(uiColor: .secondaryLabel))
+							}
 							.font(.system(size: 16, weight: .regular))
 							.lineLimit(1)
 						}
