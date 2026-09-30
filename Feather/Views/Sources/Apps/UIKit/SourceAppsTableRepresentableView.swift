@@ -22,6 +22,12 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.dataSource = context.coordinator
 		tableView.register(UITableViewCell.self, forCellReuseIdentifier: "AppCell")
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
+		tableView.separatorInset = UIEdgeInsets(top: 0, left: 88, bottom: 0, right: 16)
+		tableView.separatorColor = UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(red: 42.0 / 255.0, green: 42.0 / 255.0, blue: 44.0 / 255.0, alpha: 1)
+				: UIColor(red: 231.0 / 255.0, green: 231.0 / 255.0, blue: 232.0 / 255.0, alpha: 1)
+		}
 		
 		if #available(iOS 17, *) {
 			tableView.allowsSelection = true
