@@ -40,6 +40,7 @@ struct SourceAppsView: View {
 	@State private var _searchText = ""
 	@State private var _dictationAvailable = false
 	@State private var _dictationStatus = "Dictation unavailable"
+	@FocusState private var _searchFieldFocused: Bool
 
 	private var _navigationTitle: String {
 		if object.count == 1 {
@@ -74,10 +75,11 @@ struct SourceAppsView: View {
 		}
 		.navigationTitle(_navigationTitle)
 		.searchable(text: $_searchText, placement: .platform())
+		.searchFocused($_searchFieldFocused)
 		.overlay(alignment: .topTrailing) {
 			if object.count == 1 {
 				Button {
-					_startSystemDictation()
+					_startDictationFromSearchMic()
 				} label: {
 					Image(systemName: "mic.fill")
 						.font(.system(size: 18, weight: .regular))
@@ -178,6 +180,17 @@ struct SourceAppsView: View {
 		_dictationStatus = _dictationAvailable
 			? "Start Dictation"
 			: "startDictation unavailable"
+	}
+
+	private func _startDictationFromSearchMic() {
+		// The native searchable field must become first responder before
+		// UIDictationController starts. Starting dictation while search is
+		// resting leaves the system dictation session detached from the field.
+		_searchFieldFocused = true
+
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+			_startSystemDictation()
+		}
 	}
 
 	private func _startSystemDictation() {
