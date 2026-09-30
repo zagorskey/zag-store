@@ -346,6 +346,12 @@ struct LibraryView: View {
 
 					Section {
 
+						ZagLibraryHeader(
+							title: .localized("Signed"),
+							count: _filteredSignedApps.count
+						)
+						.listRowSeparator(.hidden)
+
 
 
 						ForEach(_filteredSignedApps, id: \.uuid) { app in
@@ -388,26 +394,6 @@ struct LibraryView: View {
 
 
 
-					} header: {
-
-
-
-						ZagLibraryHeader(
-
-
-
-							title: .localized("Signed"),
-
-
-
-							count: _filteredSignedApps.count
-
-
-
-						)
-
-
-
 					}
 
 
@@ -437,6 +423,12 @@ struct LibraryView: View {
 
 
 					Section {
+
+						ZagLibraryHeader(
+							title: .localized("Imported"),
+							count: _filteredImportedApps.count
+						)
+						.listRowSeparator(.hidden)
 
 
 
@@ -480,26 +472,6 @@ struct LibraryView: View {
 
 
 
-					} header: {
-
-
-
-						ZagLibraryHeader(
-
-
-
-							title: .localized("Imported"),
-
-
-
-							count: _filteredImportedApps.count
-
-
-
-						)
-
-
-
 					}
 
 
@@ -509,6 +481,7 @@ struct LibraryView: View {
 
 
 			}
+			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
 				placement: .platform(),
@@ -1458,16 +1431,15 @@ private struct ZagUpdatesSection: View {
 
 	var body: some View {
 		Section {
+			ZagUpdatesHeader(count: updates.count)
+				.listRowSeparator(.hidden)
+
 			ForEach(updates) { update in
 				ZagUpdateRow(
 					update: update,
 					onPreparedForInstall: onPreparedForInstall
 				)
 			}
-		} header: {
-			ZagUpdatesHeader(
-				count: updates.count
-			)
 		}
 	}
 }
