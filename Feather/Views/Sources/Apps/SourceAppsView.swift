@@ -170,9 +170,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				button = mic
 			}
 
-			button?.tintColor = field.traitCollection.userInterfaceStyle == .dark
-				? .white
-				: .black
+			button?.tintColor = .label
 			if button?.isUserInteractionEnabled != false {
 				button?.alpha = isAvailable ? 1.0 : 0.45
 			}
@@ -245,7 +243,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				),
 				for: .normal
 			)
-			mic.tintColor = field.traitCollection.userInterfaceStyle == .dark ? .white : .black
+			mic.tintColor = .label
 			mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
 			mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 			mic.accessibilityLabel = "Start Dictation"
