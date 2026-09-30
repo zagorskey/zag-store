@@ -272,6 +272,8 @@ struct LibraryView: View {
 				_isUpdatesPresenting = true
 			} label: {
 				HStack(spacing: 10) {
+					ZagFlashingUpdateDot()
+
 					Text(.localized("App Updates"))
 						.zagContentTitleStyle()
 
@@ -279,7 +281,11 @@ struct LibraryView: View {
 
 					ZagUpdateBadge(count: updateManager.updates.count)
 				}
-				.contentShape(Rectangle())
+				.padding(.horizontal, 16)
+				.frame(minHeight: 50)
+				.background(Color(hex: "#2C2C2E"))
+				.clipShape(Capsule())
+				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
@@ -616,13 +622,19 @@ struct LibraryView: View {
 
 
 				ToolbarItem(placement: .topBarLeading) {
-
-
-
-					EditButton()
-
-
-
+					Button {
+						withAnimation {
+							_editMode = _editMode.isEditing ? .inactive : .active
+						}
+					} label: {
+						Image(systemName: "square.and.pencil")
+							.font(.system(size: 20, weight: .semibold))
+					}
+					.accessibilityLabel(
+						_editMode.isEditing
+							? Text(.localized("Done"))
+							: Text(.localized("Edit"))
+					)
 				}
 
 
@@ -1293,6 +1305,26 @@ extension LibraryView {
 
 
 
+
+
+private struct ZagFlashingUpdateDot: View {
+	var body: some View {
+		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+			let phase = context.date.timeIntervalSinceReferenceDate
+			let wave = (sin(phase * .pi * 1.25) + 1.0) / 2.0
+
+			Circle()
+				.fill(Color.green)
+				.frame(width: 9, height: 9)
+				.opacity(0.25 + (wave * 0.75))
+				.scaleEffect(0.78 + (wave * 0.22))
+				.shadow(
+					color: Color.green.opacity(wave * 0.65),
+					radius: 4
+				)
+		}
+	}
+}
 
 
 private struct ZagUpdateRow: View {
