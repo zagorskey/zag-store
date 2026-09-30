@@ -9,7 +9,7 @@ private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>
 }
 
 @MainActor
-final class ZagRPPairingCore: ObservableObject {
+final class ZagRPPairingCore: NSObject, ObservableObject, NetServiceDelegate {
 	static let shared = ZagRPPairingCore()
 
 	enum State: Equatable {
@@ -23,6 +23,11 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var state: State = .idle
+	private var pairingService: NetService?
+
+	private override init() {
+		super.init()
+	}
 
 	static var version: String {
 		guard let pointer = zag_rppairing_core_version() else {
@@ -47,6 +52,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func start() {
 		guard !isRunning else { return }
+		stopBonjour()
 		state = .starting
 
 		let started = "Zag Store".withCString { hostName in
@@ -62,6 +68,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func resetStatus() {
 		guard !isRunning else { return }
+		stopBonjour()
 		state = .idle
 	}
 
@@ -70,12 +77,13 @@ final class ZagRPPairingCore: ObservableObject {
 		case 1:
 			state = .starting
 		case 2:
-			state = .advertising
+			startNativeBonjour(from: message)
 		case 3:
 			state = .connected
 		case 4:
 			state = .pin(message)
 		case 5:
+			stopBonjour()
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false)
 			state = .paired(
 				name: fields.indices.contains(0) ? String(fields[0]) : "This iPhone",
@@ -83,10 +91,65 @@ final class ZagRPPairingCore: ObservableObject {
 				udid: fields.indices.contains(2) ? String(fields[2]) : ""
 			)
 		case -1:
+			stopBonjour()
 			state = .failed(message)
 		default:
 			break
 		}
+	}
+
+	private func startNativeBonjour(from payload: String) {
+		let lines = payload.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+		guard lines.count >= 2, let port = Int32(lines[0]), port > 0 else {
+			state = .failed("RPPairing returned invalid Bonjour listener metadata.")
+			return
+		}
+
+		let serviceName = lines[1]
+		guard !serviceName.isEmpty else {
+			state = .failed("RPPairing returned an empty Bonjour service identifier.")
+			return
+		}
+
+		var txt: [String: Data] = [:]
+		for line in lines.dropFirst(2) {
+			guard let separator = line.firstIndex(of: "=") else { continue }
+			let key = String(line[..<separator])
+			let value = String(line[line.index(after: separator)...])
+			guard !key.isEmpty else { continue }
+			txt[key] = Data(value.utf8)
+		}
+
+		stopBonjour()
+		let service = NetService(
+			domain: "local.",
+			type: "_remotepairing-pairable-host._tcp.",
+			name: serviceName,
+			port: port
+		)
+		service.delegate = self
+		if !txt.isEmpty {
+			service.setTXTRecord(NetService.data(fromTXTRecord: txt))
+		}
+		pairingService = service
+		service.publish()
+		state = .advertising
+	}
+
+	private func stopBonjour() {
+		pairingService?.stop()
+		pairingService?.delegate = nil
+		pairingService = nil
+	}
+
+	func netServiceDidPublish(_ sender: NetService) {
+		state = .advertising
+	}
+
+	func netService(_ sender: NetService, didNotPublish errorDict: [String : NSNumber]) {
+		stopBonjour()
+		let code = errorDict[NetService.errorCode]?.intValue ?? -1
+		state = .failed("Native Bonjour advertisement failed (\(code)).")
 	}
 
 	private static var pairingFileURL: URL {
