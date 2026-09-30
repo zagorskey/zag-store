@@ -12,6 +12,7 @@ use idevice::remote_pairing::{
 use idevice::RsdService;
 use idevice::rsd::RsdHandshake;
 use idevice::services::lockdown::LockdownClient;
+use idevice::services::installation_proxy::InstallationProxyClient;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
 
@@ -175,7 +176,9 @@ async fn run_pairing(
 /// 105 = TLS-PSK CDTunnel established
 /// 106 = RSD handshake established
 /// 107 = device information read (message is pipe-delimited)
-/// -2  = Gate 2 failure
+/// 108 = installation_proxy connected over RSD
+/// 109 = user-app lookup complete (message: count|zagStoreFound)
+/// -2  = device-services probe failure
 #[no_mangle]
 pub unsafe extern "C" fn zag_gate2_probe(
     device_ip: *const c_char,
@@ -295,5 +298,20 @@ async fn run_gate2_probe(
     let build_version = dict.and_then(|d| d.get("BuildVersion")).and_then(|v| v.as_string()).unwrap_or("");
 
     emit(callback, 107, format!("{device_name}|{product_type}|{product_version}|{build_version}"));
+
+    // Gate 3A is deliberately read-only: connect to installation_proxy over the
+    // already-proven RSD tunnel and ask it only for the user-app lookup table.
+    drop(remote_lockdown);
+    let mut installation_proxy = InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+        .await
+        .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
+    emit(callback, 108, "installation_proxy connected over RSD");
+
+    let apps = installation_proxy
+        .get_apps(Some("User"), None)
+        .await
+        .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
+    let zag_store_found = apps.contains_key("com.cwd43.gu29");
+    emit(callback, 109, format!("{}|{}", apps.len(), zag_store_found));
     Ok(())
 }
