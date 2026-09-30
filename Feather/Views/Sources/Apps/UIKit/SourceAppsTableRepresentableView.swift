@@ -18,6 +18,7 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 	
 	func makeUIView(context: Context) -> UITableView {
 		let tableView = UITableView(frame: .zero, style: .plain)
+		tableView.backgroundColor = .clear
 		tableView.delegate = context.coordinator
 		tableView.dataSource = context.coordinator
 		tableView.register(UITableViewCell.self, forCellReuseIdentifier: "AppCell")
@@ -231,9 +232,11 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		case .date: entry = _groupedAppsByDate[_sortedSectionTitles[indexPath.section]]?[indexPath.row] ?? _sortedApps[indexPath.row]
 		}
 
+		cell.backgroundColor = .clear
 		cell.contentConfiguration = UIHostingConfiguration {
 			SourceAppsCellView(source: entry.source, app: entry.app)
 		}
+		.background(.clear)
 		return cell
 	}
 	
@@ -261,6 +264,8 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		case .name, .date: title = _sortedSectionTitles[section]
 		}
 		
+		headerView?.backgroundView = UIView()
+		headerView?.backgroundView?.backgroundColor = .clear
 		headerView?.contentConfiguration = UIHostingConfiguration {
 			HStack {
 				Text(verbatim: title)
@@ -269,6 +274,7 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 			.font(.headline)
 			.padding(.vertical, 2)
 		}
+		.background(.clear)
 		
 		return headerView
 	}
