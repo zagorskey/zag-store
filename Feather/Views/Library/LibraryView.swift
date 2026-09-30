@@ -379,6 +379,7 @@ struct LibraryView: View {
 
 
 			NBListAdaptable(transparentBackground: true) {
+				Group {
 
 
 
@@ -538,6 +539,8 @@ struct LibraryView: View {
 
 
 
+				}
+				.listRowBackground(Color.clear)
 			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
