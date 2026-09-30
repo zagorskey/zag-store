@@ -29,6 +29,8 @@ struct LibraryCellView: View {
 	}
 
 	var app: AppInfoPresentable
+	var isManagedInstalled: Bool = false
+	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -166,12 +168,22 @@ extension LibraryCellView {
 	private func _actions(
 		for app: AppInfoPresentable
 	) -> some View {
-		Button(
-			.localized("Delete"),
-			systemImage: "trash",
-			role: .destructive
-		) {
-			Storage.shared.deleteApp(for: app)
+		if isManagedInstalled {
+			Button(
+				.localized("Remove App"),
+				systemImage: "minus.circle",
+				role: .destructive
+			) {
+				onRemoveManagedApp?(app)
+			}
+		} else {
+			Button(
+				.localized("Delete"),
+				systemImage: "trash",
+				role: .destructive
+			) {
+				Storage.shared.deleteApp(for: app)
+			}
 		}
 	}
 
@@ -192,20 +204,20 @@ extension LibraryCellView {
 		for app: AppInfoPresentable
 	) -> some View {
 		if app.isSigned {
-			if let id = app.identifier {
+			if isManagedInstalled, let id = app.identifier {
 				Button(
 					.localized("Open"),
 					systemImage: "app.badge.checkmark"
 				) {
 					UIApplication.openApp(with: id)
 				}
-			}
-
-			Button(
-				.localized("Install"),
-				systemImage: "square.and.arrow.down"
-			) {
-				selectedInstallAppPresenting = AnyApp(base: app)
+			} else {
+				Button(
+					.localized("Install"),
+					systemImage: "square.and.arrow.down"
+				) {
+					selectedInstallAppPresenting = AnyApp(base: app)
+				}
 			}
 
 			Button(
@@ -252,9 +264,13 @@ extension LibraryCellView {
 				alignment: .center,
 				spacing: 3
 			) {
-				if let id = app.identifier {
+				if isManagedInstalled, let id = app.identifier {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: id)
+					}
+				} else {
+					ZagActionPill(title: .localized("Install")) {
+						selectedInstallAppPresenting = AnyApp(base: app)
 					}
 				}
 
