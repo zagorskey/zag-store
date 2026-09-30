@@ -43,17 +43,31 @@ struct SourcesCellView: View {
 		let second = components.second ?? 0
 		let looksDateOnly = minute == 0 && second == 0 && (hour == 0 || hour == 1)
 
-		if looksDateOnly {
-			return "Updated: \(Self.dayFormatter.string(from: date))"
+		let startOfToday = calendar.startOfDay(for: .now)
+		let startOfDate = calendar.startOfDay(for: date)
+		let daysAgo = calendar.dateComponents([.day], from: startOfDate, to: startOfToday).day
+
+		if let daysAgo, (0...3).contains(daysAgo) {
+			let label: String
+			switch daysAgo {
+			case 0: label = "Today"
+			case 1: label = "Yesterday"
+			case 2: label = "Two Days Ago"
+			default: label = "Three Days Ago"
+			}
+			if looksDateOnly {
+				return "Updated: \(label)"
+			}
+			return "Updated: \(label) at \(Self.timeFormatter.string(from: date))"
 		}
 
-		return "Updated: \(Self.dateFormatter.string(from: date))"
+		return "Updated: \(Self.dayFormatter.string(from: date))"
 	}
 
-	private static let dateFormatter: DateFormatter = {
+	private static let timeFormatter: DateFormatter = {
 		let formatter = DateFormatter()
 		formatter.locale = Locale(identifier: "en_GB")
-		formatter.dateFormat = "d MMM yyyy 'at' HH:mm"
+		formatter.dateFormat = "HH:mm"
 		return formatter
 	}()
 
@@ -83,7 +97,7 @@ struct SourcesCellView: View {
 				.lineLimit(1)
 
 				if isRefreshing {
-					Text("Refreshing" + String(repeating: ".", count: refreshDotCount))
+					Text("Updated: Refreshing" + String(repeating: ".", count: refreshDotCount))
 						.font(.system(size: 16, weight: .regular))
 						.foregroundStyle(Color(uiColor: .secondaryLabel))
 						.lineLimit(1)
