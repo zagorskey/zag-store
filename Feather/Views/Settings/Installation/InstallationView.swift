@@ -67,6 +67,32 @@ private struct RPPairingView: View {
 	@State private var showGate4Importer = false
 
 	var body: some View {
+		Section("Direct Install Status") {
+			LabeledContent("Pairing") {
+				Label(
+					pairingCore.pairingFileExists ? "Paired" : "Setup Required",
+					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle"
+				)
+				.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
+			}
+			LabeledContent("Local Tunnel") {
+				Label(
+					isLocalDevVpnAvailable ? "LocalDevVPN Available" : "LocalDevVPN Required",
+					systemImage: isLocalDevVpnAvailable ? "checkmark.circle.fill" : "exclamationmark.circle"
+				)
+				.foregroundStyle(isLocalDevVpnAvailable ? .green : .orange)
+			}
+			LabeledContent("Direct Install") {
+				Label(
+					pairingCore.pairingFileExists && isLocalDevVpnAvailable ? "Ready" : "Not Ready",
+					systemImage: pairingCore.pairingFileExists && isLocalDevVpnAvailable ? "checkmark.circle.fill" : "circle"
+				)
+				.foregroundStyle(pairingCore.pairingFileExists && isLocalDevVpnAvailable ? .green : .secondary)
+			}
+		} footer: {
+			Text("RPPairing installs directly through this iPhone's device services. Pairing is stored by Zag Store; LocalDevVPN supplies the local tunnel when installing.")
+		}
+
 		Section {
 			LabeledContent {
 				Text(pairingCore.pairingFileExists ? "Ready" : "Setup Required")
@@ -133,7 +159,7 @@ private struct RPPairingView: View {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
 		}
 
-		Section("Local Device Tunnel") {
+		Section("Setup") {
 			if isLocalDevVpnAvailable {
 				Button("Connect to LocalDevVPN", systemImage: "link") {
 					UIApplication.open("localdevvpn://enable?scheme=feather")
