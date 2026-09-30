@@ -377,7 +377,7 @@ struct LibraryView: View {
 
 
 
-			NBListAdaptable {
+			NBListAdaptable(transparentBackground: true) {
 
 
 
