@@ -22,18 +22,24 @@ private extension Notification.Name {
 private extension NSObject {
 	@objc dynamic func zag_setupForDictationStart() {
 		// After method exchange this calls UIKit's original implementation.
+		// Starting dictation is not the point where App Store hides its trailing mic.
 		zag_setupForDictationStart()
-		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
 	}
 
 	@objc dynamic func zag_stopDictation() {
+		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
 		zag_stopDictation()
-		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+			NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+		}
 	}
 
 	@objc dynamic func zag_cancelDictation() {
+		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
 		zag_cancelDictation()
-		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+			NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
+		}
 	}
 }
 
@@ -189,7 +195,6 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		@objc private func micPressed() {
-			setMicVisible(false, animated: true)
 			action()
 		}
 
