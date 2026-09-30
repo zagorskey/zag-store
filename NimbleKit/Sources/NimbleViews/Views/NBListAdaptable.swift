@@ -29,6 +29,7 @@ public struct NBListAdaptable<Content>: View where Content: View {
 			.listStyle(.plain)
 			.listRowSeparator(.hidden)
 			.scrollContentBackground(_transparentBackground ? .hidden : .visible)
+			.listRowBackground(_transparentBackground ? Color.clear : nil)
 		} else {
 			NBGrid {
 				_content
