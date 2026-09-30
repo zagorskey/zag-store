@@ -265,6 +265,19 @@ struct LibraryView: View {
 
 
 
+	@Environment(\.colorScheme) private var zagUpdatesColorScheme
+	@AppStorage("Feather.userTintColor") private var zagUpdatesThemeHex: String = "#3F8EF7"
+
+	private var zagUpdatesPillBackground: Color {
+		zagUpdatesColorScheme == .dark
+			? Color(hex: "#1C1C1E")
+			: Color(hex: "#EEEEEF")
+	}
+
+	private var zagUpdatesTitleColor: Color {
+		Color(hex: zagUpdatesThemeHex)
+	}
+
 	@ViewBuilder
 	private var zagUpdatesContent: some View {
 		if !updateManager.updates.isEmpty {
@@ -275,21 +288,26 @@ struct LibraryView: View {
 					HStack(spacing: 9) {
 						Text(.localized("Updates"))
 							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(.primary)
+							.foregroundStyle(zagUpdatesTitleColor)
 
 						ZagFlashingUpdateDot()
 							.frame(width: 9, height: 9)
+							.offset(y: 1)
 					}
 					.padding(.horizontal, 14)
 					.frame(height: 46)
-					.background(Color(hex: "#242426"))
+					.background(zagUpdatesPillBackground)
 					.clipShape(Capsule())
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
 
 					ZStack {
-						ZagUpdatesPillSurface(baseColorHex: "#202022")
+						ZagUpdatesPillSurface(
+							baseColorHex: zagUpdatesColorScheme == .dark
+								? "#1C1C1E"
+								: "#EEEEEF"
+						)
 
 						Text(updateManager.updates.count.description)
 							.font(.system(size: 14, weight: .regular))
