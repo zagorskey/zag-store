@@ -164,6 +164,8 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 				field.rightView = mic
 				field.rightViewMode = .always
+				field.removeTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
+				field.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
 				installedField = field
 				button = mic
 			}
@@ -204,6 +206,8 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		@objc private func dictationEnded() {
 			guard let field = installedField else { return }
 			yieldingToNativeClearButton = true
+			field.removeTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
+			field.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
 
 			UIView.animate(
 				withDuration: 0.16,
@@ -218,6 +222,47 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 						field.rightView = nil
 					}
 					self.button = nil
+				}
+			)
+		}
+
+		@objc private func searchTextChanged(_ field: UISearchTextField) {
+			guard yieldingToNativeClearButton, (field.text ?? "").isEmpty else { return }
+
+			yieldingToNativeClearButton = false
+			installMic(in: field)
+		}
+
+		private func installMic(in field: UISearchTextField) {
+			let mic = UIButton(type: .system)
+			mic.setImage(
+				UIImage(
+					systemName: "mic.fill",
+					withConfiguration: UIImage.SymbolConfiguration(
+						pointSize: 18,
+						weight: .regular
+					)
+				),
+				for: .normal
+			)
+			mic.tintColor = field.traitCollection.userInterfaceStyle == .dark ? .white : .black
+			mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+			mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
+			mic.accessibilityLabel = "Start Dictation"
+			mic.alpha = 0
+			mic.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+
+			field.rightView = mic
+			field.rightViewMode = .always
+			button = mic
+
+			UIView.animate(
+				withDuration: 0.2,
+				delay: 0,
+				options: [.beginFromCurrentState, .curveEaseInOut],
+				animations: {
+					mic.alpha = 1
+					mic.transform = .identity
 				}
 			)
 		}
