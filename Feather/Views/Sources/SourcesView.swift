@@ -234,11 +234,14 @@ struct SourcesView: View {
 	var body: some View {
 		NBNavigationView(.localized("Sources")) {
 			NBListAdaptable(transparentBackground: true) {
+				Group {
 				if _isSearchingApps {
 					searchResultsContent
 				} else {
 					normalSourcesContent
 				}
+				}
+				.listRowBackground(Color.clear)
 			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
