@@ -42,15 +42,13 @@ struct SettingsView: View {
 			Form {
 				_feedback()
                 
-				Section {
+				NBSection("Display") {
 					NavigationLink(destination: AppearanceView()) {
 						Label(.localized("Appearance"), systemImage: "paintbrush")
 					}
 					NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
 						Label(.localized("App Icon"), systemImage: "app.badge")
 					}
-				} header: {
-					Text("Display")
 				}
                 
 				NBSection(.localized("Certificates")) {
