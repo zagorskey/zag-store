@@ -45,12 +45,17 @@ final class ZagRPPairingCore: ObservableObject {
 		case rsd(String)
 		case deviceInfo(name: String, model: String, version: String, build: String)
 		case installationProxy(String)
+		case installedApps(userAppCount: Int, zagStoreFound: Bool)
+		case afc(String)
+		case stagingWrite(String)
+		case stagingVerify(String)
 		case complete(name: String, model: String, version: String, build: String, userAppCount: Int, zagStoreFound: Bool)
 		case failed(String)
 	}
 
 	@Published private(set) var gate2State: Gate2State = .idle
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
+	private var gate2LastAppResult: (Int, Bool)?
 	private let advertiser = ZagPairableHostAdvertiser()
 	private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -69,7 +74,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	var isGate2Running: Bool {
 		switch gate2State {
-		case .starting, .lockdown, .pairing, .pairRecord, .coreDevice, .rsd, .deviceInfo, .installationProxy:
+		case .starting, .lockdown, .pairing, .pairRecord, .coreDevice, .rsd, .deviceInfo, .installationProxy, .installedApps, .afc, .stagingWrite, .stagingVerify:
 			return true
 		default:
 			return false
@@ -118,14 +123,32 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .installationProxy(message)
 		case 109:
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+			let result = (
+				fields.indices.contains(0) ? (Int(fields[0]) ?? 0) : 0,
+				fields.indices.contains(1) ? fields[1] == "true" : false
+			)
+			gate2LastAppResult = result
+			gate2State = .installedApps(userAppCount: result.0, zagStoreFound: result.1)
+		case 110:
+			gate2State = .afc(message)
+		case 111:
+			gate2State = .stagingWrite(message)
+		case 112:
+			gate2State = .stagingVerify(message)
+		case 113:
 			let previous = gate2DeviceInfo ?? (name: "This iPhone", model: "", version: "", build: "")
+			let appResult: (Int, Bool)
+			switch gate2LastAppResult {
+			case .some(let result): appResult = result
+			case .none: appResult = (0, false)
+			}
 			gate2State = .complete(
 				name: previous.name,
 				model: previous.model,
 				version: previous.version,
 				build: previous.build,
-				userAppCount: fields.indices.contains(0) ? (Int(fields[0]) ?? 0) : 0,
-				zagStoreFound: fields.indices.contains(1) ? fields[1] == "true" : false
+				userAppCount: appResult.0,
+				zagStoreFound: appResult.1
 			)
 		case -2:
 			gate2State = .failed(message)
