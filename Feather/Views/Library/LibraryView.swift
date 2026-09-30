@@ -1343,6 +1343,7 @@ private struct ZagUpdateRow: View {
 
 			zagUpdateButton
 		}
+		.zagAppStoreRowSeparator()
 	}
 
 	@ViewBuilder
