@@ -1325,49 +1325,74 @@ private struct ZagUpdatesPillSurface: View {
 
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let raw = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 6.6) / 6.6
-			// Smoothstep keeps the reflection from feeling like a progress spinner.
-			let progress = raw * raw * (3.0 - (2.0 * raw))
+			// Constant phase makes the lap seamless; there is no eased reset point.
+			let progress = context.date.timeIntervalSinceReferenceDate
+				.truncatingRemainder(dividingBy: 6.8) / 6.8
 
 			Capsule()
 				.fill(Color(hex: "#2C2C2E"))
 				.overlay {
 					ZStack {
-						// A soft halo gives the edge reflection depth.
+						// Long, diffuse comet tail.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
-							length: 0.22,
+							offset: -0.075,
+							length: 0.24,
 							color: Color(hex: themeColorHex),
-							opacity: 0.18,
-							lineWidth: 3.0
+							opacity: 0.14,
+							lineWidth: 3.2
 						)
-						.blur(radius: 2.2)
+						.blur(radius: 2.5)
 
-						// Feathered shoulders around a narrow specular core.
+						// Coloured body, biased behind the hotspot.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
-							length: 0.18,
+							offset: -0.035,
+							length: 0.14,
 							color: Color(hex: themeColorHex),
-							opacity: 0.18,
-							lineWidth: 1.0
-						)
-
-						ZagUpdatesEdgeGlint(
-							progress: progress,
-							length: 0.10,
-							color: Color(hex: themeColorHex),
-							opacity: 0.34,
-							lineWidth: 0.85
+							opacity: 0.30,
+							lineWidth: 1.15
 						)
 
+						// Tight specular hotspot.
 						ZagUpdatesEdgeGlint(
 							progress: progress,
-							length: 0.035,
+							offset: 0,
+							length: 0.026,
 							color: .white,
-							opacity: 0.72,
-							lineWidth: 0.65
+							opacity: 0.82,
+							lineWidth: 0.7
 						)
+
+						// Very short leading feather prevents a hard front edge.
+						ZagUpdatesEdgeGlint(
+							progress: progress,
+							offset: 0.022,
+							length: 0.045,
+							color: Color(hex: themeColorHex),
+							opacity: 0.20,
+							lineWidth: 0.8
+						)
+					}
+					// A stationary lighting mask makes the top/right reflection
+					// stronger and the lower edge more restrained.
+					.mask {
+						Capsule()
+							.stroke(
+								AngularGradient(
+									colors: [
+										.white.opacity(0.62),
+										.white,
+										.white.opacity(0.90),
+										.white.opacity(0.42),
+										.white.opacity(0.32),
+										.white.opacity(0.58),
+										.white.opacity(0.62)
+									],
+									center: .center
+								),
+								lineWidth: 6
+							)
 					}
 					.clipShape(Capsule())
 				}
@@ -1378,24 +1403,26 @@ private struct ZagUpdatesPillSurface: View {
 
 private struct ZagUpdatesEdgeGlint: View {
 	let progress: Double
+	let offset: Double
 	let length: Double
 	let color: Color
 	let opacity: Double
 	let lineWidth: CGFloat
 
 	var body: some View {
+		let center = wrapped(progress + offset)
 		let half = length / 2.0
-		let start = progress - half
-		let end = progress + half
+		let start = center - half
+		let end = center + half
 
 		ZStack {
 			if start >= 0 && end <= 1 {
 				segment(from: start, to: end)
 			} else if start < 0 {
 				segment(from: 0, to: end)
-				.overlay {
-					segment(from: 1 + start, to: 1)
-				}
+					.overlay {
+						segment(from: 1 + start, to: 1)
+					}
 			} else {
 				segment(from: start, to: 1)
 					.overlay {
@@ -1403,6 +1430,11 @@ private struct ZagUpdatesEdgeGlint: View {
 					}
 			}
 		}
+	}
+
+	private func wrapped(_ value: Double) -> Double {
+		let remainder = value.truncatingRemainder(dividingBy: 1)
+		return remainder >= 0 ? remainder : remainder + 1
 	}
 
 	private func segment(from: Double, to: Double) -> some View {
