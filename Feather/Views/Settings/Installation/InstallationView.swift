@@ -149,8 +149,10 @@ private struct RPPairingView: View {
 			gate2Row("RPPairing Pair-Verify", stage: .pairRecord)
 			gate2Row("TLS-PSK Device Tunnel", stage: .coreDevice)
 			gate2Row("RSD", stage: .rsd)
+			gate2Row("Installation Proxy", stage: .installationProxy)
+			gate2Row("Installed Apps Lookup", stage: .installedApps)
 
-			if case .complete(let name, let model, let version, let build) = pairingCore.gate2State {
+			if case .complete(let name, let model, let version, let build, let userAppCount, let zagStoreFound) = pairingCore.gate2State {
 				LabeledContent("Device") {
 					VStack(alignment: .trailing, spacing: 2) {
 						Text(name)
@@ -165,6 +167,16 @@ private struct RPPairingView: View {
 								.foregroundStyle(.secondary)
 						}
 					}
+				}
+				LabeledContent("User Apps") {
+					Text("\(userAppCount)")
+				}
+				LabeledContent("Zag Store") {
+					Label(
+						zagStoreFound ? "Found" : "Not Found",
+						systemImage: zagStoreFound ? "checkmark.circle.fill" : "exclamationmark.circle"
+					)
+					.foregroundStyle(zagStoreFound ? .green : .orange)
 				}
 			}
 
@@ -185,9 +197,9 @@ private struct RPPairingView: View {
 			}
 			.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
 		} header: {
-			Text("Gate 2 — Device Services")
+			Text("Gate 2 / 3A — Device Services")
 		} footer: {
-			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel and RSD. It does not create a classic pair record and does not install, remove, or modify apps.")
+			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel, RSD, and a read-only installation_proxy lookup. It does not create a classic pair record and does not install, remove, upgrade, stage, or modify apps.")
 		}
 		.onAppear {
 			if let url = URL(string: "localdevvpn://") {
@@ -201,6 +213,8 @@ private struct RPPairingView: View {
 		case pairRecord
 		case coreDevice
 		case rsd
+		case installationProxy
+		case installedApps
 	}
 
 	@ViewBuilder
@@ -238,7 +252,9 @@ private struct RPPairingView: View {
 		case .pairRecord: rank = 2; failed = false
 		case .coreDevice: rank = 3; failed = false
 		case .rsd: rank = 4; failed = false
-		case .complete: rank = 5; failed = false
+		case .deviceInfo: rank = 5; failed = false
+		case .installationProxy: rank = 5; failed = false
+		case .complete: rank = 7; failed = false
 		case .failed: rank = -1; failed = true
 		}
 
@@ -248,9 +264,11 @@ private struct RPPairingView: View {
 		case .pairRecord: target = 2
 		case .coreDevice: target = 3
 		case .rsd: target = 4
+		case .installationProxy: target = 5
+		case .installedApps: target = 6
 		}
 
-		if rank > target || rank == 5 {
+		if rank > target || rank == 7 {
 			return ("checkmark.circle.fill", .green, false)
 		}
 		if rank == target {
