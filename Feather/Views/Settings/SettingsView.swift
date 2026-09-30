@@ -40,8 +40,6 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				_feedback()
-                
 				NBSection("Display") {
 					NavigationLink(destination: AppearanceView()) {
 						Label(.localized("Appearance"), systemImage: "paintbrush")
@@ -85,6 +83,8 @@ struct SettingsView: View {
 					Text(.localized("Configure the apps way of installing, its zip compression levels, and custom modifications to apps."))
 				}
                 
+
+				_feedback()
 				_directories()
                 
 				Section {
@@ -114,10 +114,10 @@ struct SettingsView: View {
 extension SettingsView {
 	@ViewBuilder
 	private func _feedback() -> some View {
-		Section {
+		NBSection("About Us") {
 			NavigationLink(destination: AboutView()) {
 				Label {
-					Text(verbatim: .localized("About %@", arguments: Bundle.main.name))
+					Text("Zag Store")
 				} icon: {
 					FRAppIconView(size: 23)
 				}
