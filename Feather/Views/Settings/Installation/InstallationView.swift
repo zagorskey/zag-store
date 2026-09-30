@@ -69,8 +69,8 @@ private struct RPPairingView: View {
 	var body: some View {
 		Section {
 			LabeledContent {
-				Text("Experimental")
-					.foregroundStyle(.orange)
+				Text(pairingCore.pairingFileExists ? "Ready" : "Setup Required")
+					.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
 			} label: {
 				Label("RPPairing", systemImage: "iphone.radiowaves.left.and.right")
 			}
@@ -197,15 +197,15 @@ private struct RPPairingView: View {
 				pairingCore.startGate2Probe()
 			} label: {
 				Label(
-					pairingCore.isGate2Running ? "Testing Device Connection…" : "Test Device Connection",
+					pairingCore.isGate2Running ? "Running Health Check…" : "Run Health Check",
 					systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope"
 				)
 			}
 			.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
 		} header: {
-			Text("Gate 2 / 3 — Device Services")
+			Text("Health Checks")
 		} footer: {
-			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel, RSD, a read-only installation_proxy lookup, and an AFC PublicStaging diagnostic. Gate 3B writes one tiny marker file, reads it back byte-for-byte, then deletes it. It does not install, remove, upgrade, or modify apps.")
+			Text("Connect LocalDevVPN first, then run the health check. It verifies saved pairing credentials, Pair-Verify, the TLS-PSK tunnel, RSD, Installation Proxy, installed-app lookup, and the AFC/PublicStaging write-read-cleanup path. The staging check uses only a tiny temporary marker and does not install, remove, upgrade, or modify apps.")
 		}
 		Section {
 			LabeledContent("Status") {
@@ -231,13 +231,13 @@ private struct RPPairingView: View {
 			Button {
 				showGate4Importer = true
 			} label: {
-				Label("Choose Signed Test IPA…", systemImage: "shippingbox")
+				Label("Run Installation Test…", systemImage: "shippingbox")
 			}
 			.disabled(pairingCore.isGate4Running || !pairingCore.pairingFileExists)
 		} header: {
-			Text("Gate 4 — Controlled Install")
+			Text("Tests")
 		} footer: {
-			Text("Choose an already-signed disposable test IPA. Zag Store copies it into its sandbox, stages it through AFC/PublicStaging, and asks installation_proxy to install it over the proven RPPairing tunnel. Do not select Zag Store itself for this test.")
+			Text("Installation Test runs the complete direct-install path with a signed disposable IPA: Pair-Verify → TLS-PSK tunnel → RSD → AFC/PublicStaging → Installation Proxy → installd. Use an app that is not already installed when validating a differently signed build. Do not select Zag Store itself.")
 		}
 
 		.onAppear {
@@ -268,7 +268,7 @@ private struct RPPairingView: View {
 
 	private var gate4StatusText: String {
 		switch pairingCore.gate4State {
-		case .idle: return "Ready — choose a signed test IPA"
+		case .idle: return "Ready for installation test"
 		case .starting: return "Starting RPPairing…"
 		case .pairVerified: return "Pair-Verify complete"
 		case .tunnel: return "TLS-PSK tunnel established"
