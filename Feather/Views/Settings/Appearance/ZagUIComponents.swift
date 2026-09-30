@@ -79,6 +79,9 @@ struct ZagSectionHeader: View {
 			}
 
 			Text(title)
+				.font(.system(size: 20, weight: .semibold))
+				.foregroundStyle(.primary)
+				.textCase(nil)
 
 			ZagCountBadge(count: count)
 
