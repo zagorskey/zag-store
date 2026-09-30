@@ -272,7 +272,7 @@ struct LibraryView: View {
 				_isUpdatesPresenting = true
 			} label: {
 				HStack(spacing: 10) {
-					Image(systemName: "square.stack.3d.up.fill")
+					Image(systemName: "arrow.triangle.2.circlepath")
 						.font(.system(size: 20, weight: .semibold))
 						.foregroundStyle(.primary)
 						.frame(width: 24)
@@ -303,8 +303,8 @@ struct LibraryView: View {
 				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
-			.listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
 			.listRowSeparator(.hidden)
+			.padding(.vertical, 2)
 		}
 	}
 
