@@ -142,11 +142,124 @@ private struct RPPairingView: View {
 				}
 			}
 		}
+
+		Section {
+			gate2Row("Pairing Credentials", complete: pairingCore.pairingFileExists)
+			gate2Row("LocalDevVPN / lockdownd", stage: .lockdown)
+			gate2Row("Classic Pair Record", stage: .pairRecord)
+			gate2Row("CoreDeviceProxy", stage: .coreDevice)
+			gate2Row("RSD", stage: .rsd)
+
+			if case .complete(let name, let model, let version, let build) = pairingCore.gate2State {
+				LabeledContent("Device") {
+					VStack(alignment: .trailing, spacing: 2) {
+						Text(name)
+						if !model.isEmpty {
+							Text(model)
+								.font(.caption)
+								.foregroundStyle(.secondary)
+						}
+						if !version.isEmpty {
+							Text("iOS \(version)\(build.isEmpty ? "" : " (\(build))")")
+								.font(.caption)
+								.foregroundStyle(.secondary)
+						}
+					}
+				}
+			}
+
+			if case .failed(let error) = pairingCore.gate2State {
+				Text(error)
+					.font(.footnote)
+					.foregroundStyle(.red)
+					.textSelection(.enabled)
+			}
+
+			Button {
+				pairingCore.startGate2Probe()
+			} label: {
+				Label(
+					pairingCore.isGate2Running ? "Testing Device Connection…" : "Test Device Connection",
+					systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope"
+				)
+			}
+			.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
+		} header: {
+			Text("Gate 2 — Device Services")
+		} footer: {
+			Text("Connect LocalDevVPN first. This diagnostic talks to this iPhone through lockdownd, creates a separate classic pairing record if iOS permits it, then tests CoreDeviceProxy and RSD. It does not install, remove, or modify apps.")
+		}
 		.onAppear {
 			if let url = URL(string: "localdevvpn://") {
 				isLocalDevVpnAvailable = UIApplication.shared.canOpenURL(url)
 			}
 		}
+	}
+
+	private enum Gate2Stage {
+		case lockdown
+		case pairRecord
+		case coreDevice
+		case rsd
+	}
+
+	@ViewBuilder
+	private func gate2Row(_ title: String, complete: Bool) -> some View {
+		HStack(spacing: 10) {
+			Image(systemName: complete ? "checkmark.circle.fill" : "circle")
+				.foregroundStyle(complete ? .green : .secondary)
+			Text(title)
+		}
+	}
+
+	@ViewBuilder
+	private func gate2Row(_ title: String, stage: Gate2Stage) -> some View {
+		let status = gate2Status(for: stage)
+		HStack(spacing: 10) {
+			Image(systemName: status.icon)
+				.foregroundStyle(status.color)
+			Text(title)
+			Spacer()
+			if status.active {
+				ProgressView()
+					.controlSize(.small)
+			}
+		}
+	}
+
+	private func gate2Status(for stage: Gate2Stage) -> (icon: String, color: Color, active: Bool) {
+		let rank: Int
+		let failed: Bool
+		switch pairingCore.gate2State {
+		case .idle: rank = 0; failed = false
+		case .starting: rank = 0; failed = false
+		case .lockdown: rank = 1; failed = false
+		case .pairing: rank = 1; failed = false
+		case .pairRecord: rank = 2; failed = false
+		case .coreDevice: rank = 3; failed = false
+		case .rsd: rank = 4; failed = false
+		case .complete: rank = 5; failed = false
+		case .failed: rank = -1; failed = true
+		}
+
+		let target: Int
+		switch stage {
+		case .lockdown: target = 1
+		case .pairRecord: target = 2
+		case .coreDevice: target = 3
+		case .rsd: target = 4
+		}
+
+		if rank > target || rank == 5 {
+			return ("checkmark.circle.fill", .green, false)
+		}
+		if rank == target {
+			return ("circle.dotted", .secondary, true)
+		}
+		if failed {
+			return ("exclamationmark.circle", .red, false)
+		}
+		return ("circle", .secondary, false)
 	}
 
 	private var statusText: String {
