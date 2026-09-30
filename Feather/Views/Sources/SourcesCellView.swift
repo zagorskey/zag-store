@@ -33,6 +33,17 @@ struct SourcesCellView: View {
 			return "Updated: Unknown"
 		}
 
+		let calendar = Calendar.current
+		let components = calendar.dateComponents([.hour, .minute, .second], from: date)
+		let hour = components.hour ?? 0
+		let minute = components.minute ?? 0
+		let second = components.second ?? 0
+		let looksDateOnly = minute == 0 && second == 0 && (hour == 0 || hour == 1)
+
+		if looksDateOnly {
+			return "Updated: \(Self.dayFormatter.string(from: date))"
+		}
+
 		return "Updated: \(Self.dateFormatter.string(from: date))"
 	}
 
@@ -40,6 +51,13 @@ struct SourcesCellView: View {
 		let formatter = DateFormatter()
 		formatter.locale = Locale(identifier: "en_GB")
 		formatter.dateFormat = "d MMM yyyy 'at' HH:mm"
+		return formatter
+	}()
+
+	private static let dayFormatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.locale = Locale(identifier: "en_GB")
+		formatter.dateFormat = "d MMM yyyy"
 		return formatter
 	}()
 
