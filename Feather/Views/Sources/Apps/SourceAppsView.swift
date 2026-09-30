@@ -11,6 +11,97 @@ import NimbleViews
 import UIKit
 
 
+// MARK: - Native Search Microphone
+
+private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
+	let isAvailable: Bool
+	let action: () -> Void
+
+	func makeCoordinator() -> Coordinator {
+		Coordinator(action: action)
+	}
+
+	func makeUIView(context: Context) -> UIView {
+		let view = UIView(frame: .zero)
+		view.isUserInteractionEnabled = false
+		DispatchQueue.main.async {
+			context.coordinator.install(from: view, isAvailable: isAvailable)
+		}
+		return view
+	}
+
+	func updateUIView(_ uiView: UIView, context: Context) {
+		context.coordinator.action = action
+		DispatchQueue.main.async {
+			context.coordinator.install(from: uiView, isAvailable: isAvailable)
+		}
+	}
+
+	final class Coordinator: NSObject {
+		var action: () -> Void
+		private weak var installedField: UISearchTextField?
+		private weak var button: UIButton?
+
+		init(action: @escaping () -> Void) {
+			self.action = action
+		}
+
+		func install(from anchor: UIView, isAvailable: Bool) {
+			guard let window = anchor.window else {
+				DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+					self.install(from: anchor, isAvailable: isAvailable)
+				}
+				return
+			}
+
+			guard let field = Self.findSearchField(in: window) else { return }
+
+			if installedField !== field || button == nil {
+				let mic = UIButton(type: .system)
+				mic.setImage(
+					UIImage(
+						systemName: "mic.fill",
+						withConfiguration: UIImage.SymbolConfiguration(
+							pointSize: 18,
+							weight: .regular
+						)
+					),
+					for: .normal
+				)
+				mic.tintColor = .placeholderText
+				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
+				mic.accessibilityLabel = "Start Dictation"
+
+				field.rightView = mic
+				field.rightViewMode = .always
+				installedField = field
+				button = mic
+			}
+
+			button?.alpha = isAvailable ? 1.0 : 0.45
+			button?.isEnabled = isAvailable
+		}
+
+		@objc private func micPressed() {
+			action()
+		}
+
+		private static func findSearchField(in view: UIView) -> UISearchTextField? {
+			if let field = view as? UISearchTextField {
+				return field
+			}
+
+			for subview in view.subviews {
+				if let field = findSearchField(in: subview) {
+					return field
+				}
+			}
+			return nil
+		}
+	}
+}
+
 // MARK: - Native Search Focus Compatibility
 
 private struct ZagRepositorySearchFocusModifier: ViewModifier {
@@ -92,22 +183,13 @@ struct SourceAppsView: View {
 		.navigationTitle(_navigationTitle)
 		.searchable(text: $_searchText, placement: .platform())
 		.modifier(ZagRepositorySearchFocusModifier(isFocused: $_searchFieldFocused))
-		.overlay(alignment: .topTrailing) {
+		.background {
 			if object.count == 1 {
-				Button {
-					_startDictationFromSearchMic()
-				} label: {
-					Image(systemName: "mic.fill")
-						.font(.system(size: 18, weight: .regular))
-						.foregroundStyle(.secondary)
-						.frame(width: 44, height: 44)
-						.contentShape(Rectangle())
-				}
-				.buttonStyle(.plain)
-				.padding(.top, 48)
-				.padding(.trailing, 22)
-				.opacity(_dictationAvailable ? 1 : 0.45)
-				.accessibilityLabel(_dictationStatus)
+				ZagNativeSearchMicInstaller(
+					isAvailable: _dictationAvailable,
+					action: _startDictationFromSearchMic
+				)
+				.frame(width: 0, height: 0)
 			}
 		}
 		.toolbarTitleMenu {
