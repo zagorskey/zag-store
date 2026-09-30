@@ -444,6 +444,7 @@ struct SourceAppsView: View {
 			}
 		}
 		.navigationTitle(_navigationTitle)
+		.toolbarBackground(.hidden, for: .navigationBar)
 		.searchable(
 			text: $_searchText,
 			placement: .platform(),
