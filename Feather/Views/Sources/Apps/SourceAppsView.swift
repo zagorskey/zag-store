@@ -312,16 +312,26 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		@objc private func searchFocusBegan(_ field: UISearchTextField) {
-			DispatchQueue.main.async {
-				guard field.isFirstResponder else { return }
-				self.applyPlaceholderStyle(to: field, focused: true)
-			}
+			stabilizePlaceholder(in: field, focused: true)
 		}
 
 		@objc private func searchFocusEnded(_ field: UISearchTextField) {
-			DispatchQueue.main.async {
-				guard !field.isFirstResponder else { return }
-				self.applyPlaceholderStyle(to: field, focused: false)
+			stabilizePlaceholder(in: field, focused: false)
+		}
+
+		private func stabilizePlaceholder(
+			in field: UISearchTextField,
+			focused: Bool
+		) {
+			// Native searchable mutates its text field several times while its
+			// activation/collapse animation is running. Re-assert our prompt
+			// during that short window so SwiftUI cannot flash the old value.
+			for delay in [0.0, 0.03, 0.08, 0.16, 0.28] {
+				DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak field] in
+					guard let self, let field else { return }
+					guard field.isFirstResponder == focused else { return }
+					self.applyPlaceholderStyle(to: field, focused: focused)
+				}
 			}
 		}
 
