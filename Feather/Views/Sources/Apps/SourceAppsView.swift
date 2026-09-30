@@ -149,16 +149,17 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				let mic = UIButton(type: .system)
 				mic.setImage(
 					UIImage(
-						systemName: "mic.fill",
+						systemName: "mic",
 						withConfiguration: UIImage.SymbolConfiguration(
-							pointSize: 18,
-							weight: .regular
+							pointSize: 17,
+							weight: .regular,
+							scale: .medium
 						)
 					),
 					for: .normal
 				)
 				mic.tintColor = .label
-				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+				mic.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
 				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 				mic.accessibilityLabel = "Start Dictation"
 
@@ -235,16 +236,17 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			let mic = UIButton(type: .system)
 			mic.setImage(
 				UIImage(
-					systemName: "mic.fill",
+					systemName: "mic",
 					withConfiguration: UIImage.SymbolConfiguration(
-						pointSize: 18,
-						weight: .regular
+						pointSize: 17,
+							weight: .regular,
+							scale: .medium
 					)
 				),
 				for: .normal
 			)
 			mic.tintColor = .label
-			mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+			mic.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
 			mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 			mic.accessibilityLabel = "Start Dictation"
 			mic.alpha = 0
