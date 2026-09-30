@@ -73,16 +73,13 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 	}
 
-	var lockdownPairingFileExists: Bool {
-		FileManager.default.fileExists(atPath: Self.lockdownPairingFileURL.path)
-	}
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
 		guard !isGate2Running else { return }
 		gate2State = .starting
 		let started = deviceIP.withCString { ip in
-			Self.lockdownPairingFileURL.path.withCString { outputPath in
-				zag_gate2_probe(ip, outputPath, zagGate2Callback)
+			Self.pairingFileURL.path.withCString { pairingPath in
+				zag_gate2_probe(ip, pairingPath, zagGate2Callback)
 			}
 		}
 		if !started {
@@ -230,13 +227,6 @@ final class ZagRPPairingCore: ObservableObject {
 		guard backgroundTask != .invalid else { return }
 		UIApplication.shared.endBackgroundTask(backgroundTask)
 		backgroundTask = .invalid
-	}
-
-	private static var lockdownPairingFileURL: URL {
-		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-		return base
-			.appendingPathComponent("ZagStore", isDirectory: true)
-			.appendingPathComponent("lockdown-pairing.plist", isDirectory: false)
 	}
 
 	private static var pairingFileURL: URL {
