@@ -186,7 +186,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return false
 			}
-			return UIApplication.isAppInstalled(with: identifier)
+			return UIApplication.shared.canOpenURL(URL(string: "\(identifier)://")!)
 		}
 	}
 
@@ -195,7 +195,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return true
 			}
-			return !UIApplication.isAppInstalled(with: identifier)
+			return !UIApplication.shared.canOpenURL(URL(string: "\(identifier)://")!)
 		}
 	}
 
