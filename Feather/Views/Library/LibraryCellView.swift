@@ -176,14 +176,14 @@ extension LibraryCellView {
 			) {
 				onRemoveManagedApp?(app)
 			}
-		} else {
-			Button(
-				.localized("Delete"),
-				systemImage: "trash",
-				role: .destructive
-			) {
-				Storage.shared.deleteApp(for: app)
-			}
+		}
+
+		Button(
+			.localized("Delete"),
+			systemImage: "trash",
+			role: .destructive
+		) {
+			Storage.shared.deleteApp(for: app)
 		}
 	}
 
@@ -214,6 +214,15 @@ extension LibraryCellView {
 			} else {
 				Button(
 					.localized("Install"),
+					systemImage: "square.and.arrow.down"
+				) {
+					selectedInstallAppPresenting = AnyApp(base: app)
+				}
+			}
+
+			if isManagedInstalled {
+				Button(
+					.localized("Re-install"),
 					systemImage: "square.and.arrow.down"
 				) {
 					selectedInstallAppPresenting = AnyApp(base: app)
