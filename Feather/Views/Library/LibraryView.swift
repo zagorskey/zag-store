@@ -273,7 +273,7 @@ struct LibraryView: View {
 			} label: {
 				HStack(spacing: 12) {
 					HStack(spacing: 9) {
-						Text(.localized("App Updates"))
+						Text(.localized("Updates"))
 							.font(.system(size: 20, weight: .semibold))
 							.foregroundStyle(.primary)
 
@@ -286,8 +286,7 @@ struct LibraryView: View {
 					.clipShape(Capsule())
 
 					ZagUpdateTransferParticles()
-
-					Spacer(minLength: 12)
+						.frame(maxWidth: .infinity)
 
 					ZStack {
 						ZagUpdatesPillSurface(baseColorHex: "#202022")
@@ -1331,36 +1330,48 @@ private struct ZagUpdateTransferParticles: View {
 	private var themeColorHex: String = "#3F8EF7"
 
 	var body: some View {
-		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let cycle = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 4.6)
-			let active = min(max(cycle / 1.55, 0), 1)
-			let visible = cycle < 1.55
+		GeometryReader { proxy in
+			TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+				let cycle = context.date.timeIntervalSinceReferenceDate
+					.truncatingRemainder(dividingBy: 4.8)
+				let width = max(proxy.size.width, 1)
 
-			ZStack {
-				ForEach(0..<6, id: \.self) { index in
-					let delay = Double(index) * 0.075
-					let local = min(max((active - delay) / (1 - delay), 0), 1)
-					let eased = local * local * (3 - 2 * local)
-					let size = 2.2 + Double(index % 2) * 0.7
+				ZStack {
+					// Three compact bursts cross almost the full bridge from
+					// the counter capsule toward the Updates capsule.
+					ForEach(0..<3, id: \.self) { burst in
+						ForEach(0..<5, id: \.self) { particle in
+							let launch = Double(burst) * 0.30 + Double(particle) * 0.045
+							let duration = 1.55
+							let local = min(max((cycle - launch) / duration, 0), 1)
+							let eased = local * local * (3 - 2 * local)
+							let visible = cycle >= launch && cycle <= launch + duration
+							let y = CGFloat(particle - 2) * 1.25
+							let size = 2.1 + Double((particle + burst) % 3) * 0.55
 
-					Circle()
-						.fill(Color(hex: themeColorHex))
-						.frame(width: size, height: size)
-						.opacity(
-							visible
-								? sin(local * .pi) * (0.95 - Double(index) * 0.075)
-								: 0
-						)
-						.offset(x: CGFloat(13 - eased * 26))
-						.shadow(
-							color: Color(hex: themeColorHex).opacity(0.48),
-							radius: 2.4
-						)
+							Circle()
+								.fill(Color(hex: themeColorHex))
+								.frame(width: size, height: size)
+								.opacity(
+									visible
+										? sin(local * .pi) * (0.95 - Double(particle) * 0.07)
+										: 0
+								)
+								.offset(
+									x: (width / 2 - 5) - CGFloat(eased) * (width - 10),
+									y: y
+								)
+								.shadow(
+									color: Color(hex: themeColorHex).opacity(0.52),
+									radius: 2.5
+								)
+						}
+					}
 				}
+				.frame(width: proxy.size.width, height: proxy.size.height)
 			}
-			.frame(width: 30, height: 46)
 		}
+		.frame(height: 46)
 	}
 }
 
