@@ -175,12 +175,14 @@ private struct RPPairingView: View {
 			}
 		}
 
-		Section("Diagnostics") {
+		Section {
 			NavigationLink {
 				RPPairingDiagnosticsView()
 			} label: {
 				Label("Diagnostics & Health Checks", systemImage: "stethoscope")
 			}
+		} header: {
+			Text("Diagnostics")
 		} footer: {
 			Text("Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test.")
 		}
