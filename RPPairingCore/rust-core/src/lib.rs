@@ -13,6 +13,7 @@ use idevice::RsdService;
 use idevice::rsd::RsdHandshake;
 use idevice::services::lockdown::LockdownClient;
 use idevice::services::installation_proxy::InstallationProxyClient;
+use idevice::services::afc::{AfcClient, opcode::AfcFopenMode};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
 
@@ -178,6 +179,10 @@ async fn run_pairing(
 /// 107 = device information read (message is pipe-delimited)
 /// 108 = installation_proxy connected over RSD
 /// 109 = user-app lookup complete (message: count|zagStoreFound)
+/// 110 = AFC connected over RSD
+/// 111 = PublicStaging write complete
+/// 112 = PublicStaging read-back verified
+/// 113 = diagnostic file deleted
 /// -2  = device-services probe failure
 #[no_mangle]
 pub unsafe extern "C" fn zag_gate2_probe(
@@ -313,5 +318,59 @@ async fn run_gate2_probe(
         .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
     let zag_store_found = apps.contains_key("com.cwd43.gu29");
     emit(callback, 109, format!("{}|{}", apps.len(), zag_store_found));
+
+    // Gate 3B: prove the staging half of the install pipeline without staging
+    // an app. Create one tiny marker in PublicStaging, verify it byte-for-byte,
+    // then remove it before returning success.
+    drop(installation_proxy);
+    let mut afc = AfcClient::connect_rsd(&mut adapter, &mut handshake)
+        .await
+        .map_err(|error| format!("AFC over RSD failed: {error}"))?;
+    emit(callback, 110, "AFC connected over RSD");
+
+    let staging_path = "/PublicStaging/zag-gate3b-test.txt";
+    let marker = b"Zag Store Gate 3B AFC verification";
+    {
+        let mut file = afc
+            .open(staging_path, AfcFopenMode::Wr)
+            .await
+            .map_err(|error| format!("Opening PublicStaging diagnostic for write failed: {error}"))?;
+        file.write_entire(marker)
+            .await
+            .map_err(|error| format!("Writing PublicStaging diagnostic failed: {error}"))?;
+        file.close()
+            .await
+            .map_err(|error| format!("Closing PublicStaging diagnostic after write failed: {error}"))?;
+    }
+    emit(callback, 111, format!("Wrote {} bytes to {staging_path}", marker.len()));
+
+    let read_back = {
+        let mut file = afc
+            .open(staging_path, AfcFopenMode::RdOnly)
+            .await
+            .map_err(|error| format!("Opening PublicStaging diagnostic for read failed: {error}"))?;
+        let bytes = file.read_entire()
+            .await
+            .map_err(|error| format!("Reading PublicStaging diagnostic failed: {error}"))?;
+        file.close()
+            .await
+            .map_err(|error| format!("Closing PublicStaging diagnostic after read failed: {error}"))?;
+        bytes
+    };
+
+    if read_back != marker {
+        let _ = afc.remove(staging_path).await;
+        return Err(format!(
+            "PublicStaging verification mismatch: wrote {} bytes, read {} bytes",
+            marker.len(),
+            read_back.len()
+        ));
+    }
+    emit(callback, 112, format!("Verified {} bytes from {staging_path}", read_back.len()));
+
+    afc.remove(staging_path)
+        .await
+        .map_err(|error| format!("Removing PublicStaging diagnostic failed: {error}"))?;
+    emit(callback, 113, "PublicStaging diagnostic removed");
     Ok(())
 }
