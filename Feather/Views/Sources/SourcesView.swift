@@ -16,7 +16,7 @@ import AVFoundation
 
 struct ZagSourcesAtomIcon: View {
 	@AppStorage("Feather.userTintColor")
-	private var themeColorHex: String = "#4497F7"
+	private var themeColorHex: String = "#3F8EF7"
 
 	var animated: Bool = false
 	@State private var drawOut = false
