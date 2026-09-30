@@ -62,6 +62,7 @@ struct InstallationView: View {
 
 private struct RPPairingView: View {
 	@State private var isLocalDevVpnAvailable = false
+	@StateObject private var pairingCore = ZagRPPairingCore.shared
 
 	var body: some View {
 		Section {
@@ -73,21 +74,64 @@ private struct RPPairingView: View {
 			}
 
 			HStack(spacing: 10) {
-				Image(systemName: "checkmark.circle.fill")
-					.foregroundStyle(.green)
-				Text("No computer-generated pairing file")
+				Image(systemName: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "circle")
+					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
+				Text(pairingCore.pairingFileExists ? "Pairing credentials saved" : "No computer-generated pairing file")
 			}
 
 			HStack(spacing: 10) {
-				Image(systemName: "network")
-					.foregroundStyle(.secondary)
-				Text("On-device Remote Pairing")
+				Image(systemName: statusIcon)
+					.foregroundStyle(statusColor)
+				Text(statusText)
 			}
+
+			if case .pin(let pin) = pairingCore.state {
+				VStack(spacing: 5) {
+					Text("PAIRING CODE")
+						.font(.caption.weight(.semibold))
+						.foregroundStyle(.secondary)
+					Text(pin)
+						.font(.system(size: 32, weight: .semibold, design: .monospaced))
+						.textSelection(.enabled)
+				}
+				.frame(maxWidth: .infinity)
+				.padding(.vertical, 8)
+			}
+
+			if case .failed(let error) = pairingCore.state {
+				Text(error)
+					.font(.footnote)
+					.foregroundStyle(.red)
+					.textSelection(.enabled)
+			}
+
+			if case .paired(let name, let model, _) = pairingCore.state {
+				LabeledContent("Paired Device") {
+					VStack(alignment: .trailing, spacing: 2) {
+						Text(name)
+						if !model.isEmpty {
+							Text(model)
+								.font(.caption)
+								.foregroundStyle(.secondary)
+						}
+					}
+				}
+			}
+
+			Button {
+				pairingCore.start()
+			} label: {
+				Label(
+					pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone",
+					systemImage: pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus"
+				)
+			}
+			.disabled(pairingCore.isRunning)
 		} footer: {
-			Text("The RPPairing engine is being integrated. This option will create and store its own Remote Pairing credentials on this iPhone, then use LocalDevVPN to reach Apple's device services for direct installation.")
+			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
 		}
 
-		Section {
+		Section("Local Device Tunnel") {
 			if isLocalDevVpnAvailable {
 				Button("Connect to LocalDevVPN", systemImage: "link") {
 					UIApplication.open("localdevvpn://enable?scheme=feather")
@@ -102,6 +146,49 @@ private struct RPPairingView: View {
 			if let url = URL(string: "localdevvpn://") {
 				isLocalDevVpnAvailable = UIApplication.shared.canOpenURL(url)
 			}
+		}
+	}
+
+	private var statusText: String {
+		switch pairingCore.state {
+		case .idle:
+			return "Ready for on-device Remote Pairing"
+		case .starting:
+			return "Starting pairing host…"
+		case .advertising:
+			return "Advertising — waiting for this iPhone"
+		case .connected:
+			return "This iPhone connected"
+		case .pin:
+			return "Enter the code when iOS asks"
+		case .paired:
+			return "Remote Pairing complete"
+		case .failed:
+			return "Remote Pairing failed"
+		}
+	}
+
+	private var statusIcon: String {
+		switch pairingCore.state {
+		case .paired:
+			return "checkmark.circle.fill"
+		case .failed:
+			return "exclamationmark.triangle.fill"
+		case .starting, .advertising, .connected, .pin:
+			return "antenna.radiowaves.left.and.right"
+		case .idle:
+			return "network"
+		}
+	}
+
+	private var statusColor: Color {
+		switch pairingCore.state {
+		case .paired:
+			return .green
+		case .failed:
+			return .red
+		default:
+			return .secondary
 		}
 	}
 }
