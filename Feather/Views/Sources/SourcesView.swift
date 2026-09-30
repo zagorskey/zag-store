@@ -28,7 +28,7 @@ struct ZagSourcesAtomIcon: View {
 
 			if #available(iOS 26.0, *), animated {
 				Image(systemName: "atom")
-					.font(.system(size: 39, weight: .semibold))
+					.font(.system(size: 39, weight: .regular))
 					.foregroundStyle(.white)
 					.symbolEffect(
 						.drawOff.wholeSymbol,
@@ -44,7 +44,7 @@ struct ZagSourcesAtomIcon: View {
 					}
 			} else {
 				Image(systemName: "atom")
-					.font(.system(size: 39, weight: .semibold))
+					.font(.system(size: 39, weight: .regular))
 					.foregroundStyle(.white)
 			}
 		}
@@ -657,7 +657,7 @@ struct SourcesView: View {
 						horizontalSizeClass
 							!= .compact
 					HStack(spacing: 10) {
-						ZagSourcesAtomIcon(animated: true)
+						ZagSourcesAtomIcon(animated: viewModel.isRefreshing)
 
 						VStack(
 							alignment: .leading,
@@ -665,7 +665,7 @@ struct SourcesView: View {
 						) {
 							Text(
 								.localized(
-									"All Repositories"
+									"Your Repos"
 								)
 							)
 							.font(
@@ -676,13 +676,20 @@ struct SourcesView: View {
 							)
 							.foregroundStyle(.primary)
 
-							Text(
-								.localized(
-									"See all apps from your sources"
-								)
+							let totalApps = viewModel.sources.values.reduce(0) {
+								$0 + $1.apps.count
+							}
+							(
+								Text("See all ")
+									.foregroundStyle(Color(uiColor: .secondaryLabel))
+								+ Text(totalApps.formatted())
+									.fontWeight(.semibold)
+									.foregroundStyle(.white)
+								+ Text(" apps from sources")
+									.foregroundStyle(Color(uiColor: .secondaryLabel))
 							)
 							.font(.system(size: 16, weight: .regular))
-							.foregroundStyle(Color(uiColor: .secondaryLabel))
+							.lineLimit(1)
 						}
 						.frame(
 							maxWidth: .infinity,
@@ -690,8 +697,8 @@ struct SourcesView: View {
 						)
 
 						Image(systemName: "chevron.right")
-							.font(.system(size: 18, weight: .bold))
-							.foregroundStyle(Color(uiColor: .tertiaryLabel))
+							.font(.system(size: 14, weight: .semibold))
+							.foregroundStyle(Color(uiColor: .secondaryLabel))
 					}
 					.padding(
 						isRegular ? 12 : 0
