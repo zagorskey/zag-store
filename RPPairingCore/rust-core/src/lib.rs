@@ -21,7 +21,7 @@ fn emit(callback: ZagRPPairingCallback, code: i32, message: impl AsRef<str>) {
 
 #[no_mangle]
 pub extern "C" fn zag_rppairing_core_version() -> *mut c_char {
-    CString::new("Zag RPPairing Core 0.3")
+    CString::new("Zag RPPairing Core 0.4")
         .expect("static string")
         .into_raw()
 }
@@ -94,7 +94,7 @@ async fn run_pairing(
     output_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+    let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0))
         .await
         .map_err(|error| format!("Unable to open pairing listener: {error}"))?;
     let port = listener
@@ -109,7 +109,7 @@ async fn run_pairing(
     let txt = host_info.mdns_txt_records(&service_identifier);
 
     // Hand the already-bound listener's Bonjour metadata to Swift. On iOS we
-    // publish with Foundation's NetService so the advertisement participates in
+    // publish with Foundation's NetService so the advertisement points directly at this listener and participates in
     // the system Local Network privacy path instead of relying on a raw mDNS
     // socket from the Rust process.
     let mut native_bonjour = format!("{port}\n{service_identifier}");
