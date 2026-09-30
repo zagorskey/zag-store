@@ -536,6 +536,7 @@ struct LibraryView: View {
 
 
 			}
+			.zagWallpaperListBackground()
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
