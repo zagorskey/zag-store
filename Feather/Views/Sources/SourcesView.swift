@@ -236,9 +236,6 @@ struct SourcesView: View {
 					normalSourcesContent
 				}
 			}
-			.listRowSeparatorTint(
-				Color(uiColor: .separator).opacity(0.32)
-			)
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
 				text: $_searchText,
