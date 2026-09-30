@@ -67,7 +67,7 @@ private struct RPPairingView: View {
 	@State private var showGate4Importer = false
 
 	var body: some View {
-		Section("Direct Install Status") {
+		Section {
 			LabeledContent("Pairing") {
 				Label(
 					pairingCore.pairingFileExists ? "Paired" : "Setup Required",
@@ -89,6 +89,8 @@ private struct RPPairingView: View {
 				)
 				.foregroundStyle(pairingCore.pairingFileExists && isLocalDevVpnAvailable ? .green : .secondary)
 			}
+		} header: {
+			Text("Direct Install Status")
 		} footer: {
 			Text("RPPairing installs directly through this iPhone's device services. Pairing is stored by Zag Store; LocalDevVPN supplies the local tunnel when installing.")
 		}
