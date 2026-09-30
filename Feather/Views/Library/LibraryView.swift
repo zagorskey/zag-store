@@ -414,6 +414,8 @@ struct LibraryView: View {
 						ForEach(_filteredInstalledApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
+								isManagedInstalled: true,
+								onRemoveManagedApp: _removeManagedApp,
 								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
