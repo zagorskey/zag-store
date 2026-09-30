@@ -76,6 +76,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	@Published private(set) var gate4State: Gate4State = .idle
 	private var gate4Completion: ((Result<Void, Error>) -> Void)?
+	private var gate4Progress: ((Int) -> Void)?
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
 	private var gate2LastAppResult: (Int, Bool)?
 	private let advertiser = ZagPairableHostAdvertiser()
@@ -111,11 +112,17 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 	}
 
-	func installGate4IPA(at sourceURL: URL, deviceIP: String = "10.7.0.1", completion: ((Result<Void, Error>) -> Void)? = nil) throws {
+	func installGate4IPA(
+		at sourceURL: URL,
+		deviceIP: String = "10.7.0.1",
+		progress: ((Int) -> Void)? = nil,
+		completion: ((Result<Void, Error>) -> Void)? = nil
+	) throws {
 		guard !isGate4Running else {
 			throw Gate4InstallError.alreadyRunning
 		}
 		gate4Completion = completion
+		gate4Progress = progress
 		let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 			.appendingPathComponent("ZagStore/Gate4", isDirectory: true)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -149,16 +156,21 @@ final class ZagRPPairingCore: ObservableObject {
 		case 203: gate4State = .tunnel
 		case 204: gate4State = .rsd
 		case 205: gate4State = .installing
-		case 206: gate4State = .progress(Int(message) ?? 0)
+		case 206:
+			let percent = Int(message) ?? 0
+			gate4State = .progress(percent)
+			gate4Progress?(percent)
 		case 207:
 			gate4State = .complete
 			gate4Completion?(.success(()))
 			gate4Completion = nil
+			gate4Progress = nil
 		case -4:
 			gate4State = .failed(message)
 			let error = Gate4InstallError.installFailed(message)
 			gate4Completion?(.failure(error))
 			gate4Completion = nil
+			gate4Progress = nil
 		default: break
 		}
 	}
