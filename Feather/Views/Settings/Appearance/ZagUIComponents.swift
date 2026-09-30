@@ -9,22 +9,22 @@ struct ZagCountBadge: View {
 	@AppStorage("zagStore.designer.standardBadge.fontSize")
 	private var badgeFontSize: Double = 14
 
-	@AppStorage("zagStore.designer.standardBadge.background")
-	private var badgeColorHex: String = "#8E8E93"
-
 	@AppStorage("zagStore.designer.standardBadge.foreground")
 	private var badgeTextColorHex: String = "#FFFFFF"
+
+	@AppStorage("Feather.userTintColor")
+	private var themeColorHex: String = "#4395F8"
 
 	let count: Int
 
 	var body: some View {
 		Text(count.description)
-			.font(.system(size: badgeFontSize, weight: .bold))
+			.font(.system(size: badgeFontSize, weight: .regular))
 			.foregroundStyle(Color(hex: badgeTextColorHex))
-			.frame(width: badgeSize, height: badgeSize)
+			.frame(width: badgeSize, height: badgeSize, alignment: .center)
 			.background(
 				Circle()
-					.fill(Color(hex: badgeColorHex))
+					.fill(Color(hex: themeColorHex))
 			)
 	}
 }
