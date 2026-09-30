@@ -543,12 +543,39 @@ final class UpdateManager: ObservableObject {
 		_ lhs: String,
 		_ rhs: String
 	) -> ComparisonResult {
-		lhs.compare(
+		let lhsParts = _numericVersionParts(lhs)
+		let rhsParts = _numericVersionParts(rhs)
+
+		// Repository version strings sometimes carry build/channel prefixes
+		// (for example "HV-4.6.4"). Compare their numeric version components
+		// rather than letting the prefix make an older build look newer.
+		if !lhsParts.isEmpty, !rhsParts.isEmpty {
+			let count = max(lhsParts.count, rhsParts.count)
+
+			for index in 0..<count {
+				let left = index < lhsParts.count ? lhsParts[index] : 0
+				let right = index < rhsParts.count ? rhsParts[index] : 0
+
+				if left != right {
+					return left < right ? .orderedAscending : .orderedDescending
+				}
+			}
+
+			return .orderedSame
+		}
+
+		return lhs.compare(
 			rhs,
 			options: [
 				.numeric,
 				.caseInsensitive
 			]
 		)
+	}
+
+	private func _numericVersionParts(_ version: String) -> [Int] {
+		version
+			.split { !$0.isNumber }
+			.compactMap { Int($0) }
 	}
 }
