@@ -110,3 +110,25 @@ struct ZagWallpaperPicker: UIViewControllerRepresentable {
 		}
 	}
 }
+
+
+private struct ZagWallpaperListBackgroundModifier: ViewModifier {
+	@AppStorage(ZagWallpaperStore.enabledKey) private var enabled = false
+
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if enabled {
+			content
+				.scrollContentBackground(.hidden)
+				.background(Color.clear)
+		} else {
+			content
+		}
+	}
+}
+
+extension View {
+	func zagWallpaperListBackground() -> some View {
+		modifier(ZagWallpaperListBackgroundModifier())
+	}
+}
