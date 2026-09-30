@@ -27,19 +27,13 @@ private extension NSObject {
 	}
 
 	@objc dynamic func zag_stopDictation() {
-		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
 		zag_stopDictation()
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-			NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
-		}
+		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
 	}
 
 	@objc dynamic func zag_cancelDictation() {
-		NotificationCenter.default.post(name: .zagDictationDidStart, object: nil)
 		zag_cancelDictation()
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-			NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
-		}
+		NotificationCenter.default.post(name: .zagDictationDidEnd, object: nil)
 	}
 }
 
@@ -125,6 +119,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		private weak var installedField: UISearchTextField?
 		private weak var button: UIButton?
 		private var dictationObserversInstalled = false
+		private var yieldingToNativeClearButton = false
 
 		init(action: @escaping () -> Void) {
 			self.action = action
@@ -139,6 +134,16 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			}
 
 			guard let field = Self.findSearchField(in: window) else { return }
+
+			if yieldingToNativeClearButton {
+				if !(field.text ?? "").isEmpty {
+					if field.rightView === button {
+						field.rightView = nil
+					}
+					return
+				}
+				yieldingToNativeClearButton = false
+			}
 
 			if installedField !== field || button == nil {
 				let mic = UIButton(type: .system)
@@ -180,13 +185,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 			ZagSystemDictationLifecycle.install()
 
-			NotificationCenter.default.addObserver(
-				self,
-				selector: #selector(dictationStarted),
-				name: .zagDictationDidStart,
-				object: nil
-			)
-			NotificationCenter.default.addObserver(
+ 			NotificationCenter.default.addObserver(
 				self,
 				selector: #selector(dictationEnded),
 				name: .zagDictationDidEnd,
@@ -203,7 +202,24 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		@objc private func dictationEnded() {
-			setMicVisible(true, animated: true)
+			guard let field = installedField else { return }
+			yieldingToNativeClearButton = true
+
+			UIView.animate(
+				withDuration: 0.16,
+				delay: 0,
+				options: [.beginFromCurrentState, .curveEaseInOut],
+				animations: {
+					self.button?.alpha = 0
+					self.button?.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+				},
+				completion: { _ in
+					if field.rightView === self.button {
+						field.rightView = nil
+					}
+					self.button = nil
+				}
+			)
 		}
 
 		private func setMicVisible(_ visible: Bool, animated: Bool) {
