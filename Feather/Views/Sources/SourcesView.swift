@@ -246,15 +246,15 @@ struct SourcesView: View {
 			}
 			.environment(\.editMode, .constant(_isRearrangingRepositories ? .active : .inactive))
 			.toolbar {
-				ToolbarItem(
+				ToolbarItemGroup(
 					placement: .topBarLeading
 				) {
 					refreshButton
+					repositorySortMenu
 				}
 				ToolbarItemGroup(
 					placement: .topBarTrailing
 				) {
-					repositorySortMenu
 					addRepositoryButton
 					repositoryTransferMenu
 				}
@@ -464,8 +464,8 @@ struct SourcesView: View {
 				Label("Rearrange", systemImage: "slider.horizontal.3")
 			}
 		} label: {
-			Image(systemName: "arrow.up.arrow.down.circle")
-				.font(.system(size: 17, weight: .semibold))
+			Image(systemName: "line.3.horizontal.decrease.circle")
+				.font(.system(size: 21, weight: .regular))
 				.frame(width: 26, height: 22)
 		}
 		.accessibilityLabel("Sort Repositories")
