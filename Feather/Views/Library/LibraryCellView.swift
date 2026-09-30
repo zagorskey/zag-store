@@ -105,6 +105,7 @@ struct LibraryCellView: View {
 			}
 		}
 		.padding(isRegular ? 12 : 0)
+		.zagAppStoreRowSeparator()
 		.background(
 			isRegular
 				? RoundedRectangle(
