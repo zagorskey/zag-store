@@ -8,14 +8,13 @@ use std::{
 use idevice::remote_pairing::{
     PairableHost, PairableHostInfo, RpPairingFile, RpPairingSocket,
 };
-use idevice::{Idevice, IdeviceService, RsdService};
-use idevice::core_device_proxy::CoreDeviceProxy;
-use idevice::provider::TcpProvider;
+use idevice::{RsdService};
+use idevice::remote_pairing::{RemotePairingClient, RpPairingFile, RpPairingSocket, connect_tls_psk_tunnel_native};
 use idevice::rsd::RsdHandshake;
 use idevice::services::lockdown::LockdownClient;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
-use uuid::Uuid;
+
 
 pub type ZagRPPairingCallback = extern "C" fn(i32, *const c_char);
 
@@ -166,185 +165,135 @@ async fn run_pairing(
 }
 
 
-/// Runs the first read-only Gate 2 transport probe on a dedicated thread.
+/// Runs the RPPairing-native Gate 2 probe on a dedicated thread.
 ///
 /// Callback codes:
 /// 101 = starting
-/// 102 = lockdownd :62078 reached
-/// 103 = waiting for / performing classic Pair
-/// 104 = classic pairing record saved
-/// 105 = CoreDeviceProxy tunnel established
+/// 102 = raw RPPairing service reached
+/// 103 = pair-verify in progress
+/// 104 = saved RPPairing credentials verified
+/// 105 = TLS-PSK CDTunnel established
 /// 106 = RSD handshake established
 /// 107 = device information read (message is pipe-delimited)
 /// -2  = Gate 2 failure
 #[no_mangle]
 pub unsafe extern "C" fn zag_gate2_probe(
     device_ip: *const c_char,
-    lockdown_output_path: *const c_char,
+    pairing_path: *const c_char,
     callback: Option<ZagRPPairingCallback>,
 ) -> bool {
-    let Some(callback) = callback else {
-        return false;
-    };
-    if device_ip.is_null() || lockdown_output_path.is_null() {
-        return false;
-    }
+    let Some(callback) = callback else { return false; };
+    if device_ip.is_null() || pairing_path.is_null() { return false; }
 
     let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else {
         return false;
     };
-    let Ok(output_path) = CStr::from_ptr(lockdown_output_path)
-        .to_str()
-        .map(PathBuf::from)
-    else {
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else {
         return false;
     };
 
     thread::spawn(move || {
-        emit(callback, 101, "Starting Gate 2 device probe");
-
-        let runtime = match tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-        {
+        emit(callback, 101, "Starting RPPairing-native Gate 2 probe");
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
             Ok(runtime) => runtime,
             Err(error) => {
                 emit(callback, -2, format!("Gate 2 runtime failed: {error}"));
                 return;
             }
         };
-
         runtime.block_on(async move {
-            if let Err(error) = run_gate2_probe(device_ip, output_path, callback).await {
+            if let Err(error) = run_gate2_probe(device_ip, pairing_path, callback).await {
                 emit(callback, -2, error);
             }
         });
     });
-
     true
 }
 
 async fn run_gate2_probe(
     device_ip: String,
-    output_path: PathBuf,
+    pairing_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
     let ip: IpAddr = device_ip
         .parse()
         .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
 
-    let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 62078)))
+    let mut pairing_file = RpPairingFile::read_from_file(&pairing_path)
         .await
-        .map_err(|_| format!("Timed out reaching lockdownd at {device_ip}:62078"))?
-        .map_err(|error| format!("Unable to reach lockdownd at {device_ip}:62078: {error}"))?;
+        .map_err(|error| format!("Unable to read saved RPPairing credentials: {error}"))?;
 
-    emit(callback, 102, format!("lockdownd reachable at {device_ip}:62078"));
-
-    let idevice = Idevice::new(Box::new(stream), "Zag Store");
-    let mut lockdown = LockdownClient::new(idevice);
-
-    let host_id = Uuid::new_v4().to_string().to_uppercase();
-    let system_buid = Uuid::new_v4().to_string().to_uppercase();
-    emit(callback, 103, "Requesting classic lockdown pairing — approve Trust if iOS asks");
-
-    let pairing_file = lockdown
-        .pair(host_id, system_buid, Some("Zag Store"))
+    let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 49152)))
         .await
-        .map_err(|error| format!("Classic lockdown pairing failed: {error}"))?;
+        .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
+        .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
 
-    let bytes = pairing_file
-        .clone()
-        .serialize()
-        .map_err(|error| format!("Unable to serialize lockdown pairing record: {error}"))?;
+    emit(callback, 102, format!("RPPairing reachable at {device_ip}:49152"));
+    emit(callback, 103, "Verifying saved RPPairing credentials");
 
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Unable to create Gate 2 storage: {error}"))?;
-    }
-    std::fs::write(&output_path, &bytes)
-        .map_err(|error| format!("Unable to save lockdown pairing record: {error}"))?;
-
-    emit(
-        callback,
-        104,
-        format!("Classic pairing record saved ({} bytes)", bytes.len()),
-    );
-
-    let provider = TcpProvider {
-        addr: ip,
-        scope_id: None,
-        pairing_file,
-        label: "Zag Store".to_string(),
-    };
-
-    let proxy = CoreDeviceProxy::connect(&provider)
+    let conn = RpPairingSocket::new(stream);
+    let mut rpc = RemotePairingClient::new(conn, "Zag Store");
+    rpc.connect(&mut pairing_file, || async { "000000".to_string() })
         .await
-        .map_err(|error| format!("CoreDeviceProxy connection failed: {error}"))?;
-    let rsd_port = proxy.tunnel_info().server_rsd_port;
-    emit(
-        callback,
-        105,
-        format!("CoreDeviceProxy tunnel established; RSD port {rsd_port}"),
-    );
+        .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
 
-    let adapter = proxy
-        .create_software_tunnel()
-        .map_err(|error| format!("Unable to create software tunnel: {error}"))?;
+    // Persist in case idevice refreshed any pairing metadata.
+    pairing_file
+        .write_to_file(&pairing_path)
+        .await
+        .map_err(|error| format!("Unable to persist verified RPPairing credentials: {error}"))?;
+    emit(callback, 104, "Saved RPPairing credentials verified");
+
+    let tunnel_port = rpc
+        .create_tcp_listener()
+        .await
+        .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
+    let tunnel_addr = (ip, tunnel_port);
+    let tunnel_stream = timeout(Duration::from_secs(8), TcpStream::connect(tunnel_addr))
+        .await
+        .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
+        .map_err(|error| format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}"))?;
+
+    let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
+        .await
+        .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
+
+    let client_ip: IpAddr = tunnel.info.client_address.parse()
+        .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
+    let server_ip: IpAddr = tunnel.info.server_address.parse()
+        .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
+    let mtu = tunnel.info.mtu as usize;
+    let rsd_port = tunnel.info.server_rsd_port;
+    emit(callback, 105, format!("CDTunnel established; RSD port {rsd_port}"));
+
+    let raw = tunnel.into_inner();
+    let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
+    adapter.set_mss(mtu.saturating_sub(60));
     let mut adapter = adapter.to_async_handle();
 
     let rsd_stream = adapter
         .connect(rsd_port)
         .await
-        .map_err(|error| format!("Unable to reach RSD through CoreDeviceProxy: {error}"))?;
+        .map_err(|error| format!("Unable to reach RSD through tunnel: {error}"))?;
     let mut handshake = RsdHandshake::new(rsd_stream)
         .await
         .map_err(|error| format!("RSD handshake failed: {error}"))?;
-
-    emit(
-        callback,
-        106,
-        format!(
-            "RSD established; protocol {} with {} services",
-            handshake.protocol_version,
-            handshake.services.len()
-        ),
-    );
+    emit(callback, 106, format!("RSD established; {} services", handshake.services.len()));
 
     let mut remote_lockdown = LockdownClient::connect_rsd(&mut adapter, &mut handshake)
         .await
         .map_err(|error| format!("RSD lockdownd connection failed: {error}"))?;
-
     let values = remote_lockdown
         .get_value(None, None)
         .await
         .map_err(|error| format!("Reading device information over RSD failed: {error}"))?;
 
-    let device_name = values
-        .as_dictionary()
-        .and_then(|d| d.get("DeviceName"))
-        .and_then(|v| v.as_string())
-        .unwrap_or("This iPhone");
-    let product_type = values
-        .as_dictionary()
-        .and_then(|d| d.get("ProductType"))
-        .and_then(|v| v.as_string())
-        .unwrap_or("");
-    let product_version = values
-        .as_dictionary()
-        .and_then(|d| d.get("ProductVersion"))
-        .and_then(|v| v.as_string())
-        .unwrap_or("");
-    let build_version = values
-        .as_dictionary()
-        .and_then(|d| d.get("BuildVersion"))
-        .and_then(|v| v.as_string())
-        .unwrap_or("");
+    let dict = values.as_dictionary();
+    let device_name = dict.and_then(|d| d.get("DeviceName")).and_then(|v| v.as_string()).unwrap_or("This iPhone");
+    let product_type = dict.and_then(|d| d.get("ProductType")).and_then(|v| v.as_string()).unwrap_or("");
+    let product_version = dict.and_then(|d| d.get("ProductVersion")).and_then(|v| v.as_string()).unwrap_or("");
+    let build_version = dict.and_then(|d| d.get("BuildVersion")).and_then(|v| v.as_string()).unwrap_or("");
 
-    emit(
-        callback,
-        107,
-        format!("{device_name}|{product_type}|{product_version}|{build_version}"),
-    );
-
+    emit(callback, 107, format!("{device_name}|{product_type}|{product_version}|{build_version}"));
     Ok(())
 }
