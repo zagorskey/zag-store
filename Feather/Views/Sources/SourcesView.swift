@@ -233,7 +233,7 @@ struct SourcesView: View {
 	// MARK: - Body
 	var body: some View {
 		NBNavigationView(.localized("Sources")) {
-			NBListAdaptable {
+			NBListAdaptable(transparentBackground: true) {
 				if _isSearchingApps {
 					searchResultsContent
 				} else {
