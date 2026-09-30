@@ -19,27 +19,39 @@ struct ZagSourcesAtomIcon: View {
 	private var themeColorHex: String = "#4395F8"
 
 	var animated: Bool = false
-	@State private var drawIn = true
+	@State private var drawOut = false
 
 	var body: some View {
 		ZStack {
 			RoundedRectangle(cornerRadius: 13.5, style: .continuous)
 				.fill(Color(hex: themeColorHex))
 
-			if #available(iOS 26.0, *), animated {
+			if #available(iOS 26.0, *) {
 				Image(systemName: "atom")
 					.font(.system(size: 39, weight: .regular))
 					.foregroundStyle(.white)
 					.symbolEffect(
 						.drawOff.wholeSymbol,
 						options: .nonRepeating,
-						isActive: !drawIn
+						isActive: drawOut
 					)
-					.task {
-						while !Task.isCancelled {
+					.task(id: animated) {
+						guard animated else {
+							drawOut = false
+							return
+						}
+
+						// Keep the symbol visible for the first rendered frame,
+						// then immediately begin by drawing it out.
+						drawOut = false
+						await Task.yield()
+						guard !Task.isCancelled && animated else { return }
+						drawOut = true
+
+						while !Task.isCancelled && animated {
 							try? await Task.sleep(for: .seconds(1.15))
-							guard !Task.isCancelled else { break }
-							drawIn.toggle()
+							guard !Task.isCancelled && animated else { break }
+							drawOut.toggle()
 						}
 					}
 			} else {
@@ -79,6 +91,7 @@ struct SourcesView: View {
 	@AppStorage("zagStore.sources.customOrder") private var _customOrderData = ""
 	@State private var _isRearrangingRepositories = false
 	@State private var _showAllRepositories = false
+	@State private var _loadingAppsDotCount = 0
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
 	@FetchRequest(
@@ -680,10 +693,18 @@ struct SourcesView: View {
 								$0 + $1.apps.count
 							}
 							if viewModel.isRefreshing {
-								Text("Loading apps…")
-									.font(.system(size: 16, weight: .regular))
+								Text("Loading apps" + String(repeating: ".", count: _loadingAppsDotCount))
+									.font(.system(size: 15, weight: .regular))
 									.foregroundColor(Color(uiColor: .secondaryLabel))
 									.lineLimit(1)
+									.task(id: viewModel.isRefreshing) {
+										_loadingAppsDotCount = 0
+										while !Task.isCancelled && viewModel.isRefreshing {
+											try? await Task.sleep(for: .milliseconds(380))
+											guard !Task.isCancelled && viewModel.isRefreshing else { break }
+											_loadingAppsDotCount = (_loadingAppsDotCount + 1) % 4
+										}
+									}
 							} else if totalApps == 0 {
 								HStack(spacing: 0) {
 									Text("You have ")
@@ -694,7 +715,7 @@ struct SourcesView: View {
 									Text(" apps")
 										.foregroundColor(Color(uiColor: .secondaryLabel))
 								}
-								.font(.system(size: 16, weight: .regular))
+								.font(.system(size: 15, weight: .regular))
 								.lineLimit(1)
 							} else {
 								HStack(spacing: 0) {
@@ -706,7 +727,7 @@ struct SourcesView: View {
 									Text(totalApps == 1 ? " app from sources" : " apps from sources")
 										.foregroundColor(Color(uiColor: .secondaryLabel))
 								}
-								.font(.system(size: 16, weight: .regular))
+								.font(.system(size: 15, weight: .regular))
 								.lineLimit(1)
 							}
 						}
@@ -715,9 +736,9 @@ struct SourcesView: View {
 							alignment: .leading
 						)
 
-						Image(systemName: "chevron.forward")
-							.font(.system(size: 17, weight: .semibold))
-							.foregroundStyle(Color(uiColor: .systemGray))
+						Image(systemName: "chevron.right")
+							.font(.system(size: 15, weight: .heavy))
+							.foregroundStyle(Color(uiColor: .systemGray2))
 					}
 					.padding(
 						isRegular ? 12 : 0
