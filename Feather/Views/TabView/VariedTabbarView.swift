@@ -47,19 +47,13 @@ struct VariedTabbarView: View {
 				sources,
 				refresh: true
 			)
-
-			refreshUpdates()
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
-			refreshUpdates()
+			// SourcesViewModel commits the repository snapshot and its
+			// derived update state together after a refresh completes.
+			// Do not recalculate here: @Published sends before assignment,
+			// which would momentarily evaluate the previous/empty snapshot
+			// and erase the last known Updates state while refreshing.
 		}
-	}
-
-	private func refreshUpdates() {
-		updateManager.refresh(
-			repositories: Array(
-				sourcesViewModel.sources.values
-			)
-		)
 	}
 }
