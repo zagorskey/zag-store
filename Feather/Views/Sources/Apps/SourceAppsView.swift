@@ -428,6 +428,8 @@ struct SourceAppsView: View {
 	// MARK: Body
 	var body: some View {
 		ZStack {
+			ZagWallpaperBackground()
+
 			if
 				let _sources,
 				!_sources.isEmpty
