@@ -98,7 +98,7 @@ struct SourcesCellView: View {
 
 				if isRefreshing {
 					Text("Updated: Refreshing" + String(repeating: ".", count: refreshDotCount))
-						.font(.system(size: 16, weight: .regular))
+						.font(.system(size: 15, weight: .regular))
 						.foregroundStyle(Color(uiColor: .secondaryLabel))
 						.lineLimit(1)
 						.task(id: isRefreshing) {
@@ -111,7 +111,7 @@ struct SourcesCellView: View {
 						}
 				} else {
 					Text(lastUpdatedText)
-						.font(.system(size: 16, weight: .regular))
+						.font(.system(size: 15, weight: .regular))
 						.foregroundStyle(Color(uiColor: .secondaryLabel))
 						.lineLimit(1)
 				}
