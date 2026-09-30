@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-idevice = { git = "https://github.com/jkcoxson/idevice", rev = "7bd551c16c6dd2e058740d85a2d9399a51a776e9", features = ["remote_pairing", "tunnel_tcp_stack", "rsd", "tcp", "xpc", "core_device_proxy", "pair", "installation_proxy", "aws-lc"] }
+idevice = { git = "https://github.com/jkcoxson/idevice", rev = "7bd551c16c6dd2e058740d85a2d9399a51a776e9", features = ["remote_pairing", "tunnel_tcp_stack", "rsd", "tcp", "xpc", "core_device_proxy", "pair", "installation_proxy", "afc", "aws-lc"] }
 mdns-sd = "0.19"
 tokio = { version = "1.43", features = ["rt-multi-thread", "net", "time"] }
 uuid = { version = "1", features = ["v4"] }
