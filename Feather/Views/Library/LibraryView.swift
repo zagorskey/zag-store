@@ -275,11 +275,6 @@ struct LibraryView: View {
 					ZagUpdatesPillSurface()
 
 					HStack(alignment: .center, spacing: 10) {
-						Image(systemName: "arrow.triangle.2.circlepath")
-							.font(.system(size: 19, weight: .regular))
-							.foregroundStyle(.primary)
-							.frame(width: 22, height: 22)
-
 						Text(.localized("App Updates"))
 							.font(.system(size: 20, weight: .semibold))
 							.foregroundStyle(.primary)
@@ -301,7 +296,7 @@ struct LibraryView: View {
 					.padding(.horizontal, 12)
 				}
 				.frame(height: 46)
-				.padding(.top, -17)
+				.padding(.top, -16)
 				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
