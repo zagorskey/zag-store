@@ -448,6 +448,8 @@ struct LibraryView: View {
 
 
 								app: app,
+								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+								onRemoveManagedApp: _removeManagedApp,
 
 
 
@@ -527,6 +529,8 @@ struct LibraryView: View {
 
 
 								app: app,
+								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+								onRemoveManagedApp: _removeManagedApp,
 
 
 
@@ -1101,6 +1105,26 @@ extension LibraryView {
 		var identifiers = _managedInstalledBundleIDs
 		identifiers.insert(identifier)
 
+		if let encoded = try? JSONEncoder().encode(identifiers) {
+			_managedInstalledBundleIDsData = encoded
+		}
+	}
+
+	private func _removeManagedApp(_ app: AppInfoPresentable) {
+		guard let identifier = app.identifier, !identifier.isEmpty else {
+			return
+		}
+
+		guard UIApplication.removeApp(with: identifier) else {
+			UIAlertController.showAlertWithOk(
+				title: .localized("Remove App"),
+				message: .localized("Zag Store could not remove this application.")
+			)
+			return
+		}
+
+		var identifiers = _managedInstalledBundleIDs
+		identifiers.remove(identifier)
 		if let encoded = try? JSONEncoder().encode(identifiers) {
 			_managedInstalledBundleIDsData = encoded
 		}
