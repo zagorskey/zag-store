@@ -7,6 +7,7 @@
 
 import SwiftUI
 import NimbleViews
+import UniformTypeIdentifiers
 
 // MARK: - View
 struct InstallationView: View {
@@ -63,6 +64,7 @@ struct InstallationView: View {
 private struct RPPairingView: View {
 	@State private var isLocalDevVpnAvailable = false
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
+	@State private var showGate4Importer = false
 
 	var body: some View {
 		Section {
@@ -205,10 +207,84 @@ private struct RPPairingView: View {
 		} footer: {
 			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel, RSD, a read-only installation_proxy lookup, and an AFC PublicStaging diagnostic. Gate 3B writes one tiny marker file, reads it back byte-for-byte, then deletes it. It does not install, remove, upgrade, or modify apps.")
 		}
+		Section {
+			LabeledContent("Status") {
+				Text(gate4StatusText)
+					.foregroundStyle(gate4StatusColor)
+			}
+
+			if case .progress(let percent) = pairingCore.gate4State {
+				ProgressView(value: Double(percent), total: 100) {
+					Text("Installing")
+				} currentValueLabel: {
+					Text("\(percent)%")
+				}
+			}
+
+			if case .failed(let error) = pairingCore.gate4State {
+				Text(error)
+					.font(.footnote)
+					.foregroundStyle(.red)
+					.textSelection(.enabled)
+			}
+
+			Button {
+				showGate4Importer = true
+			} label: {
+				Label("Choose Signed Test IPA…", systemImage: "shippingbox")
+			}
+			.disabled(pairingCore.isGate4Running || !pairingCore.pairingFileExists)
+		} header: {
+			Text("Gate 4 — Controlled Install")
+		} footer: {
+			Text("Choose an already-signed disposable test IPA. Zag Store copies it into its sandbox, stages it through AFC/PublicStaging, and asks installation_proxy to install it over the proven RPPairing tunnel. Do not select Zag Store itself for this test.")
+		}
+
 		.onAppear {
 			if let url = URL(string: "localdevvpn://") {
 				isLocalDevVpnAvailable = UIApplication.shared.canOpenURL(url)
 			}
+		}
+		.fileImporter(
+			isPresented: $showGate4Importer,
+			allowedContentTypes: [.data],
+			allowsMultipleSelection: false
+		) { result in
+			switch result {
+			case .success(let urls):
+				guard let url = urls.first else { return }
+				do {
+					try pairingCore.installGate4IPA(at: url)
+				} catch {
+					// Copy/import errors are surfaced here; transport/install errors
+					// are reported by the Gate 4 callback state.
+					print("Gate 4 IPA import failed: \(error)")
+				}
+			case .failure(let error):
+				print("Gate 4 file importer failed: \(error)")
+			}
+		}
+	}
+
+	private var gate4StatusText: String {
+		switch pairingCore.gate4State {
+		case .idle: return "Ready — choose a signed test IPA"
+		case .starting: return "Starting RPPairing…"
+		case .pairVerified: return "Pair-Verify complete"
+		case .tunnel: return "TLS-PSK tunnel established"
+		case .rsd: return "RSD established"
+		case .installing: return "Staging and installing…"
+		case .progress(let percent): return "Installing — \(percent)%"
+		case .complete: return "Installation complete"
+		case .failed: return "Installation failed"
+		}
+	}
+
+	private var gate4StatusColor: Color {
+		switch pairingCore.gate4State {
+		case .complete: return .green
+		case .failed: return .red
+		default: return .secondary
 		}
 	}
 
