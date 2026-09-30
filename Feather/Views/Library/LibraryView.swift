@@ -90,6 +90,7 @@ struct LibraryView: View {
 
 
 	@State private var _isDownloadingPresenting = false
+	@State private var _isUpdatesPresenting = false
 
 
 
@@ -267,10 +268,22 @@ struct LibraryView: View {
 	@ViewBuilder
 	private var zagUpdatesContent: some View {
 		if !updateManager.updates.isEmpty {
-			ZagUpdatesSection(
-				updates: updateManager.updates,
-				onPreparedForInstall: handlePreparedUpdate
-			)
+			Button {
+				_isUpdatesPresenting = true
+			} label: {
+				HStack(spacing: 10) {
+					Text(.localized("App Updates"))
+						.zagContentTitleStyle()
+
+					Spacer(minLength: 8)
+
+					ZagUpdateBadge(count: updateManager.updates.count)
+				}
+				.contentShape(Rectangle())
+			}
+			.buttonStyle(.plain)
+			.listRowSeparator(.hidden)
+			.padding(.vertical, 2)
 		}
 	}
 
@@ -692,7 +705,15 @@ struct LibraryView: View {
 
 			.environment(\.editMode, $_editMode)
 
-
+			.sheet(isPresented: $_isUpdatesPresenting) {
+				ZagUpdatesPopup(
+					updates: updateManager.updates,
+					onPreparedForInstall: { signedUUID in
+						_isUpdatesPresenting = false
+						handlePreparedUpdate(signedUUID)
+					}
+				)
+			}
 
 			.sheet(item: $_selectedInfoAppPresenting) { app in
 
@@ -1274,37 +1295,6 @@ extension LibraryView {
 
 
 
-private struct ZagUpdatesHeader: View {
-	let count: Int
-
-	var body: some View {
-		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let phase = context.date.timeIntervalSinceReferenceDate
-			let wave = (sin(phase * .pi * 1.25) + 1.0) / 2.0
-			let opacity = 0.25 + (wave * 0.75)
-			let scale = 0.78 + (wave * 0.22)
-
-			HStack(spacing: 10) {
-				Circle()
-					.fill(Color.green)
-					.frame(width: 9, height: 9)
-					.opacity(opacity)
-					.scaleEffect(scale)
-					.shadow(
-						color: Color.green.opacity(wave * 0.65),
-						radius: 4
-					)
-
-				Text(.localized("Updates Available"))
-
-				ZagUpdateBadge(count: count)
-
-				Spacer(minLength: 0)
-			}
-		}
-	}
-}
-
 private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
 	@Environment(\.colorScheme) private var colorScheme
@@ -1425,20 +1415,37 @@ private struct ZagUpdateRow: View {
 }
 
 
-private struct ZagUpdatesSection: View {
+private struct ZagUpdatesPopup: View {
 	let updates: [UpdateManager.AvailableUpdate]
 	let onPreparedForInstall: (String) -> Void
 
-	var body: some View {
-		Section {
-			ZagUpdatesHeader(count: updates.count)
-				.listRowSeparator(.hidden)
+	@Environment(\.dismiss) private var dismiss
 
-			ForEach(updates) { update in
-				ZagUpdateRow(
-					update: update,
-					onPreparedForInstall: onPreparedForInstall
-				)
+	var body: some View {
+		NavigationStack {
+			List {
+				ForEach(updates) { update in
+					ZagUpdateRow(
+						update: update,
+						onPreparedForInstall: onPreparedForInstall
+					)
+				}
+			}
+			.listStyle(.plain)
+			.listRowSeparator(.hidden)
+			.navigationTitle(.localized("App Updates"))
+			.navigationBarTitleDisplayMode(.inline)
+			.toolbar {
+				ToolbarItem(placement: .topBarTrailing) {
+					Button {
+						dismiss()
+					} label: {
+						Image(systemName: "xmark")
+							.font(.system(size: 13, weight: .bold))
+					}
+					.buttonStyle(.bordered)
+					.buttonBorderShape(.circle)
+				}
 			}
 		}
 	}
