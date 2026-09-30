@@ -91,7 +91,8 @@ struct LibraryView: View {
 
 	@State private var _isDownloadingPresenting = false
 	@State private var _isUpdatesPresenting = false
-	@State private var _installedApplicationIdentifiers = Set<String>()
+	@AppStorage("zagStore.managedInstalledBundleIDs")
+	private var _managedInstalledBundleIDsData: Data = Data()
 
 
 
@@ -187,7 +188,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return false
 			}
-			return _installedApplicationIdentifiers.contains(identifier)
+			return _managedInstalledBundleIDs.contains(identifier)
 		}
 	}
 
@@ -196,7 +197,7 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return true
 			}
-			return !_installedApplicationIdentifiers.contains(identifier)
+			return !_managedInstalledBundleIDs.contains(identifier)
 		}
 	}
 
@@ -594,7 +595,6 @@ struct LibraryView: View {
 
 			.onAppear {
 				_probeSystemDictation()
-				_refreshInstalledApplicationIdentifiers()
 			}
 
 			.compatSearchScopes($_selectedScope) {
@@ -817,6 +817,7 @@ struct LibraryView: View {
 					app: app.base,
 					isSharing: app.archive,
 					onInstallCompleted: {
+						_markManagedAppInstalled(app.base)
 						guard let signedUUID = app.base.uuid else { return }
 						ZagUpdateTransactionManager.shared.completeInstallation(
 							signedUUID: signedUUID
@@ -1079,9 +1080,30 @@ struct LibraryView: View {
 
 extension LibraryView {
 
-	private func _refreshInstalledApplicationIdentifiers() {
-		_installedApplicationIdentifiers =
-			UIApplication.installedApplicationIdentifiers()
+	private var _managedInstalledBundleIDs: Set<String> {
+		guard
+			!_managedInstalledBundleIDsData.isEmpty,
+			let identifiers = try? JSONDecoder().decode(
+				Set<String>.self,
+				from: _managedInstalledBundleIDsData
+			)
+		else {
+			return []
+		}
+		return identifiers
+	}
+
+	private func _markManagedAppInstalled(_ app: AppInfoPresentable) {
+		guard let identifier = app.identifier, !identifier.isEmpty else {
+			return
+		}
+
+		var identifiers = _managedInstalledBundleIDs
+		identifiers.insert(identifier)
+
+		if let encoded = try? JSONEncoder().encode(identifiers) {
+			_managedInstalledBundleIDsData = encoded
+		}
 	}
 
 	@ViewBuilder
