@@ -90,12 +90,18 @@ private enum ZagSystemDictationLifecycle {
 
 // MARK: - Native Search Microphone
 
-private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
+struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 	let isAvailable: Bool
 	let action: () -> Void
+	var prompt: String
+	var activePrompt: String? = nil
 
 	func makeCoordinator() -> Coordinator {
-		Coordinator(action: action)
+		Coordinator(
+			action: action,
+			prompt: prompt,
+			activePrompt: activePrompt
+		)
 	}
 
 	func makeUIView(context: Context) -> UIView {
@@ -109,6 +115,8 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 	func updateUIView(_ uiView: UIView, context: Context) {
 		context.coordinator.action = action
+		context.coordinator.prompt = prompt
+		context.coordinator.activePrompt = activePrompt
 		DispatchQueue.main.async {
 			context.coordinator.install(from: uiView, isAvailable: isAvailable)
 		}
@@ -116,13 +124,21 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 	final class Coordinator: NSObject {
 		var action: () -> Void
+		var prompt: String
+		var activePrompt: String?
 		private weak var installedField: UISearchTextField?
 		private weak var button: UIButton?
 		private var dictationObserversInstalled = false
 		private var yieldingToNativeClearButton = false
 
-		init(action: @escaping () -> Void) {
+		init(
+			action: @escaping () -> Void,
+			prompt: String,
+			activePrompt: String?
+		) {
 			self.action = action
+			self.prompt = prompt
+			self.activePrompt = activePrompt
 		}
 
 		func install(from anchor: UIView, isAvailable: Bool) {
@@ -135,7 +151,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 			guard let field = Self.findSearchField(in: window) else { return }
 
-			Self.applyAppStorePlaceholderStyle(to: field)
+			applyPlaceholderStyle(to: field)
 
 			if yieldingToNativeClearButton {
 				if !(field.text ?? "").isEmpty {
@@ -169,6 +185,10 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				field.rightViewMode = .always
 				field.removeTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
 				field.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
+				field.removeTarget(self, action: #selector(searchFocusBegan), for: .editingDidBegin)
+				field.addTarget(self, action: #selector(searchFocusBegan), for: .editingDidBegin)
+				field.removeTarget(self, action: #selector(searchFocusEnded), for: .editingDidEnd)
+				field.addTarget(self, action: #selector(searchFocusEnded), for: .editingDidEnd)
 				installedField = field
 				button = mic
 			}
@@ -291,13 +311,25 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			button.isUserInteractionEnabled = visible
 		}
 
-		private static func applyAppStorePlaceholderStyle(to field: UISearchTextField) {
-			guard let placeholder = field.placeholder, !placeholder.isEmpty else { return }
+		@objc private func searchFocusBegan(_ field: UISearchTextField) {
+			applyPlaceholderStyle(to: field, focused: true)
+		}
 
+		@objc private func searchFocusEnded(_ field: UISearchTextField) {
+			applyPlaceholderStyle(to: field, focused: false)
+		}
+
+		private func applyPlaceholderStyle(
+			to field: UISearchTextField,
+			focused: Bool? = nil
+		) {
+			let isFocused = focused ?? field.isFirstResponder
+			let text = isFocused ? (activePrompt ?? prompt) : prompt
 			field.attributedPlaceholder = NSAttributedString(
-				string: placeholder,
+				string: text,
 				attributes: [
-					.foregroundColor: UIColor.tertiaryLabel
+					.font: UIFont.systemFont(ofSize: 19, weight: .semibold),
+					.foregroundColor: UIColor.placeholderText
 				]
 			)
 		}
@@ -319,7 +351,7 @@ private struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 
 // MARK: - Native Search Focus Compatibility
 
-private struct ZagRepositorySearchFocusModifier: ViewModifier {
+struct ZagRepositorySearchFocusModifier: ViewModifier {
 	let isFocused: FocusState<Bool>.Binding
 
 	@ViewBuilder
@@ -396,13 +428,19 @@ struct SourceAppsView: View {
 			}
 		}
 		.navigationTitle(_navigationTitle)
-		.searchable(text: $_searchText, placement: .platform())
+		.searchable(
+			text: $_searchText,
+			placement: .platform(),
+			prompt: Text("Apps, Games in Repo")
+		)
 		.modifier(ZagRepositorySearchFocusModifier(isFocused: $_searchFieldFocused))
 		.background {
 			if object.count == 1 {
 				ZagNativeSearchMicInstaller(
 					isAvailable: _dictationAvailable,
-					action: _startDictationFromSearchMic
+					action: _startDictationFromSearchMic,
+					prompt: "Apps, Games in Repo",
+					activePrompt: "Apps, Games in Repo"
 				)
 				.frame(width: 0, height: 0)
 			}
