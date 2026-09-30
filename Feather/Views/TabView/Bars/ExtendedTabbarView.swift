@@ -27,29 +27,8 @@ struct ExtendedTabbarView: View {
 	var body: some View {
 		TabView {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
-				if tab == .library {
-					Tab {
-						TabEnum.view(for: tab)
-					} label: {
-						Label {
-							Text(tab.title)
-						} icon: {
-							ZStack(alignment: .topTrailing) {
-								Image(systemName: tab.icon)
-
-								if !updateManager.updates.isEmpty {
-									Circle()
-										.fill(Color(hex: "#E93323"))
-										.frame(width: 7, height: 7)
-										.offset(x: 3, y: -2)
-								}
-							}
-						}
-					}
-				} else {
-					Tab(tab.title, systemImage: tab.icon) {
-						TabEnum.view(for: tab)
-					}
+				Tab(tab.title, systemImage: tab.icon) {
+					TabEnum.view(for: tab)
 				}
 			}
 			
@@ -94,6 +73,22 @@ struct ExtendedTabbarView: View {
 			.hidden(horizontalSizeClass == .compact)
 		}
 		.tabViewStyle(.sidebarAdaptable)
+		.overlay(alignment: .bottom) {
+			if horizontalSizeClass == .compact, !updateManager.updates.isEmpty {
+				GeometryReader { proxy in
+					let itemWidth = proxy.size.width / CGFloat(TabEnum.defaultTabs.count)
+					Circle()
+						.fill(Color(hex: "#E93323"))
+						.frame(width: 7, height: 7)
+						.position(
+							x: itemWidth * 1.5 + 12,
+							y: proxy.size.height - 55
+						)
+						.allowsHitTesting(false)
+				}
+				.ignoresSafeArea()
+			}
+		}
 		.tabViewCustomization($customization)
 		.sheet(isPresented: $_isAddingPresenting) {
 			SourcesAddView()
