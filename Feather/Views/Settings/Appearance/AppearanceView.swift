@@ -12,6 +12,13 @@ import UIKit
 // MARK: - View
 
 struct AppearanceView: View {
+	@AppStorage(ZagWallpaperStore.enabledKey)
+	private var _wallpaperEnabled = false
+
+	@AppStorage(ZagWallpaperStore.blurKey)
+	private var _wallpaperBlurred = false
+
+	@State private var _wallpaperPickerPresenting = false
 	@AppStorage("Feather.userInterfaceStyle")
 	private var _userIntefacerStyle: Int =
 		UIUserInterfaceStyle.unspecified.rawValue
@@ -105,6 +112,31 @@ struct AppearanceView: View {
 				)
 			}
 
+			Section(.localized("Wallpaper")) {
+				Button {
+					_wallpaperPickerPresenting = true
+				} label: {
+					Label(
+						.localized(_wallpaperEnabled ? "Change Wallpaper" : "Choose Wallpaper"),
+						systemImage: "photo"
+					)
+				}
+
+				if _wallpaperEnabled {
+					Toggle(
+						.localized("Blur Wallpaper"),
+						isOn: $_wallpaperBlurred
+					)
+
+					Button(role: .destructive) {
+						ZagWallpaperStore.clear()
+						_wallpaperEnabled = false
+					} label: {
+						Label(.localized("Clear Wallpaper"), systemImage: "trash")
+					}
+				}
+			}
+
 			if #available(iOS 18.0, *) {
 				NBSection(.localized("Library")) {
 					Toggle(
@@ -143,6 +175,12 @@ struct AppearanceView: View {
 				}
 				.labelsHidden()
 				.pickerStyle(.inline)
+			}
+		}
+		.sheet(isPresented: $_wallpaperPickerPresenting) {
+			ZagWallpaperPicker { image in
+				try? ZagWallpaperStore.save(image)
+				_wallpaperEnabled = true
 			}
 		}
 		.onChange(of: _userIntefacerStyle) { value in
