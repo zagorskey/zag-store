@@ -30,13 +30,11 @@ struct CertificatesCellView: View {
 
 			VStack(spacing: 2) {
 				Text(title)
-					.font(.system(size: 16, weight: .semibold))
+					.font(.system(size: 19, weight: .semibold))
 					.lineLimit(1)
 					.minimumScaleFactor(0.75)
-					.frame(
-						maxWidth: .infinity,
-						alignment: .leading
-					)
+					.frame(maxWidth: .infinity)
+					.multilineTextAlignment(.center)
 
 				Text(data?.AppIDName ?? .localized("Unknown"))
 					.font(.subheadline)
