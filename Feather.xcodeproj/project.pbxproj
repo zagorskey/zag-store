@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7A0000010000000000000001 /* libzag_rppairing_core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A0000020000000000000002 /* libzag_rppairing_core.a */; };
 		3305BBAC2DB8944200660D45 /* Vapor in Frameworks */ = {isa = PBXBuildFile; productRef = 3305BBAB2DB8944200660D45 /* Vapor */; };
 		330F68FC2DBF7C8600D8C35D /* NimbleExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 330F68FB2DBF7C8600D8C35D /* NimbleExtensions */; };
 		330F68FE2DBF7C8600D8C35D /* NimbleViews in Frameworks */ = {isa = PBXBuildFile; productRef = 330F68FD2DBF7C8600D8C35D /* NimbleViews */; };
@@ -24,6 +25,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		7A0000020000000000000002 /* libzag_rppairing_core.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libzag_rppairing_core.a; path = RPPairingCore/build/device/libzag_rppairing_core.a; sourceTree = SOURCE_ROOT; };
 		336D43972DB7454A00206400 /* MobileCoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MobileCoreServices.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS18.2.sdk/System/Library/Frameworks/MobileCoreServices.framework; sourceTree = DEVELOPER_DIR; };
 		3379C1B92DA869A1004372DA /* Feather.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Feather.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		570920BD2F98A4F0008C4A83 /* Feather.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Feather.xcconfig; sourceTree = "<group>"; };
@@ -67,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A0000010000000000000001 /* libzag_rppairing_core.a in Frameworks */,
 				330F68FE2DBF7C8600D8C35D /* NimbleViews in Frameworks */,
 				330F68FC2DBF7C8600D8C35D /* NimbleExtensions in Frameworks */,
 				3346F5C22DC329A200C7D508 /* ZsignSwift in Frameworks */,
@@ -89,6 +92,7 @@
 		3371F7302DA9ECDD00281AC6 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7A0000020000000000000002 /* libzag_rppairing_core.a */,
 				336D43972DB7454A00206400 /* MobileCoreServices.framework */,
 			);
 			name = Frameworks;
