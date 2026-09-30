@@ -38,6 +38,38 @@ extension UIApplication {
 	
 
 
+	/// Removes an app by bundle identifier through LaunchServices.
+	/// Returns true when the uninstall request was accepted.
+	@discardableResult
+	static public func removeApp(with identifier: String) -> Bool {
+		let classNameBase64 = "TFNBcHBsaWNhdGlvbldvcmtzcGFjZQ==" // LSApplicationWorkspace
+		let defaultSelectorBase64 = "ZGVmYXVsdFdvcmtzcGFjZQ==" // defaultWorkspace
+		let uninstallSelectorBase64 = "dW5pbnN0YWxsQXBwbGljYXRpb246d2l0aE9wdGlvbnM6" // uninstallApplication:withOptions:
+
+		guard
+			let className = String(data: Data(base64Encoded: classNameBase64)!, encoding: .utf8),
+			let defaultSelector = String(data: Data(base64Encoded: defaultSelectorBase64)!, encoding: .utf8),
+			let uninstallSelector = String(data: Data(base64Encoded: uninstallSelectorBase64)!, encoding: .utf8),
+			let workspaceClass = NSClassFromString(className) as? NSObject.Type,
+			let workspace = workspaceClass.perform(NSSelectorFromString(defaultSelector))?.takeUnretainedValue() as? NSObject
+		else {
+			return false
+		}
+
+		let selector = NSSelectorFromString(uninstallSelector)
+		guard workspace.responds(to: selector) else {
+			return false
+		}
+
+		let result = workspace.perform(
+			selector,
+			with: identifier,
+			with: nil
+		)?.takeUnretainedValue()
+
+		return (result as? NSNumber)?.boolValue ?? true
+	}
+
 	/// Returns install progress for a bundle identifier (0.0 – 1.0)
 	/// - Parameters:
 	///   - identifier: Bundle identifier
