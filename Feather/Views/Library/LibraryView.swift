@@ -278,9 +278,11 @@ struct LibraryView: View {
 						.frame(width: 24)
 
 					Text(.localized("App Updates"))
-						.zagContentTitleStyle()
+						.font(.system(size: 20, weight: .semibold))
+						.foregroundStyle(.primary)
 
 					ZagFlashingUpdateDot()
+						.offset(y: 2.5)
 
 					Spacer(minLength: 8)
 
@@ -301,8 +303,7 @@ struct LibraryView: View {
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
-			.padding(.top, 14)
-			.padding(.bottom, 2)
+			.padding(.vertical, 2)
 		}
 	}
 
