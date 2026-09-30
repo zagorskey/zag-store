@@ -276,9 +276,9 @@ struct LibraryView: View {
 
 					HStack(alignment: .center, spacing: 10) {
 						Image(systemName: "arrow.triangle.2.circlepath")
-							.font(.system(size: 21, weight: .regular))
+							.font(.system(size: 19, weight: .regular))
 							.foregroundStyle(.primary)
-							.frame(width: 24, height: 24)
+							.frame(width: 22, height: 22)
 
 						Text(.localized("App Updates"))
 							.font(.system(size: 20, weight: .semibold))
@@ -298,10 +298,10 @@ struct LibraryView: View {
 									.fill(Color(hex: "#E93323"))
 							)
 					}
-					.padding(.horizontal, 16)
+					.padding(.horizontal, 12)
 				}
-				.frame(height: 50)
-				.padding(.top, -20)
+				.frame(height: 46)
+				.padding(.top, -17)
 				.contentShape(Capsule())
 			}
 			.buttonStyle(.plain)
@@ -1330,25 +1330,38 @@ private struct ZagUpdatesPillSurface: View {
 
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let cycle = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 5.2)
-			let progress = min(max((cycle - 4.0) / 1.2, 0), 1)
-			let travelling = progress > 0 && progress < 1
+			let progress = context.date.timeIntervalSinceReferenceDate
+				.truncatingRemainder(dividingBy: 4.8) / 4.8
+			let segment: Double = 0.14
+			let start = progress
+			let end = min(1, progress + segment)
 
 			Capsule()
 				.fill(Color(hex: "#2C2C2E"))
 				.overlay {
-					Capsule()
-						.trim(from: max(0, progress - 0.10), to: min(1, progress + 0.10))
-						.stroke(
-							Color(hex: themeColorHex)
-								.opacity(travelling ? 0.34 : 0),
-							style: StrokeStyle(
-								lineWidth: 0.75,
-								lineCap: .round
+					ZStack {
+						Capsule()
+							.trim(from: start, to: end)
+							.stroke(
+								Color(hex: themeColorHex).opacity(0.58),
+								style: StrokeStyle(
+									lineWidth: 1.0,
+									lineCap: .round
+								)
 							)
-						)
-						.animation(.easeInOut(duration: 0.18), value: travelling)
+
+						if progress > 1 - segment {
+							Capsule()
+								.trim(from: 0, to: progress + segment - 1)
+								.stroke(
+									Color(hex: themeColorHex).opacity(0.58),
+									style: StrokeStyle(
+										lineWidth: 1.0,
+										lineCap: .round
+									)
+								)
+						}
+					}
 				}
 		}
 	}
