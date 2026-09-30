@@ -300,7 +300,7 @@ private struct RPPairingView: View {
 	}
 }
 
-private struct RPPairingDiagnosticsView: View {
+struct RPPairingDiagnosticsView: View {
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var showGate4Importer = false
 
