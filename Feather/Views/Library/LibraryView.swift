@@ -119,8 +119,8 @@ struct LibraryView: View {
 
 	@State private var _searchText = ""
 
-	@State private var _searchActive = false
-	@State private var _searchPinned = false
+	@State private var _dictationAvailable = false
+	@FocusState private var _searchFieldFocused: Bool
 
 
 
@@ -282,6 +282,36 @@ struct LibraryView: View {
 		}
 
 		_selectedInstallAppPresenting = AnyApp(base: signed)
+	}
+
+	private func _probeSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else {
+			_dictationAvailable = false
+			return
+		}
+		_dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+	}
+
+	private func _startDictationFromSearchMic() {
+		_searchFieldFocused = true
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+			_startSystemDictation()
+		}
+	}
+
+	private func _startSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else { return }
+
+		let preheat = NSSelectorFromString("preheatIfNecessary")
+		if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+		let start = NSSelectorFromString("startDictation")
+		if controller.responds(to: start) { _ = controller.perform(start) }
 	}
 
 	var body: some View {
@@ -479,29 +509,31 @@ struct LibraryView: View {
 
 
 			}
-			.zagTrackSearchPin($_searchPinned)
-.safeAreaInset(edge: .top, spacing: 8) {
-				ZagLiquidGlassSearchBar(
-					text: $_searchText,
-					isActive: $_searchActive,
-					isPinned: _searchPinned,
+			.searchable(
+				text: $_searchText,
+				placement: .platform(),
+				prompt: Text("Apps, Games and More")
+			)
+			.modifier(
+				ZagRepositorySearchFocusModifier(
+					isFocused: $_searchFieldFocused
+				)
+			)
+			.background {
+				ZagNativeSearchMicInstaller(
+					isAvailable: _dictationAvailable,
+					action: _startDictationFromSearchMic,
 					prompt: "Apps, Games and More",
 					activePrompt: "Apps, Games and More"
 				)
-				.padding(.horizontal, 16)
-				.padding(.top, 4)
-			}
-			.toolbar(
-				_searchActive ? .hidden : .visible,
-				for: .navigationBar
-			)
-			.transaction { transaction in
-				if _searchActive {
-					transaction.animation = nil
-				}
+				.frame(width: 0, height: 0)
 			}
 
 
+
+			.onAppear {
+				_probeSystemDictation()
+			}
 
 			.compatSearchScopes($_selectedScope) {
 				librarySearchScopes
