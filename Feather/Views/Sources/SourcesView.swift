@@ -75,6 +75,9 @@ struct SourcesView: View {
 	@FocusState private var _searchFieldFocused: Bool
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
+	@AppStorage("zagStore.sources.sortMode") private var _sortModeRaw = "default"
+	@AppStorage("zagStore.sources.customOrder") private var _customOrderData = ""
+	@State private var _isRearrangingRepositories = false
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
 	@FetchRequest(
@@ -108,6 +111,69 @@ struct SourcesView: View {
 			) ?? false
 		}
 	}
+	private enum RepositorySortMode: String {
+		case defaultOrder = "default"
+		case nameAscending
+		case nameDescending
+		case lastUpdated
+		case dateAdded
+		case custom
+	}
+	private var _sortMode: RepositorySortMode {
+		RepositorySortMode(rawValue: _sortModeRaw) ?? .defaultOrder
+	}
+	private var _customOrder: [String] {
+		_customOrderData.split(separator: "\n").map(String.init)
+	}
+	private func _sourceKey(_ source: AltSource) -> String {
+		source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
+	}
+	private func _lastUpdated(_ source: AltSource) -> Date {
+		viewModel.sources[source]?.apps.compactMap { $0.currentDate?.date }.max() ?? .distantPast
+	}
+	private func _sorted(_ sources: [AltSource]) -> [AltSource] {
+		switch _sortMode {
+		case .defaultOrder:
+			return sources
+		case .nameAscending:
+			return sources.sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
+		case .nameDescending:
+			return sources.sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedDescending }
+		case .lastUpdated:
+			return sources.sorted { _lastUpdated($0) > _lastUpdated($1) }
+		case .dateAdded:
+			return sources.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+		case .custom:
+			let order = Dictionary(uniqueKeysWithValues: _customOrder.enumerated().map { ($1, $0) })
+			return sources.enumerated().sorted {
+				let li = order[_sourceKey($0.element)] ?? (_customOrder.count + $0.offset)
+				let ri = order[_sourceKey($1.element)] ?? (_customOrder.count + $1.offset)
+				return li < ri
+			}.map(\.element)
+		}
+	}
+	private var _displayedSources: [AltSource] {
+		_sorted(_filteredSources)
+	}
+	private func _selectSort(_ mode: RepositorySortMode) {
+		_sortModeRaw = mode.rawValue
+	}
+	private func _beginRearranging() {
+		var order = _customOrder
+		for source in _sorted(Array(_sources)) {
+			let key = _sourceKey(source)
+			if !order.contains(key) { order.append(key) }
+		}
+		_customOrderData = order.joined(separator: "\n")
+		_sortModeRaw = RepositorySortMode.custom.rawValue
+		_isRearrangingRepositories = true
+	}
+	private func _moveRepositories(from offsets: IndexSet, to destination: Int) {
+		var items = _displayedSources
+		items.move(fromOffsets: offsets, toOffset: destination)
+		_customOrderData = items.map(_sourceKey).joined(separator: "\n")
+	}
+
 	private var _matchingApps:
 		[SourceAppsView.SourceAppRoute] {
 		guard _isSearchingApps else {
@@ -178,6 +244,7 @@ struct SourcesView: View {
 			.overlay {
 				emptyState
 			}
+			.environment(\.editMode, .constant(_isRearrangingRepositories ? .active : .inactive))
 			.toolbar {
 				ToolbarItem(
 					placement: .topBarLeading
@@ -187,8 +254,7 @@ struct SourcesView: View {
 				ToolbarItemGroup(
 					placement: .topBarTrailing
 				) {
-					// Primary action first:
-					// + | transfer
+					repositorySortMenu
 					addRepositoryButton
 					repositoryTransferMenu
 				}
@@ -372,6 +438,39 @@ struct SourcesView: View {
 			"Add Repository"
 		)
 	}
+	// MARK: Repository Sorting
+	private var repositorySortMenu: some View {
+		Menu {
+			Button { _selectSort(.defaultOrder) } label: {
+				Label("Default", systemImage: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
+			}
+			Button { _selectSort(.nameAscending) } label: {
+				Label("Name (A–Z)", systemImage: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
+			}
+			Button { _selectSort(.nameDescending) } label: {
+				Label("Name (Z–A)", systemImage: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
+			}
+			Button { _selectSort(.lastUpdated) } label: {
+				Label("Last Updated", systemImage: _sortMode == .lastUpdated ? "checkmark" : "clock")
+			}
+			Button { _selectSort(.dateAdded) } label: {
+				Label("Date Added", systemImage: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
+			}
+			Button { _selectSort(.custom) } label: {
+				Label("Custom", systemImage: _sortMode == .custom ? "checkmark" : "list.bullet")
+			}
+			Divider()
+			Button { _beginRearranging() } label: {
+				Label("Rearrange", systemImage: "slider.horizontal.3")
+			}
+		} label: {
+			Image(systemName: "arrow.up.arrow.down.circle")
+				.font(.system(size: 17, weight: .semibold))
+				.frame(width: 26, height: 22)
+		}
+		.accessibilityLabel("Sort Repositories")
+	}
+
 	// MARK: Repository Transfer
 	private var repositoryTransferMenu:
 		some View {
@@ -616,7 +715,7 @@ struct SourcesView: View {
 			.listSectionSeparator(.hidden, edges: .all)
 			Section {
 				ForEach(
-					_filteredSources
+					_displayedSources
 				) { source in
 					SourcesCellView(
 						source: source,
@@ -625,6 +724,7 @@ struct SourcesView: View {
 								source
 							]
 					)
+					.moveDisabled(!_isRearrangingRepositories)
 					.background {
 						NavigationLink {
 							SourceAppsView(
@@ -643,9 +743,10 @@ struct SourcesView: View {
 			} header: {
 				ZagRepositoriesHeader(
 					count:
-						_filteredSources.count
+						_displayedSources.count
 				)
 			}
+			.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 		}
 	}
 	// MARK: - Global Search Results
@@ -685,7 +786,7 @@ struct SourcesView: View {
 		if !_filteredSources.isEmpty {
 			Section {
 				ForEach(
-					_filteredSources
+					_displayedSources
 				) { source in
 					SourcesCellView(
 						source: source,
@@ -712,7 +813,7 @@ struct SourcesView: View {
 			} header: {
 				ZagRepositoriesHeader(
 					count:
-						_filteredSources.count
+						_displayedSources.count
 				)
 			}
 		}
