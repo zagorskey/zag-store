@@ -9,6 +9,10 @@ import SwiftUI
 import Nuke
 import IDeviceSwift
 import OSLog
+import BackgroundTasks
+import CoreData
+import AltSourceKit
+import NimbleJSON
 
 @main
 struct FeatherApp: App {
@@ -156,6 +160,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_createDocumentsDirectories()
 		ResetView.clearWorkCache()
 		_addDefaultCertificates()
+		ZagBackgroundUpdateRefresh.shared.register()
+		ZagBackgroundUpdateRefresh.shared.schedule()
 		return true
 	}
 	
@@ -248,4 +254,126 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		}
 	}
 
+	
+	func applicationDidEnterBackground(_ application: UIApplication) {
+		ZagBackgroundUpdateRefresh.shared.schedule()
+	}
+
+}
+
+
+// MARK: - Zag Store Background Update Refresh
+
+final class ZagBackgroundUpdateRefresh {
+	static let shared = ZagBackgroundUpdateRefresh()
+
+	private let taskIdentifier = "com.cwd43.gu29.background-update-check"
+	private let refreshInterval: TimeInterval = 60 * 60 * 4
+	private let dataService = NBFetchService()
+
+	private init() {}
+
+	func register() {
+		BGTaskScheduler.shared.register(
+			forTaskWithIdentifier: taskIdentifier,
+			using: nil
+		) { task in
+			guard let refreshTask = task as? BGAppRefreshTask else {
+				task.setTaskCompleted(success: false)
+				return
+			}
+			self.handle(refreshTask)
+		}
+	}
+
+	func schedule() {
+		BGTaskScheduler.shared.cancel(
+			taskRequestWithIdentifier: taskIdentifier
+		)
+
+		let request = BGAppRefreshTaskRequest(
+			identifier: taskIdentifier
+		)
+		request.earliestBeginDate = Date(
+			timeIntervalSinceNow: refreshInterval
+		)
+
+		do {
+			try BGTaskScheduler.shared.submit(request)
+			Logger.misc.info(
+				"[Zag Store Background] Update refresh scheduled"
+			)
+		} catch {
+			Logger.misc.error(
+				"[Zag Store Background] Schedule failed: \(error.localizedDescription)"
+			)
+		}
+	}
+
+	private func handle(_ task: BGAppRefreshTask) {
+		// Every execution schedules the next opportunity before doing network
+		// work, so an expiration or termination does not break the chain.
+		schedule()
+
+		let work = Task {
+			let success = await refreshRepositoriesAndUpdates()
+			guard !Task.isCancelled else { return }
+			task.setTaskCompleted(success: success)
+		}
+
+		task.expirationHandler = {
+			work.cancel()
+		}
+	}
+
+	private func refreshRepositoriesAndUpdates() async -> Bool {
+		let sources = Storage.shared.getSources()
+		guard !sources.isEmpty else {
+			await MainActor.run {
+				UpdateManager.shared.refresh(repositories: [])
+			}
+			return true
+		}
+
+		var repositories: [ASRepository] = []
+
+		await withTaskGroup(of: ASRepository?.self) { group in
+			for source in sources {
+				guard let url = source.sourceURL else { continue }
+
+				group.addTask {
+					await withCheckedContinuation { continuation in
+						self.dataService.fetch(from: url) {
+							(result: Result<ASRepository, Error>) in
+							switch result {
+							case .success(let repository):
+								continuation.resume(returning: repository)
+							case .failure:
+								continuation.resume(returning: nil)
+							}
+						}
+					}
+				}
+			}
+
+			for await repository in group {
+				if let repository {
+					repositories.append(repository)
+				}
+			}
+		}
+
+		guard !Task.isCancelled else { return false }
+
+		await MainActor.run {
+			UpdateManager.shared.refresh(
+				repositories: repositories
+			)
+		}
+
+		Logger.misc.info(
+			"[Zag Store Background] Refreshed \(repositories.count) repositories"
+		)
+		return !repositories.isEmpty
+	}
 }
