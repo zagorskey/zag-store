@@ -96,6 +96,16 @@ struct SettingsView: View {
 				}
 			}
 			.zagWallpaperSurface()
+			.toolbar {
+				ToolbarItem(placement: .topBarTrailing) {
+					Button {
+						UIApplication.open("https://github.com/zagorskey/zag-store")
+					} label: {
+						Image(systemName: "chevron.left.forwardslash.chevron.right")
+					}
+					.accessibilityLabel("GitHub Repository")
+				}
+			}
 		}
 	}
 }
