@@ -21,7 +21,7 @@ fn emit(callback: ZagRPPairingCallback, code: i32, message: impl AsRef<str>) {
 
 #[no_mangle]
 pub extern "C" fn zag_rppairing_core_version() -> *mut c_char {
-    CString::new("Zag RPPairing Core 0.2")
+    CString::new("Zag RPPairing Core 0.3")
         .expect("static string")
         .into_raw()
 }
@@ -94,7 +94,7 @@ async fn run_pairing(
     output_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
-    let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0))
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
         .map_err(|error| format!("Unable to open pairing listener: {error}"))?;
     let port = listener
