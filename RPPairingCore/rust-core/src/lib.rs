@@ -7,9 +7,7 @@ use std::{
 
 use idevice::remote_pairing::{
     PairableHost, PairableHostInfo, RpPairingFile, RpPairingSocket,
-    PAIRABLE_HOST_SERVICE_TYPE,
 };
-use mdns_sd::{ServiceDaemon, ServiceInfo};
 use tokio::net::TcpListener;
 
 pub type ZagRPPairingCallback = extern "C" fn(i32, *const c_char);
@@ -108,34 +106,7 @@ async fn run_pairing(
     let host_info = PairableHostInfo::generate(&host_name, "Mac17,7");
     let service_identifier = pairing_file.identifier.clone();
 
-    let mdns = ServiceDaemon::new()
-        .map_err(|error| format!("Unable to start Bonjour: {error}"))?;
-    mdns.set_service_name_len_max(30)
-        .map_err(|error| format!("Unable to configure Bonjour: {error}"))?;
-
-    let hostname = format!(
-        "zagstore-{}.local.",
-        &service_identifier[..service_identifier.len().min(8)]
-    );
     let txt = host_info.mdns_txt_records(&service_identifier);
-    let properties: Vec<(&str, &str)> = txt
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect();
-
-    let service_info = ServiceInfo::new(
-        PAIRABLE_HOST_SERVICE_TYPE,
-        &service_identifier,
-        &hostname,
-        "",
-        port,
-        &properties[..],
-    )
-    .map_err(|error| format!("Unable to create Bonjour service: {error}"))?
-    .enable_addr_auto();
-
-    mdns.register(service_info)
-        .map_err(|error| format!("Unable to advertise RPPairing: {error}"))?;
 
     // Hand the already-bound listener's Bonjour metadata to Swift. On iOS we
     // publish with Foundation's NetService so the advertisement participates in
@@ -184,7 +155,5 @@ async fn run_pairing(
         ),
     );
 
-    // Keep the daemon alive until pairing and persistence have completed.
-    drop(mdns);
     Ok(())
 }
