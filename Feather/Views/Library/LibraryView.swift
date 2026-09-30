@@ -325,6 +325,7 @@ struct LibraryView: View {
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
+			.listRowBackground(Color.clear)
 			.padding(.vertical, 2)
 		}
 	}
@@ -406,6 +407,7 @@ struct LibraryView: View {
 							count: _filteredSignedApps.count
 						)
 						.listRowSeparator(.hidden)
+			.listRowBackground(Color.clear)
 
 
 
@@ -484,6 +486,7 @@ struct LibraryView: View {
 							count: _filteredImportedApps.count
 						)
 						.listRowSeparator(.hidden)
+			.listRowBackground(Color.clear)
 
 
 
@@ -1742,6 +1745,7 @@ private struct ZagUpdatesPopup: View {
 			}
 			.listStyle(.plain)
 			.listRowSeparator(.hidden)
+			.listRowBackground(Color.clear)
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
 			.toolbar {
