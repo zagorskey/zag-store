@@ -21,13 +21,17 @@ struct FeatherApp: App {
 	
 	var body: some Scene {
 		WindowGroup {
-			VStack {
-				DownloadHeaderView(downloadManager: downloadManager)
-					.transition(.move(edge: .top).combined(with: .opacity))
-				VariedTabbarView()
-					.environment(\.managedObjectContext, storage.context)
-					.onOpenURL(perform: _handleURL)
-					.transition(.move(edge: .top).combined(with: .opacity))
+			ZStack {
+				ZagWallpaperBackground()
+
+				VStack {
+					DownloadHeaderView(downloadManager: downloadManager)
+						.transition(.move(edge: .top).combined(with: .opacity))
+					VariedTabbarView()
+						.environment(\.managedObjectContext, storage.context)
+						.onOpenURL(perform: _handleURL)
+						.transition(.move(edge: .top).combined(with: .opacity))
+				}
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
