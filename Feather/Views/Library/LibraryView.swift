@@ -1330,43 +1330,98 @@ private struct ZagUpdatesPillSurface: View {
 
 	var body: some View {
 		TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-			let progress = context.date.timeIntervalSinceReferenceDate
-				.truncatingRemainder(dividingBy: 4.8) / 4.8
-			let segment: Double = 0.14
-			let start = progress
-			let end = min(1, progress + segment)
+			let raw = context.date.timeIntervalSinceReferenceDate
+				.truncatingRemainder(dividingBy: 6.6) / 6.6
+			// Smoothstep keeps the reflection from feeling like a progress spinner.
+			let progress = raw * raw * (3.0 - (2.0 * raw))
 
 			Capsule()
 				.fill(Color(hex: "#2C2C2E"))
 				.overlay {
 					ZStack {
-						Capsule()
-							.trim(from: start, to: end)
-							.stroke(
-								Color(hex: themeColorHex).opacity(0.58),
-								style: StrokeStyle(
-									lineWidth: 1.0,
-									lineCap: .round
-								)
-							)
+						// A soft halo gives the edge reflection depth.
+						ZagUpdatesEdgeGlint(
+							progress: progress,
+							length: 0.22,
+							color: Color(hex: themeColorHex),
+							opacity: 0.18,
+							lineWidth: 3.0
+						)
+						.blur(radius: 2.2)
 
-						if progress > 1 - segment {
-							Capsule()
-								.trim(from: 0, to: progress + segment - 1)
-								.stroke(
-									Color(hex: themeColorHex).opacity(0.58),
-									style: StrokeStyle(
-										lineWidth: 1.0,
-										lineCap: .round
-									)
-								)
-						}
+						// Feathered shoulders around a narrow specular core.
+						ZagUpdatesEdgeGlint(
+							progress: progress,
+							length: 0.18,
+							color: Color(hex: themeColorHex),
+							opacity: 0.18,
+							lineWidth: 1.0
+						)
+
+						ZagUpdatesEdgeGlint(
+							progress: progress,
+							length: 0.10,
+							color: Color(hex: themeColorHex),
+							opacity: 0.34,
+							lineWidth: 0.85
+						)
+
+						ZagUpdatesEdgeGlint(
+							progress: progress,
+							length: 0.035,
+							color: .white,
+							opacity: 0.72,
+							lineWidth: 0.65
+						)
 					}
+					.clipShape(Capsule())
 				}
 		}
 	}
 }
 
+
+private struct ZagUpdatesEdgeGlint: View {
+	let progress: Double
+	let length: Double
+	let color: Color
+	let opacity: Double
+	let lineWidth: CGFloat
+
+	var body: some View {
+		let half = length / 2.0
+		let start = progress - half
+		let end = progress + half
+
+		ZStack {
+			if start >= 0 && end <= 1 {
+				segment(from: start, to: end)
+			} else if start < 0 {
+				segment(from: 0, to: end)
+				.overlay {
+					segment(from: 1 + start, to: 1)
+				}
+			} else {
+				segment(from: start, to: 1)
+					.overlay {
+						segment(from: 0, to: end - 1)
+					}
+			}
+		}
+	}
+
+	private func segment(from: Double, to: Double) -> some View {
+		Capsule()
+			.trim(from: max(0, from), to: min(1, to))
+			.stroke(
+				color.opacity(opacity),
+				style: StrokeStyle(
+					lineWidth: lineWidth,
+					lineCap: .round
+				)
+			)
+	}
+}
 
 private struct ZagFlashingUpdateDot: View {
 	var body: some View {
