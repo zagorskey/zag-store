@@ -151,6 +151,10 @@ private struct RPPairingView: View {
 			gate2Row("RSD", stage: .rsd)
 			gate2Row("Installation Proxy", stage: .installationProxy)
 			gate2Row("Installed Apps Lookup", stage: .installedApps)
+			gate2Row("AFC", stage: .afc)
+			gate2Row("PublicStaging Write", stage: .stagingWrite)
+			gate2Row("PublicStaging Verify", stage: .stagingVerify)
+			gate2Row("Cleanup", stage: .cleanup)
 
 			if case .complete(let name, let model, let version, let build, let userAppCount, let zagStoreFound) = pairingCore.gate2State {
 				LabeledContent("Device") {
@@ -197,9 +201,9 @@ private struct RPPairingView: View {
 			}
 			.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
 		} header: {
-			Text("Gate 2 / 3A — Device Services")
+			Text("Gate 2 / 3 — Device Services")
 		} footer: {
-			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel, RSD, and a read-only installation_proxy lookup. It does not create a classic pair record and does not install, remove, upgrade, stage, or modify apps.")
+			Text("Connect LocalDevVPN first. This diagnostic reuses the RPPairing credentials already created on this iPhone, verifies them through LocalDevVPN, then tests the TLS-PSK device tunnel, RSD, a read-only installation_proxy lookup, and an AFC PublicStaging diagnostic. Gate 3B writes one tiny marker file, reads it back byte-for-byte, then deletes it. It does not install, remove, upgrade, or modify apps.")
 		}
 		.onAppear {
 			if let url = URL(string: "localdevvpn://") {
@@ -215,6 +219,10 @@ private struct RPPairingView: View {
 		case rsd
 		case installationProxy
 		case installedApps
+		case afc
+		case stagingWrite
+		case stagingVerify
+		case cleanup
 	}
 
 	@ViewBuilder
@@ -254,7 +262,11 @@ private struct RPPairingView: View {
 		case .rsd: rank = 4; failed = false
 		case .deviceInfo: rank = 5; failed = false
 		case .installationProxy: rank = 5; failed = false
-		case .complete: rank = 7; failed = false
+		case .installedApps: rank = 6; failed = false
+		case .afc: rank = 7; failed = false
+		case .stagingWrite: rank = 8; failed = false
+		case .stagingVerify: rank = 9; failed = false
+		case .complete: rank = 11; failed = false
 		case .failed: rank = -1; failed = true
 		}
 
@@ -266,9 +278,13 @@ private struct RPPairingView: View {
 		case .rsd: target = 4
 		case .installationProxy: target = 5
 		case .installedApps: target = 6
+		case .afc: target = 7
+		case .stagingWrite: target = 8
+		case .stagingVerify: target = 9
+		case .cleanup: target = 10
 		}
 
-		if rank > target || rank == 7 {
+		if rank > target || rank == 11 {
 			return ("checkmark.circle.fill", .green, false)
 		}
 		if rank == target {
