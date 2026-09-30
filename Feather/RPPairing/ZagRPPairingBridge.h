@@ -14,4 +14,10 @@ bool zag_rppairing_start(
     ZagRPPairingCallback callback
 );
 
+bool zag_gate2_probe(
+    const char *device_ip,
+    const char *lockdown_output_path,
+    ZagRPPairingCallback callback
+);
+
 #endif
