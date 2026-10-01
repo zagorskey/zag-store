@@ -405,7 +405,9 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		let declared = (app.versions ?? []).filter { $0.version != app.currentVersion }.map { version in
 			let title = version.build.map { $0.isEmpty ? version.version : "\(version.version) (\($0))" } ?? version.version
 			return UIAction(title: title, image: UIImage(systemName: "arrow.down")) { _ in
-				_ = DownloadManager.shared.startDownload(from: version.downloadURL, id: app.currentUniqueId)
+				if let url = version.downloadURL {
+					_ = DownloadManager.shared.startDownload(from: url, id: app.currentUniqueId)
+				}
 			}
 		}
 		if !declared.isEmpty { return declared }
