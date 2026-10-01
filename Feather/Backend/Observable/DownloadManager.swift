@@ -29,6 +29,7 @@ class Download: Identifiable, @unchecked Sendable {
 	let url: URL
 	let fileName: String
 	let onlyArchiving: Bool
+	var zagImported: ((String?, Error?) -> Void)?
 	
 	init(
 		id: String,
@@ -73,7 +74,8 @@ class DownloadManager: NSObject, ObservableObject {
 	
 	func startDownload(
 		from url: URL,
-		id: String = UUID().uuidString
+		id: String = UUID().uuidString,
+		zagImported: ((String?, Error?) -> Void)? = nil
 	) -> Download {
 		if let existingDownload = downloads.first(where: { $0.url == url }) {
 			resumeDownload(existingDownload)
@@ -81,6 +83,7 @@ class DownloadManager: NSObject, ObservableObject {
 		}
 		
 		let download = Download(id: id, url: url)
+		download.zagImported = zagImported
 		
 		let task = _session.downloadTask(with: url)
 		download.task = task
@@ -169,7 +172,10 @@ class DownloadManager: NSObject, ObservableObject {
 extension DownloadManager: URLSessionDownloadDelegate {
 	
 	func handlePachageFile(url: URL, dl: Download) throws {
-		FR.handlePackageFile(url, download: dl) { err in
+		var importedUUID: String?
+		FR.handlePackageFile(url, download: dl, importedUUID: { importedUUID = $0 }) { err in
+			dl.zagImported?(importedUUID, err)
+			dl.zagImported = nil
 			if err != nil {
 				let generator = UINotificationFeedbackGenerator()
 				generator.notificationOccurred(.error)
