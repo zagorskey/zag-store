@@ -159,14 +159,17 @@ private struct RPPairingView: View {
 					pairingCore.start()
 				}
 			} label: {
-				Label(
-					pairingCore.pairingFileExists
-						? "Unpair This iPhone"
-						: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone"),
-					systemImage: pairingCore.pairingFileExists
+				HStack(spacing: 10) {
+					Image(systemName: pairingCore.pairingFileExists
 						? "link.badge.minus"
-						: (pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus")
-				)
+						: (pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus"))
+						.frame(width: 22)
+					Text(
+						pairingCore.pairingFileExists
+							? "Unpair This iPhone"
+							: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone")
+					)
+				}
 			}
 			.disabled(pairingCore.isRunning)
 		} footer: {
