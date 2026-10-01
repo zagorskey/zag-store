@@ -15,6 +15,7 @@ import IDeviceSwift
 struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
+	@AppStorage(UpdateManager.updateNotificationsEnabledKey) private var _updateNotificationsEnabled = false
 	@AppStorage("ZagStore.disableIdleTimeout") private var _disableIdleTimeout = false
 	@State private var _currentIcon: String? = UIApplication.shared.alternateIconName
 	
@@ -94,6 +95,21 @@ struct SettingsView: View {
 						ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
 					}
 
+					Toggle(isOn: $_updateNotificationsEnabled) {
+						Label("Update Notifications", systemImage: "bell.badge")
+					}
+					.onChange(of: _updateNotificationsEnabled) { enabled in
+						guard enabled else { return }
+						Task {
+							let granted = await UpdateManager.shared.requestUpdateNotificationPermission()
+							if !granted {
+								await MainActor.run {
+									_updateNotificationsEnabled = false
+								}
+							}
+						}
+					}
+
 					Toggle(isOn: $_disableIdleTimeout) {
 						Label("Disable Idle Timeout", systemImage: "sun.max")
 					}
@@ -102,7 +118,7 @@ struct SettingsView: View {
 					}
 
 				} footer: {
-					Text("Background Updates controls Zag Store’s own scheduled background update checks. Disable Idle Timeout prevents the device from automatically locking while Zag Store is active.")
+					Text("Background Updates controls Zag Store’s scheduled update checks. Update Notifications alerts you when a newly available app version is discovered. Disable Idle Timeout prevents the device from automatically locking while Zag Store is active.")
 				}
                 
 
