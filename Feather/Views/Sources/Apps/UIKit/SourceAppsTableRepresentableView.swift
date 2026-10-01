@@ -8,6 +8,81 @@
 import SwiftUI
 import AltSourceKit
 
+private struct ZagGitHubHistoricalIPA: Hashable {
+	let version: String
+	let release: String
+	let downloadURL: URL
+}
+
+private final class ZagGitHubHistoryResolver {
+	static let shared = ZagGitHubHistoryResolver()
+	private var cache: [String: [ZagGitHubHistoricalIPA]] = [:]
+	private var loading = Set<String>()
+	private let lock = NSLock()
+
+	func cached(for app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
+		let key = app.id ?? app.name ?? ""
+		lock.lock(); defer { lock.unlock() }
+		return cache[key] ?? []
+	}
+
+	func prefetch(_ app: ASRepository.App, completion: @escaping () -> Void) {
+		guard let repository = upstreamRepository(for: app) else { return }
+		let key = app.id ?? app.name ?? repository
+		lock.lock()
+		if cache[key] != nil || loading.contains(key) { lock.unlock(); return }
+		loading.insert(key)
+		lock.unlock()
+
+		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else { return }
+		var request = URLRequest(url: url)
+		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+		request.setValue("ZagStore", forHTTPHeaderField: "User-Agent")
+		URLSession.shared.dataTask(with: request) { data, _, _ in
+			let items = data.flatMap { self.parse($0, currentVersion: app.currentVersion) } ?? []
+			self.lock.lock()
+			self.cache[key] = items
+			self.loading.remove(key)
+			self.lock.unlock()
+			DispatchQueue.main.async { completion() }
+		}.resume()
+	}
+
+	private func upstreamRepository(for app: ASRepository.App) -> String? {
+		let text = [app.currentDescription, app.localizedDescription, app.description]
+			.compactMap { $0 }.joined(separator: "\n")
+		let pattern = #"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/|\)|\]|\s|$)"#
+		guard let regex = try? NSRegularExpression(pattern: pattern),
+			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+			let range = Range(match.range(at: 1), in: text) else { return nil }
+		return String(text[range]).replacingOccurrences(of: ".git", with: "")
+	}
+
+	private func parse(_ data: Data, currentVersion: String?) -> [ZagGitHubHistoricalIPA] {
+		guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+		var result: [ZagGitHubHistoricalIPA] = []
+		for release in releases where (release["draft"] as? Bool) != true {
+			let tag = release["tag_name"] as? String ?? ""
+			guard let assets = release["assets"] as? [[String: Any]] else { continue }
+			for asset in assets {
+				guard let name = asset["name"] as? String, name.lowercased().hasSuffix(".ipa"),
+					let rawURL = asset["browser_download_url"] as? String, let url = URL(string: rawURL),
+					let version = versions(in: name).last, version != currentVersion else { continue }
+				result.append(.init(version: version, release: tag, downloadURL: url))
+			}
+		}
+		var seen = Set<String>()
+		return result.filter { seen.insert($0.version + "|" + $0.downloadURL.absoluteString).inserted }
+	}
+
+	private func versions(in value: String) -> [String] {
+		let regex = try? NSRegularExpression(pattern: #"\d+(?:\.\d+){1,3}"#)
+		return regex?.matches(in: value, range: NSRange(value.startIndex..., in: value)).compactMap {
+			Range($0.range, in: value).map { String(value[$0]) }
+		} ?? []
+	}
+}
+
 // MARK: - Representable
 struct SourceAppsTableRepresentableView: UIViewRepresentable {
 	var sources: [ASRepository]
@@ -72,6 +147,13 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		let sortDirectionChanged = context.coordinator.sortAscending != sortAscending
 		
 		context.coordinator.sources = sources
+		for source in sources {
+			for app in source.apps where (app.versions?.count ?? 0) <= 1 {
+				ZagGitHubHistoryResolver.shared.prefetch(app) { [weak tableView] in
+					tableView?.reloadData()
+				}
+			}
+		}
 		context.coordinator.searchText = searchText
 		context.coordinator.sortOption = sortOption
 		context.coordinator.sortAscending = sortAscending
@@ -307,17 +389,10 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 				}, image: UIImage(systemName: "doc.on.clipboard"))
 			)
 			
-			let downloadsMenu = UIMenu(
+				let downloadsMenu = UIMenu(
 				title: .localized("Previous Versions"),
 				image: UIImage(systemName: "square.and.arrow.down.on.square"),
-				children: self._contextActions(for: entry.app, with: { version in
-					if let url = version {
-						_ = DownloadManager.shared.startDownload(
-							from: url,
-							id: entry.app.currentUniqueId
-						)
-					}
-				}, image: UIImage(systemName: "arrow.down"))
+				children: self._previousVersionActions(for: entry.app)
 			)
 			
 			return UIMenu(children: [downloadsMenu, versionsMenu])
@@ -326,6 +401,28 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 	
 	// MARK: Actions
 	
+	private func _previousVersionActions(for app: ASRepository.App) -> [UIAction] {
+		let declared = (app.versions ?? []).filter { $0.version != app.currentVersion }.map { version in
+			let title = version.build.map { $0.isEmpty ? version.version : "\(version.version) (\($0))" } ?? version.version
+			return UIAction(title: title, image: UIImage(systemName: "arrow.down")) { _ in
+				_ = DownloadManager.shared.startDownload(from: version.downloadURL, id: app.currentUniqueId)
+			}
+		}
+		if !declared.isEmpty { return declared }
+
+		let discovered = ZagGitHubHistoryResolver.shared.cached(for: app)
+		if !discovered.isEmpty {
+			return discovered.map { item in
+				let suffix = item.release.isEmpty ? "" : " — \(item.release)"
+				return UIAction(title: "\(item.version)\(suffix)", image: UIImage(systemName: "arrow.down")) { _ in
+					_ = DownloadManager.shared.startDownload(from: item.downloadURL, id: app.currentUniqueId)
+				}
+			}
+		}
+
+		return [UIAction(title: .localized("No previous versions found"), attributes: [.disabled]) { _ in }]
+	}
+
 	private func _contextActions(
 		for app: ASRepository.App,
 		with action: @escaping (URL?) -> Void,
