@@ -17,15 +17,34 @@ struct ZagCountBadge: View {
 
 	let count: Int
 
+	@Environment(\.colorScheme)
+	private var colorScheme
+
+	private var tint: Color {
+		Color(hex: themeColorHex)
+	}
+
 	var body: some View {
 		Text(count.description)
-			.font(.system(size: badgeFontSize, weight: .regular))
-			.foregroundStyle(Color(hex: badgeTextColorHex))
-			.frame(width: badgeSize, height: badgeSize, alignment: .center)
-			.background(
-				Circle()
-					.fill(Color(hex: themeColorHex))
-			)
+			.font(.system(size: badgeFontSize, weight: .medium, design: .rounded))
+			.monospacedDigit()
+			.foregroundStyle(tint)
+			.lineLimit(1)
+			.fixedSize(horizontal: true, vertical: false)
+			.padding(.horizontal, max(6, badgeSize * 0.27))
+			.frame(minWidth: badgeSize, height: badgeSize, alignment: .center)
+			.background {
+				Capsule(style: .continuous)
+					.fill(
+						tint.opacity(colorScheme == .dark ? 0.16 : 0.12)
+					)
+			}
+			.overlay {
+				Capsule(style: .continuous)
+					.strokeBorder(tint.opacity(0.32), lineWidth: 0.75)
+			}
+			.shadow(color: tint.opacity(0.10), radius: 3, y: 1)
+			.accessibilityLabel("\(count)")
 	}
 }
 
