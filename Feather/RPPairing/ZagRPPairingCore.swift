@@ -19,6 +19,13 @@ private func zagGate4Callback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	}
 }
 
+private func zagGate4UninstallCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveGate4Uninstall(code: code, message: text)
+	}
+}
+
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -77,6 +84,8 @@ final class ZagRPPairingCore: ObservableObject {
 	@Published private(set) var gate4State: Gate4State = .idle
 	private var gate4Completion: ((Result<Void, Error>) -> Void)?
 	private var gate4Progress: ((Int) -> Void)?
+	private var gate4UninstallCompletion: ((Result<Void, Error>) -> Void)?
+	private var gate4UninstallRunning = false
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
 	private var gate2LastAppResult: (Int, Bool)?
 	private let advertiser = ZagPairableHostAdvertiser()
@@ -172,6 +181,52 @@ final class ZagRPPairingCore: ObservableObject {
 			gate4Completion = nil
 			gate4Progress = nil
 		default: break
+		}
+	}
+
+
+	func uninstallGate4App(
+		bundleID: String,
+		deviceIP: String = "10.7.0.1",
+		completion: @escaping (Result<Void, Error>) -> Void
+	) throws {
+		guard !gate4UninstallRunning else {
+			throw Gate4UninstallError.alreadyRunning
+		}
+		guard !bundleID.isEmpty else {
+			throw Gate4UninstallError.invalidBundleID
+		}
+
+		gate4UninstallRunning = true
+		gate4UninstallCompletion = completion
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				bundleID.withCString { bundleID in
+					zag_gate4_uninstall(ip, pairingPath, bundleID, zagGate4UninstallCallback)
+				}
+			}
+		}
+		if !started {
+			gate4UninstallRunning = false
+			gate4UninstallCompletion = nil
+			throw Gate4UninstallError.couldNotStart
+		}
+	}
+
+	fileprivate func receiveGate4Uninstall(code: Int32, message: String) {
+		switch code {
+		case 307:
+			gate4UninstallRunning = false
+			let completion = gate4UninstallCompletion
+			gate4UninstallCompletion = nil
+			completion?(.success(()))
+		case -5:
+			gate4UninstallRunning = false
+			let completion = gate4UninstallCompletion
+			gate4UninstallCompletion = nil
+			completion?(.failure(Gate4UninstallError.uninstallFailed(message)))
+		default:
+			break
 		}
 	}
 
@@ -438,6 +493,27 @@ private enum Gate4InstallError: LocalizedError {
 		case .couldNotStart:
 			return "The RPPairing installer could not be started."
 		case .installFailed(let message):
+			return message
+		}
+	}
+}
+
+
+private enum Gate4UninstallError: LocalizedError {
+	case alreadyRunning
+	case invalidBundleID
+	case couldNotStart
+	case uninstallFailed(String)
+
+	var errorDescription: String? {
+		switch self {
+		case .alreadyRunning:
+			return "Another RPPairing uninstall is already running."
+		case .invalidBundleID:
+			return "The app does not have a valid bundle identifier."
+		case .couldNotStart:
+			return "The RPPairing uninstaller could not be started."
+		case .uninstallFailed(let message):
 			return message
 		}
 	}
