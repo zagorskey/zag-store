@@ -18,6 +18,7 @@ private final class ZagGitHubHistoryResolver {
 	static let shared = ZagGitHubHistoryResolver()
 	private var cache: [String: [ZagGitHubHistoricalIPA]] = [:]
 	private var loading = Set<String>()
+	private var waiters: [String: [([ZagGitHubHistoricalIPA]) -> Void]] = [:]
 	private let lock = NSLock()
 
 	func cached(for app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
@@ -26,33 +27,55 @@ private final class ZagGitHubHistoryResolver {
 		return cache[key] ?? []
 	}
 
-	func prefetch(_ app: ASRepository.App, completion: @escaping () -> Void) {
-		guard (app.versions?.count ?? 0) <= 1, let repository = repositoryForHistory(of: app) else { return }
+	func resolve(_ app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA]) -> Void) {
+		guard let repository = repositoryForHistory(of: app) else {
+			DispatchQueue.main.async { completion([]) }
+			return
+		}
+
 		let key = cacheKey(for: app)
 		lock.lock()
-		if cache[key] != nil || loading.contains(key) { lock.unlock(); return }
+		if let cached = cache[key] {
+			lock.unlock()
+			DispatchQueue.main.async { completion(cached) }
+			return
+		}
+		waiters[key, default: []].append(completion)
+		if loading.contains(key) {
+			lock.unlock()
+			return
+		}
 		loading.insert(key)
 		lock.unlock()
 
 		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else {
-			finish(key: key, items: [], completion: completion)
+			finish(key: key, items: [])
 			return
 		}
 		var request = URLRequest(url: url)
 		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 		request.setValue("ZagStore", forHTTPHeaderField: "User-Agent")
-		URLSession.shared.dataTask(with: request) { data, _, _ in
-			let items = data.flatMap { self.parse($0, app: app) } ?? []
-			self.finish(key: key, items: items, completion: completion)
+		request.cachePolicy = .reloadIgnoringLocalCacheData
+		request.timeoutInterval = 15
+		URLSession.shared.dataTask(with: request) { data, response, error in
+			let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+			let items = (status == 200 && error == nil)
+				? (data.flatMap { self.parse($0, app: app) } ?? [])
+				: []
+			print("[Zag Store History] \(app.currentName) repo=\(repository) status=\(status) items=\(items.count) error=\(error?.localizedDescription ?? "none")")
+			self.finish(key: key, items: items)
 		}.resume()
 	}
 
-	private func finish(key: String, items: [ZagGitHubHistoricalIPA], completion: @escaping () -> Void) {
+	private func finish(key: String, items: [ZagGitHubHistoricalIPA]) {
 		lock.lock()
 		cache[key] = items
 		loading.remove(key)
+		let callbacks = waiters.removeValue(forKey: key) ?? []
 		lock.unlock()
-		DispatchQueue.main.async { completion() }
+		DispatchQueue.main.async {
+			callbacks.forEach { $0(items) }
+		}
 	}
 
 	private func cacheKey(for app: ASRepository.App) -> String {
@@ -494,8 +517,7 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		// UIDeferredMenuElement is UIKit's async menu API: it keeps Previous
 		// Versions open while GitHub history resolves, then inserts the actions.
 		let deferred = UIDeferredMenuElement.uncached { completion in
-			ZagGitHubHistoryResolver.shared.prefetch(app) {
-				let discovered = ZagGitHubHistoryResolver.shared.cached(for: app)
+			ZagGitHubHistoryResolver.shared.resolve(app) { discovered in
 				if discovered.isEmpty {
 					completion([
 						UIAction(
