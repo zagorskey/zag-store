@@ -160,7 +160,11 @@ struct DownloadButtonView: View {
 			zagImported: { uuid, error in
 				DispatchQueue.main.async {
 					if let error {
-						_failTransaction(error.localizedDescription)
+						if (error as? URLError)?.code == .cancelled {
+							zagPhase = .idle
+						} else {
+							_failTransaction(error.localizedDescription)
+						}
 						return
 					}
 					guard let uuid, let imported = _importedApp(uuid: uuid) else {
