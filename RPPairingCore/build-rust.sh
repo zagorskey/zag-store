@@ -17,7 +17,9 @@ mkdir -p "$OUT/device" "$OUT/simulator"
 cp "$CRATE/target/aarch64-apple-ios/release/libzag_rppairing_core.a" "$OUT/device/"
 cp "$CRATE/target/aarch64-apple-ios-sim/release/libzag_rppairing_core.a" "$OUT/simulator/"
 
-cat > "$OUT/zag_rppairing.h" <<'EOF'
+mkdir -p "$OUT/headers"
+
+cat > "$OUT/headers/zag_rppairing.h" <<'EOF'
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
@@ -32,9 +34,16 @@ bool zag_gate4_install(const char *device_ip, const char *pairing_path, const ch
 bool zag_gate4_uninstall(const char *device_ip, const char *pairing_path, const char *bundle_id, ZagRPPairingCallback callback);
 EOF
 
+cat > "$OUT/headers/module.modulemap" <<'EOF'
+module ZagRPPairingCore {
+  header "zag_rppairing.h"
+  export *
+}
+EOF
+
 xcodebuild -create-xcframework \
-  -library "$OUT/device/libzag_rppairing_core.a" -headers "$OUT" \
-  -library "$OUT/simulator/libzag_rppairing_core.a" -headers "$OUT" \
+  -library "$OUT/device/libzag_rppairing_core.a" -headers "$OUT/headers" \
+  -library "$OUT/simulator/libzag_rppairing_core.a" -headers "$OUT/headers" \
   -output "$XCFRAMEWORK"
 
 echo
