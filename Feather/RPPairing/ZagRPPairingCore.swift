@@ -338,6 +338,22 @@ final class ZagRPPairingCore: ObservableObject {
 		state = .idle
 	}
 
+	func forgetPairing() throws {
+		guard !isRunning && !isGate2Running && !isGate4Running else {
+			throw PairingResetError.busy
+		}
+		advertiser.stop()
+		endPairingBackgroundTime()
+		if FileManager.default.fileExists(atPath: Self.pairingFileURL.path) {
+			try FileManager.default.removeItem(at: Self.pairingFileURL)
+		}
+		gate2DeviceInfo = nil
+		gate2LastAppResult = nil
+		gate2State = .idle
+		gate4State = .idle
+		state = .idle
+	}
+
 	fileprivate func receive(code: Int32, message: String) {
 		switch code {
 		case 1:
@@ -494,6 +510,15 @@ private final class ZagPairableHostAdvertiser: NSObject, NetServiceDelegate {
 		let callback = failure
 		stop()
 		callback?("RPPairing Bonjour advertisement failed (\(code)).")
+	}
+}
+
+
+private enum PairingResetError: LocalizedError {
+	case busy
+
+	var errorDescription: String? {
+		"Stop the current RPPairing operation before forgetting this iPhone."
 	}
 }
 
