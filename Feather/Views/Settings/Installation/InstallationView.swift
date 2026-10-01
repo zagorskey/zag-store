@@ -160,10 +160,23 @@ private struct RPPairingView: View {
 				}
 			} label: {
 				HStack(spacing: 10) {
-					Image(systemName: pairingCore.pairingFileExists
-						? "link.badge.minus"
-						: (pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus"))
-						.frame(width: 22)
+					ZStack {
+					Image(systemName: "link")
+					if pairingCore.pairingFileExists {
+						Image(systemName: "minus.circle.fill")
+							.font(.system(size: 9, weight: .bold))
+							.background(Circle().fill(Color(.systemBackground)).padding(-1))
+							.offset(x: 8, y: 7)
+					} else if pairingCore.isRunning {
+						Image(systemName: "antenna.radiowaves.left.and.right")
+					} else {
+						Image(systemName: "plus.circle.fill")
+							.font(.system(size: 9, weight: .bold))
+							.background(Circle().fill(Color(.systemBackground)).padding(-1))
+							.offset(x: 8, y: 7)
+					}
+				}
+				.frame(width: 22)
 					Text(
 						pairingCore.pairingFileExists
 							? "Unpair This iPhone"
