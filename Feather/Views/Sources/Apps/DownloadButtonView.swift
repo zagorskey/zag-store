@@ -253,19 +253,23 @@ struct DownloadButtonView: View {
 					installationProgress = 1
 				} else {
 					try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-						try ZagRPPairingCore.shared.installGate4IPA(
-							at: packageURL,
-							deviceIP: "10.7.0.1",
-							progress: { percent in
-								installationProgress = Double(percent) / 100.0
+						do {
+							try ZagRPPairingCore.shared.installGate4IPA(
+								at: packageURL,
+								deviceIP: "10.7.0.1",
+								progress: { percent in
+									installationProgress = Double(percent) / 100.0
+								}
+							) { result in
+								switch result {
+								case .success: continuation.resume()
+								case .failure(let error): continuation.resume(throwing: error)
+								}
 							}
-						) { result in
-							switch result {
-							case .success: continuation.resume()
-							case .failure(let error): continuation.resume(throwing: error)
+							} catch {
+								continuation.resume(throwing: error)
 							}
 						}
-					}
 					installationProgress = 1
 				}
 
