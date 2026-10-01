@@ -925,7 +925,7 @@ struct SourcesView: View {
 						_isAddingPresenting =
 							true
 					} label: {
-						ZagActionPill(title: .localized("Add Source")) {
+						ZagActionPill(title: .localized("Add Source"), width: 112) {
 							_isAddingPresenting = true
 						}
 					}
