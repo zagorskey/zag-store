@@ -88,9 +88,9 @@ extension CertificatesCellView {
 					icon: pill.icon,
 					color: pill.color,
 					index: index,
-					count: pillItems.count
+					count: pillItems.count,
+					compact: true
 				)
-				.scaleEffect(x: 1, y: 0.82)
 			}
 		}
 		.frame(maxWidth: .infinity)
