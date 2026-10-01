@@ -1110,18 +1110,54 @@ extension LibraryView {
 			return
 		}
 
-		guard UIApplication.removeApp(with: identifier) else {
-			UIAlertController.showAlertWithOk(
-				title: .localized("Remove App"),
-				message: .localized("Zag Store could not remove this application.")
-			)
-			return
+		func clearInstalledMarker() {
+			var identifiers = _managedInstalledBundleIDs
+			identifiers.remove(identifier)
+			if let encoded = try? JSONEncoder().encode(identifiers) {
+				_managedInstalledBundleIDsData = encoded
+			}
 		}
 
-		var identifiers = _managedInstalledBundleIDs
-		identifiers.remove(identifier)
-		if let encoded = try? JSONEncoder().encode(identifiers) {
-			_managedInstalledBundleIDsData = encoded
+		func tryLaunchServicesFallback() {
+			guard UIApplication.removeApp(with: identifier) else {
+				UIAlertController.showAlertWithOk(
+					title: .localized("Remove App"),
+					message: .localized("Zag Store could not remove this application.")
+				)
+				return
+			}
+
+			// LaunchServices may report that the request was accepted before iOS
+			// actually removes the app. Only update our Installed section after
+			// LaunchServices itself confirms the bundle is gone.
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+				if UIApplication.isAppInstalled(with: identifier) == false {
+					clearInstalledMarker()
+				} else {
+					UIAlertController.showAlertWithOk(
+						title: .localized("Remove App"),
+						message: .localized("The uninstall request was sent, but iOS still reports the app as installed.")
+					)
+				}
+			}
+		}
+
+		do {
+			try ZagRPPairingCore.shared.uninstallGate4App(
+				bundleID: identifier,
+				deviceIP: "10.7.0.1"
+			) { result in
+				switch result {
+				case .success:
+					clearInstalledMarker()
+				case .failure:
+					// Fully Local Server and other non-RPPairing setups retain the
+					// existing LaunchServices uninstall path as a fallback.
+					tryLaunchServicesFallback()
+				}
+			}
+		} catch {
+			tryLaunchServicesFallback()
 		}
 	}
 
