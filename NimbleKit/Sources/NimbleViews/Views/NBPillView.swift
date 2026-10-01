@@ -13,19 +13,22 @@ public struct NBPillView: View {
 	public var color: Color
 	public var index: Int
 	public var count: Int
+	public var compact: Bool
 	
 	public init(
 		title: String,
 		icon: String,
 		color: Color,
 		index: Int,
-		count: Int
+		count: Int,
+		compact: Bool = false
 	) {
 		self.title = title
 		self.icon = icon
 		self.color = color
 		self.index = index
 		self.count = count
+		self.compact = compact
 	}
 	
 	public var body: some View {
@@ -40,7 +43,7 @@ public struct NBPillView: View {
 				.font(.caption.bold())
 		}
 		.frame(maxWidth: .infinity)
-		.padding(.vertical, 10)
+		.padding(.vertical, compact ? 6 : 10)
 		.background(
 			UnevenRoundedRectangle(
 				cornerRadii: .init(
