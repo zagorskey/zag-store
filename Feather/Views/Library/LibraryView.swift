@@ -974,31 +974,7 @@ struct LibraryView: View {
 
 
 
-			.task {
-
-
-
-				_updateRepositoryUpdates()
-
-
-
-		}
-
-
-
 		.onChange(of: _signedApps.map { $0.uuid }) { _ in
-
-
-
-			_updateRepositoryUpdates()
-
-
-
-		}
-
-
-
-		.onChange(of: _importedApps.map { $0.uuid }) { _ in
 
 
 
