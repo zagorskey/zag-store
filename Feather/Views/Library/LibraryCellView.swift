@@ -168,6 +168,14 @@ extension LibraryCellView {
 	private func _actions(
 		for app: AppInfoPresentable
 	) -> some View {
+		Button(
+			.localized("Delete"),
+			systemImage: "trash",
+			role: .destructive
+		) {
+			Storage.shared.deleteApp(for: app)
+		}
+
 		if isManagedInstalled {
 			Button(
 				.localized("Remove App"),
@@ -176,14 +184,6 @@ extension LibraryCellView {
 			) {
 				onRemoveManagedApp?(app)
 			}
-		}
-
-		Button(
-			.localized("Delete"),
-			systemImage: "trash",
-			role: .destructive
-		) {
-			Storage.shared.deleteApp(for: app)
 		}
 	}
 
