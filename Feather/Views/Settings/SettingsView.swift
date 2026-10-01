@@ -45,7 +45,7 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				NBSection("Display") {
+				Section("Display") {
 					NavigationLink(destination: AppearanceView()) {
 						Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
 					}
@@ -54,7 +54,7 @@ struct SettingsView: View {
 					}
 				}
                 
-				NBSection(.localized("Certificates")) {
+				Section(.localized("Certificates")) {
 					NavigationLink(destination: CertificatesView()) {
 						Label(.localized("Certificates"), systemImage: "checkmark.seal")
 					}
@@ -71,7 +71,7 @@ struct SettingsView: View {
 					Text(.localized("Add and manage certificates used for signing apps."))
 				}
                 
-				NBSection(.localized("Features")) {
+				Section(.localized("Features")) {
 					NavigationLink(destination: InstallationView()) {
 						Label(.localized("Installation"), systemImage: "arrow.down.circle")
 					}
@@ -89,7 +89,7 @@ struct SettingsView: View {
 				}
 
 
-				NBSection("Refreshing Apps") {
+				Section("Refreshing Apps") {
 					Toggle(isOn: $_backgroundUpdatesEnabled) {
 						Label("Background Updates", systemImage: "arrow.triangle.2.circlepath")
 					}
@@ -166,7 +166,7 @@ struct SettingsView: View {
 extension SettingsView {
 	@ViewBuilder
 	private func _feedback() -> some View {
-		NBSection("About Us") {
+		Section("About Us") {
 			NavigationLink(destination: AboutView()) {
 				Label {
 					Text("Zag Store")
@@ -197,7 +197,7 @@ extension SettingsView {
     
 	@ViewBuilder
 	private func _directories() -> some View {
-		NBSection(.localized("Misc")) {
+		Section(.localized("Misc")) {
 			Button(.localized("Open Documents"), systemImage: "folder") {
 				UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!)
 			}
