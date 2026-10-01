@@ -463,7 +463,7 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 				let downloadsMenu = UIMenu(
 				title: .localized("Previous Versions"),
 				image: UIImage(systemName: "square.and.arrow.down.on.square"),
-				children: self._previousVersionActions(for: entry.app)
+				children: self._previousVersionElements(for: entry.app)
 			)
 			
 			return UIMenu(children: [downloadsMenu, versionsMenu])
@@ -472,13 +472,14 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 	
 	// MARK: Actions
 	
-	private func _previousVersionActions(for app: ASRepository.App) -> [UIAction] {
-		// Resolve history only when the user asks for this app. This keeps giant
-		// repositories from generating one GitHub request per catalog entry.
-		ZagGitHubHistoryResolver.shared.prefetch(app) { [weak self] in
-			self?.uiTableView?.reloadData()
-		}
-		let declared = (app.versions ?? []).filter { $0.version != app.currentVersion }.map { version in
+	private func _previousVersionElements(for app: ASRepository.App) -> [UIMenuElement] {
+		let declared = (app.versions ?? []).filter { version in
+			// Keep same-marketing-version historical builds when their URL/build
+			// differs from the current release.
+			if version.version != app.currentVersion { return true }
+			if version.downloadURL != app.currentDownloadUrl { return true }
+			return version.build != app.currentAppVersion?.build
+		}.map { version in
 			let title = version.build.map { $0.isEmpty ? version.version : "\(version.version) (\($0))" } ?? version.version
 			return UIAction(title: title, image: UIImage(systemName: "arrow.down")) { _ in
 				if let url = version.downloadURL {
@@ -488,17 +489,38 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		}
 		if !declared.isEmpty { return declared }
 
-		let discovered = ZagGitHubHistoryResolver.shared.cached(for: app)
-		if !discovered.isEmpty {
-			return discovered.map { item in
-				let suffix = item.release.isEmpty ? "" : " — \(item.release)"
-				return UIAction(title: "\(item.version)\(suffix)", image: UIImage(systemName: "arrow.down")) { _ in
-					_ = DownloadManager.shared.startDownload(from: item.downloadURL, id: app.currentUniqueId)
+		// A context menu is snapshotted when it opens. Starting an async lookup
+		// here and reloading the table cannot mutate that already-open menu.
+		// UIDeferredMenuElement is UIKit's async menu API: it keeps Previous
+		// Versions open while GitHub history resolves, then inserts the actions.
+		let deferred = UIDeferredMenuElement.uncached { completion in
+			ZagGitHubHistoryResolver.shared.prefetch(app) {
+				let discovered = ZagGitHubHistoryResolver.shared.cached(for: app)
+				if discovered.isEmpty {
+					completion([
+						UIAction(
+							title: .localized("No previous versions found"),
+							attributes: [.disabled]
+						) { _ in }
+					])
+					return
 				}
+
+				completion(discovered.map { item in
+					let suffix = item.release.isEmpty ? "" : " — \(item.release)"
+					return UIAction(
+						title: "\(item.version)\(suffix)",
+						image: UIImage(systemName: "arrow.down")
+					) { _ in
+						_ = DownloadManager.shared.startDownload(
+							from: item.downloadURL,
+							id: app.currentUniqueId
+						)
+					}
+				})
 			}
 		}
-
-		return [UIAction(title: .localized("No previous versions found"), attributes: [.disabled]) { _ in }]
+		return [deferred]
 	}
 
 	private func _contextActions(
