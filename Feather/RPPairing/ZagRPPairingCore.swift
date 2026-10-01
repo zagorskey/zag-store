@@ -342,6 +342,7 @@ final class ZagRPPairingCore: ObservableObject {
 			state = .failed("The RPPairing engine could not be started.")
 			return
 		}
+	}
 
 	func resetStatus() {
 		guard !isRunning else { return }
