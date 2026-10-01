@@ -367,8 +367,17 @@ final class ZagRPPairingCore: ObservableObject {
 			UIPasteboard.general.string = message
 			let content = UNMutableNotificationContent()
 			content.title = "Zag Store Pairing Code"
-			content.body = message
+			let digits = message.filter(\.isNumber)
+			if digits.count == 6 {
+				let split = digits.index(digits.startIndex, offsetBy: 3)
+				content.body = "\(digits[..<split]) \(digits[split...])"
+			} else {
+				content.body = message
+			}
 			content.sound = .default
+			if #available(iOS 15.0, *) {
+				content.interruptionLevel = .timeSensitive
+			}
 			UNUserNotificationCenter.current().add(
 				UNNotificationRequest(
 					identifier: "zag-rppairing-pin",
