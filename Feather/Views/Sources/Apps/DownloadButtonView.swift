@@ -25,6 +25,7 @@ struct DownloadButtonView: View {
 	@State private var installedBundleID: String?
 	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
+	@State private var ringRotation: Double = 0
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -50,11 +51,13 @@ struct DownloadButtonView: View {
 							}
 						}
 				} else if zagPhase == .signing {
-					ProgressView()
-						.controlSize(.regular)
-						.frame(width: 88, height: 34)
+					_indeterminateRing()
 				} else if zagPhase == .installing {
-					_progressRing(progress: installationProgress, showsStop: false)
+					if installationProgress > 0.03 {
+						_progressRing(progress: installationProgress, showsStop: false)
+					} else {
+						_indeterminateRing()
+					}
 				} else if let installedBundleID {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: installedBundleID)
@@ -95,6 +98,24 @@ struct DownloadButtonView: View {
 		case .signing: return .localized("Preparing…")
 		case .installing: return .localized("Installing…")
 		default: return ""
+		}
+	}
+
+	private func _indeterminateRing() -> some View {
+		ZStack {
+			Circle()
+				.stroke(pillForeground.opacity(0.22), lineWidth: 2.3)
+			Circle()
+				.trim(from: 0.08, to: 0.72)
+				.stroke(pillForeground, style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
+				.rotationEffect(.degrees(ringRotation - 90))
+		}
+		.frame(width: 31, height: 31)
+		.onAppear {
+			ringRotation = 0
+			withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
+				ringRotation = 360
+			}
 		}
 	}
 
@@ -198,7 +219,7 @@ struct DownloadButtonView: View {
 				return
 			}
 			zagPhase = .installing
-			installationProgress = 0.02
+			installationProgress = 0
 			_installInline(signed)
 		}
 	}
