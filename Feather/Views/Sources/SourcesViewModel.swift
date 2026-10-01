@@ -203,6 +203,8 @@ final class UpdateManager: ObservableObject {
 		let source: ASRepository
 		let installedVersion: String
 		let availableVersion: String
+		let installedBuild: String?
+		let availableBuild: String?
 
 		var id: String {
 			app.id ?? app.currentUniqueId
@@ -213,6 +215,7 @@ final class UpdateManager: ObservableObject {
 		let name: String
 		let identifier: String
 		let version: String
+		let build: String?
 	}
 
 	@Published private(set) var updates: [AvailableUpdate] = []
@@ -398,6 +401,7 @@ final class UpdateManager: ObservableObject {
 				name: app.name,
 				identifier: app.identifier,
 				version: app.version,
+				build: _buildVersion(for: app),
 				to: &localApps
 			)
 		}
@@ -456,10 +460,13 @@ final class UpdateManager: ObservableObject {
 						continue
 					}
 
-					guard _compareVersions(
-						availableVersion,
-						localApp.version
-					) == .orderedDescending else {
+					let availableBuild = app.currentAppVersion?.build
+					guard _isRepositoryReleaseNewer(
+						availableVersion: availableVersion,
+						availableBuild: availableBuild,
+						installedVersion: localApp.version,
+						installedBuild: localApp.build
+					) else {
 						continue
 					}
 
@@ -478,7 +485,9 @@ final class UpdateManager: ObservableObject {
 							app: app,
 							source: repository,
 							installedVersion: localApp.version,
-							availableVersion: availableVersion
+							availableVersion: availableVersion,
+							installedBuild: localApp.build,
+							availableBuild: availableBuild
 						)
 					)
 
@@ -550,6 +559,7 @@ final class UpdateManager: ObservableObject {
 		name: String?,
 		identifier: String?,
 		version: String?,
+		build: String? = nil,
 		to apps: inout [LocalApp]
 	) {
 		guard
@@ -576,7 +586,8 @@ final class UpdateManager: ObservableObject {
 				apps[index] = LocalApp(
 					name: name,
 					identifier: identifier,
-					version: version
+					version: version,
+					build: build
 				)
 			}
 		} else {
@@ -584,7 +595,8 @@ final class UpdateManager: ObservableObject {
 				LocalApp(
 					name: name,
 					identifier: identifier,
-					version: version
+					version: version,
+					build: build
 				)
 			)
 		}
@@ -616,6 +628,49 @@ final class UpdateManager: ObservableObject {
 			.filter {
 				$0.isLetter || $0.isNumber
 			}
+	}
+
+
+	private func _buildVersion(for app: Signed) -> String? {
+		guard
+			let appURL = Storage.shared.getAppDirectory(for: app),
+			let bundle = Bundle(url: appURL)
+		else {
+			return nil
+		}
+
+		return bundle.object(
+			forInfoDictionaryKey: "CFBundleVersion"
+		) as? String
+	}
+
+	private func _isRepositoryReleaseNewer(
+		availableVersion: String,
+		availableBuild: String?,
+		installedVersion: String,
+		installedBuild: String?
+	) -> Bool {
+		let versionResult = _compareVersions(
+			availableVersion,
+			installedVersion
+		)
+
+		if versionResult == .orderedDescending { return true }
+		if versionResult == .orderedAscending { return false }
+
+		guard
+			let availableBuild,
+			!availableBuild.isEmpty,
+			let installedBuild,
+			!installedBuild.isEmpty
+		else {
+			return false
+		}
+
+		return _compareVersions(
+			availableBuild,
+			installedBuild
+		) == .orderedDescending
 	}
 
 
