@@ -16,6 +16,7 @@ enum FR {
 	static func handlePackageFile(
 		_ ipa: URL,
 		download: Download? = nil,
+		importedUUID: ((String) -> Void)? = nil,
 		completion: @escaping (Error?) -> Void
 	) {
 		Task.detached {
@@ -28,6 +29,7 @@ enum FR {
 				try await handler.addToDatabase()
 				try? await handler.clean()
 				await MainActor.run {
+					importedUUID?(handler.uuid)
 					completion(nil)
 				}
 			} catch {
@@ -44,6 +46,7 @@ enum FR {
 		using options: Options,
 		icon: UIImage?,
 		certificate: CertificatePair?,
+		signedUUID: ((String) -> Void)? = nil,
 		completion: @escaping (Error?) -> Void
 	) {
 		Task.detached {
@@ -56,6 +59,7 @@ enum FR {
 				try await handler.modify()
 				try? await handler.clean()
 				await MainActor.run {
+					signedUUID?(handler.uuid)
 					completion(nil)
 				}
 			} catch {
