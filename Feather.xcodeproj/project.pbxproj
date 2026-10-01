@@ -233,6 +233,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		3379BC662DC9DB32004372DA /* Copy Acknowledgements */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -426,7 +427,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Feather/Resources",
-					"$(PROJECT_DIR)/Feather/Resources/idevice",
 					"$(PROJECT_DIR)/RPPairingCore/build/device",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
@@ -491,7 +491,6 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Feather/Resources",
-					"$(PROJECT_DIR)/Feather/Resources/idevice",
 					"$(PROJECT_DIR)/RPPairingCore/build/device",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.2;
