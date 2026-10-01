@@ -178,7 +178,6 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 				)
 				mic.tintColor = .label
 				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
-				mic.imageEdgeInsets = UIEdgeInsets(top: 0, left: 2, bottom: 0, right: -2)
 				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
 				mic.accessibilityLabel = "Start Dictation"
 

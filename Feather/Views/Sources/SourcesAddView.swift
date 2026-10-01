@@ -245,7 +245,7 @@ struct SourcesAddView: View {
 						continuation in
 
 						dataService
-							.fetch<ASRepository>(
+							.fetch(
 								from: url
 							) {
 								(result:

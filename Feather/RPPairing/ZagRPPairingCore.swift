@@ -525,7 +525,7 @@ final class ZagRPPairingCore: ObservableObject {
 }
 
 @MainActor
-private final class ZagPairableHostAdvertiser: NSObject, NetServiceDelegate {
+private final class ZagPairableHostAdvertiser: NSObject, @preconcurrency NetServiceDelegate {
 	private var service: NetService?
 	private var failure: ((String) -> Void)?
 

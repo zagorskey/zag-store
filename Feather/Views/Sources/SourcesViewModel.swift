@@ -25,6 +25,7 @@ final class SourcesViewModel: ObservableObject {
 	@Published private(set) var isRefreshing = false
 	@Published var sources: [AltSource: ASRepository] = [:]
 
+	@MainActor
 	func fetchSources(
 		_ sources: FetchedResults<AltSource>,
 		refresh: Bool = false,
@@ -38,13 +39,11 @@ final class SourcesViewModel: ObservableObject {
 			}
 		)
 
-		await MainActor.run {
-			self.sources = self.sources.filter { source, _ in
-				guard let sourceURL = source.sourceURL?.absoluteString else {
-					return false
-				}
-				return currentSourceURLs.contains(sourceURL)
+		self.sources = self.sources.filter { source, _ in
+			guard let sourceURL = source.sourceURL?.absoluteString else {
+				return false
 			}
+			return currentSourceURLs.contains(sourceURL)
 		}
 
 		if !refresh, sources.allSatisfy({
@@ -52,80 +51,74 @@ final class SourcesViewModel: ObservableObject {
 		}) {
 			// The repository snapshot is already complete. It is safe to
 			// reconcile updates against it without entering a refresh cycle.
-			await MainActor.run {
-				UpdateManager.shared.refresh(
-					repositories: Array(self.sources.values)
-				)
-			}
+			UpdateManager.shared.refresh(
+				repositories: Array(self.sources.values)
+			)
 			return
 		}
 
 		isFinished = false
 
-		await MainActor.run {
-			self.isRefreshing = true
-			UpdateManager.shared.beginRepositoryRefresh()
-		}
+		self.isRefreshing = true
+		UpdateManager.shared.beginRepositoryRefresh()
 
 		defer {
 			isFinished = true
 
-			Task { @MainActor in
-				self.isRefreshing = false
-				UpdateManager.shared.endRepositoryRefresh()
-			}
+			self.isRefreshing = false
+			UpdateManager.shared.endRepositoryRefresh()
 		}
 
 		let sourcesArray = Array(sources)
+		let sourceURLs = sourcesArray.compactMap { source -> (AltSource, URL)? in
+			guard let url = source.sourceURL else { return nil }
+			return (source, url)
+		}
 
-		// Build the next repository state off-screen. In particular, do not
-		// clear self.sources or UpdateManager while network requests are in
-		// flight: the last completed update result remains authoritative until
-		// the new refresh has fully finished.
+		// Build the next repository state off-screen. Child tasks traffic only
+		// in URLs and repository values; NSManagedObject instances never cross
+		// a task boundary.
 		var refreshedSources: [AltSource: ASRepository] = refresh
 			? [:]
-			: await MainActor.run { self.sources }
+			: self.sources
 
 		for startIndex in stride(
 			from: 0,
-			to: sourcesArray.count,
+			to: sourceURLs.count,
 			by: batchSize
 		) {
 			let endIndex = min(
 				startIndex + batchSize,
-				sourcesArray.count
+				sourceURLs.count
 			)
 
-			let batch = sourcesArray[startIndex..<endIndex]
+			let batch = sourceURLs[startIndex..<endIndex]
+			let batchURLs = batch.map { $0.1 }
 
 			let batchResults = await withTaskGroup(
-				of: (AltSource, ASRepository?).self,
-				returning: [AltSource: ASRepository].self
+				of: (URL, ASRepository?).self,
+				returning: [URL: ASRepository].self
 			) { group in
-				for source in batch {
+				for url in batchURLs {
 					group.addTask {
-						guard let url = source.sourceURL else {
-							return (source, nil)
-						}
-
-						return await withCheckedContinuation { continuation in
+						await withCheckedContinuation { continuation in
 							self._dataService.fetch(from: url) {
 								(result: RepositoryDataHandler) in
 								switch result {
 								case .success(let repo):
-									continuation.resume(returning: (source, repo))
+									continuation.resume(returning: (url, repo))
 								case .failure:
-									continuation.resume(returning: (source, nil))
+									continuation.resume(returning: (url, nil))
 								}
 							}
 						}
 					}
 				}
 
-				var results = [AltSource: ASRepository]()
-				for await (source, repo) in group {
+				var results = [URL: ASRepository]()
+				for await (url, repo) in group {
 					if let repo {
-						results[source] = repo
+						results[url] = repo
 					}
 				}
 				return results
@@ -137,10 +130,10 @@ final class SourcesViewModel: ObservableObject {
 				}
 			)
 
-			for (source, repo) in batchResults {
+			for (source, url) in batch {
 				guard
-					let url = source.sourceURL?.absoluteString,
-					savedSourceURLs.contains(url)
+					savedSourceURLs.contains(url.absoluteString),
+					let repo = batchResults[url]
 				else {
 					continue
 				}
@@ -155,15 +148,16 @@ final class SourcesViewModel: ObservableObject {
 			}
 		}
 
-		await MainActor.run {
-			// Publish the repository snapshot and its derived update state as
-			// one completed refresh. Until this point the previous Updates
-			// pill/count and app-icon badge remain untouched.
-			self.sources = refreshedSources
-			UpdateManager.shared.refresh(
-				repositories: Array(refreshedSources.values)
-			)
-		}
+		let completedSources = refreshedSources
+		let completedRepositories = Array(completedSources.values)
+
+		// Publish the repository snapshot and its derived update state as
+		// one completed refresh. Until this point the previous Updates
+		// pill/count and app-icon badge remain untouched.
+		self.sources = completedSources
+		UpdateManager.shared.refresh(
+			repositories: completedRepositories
+		)
 	}
 
 	// MARK: - Source Cache Management
@@ -455,7 +449,7 @@ final class UpdateManager: ObservableObject {
 								"installed=\(localApp.name) | " +
 								"candidate=\(app.currentName) | " +
 								"id=\(identifier) | " +
-								"repo=\(repository.name)"
+								"repo=\(repository.name ?? "unknown")"
 						)
 						continue
 					}
@@ -526,7 +520,7 @@ final class UpdateManager: ObservableObject {
 					"id=\(update.app.id ?? "nil") | " +
 					"\(update.installedVersion) -> " +
 					"\(update.availableVersion) | " +
-					"repo=\(update.source.name)"
+					"repo=\(update.source.name ?? "unknown")"
 			)
 		}
 	}

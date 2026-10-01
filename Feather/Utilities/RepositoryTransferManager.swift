@@ -271,7 +271,7 @@ final class RepositoryTransferManager {
 					await withCheckedContinuation {
 						continuation in
 
-						dataService.fetch<ASRepository>(
+						dataService.fetch(
 							from: url
 						) {
 							(result: RepositoryDataHandler) in

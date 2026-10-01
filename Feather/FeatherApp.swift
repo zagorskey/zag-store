@@ -414,9 +414,11 @@ final class ZagBackgroundUpdateRefresh {
 			return false
 		}
 
+		let completedRepositories = repositories
+
 		await MainActor.run {
 			UpdateManager.shared.refresh(
-				repositories: repositories
+				repositories: completedRepositories
 			)
 		}
 
