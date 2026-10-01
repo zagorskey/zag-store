@@ -370,9 +370,7 @@ final class ZagBackgroundUpdateRefresh {
 		// successful refresh. The last complete snapshot remains authoritative.
 		guard repositories.count == sources.count else {
 			Logger.misc.warning(
-				"[Zag Store Background] Incomplete refresh: " +
-				"\(repositories.count)/\(sources.count) repositories. " +
-				"Keeping previous update state."
+				"[Zag Store Background] Incomplete refresh: \(repositories.count)/\(sources.count) repositories. Keeping previous update state."
 			)
 			return false
 		}
