@@ -16,8 +16,6 @@ struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
 	@AppStorage("ZagStore.disableIdleTimeout") private var _disableIdleTimeout = false
-	@State private var _isRefreshingApps = false
-	@State private var _refreshStatus: String?
 	@State private var _currentIcon: String? = UIApplication.shared.alternateIconName
 	
 	// MARK: Fetch
@@ -103,35 +101,8 @@ struct SettingsView: View {
 						UIApplication.shared.isIdleTimerDisabled = enabled
 					}
 
-					Button {
-						guard !_isRefreshingApps else { return }
-						_isRefreshingApps = true
-						_refreshStatus = nil
-
-						Task {
-							let success = await ZagBackgroundUpdateRefresh.shared.refreshNow()
-							await MainActor.run {
-								_isRefreshingApps = false
-								_refreshStatus = success
-									? "Update check completed."
-									: "Update check could not complete."
-							}
-						}
-					} label: {
-						Label(
-							_isRefreshingApps ? "Refreshing Apps…" : "Refresh Apps Now",
-							systemImage: "arrow.clockwise"
-						)
-					}
-					.disabled(_isRefreshingApps)
-
-					if let _refreshStatus {
-						Text(_refreshStatus)
-							.font(.footnote)
-							.foregroundStyle(.secondary)
-					}
 				} footer: {
-					Text("Background Updates periodically checks your repositories for newer app versions. Disable Idle Timeout keeps Zag Store awake while you perform foreground update work.")
+					Text("Background Updates controls Zag Store’s own scheduled background update checks. Disable Idle Timeout prevents the device from automatically locking while Zag Store is active.")
 				}
                 
 
