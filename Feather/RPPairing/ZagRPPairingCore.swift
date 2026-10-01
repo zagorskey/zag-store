@@ -328,6 +328,34 @@ final class ZagRPPairingCore: ObservableObject {
 		if !started {
 			endPairingBackgroundTime()
 			state = .failed("The RPPairing engine could not be started.")
+			return
+		}
+
+		// iOS has no public Developer Settings deep link. For this sideloaded build,
+		// experimentally try the private Settings routes after the pairing host has
+		// had a moment to bring up its listener. If iOS rejects them, pairing keeps
+		// running and the user can navigate to Developer Mode manually.
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+			guard let self, self.isRunning else { return }
+			self.openDeveloperPairingSettings()
+		}
+	}
+
+	private func openDeveloperPairingSettings() {
+		let candidates = [
+			"prefs:root=DEVELOPER_SETTINGS#DTPairedDevicesGroup",
+			"App-prefs:root=DEVELOPER_SETTINGS#DTPairedDevicesGroup",
+			"prefs:root=DEVELOPER_SETTINGS",
+			"App-prefs:root=DEVELOPER_SETTINGS"
+		]
+		openFirstSettingsURL(candidates[...])
+	}
+
+	private func openFirstSettingsURL(_ candidates: ArraySlice<String>) {
+		guard let candidate = candidates.first, let url = URL(string: candidate) else { return }
+		UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+			guard !opened else { return }
+			self?.openFirstSettingsURL(candidates.dropFirst())
 		}
 	}
 
@@ -370,9 +398,9 @@ final class ZagRPPairingCore: ObservableObject {
 			let digits = message.filter(\.isNumber)
 			if digits.count == 6 {
 				let split = digits.index(digits.startIndex, offsetBy: 3)
-				content.body = "\(digits[..<split]) \(digits[split...])"
+				content.body = "\(digits[..<split]) \(digits[split...])  •  Tap to return to Zag Store"
 			} else {
-				content.body = message
+				content.body = "\(message)  •  Tap to return to Zag Store"
 			}
 			content.sound = .default
 			if #available(iOS 15.0, *) {
