@@ -294,7 +294,7 @@ struct LibraryView: View {
 
 	@ViewBuilder
 	private var zagUpdatesContent: some View {
-		if !updateManager.updates.isEmpty {
+		if updateManager.hasVisibleUpdates {
 			Button {
 				_isUpdatesPresenting = true
 			} label: {
@@ -323,7 +323,7 @@ struct LibraryView: View {
 								: "#EEEEEF"
 						)
 
-						Text(updateManager.updates.count.description)
+						Text(updateManager.updateCount.description)
 							.font(.system(size: 14, weight: .regular))
 							.foregroundStyle(.white)
 							.frame(width: 24, height: 24)
