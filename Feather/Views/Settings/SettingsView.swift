@@ -45,16 +45,18 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				Section("Display") {
+				Section {
 					NavigationLink(destination: AppearanceView()) {
 						Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
 					}
 					NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
 						Label(.localized("App Icon"), systemImage: "app.badge")
 					}
+				} header: {
+					Text("Display")
 				}
                 
-				Section(.localized("Certificates")) {
+				Section {
 					NavigationLink(destination: CertificatesView()) {
 						Label(.localized("Certificates"), systemImage: "checkmark.seal")
 					}
@@ -67,11 +69,13 @@ struct SettingsView: View {
 							.foregroundColor(.disabled())
 					}
 
+				} header: {
+					Text(.localized("Certificates"))
 				} footer: {
 					Text(.localized("Add and manage certificates used for signing apps."))
 				}
                 
-				Section(.localized("Features")) {
+				Section {
 					NavigationLink(destination: InstallationView()) {
 						Label(.localized("Installation"), systemImage: "arrow.down.circle")
 					}
@@ -84,12 +88,14 @@ struct SettingsView: View {
 					NavigationLink(destination: RPPairingDiagnosticsView()) {
 						Label("Diagnostics & Health Checks", systemImage: "stethoscope")
 					}
+				} header: {
+					Text(.localized("Features"))
 				} footer: {
 					Text(.localized("Configure the apps way of installing, its zip compression levels, and custom modifications to apps."))
 				}
 
 
-				Section("Refreshing Apps") {
+				Section {
 					Toggle(isOn: $_backgroundUpdatesEnabled) {
 						Label("Background Updates", systemImage: "arrow.triangle.2.circlepath")
 					}
@@ -131,6 +137,8 @@ struct SettingsView: View {
 						UIApplication.shared.isIdleTimerDisabled = enabled
 					}
 
+				} header: {
+					Text("Refreshing Apps")
 				} footer: {
 					Text("Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions.")
 				}
@@ -166,7 +174,7 @@ struct SettingsView: View {
 extension SettingsView {
 	@ViewBuilder
 	private func _feedback() -> some View {
-		Section("About Us") {
+		Section {
 			NavigationLink(destination: AboutView()) {
 				Label {
 					Text("Zag Store")
@@ -190,6 +198,8 @@ extension SettingsView {
 					actions: [bugAction, chooseAction]
 				)
 			}
+		} header: {
+			Text("About Us")
 		} footer: {
 			Text(.localized("If any issues occur within the app please report it via the GitHub repository. When submitting an issue, make sure to submit detailed information."))
 		}
@@ -197,7 +207,7 @@ extension SettingsView {
     
 	@ViewBuilder
 	private func _directories() -> some View {
-		Section(.localized("Misc")) {
+		Section {
 			Button(.localized("Open Documents"), systemImage: "folder") {
 				UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!)
 			}
@@ -207,6 +217,8 @@ extension SettingsView {
 			Button(.localized("Open Certificates"), systemImage: "folder") {
 				UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!)
 			}
+		} header: {
+			Text(.localized("Misc"))
 		} footer: {
 			Text(.localized("All of the apps files are contained in the documents directory, here are some quick links to these."))
 		}
