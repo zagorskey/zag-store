@@ -192,26 +192,18 @@ private struct RPPairingView: View {
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.contentShape(Rectangle())
 			.disabled(pairingCore.isRunning)
-			.overlay(alignment: .bottom) {
-				if showUnpairConfirmation {
-					ZagUnpairConfirmationBubble(
-						confirm: {
-							showUnpairConfirmation = false
-							do { try pairingCore.forgetPairing() }
-							catch { unpairError = error.localizedDescription }
-						},
-						cancel: {
-							withAnimation(.easeOut(duration: 0.16)) {
-								showUnpairConfirmation = false
-							}
-						}
-					)
-					.offset(y: -48)
-					.transition(.scale(scale: 0.96, anchor: .bottom).combined(with: .opacity))
-					.zIndex(20)
-				}
+			.popover(isPresented: $showUnpairConfirmation, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+				ZagUnpairConfirmationBubble(
+					confirm: {
+						showUnpairConfirmation = false
+						do { try pairingCore.forgetPairing() }
+						catch { unpairError = error.localizedDescription }
+					},
+					cancel: { showUnpairConfirmation = false }
+				)
+				.frame(width: 340)
+				.presentationCompactAdaptation(.popover)
 			}
-			.animation(.easeOut(duration: 0.16), value: showUnpairConfirmation)
 		} footer: {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
 		}
