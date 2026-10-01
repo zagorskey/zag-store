@@ -245,7 +245,7 @@ struct DownloadButtonView: View {
 					guard let installURL = URL(string: server.iTunesLink) else {
 						throw ZagInlineInstallError.invalidInstallURL
 					}
-					UIApplication.shared.open(installURL)
+					await UIApplication.shared.open(installURL)
 					try await _pollInstall(bundleID: signed.identifier ?? "")
 				} else if method == 1 {
 					let proxy = InstallationProxy(viewModel: status)
