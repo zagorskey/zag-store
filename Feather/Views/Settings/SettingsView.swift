@@ -16,6 +16,8 @@ struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
 	@AppStorage(UpdateManager.updateNotificationsEnabledKey) private var _updateNotificationsEnabled = false
+	@AppStorage(ZagBackgroundUpdateRefresh.automaticPreparationKey) private var _automaticUpdatePreparation = false
+	@AppStorage(ZagBackgroundUpdateRefresh.automaticInstallationKey) private var _automaticUpdateInstallation = false
 	@AppStorage("ZagStore.disableIdleTimeout") private var _disableIdleTimeout = false
 	@State private var _currentIcon: String? = UIApplication.shared.alternateIconName
 	
@@ -110,6 +112,18 @@ struct SettingsView: View {
 						}
 					}
 
+					Toggle(isOn: $_automaticUpdatePreparation) {
+						Label("Automatic Update Preparation", systemImage: "shippingbox.and.arrow.backward")
+					}
+					.onChange(of: _automaticUpdatePreparation) { enabled in
+						if !enabled { _automaticUpdateInstallation = false }
+					}
+
+					Toggle(isOn: $_automaticUpdateInstallation) {
+						Label("Automatic Installation", systemImage: "square.and.arrow.down")
+					}
+					.disabled(!_automaticUpdatePreparation)
+
 					Toggle(isOn: $_disableIdleTimeout) {
 						Label("Disable Idle Timeout", systemImage: "sun.max")
 					}
@@ -118,7 +132,7 @@ struct SettingsView: View {
 					}
 
 				} footer: {
-					Text("Background Updates controls Zag Store’s scheduled update checks. Update Notifications alerts you when a newly available app version is discovered. Disable Idle Timeout prevents the device from automatically locking while Zag Store is active.")
+					Text("Background Updates controls Zag Store’s scheduled checks. Automatic Update Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions.")
 				}
                 
 
