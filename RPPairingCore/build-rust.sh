@@ -6,6 +6,11 @@ CRATE="$ROOT/rust-core"
 OUT="$ROOT/build"
 XCFRAMEWORK="$ROOT/ZagRPPairingCore.xcframework"
 
+# Keep every Rust/C/assembly object in the static library compatible with Zag Store.
+# Without this, cc-based dependencies inherit the current SDK deployment version
+# (for example iOS 26.5), which produces hundreds of linker warnings at iOS 16.4.
+export IPHONEOS_DEPLOYMENT_TARGET=16.4
+
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
 cargo build --manifest-path "$CRATE/Cargo.toml" --release --target aarch64-apple-ios
