@@ -10,6 +10,7 @@ import Combine
 import AltSourceKit
 import NimbleViews
 import CoreData
+import IDeviceSwift
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
@@ -21,7 +22,8 @@ struct DownloadButtonView: View {
 	@State private var downloadProgress: Double = 0
 	@State private var cancellable: AnyCancellable?
 	@State private var zagPhase: ZagGetPhase = .idle
-	@State private var installTarget: AnyApp?
+	@State private var installedBundleID: String?
+	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
 
 	private var pillBackground: Color {
@@ -38,96 +40,42 @@ struct DownloadButtonView: View {
 	}
 
 	var body: some View {
-		ZStack {
-			if let currentDownload = downloadManager.getDownload(
-				by: app.currentUniqueId
-			) {
-				ZStack {
-					Circle()
-						.trim(
-							from: 0,
-							to: downloadProgress
-						)
-						.stroke(
-							pillForeground,
-							style: StrokeStyle(
-								lineWidth: 2.3,
-								lineCap: .round
-							)
-						)
-						.rotationEffect(.degrees(-90))
-						.frame(
-							width: 31,
-							height: 31
-						)
-						.animation(
-							.smooth,
-							value: downloadProgress
-						)
-
-					Image(
-						systemName:
-							downloadProgress >= 0.75
-							? "archivebox"
-							: "square.fill"
-					)
-					.foregroundStyle(pillForeground)
-					.font(.footnote)
-					.bold()
-				}
-				.onTapGesture {
-					if downloadProgress <= 0.75 {
-						downloadManager.cancelDownload(
-							currentDownload
-						)
+		VStack(spacing: 2) {
+			ZStack {
+				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
+					_progressRing(progress: downloadProgress, showsStop: downloadProgress < 0.75)
+						.onTapGesture {
+							if downloadProgress <= 0.75 {
+								downloadManager.cancelDownload(currentDownload)
+							}
+						}
+				} else if zagPhase == .signing {
+					ProgressView()
+						.controlSize(.regular)
+						.frame(width: 88, height: 34)
+				} else if zagPhase == .installing {
+					_progressRing(progress: installationProgress, showsStop: false)
+				} else if let installedBundleID {
+					ZagActionPill(title: .localized("Open")) {
+						UIApplication.openApp(with: installedBundleID)
+					}
+				} else {
+					ZagActionPill(title: title) {
+						_startGetAndInstall()
 					}
 				}
-				.compatTransition()
-			} else if zagPhase != .idle {
-				ProgressView().frame(width: 88, height: 34)
-			} else {
-				Button {
-					_startGetAndInstall()
-				} label: {
-					Text(title)
-						.font(
-							.system(
-								size: 15,
-								weight: .bold
-							)
-						)
-						.lineLimit(1)
-						.frame(
-							width: 88,
-							height: 34
-						)
-						.foregroundStyle(
-							pillForeground
-						)
-						.background(
-							pillBackground
-						)
-						.clipShape(Capsule())
-						.contentShape(Capsule())
-				}
-				.buttonStyle(.borderless)
-				.compatTransition()
 			}
+			.frame(width: 88, height: 34)
+
+			Text(_stageCaption)
+				.font(.system(size: 9, weight: .medium))
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+				.frame(width: 88, height: 11)
+				.opacity(_stageCaption.isEmpty ? 0 : 1)
 		}
-		.onAppear(
-			perform: setupObserver
-		)
-		.onDisappear {
-			cancellable?.cancel()
-		}
-		.fullScreenCover(item: $installTarget) { target in
-			InstallPreviewView(
-				app: target.base,
-				onInstallCompleted: {
-					zagPhase = .idle
-				}
-			)
-		}
+		.onAppear(perform: setupObserver)
+		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
 			get: { transactionError != nil },
 			set: { if !$0 { transactionError = nil } }
@@ -136,19 +84,43 @@ struct DownloadButtonView: View {
 		} message: {
 			Text(transactionError ?? "")
 		}
-		.onChange(
-			of: downloadManager.downloads.description
-		) { _ in
+		.onChange(of: downloadManager.downloads.description) { _ in
 			setupObserver()
 		}
-		.animation(
-			.easeInOut(duration: 0.3),
-			value:
-				downloadManager.getDownload(
-					by: app.currentUniqueId
-				) != nil
-		)
+		.animation(.easeInOut(duration: 0.25), value: zagPhase)
 	}
+
+	private var _stageCaption: String {
+		switch zagPhase {
+		case .signing: return .localized("Preparing…")
+		case .installing: return .localized("Installing…")
+		default: return ""
+		}
+	}
+
+	@ViewBuilder
+	private func _progressRing(progress: Double, showsStop: Bool) -> some View {
+		ZStack {
+			Circle()
+				.stroke(pillForeground.opacity(0.22), lineWidth: 2.3)
+			Circle()
+				.trim(from: 0, to: max(0.03, min(1, progress)))
+				.stroke(pillForeground, style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
+				.rotationEffect(.degrees(-90))
+			if showsStop {
+				Image(systemName: "square.fill")
+					.foregroundStyle(pillForeground)
+					.font(.footnote)
+			} else if progress >= 1 {
+				Image(systemName: "checkmark")
+					.foregroundStyle(pillForeground)
+					.font(.footnote.bold())
+			}
+		}
+		.frame(width: 31, height: 31)
+		.animation(.smooth, value: progress)
+	}
+
 
 	private func _startGetAndInstall() {
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
@@ -226,8 +198,80 @@ struct DownloadButtonView: View {
 				return
 			}
 			zagPhase = .installing
-			installTarget = AnyApp(base: signed)
+			installationProgress = 0.02
+			_installInline(signed)
 		}
+	}
+
+	private func _installInline(_ signed: Signed) {
+		let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
+		let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
+
+		Task {
+			do {
+				let status = InstallerStatusViewModel(isIdevice: method == 1)
+				let archive = ArchiveHandler(app: signed, viewModel: status)
+				try await archive.move()
+				let packageURL = try await archive.archive()
+
+				if method == 0 {
+					guard serverMethod == 0 else {
+						throw ZagInlineInstallError.semiLocalRequiresPreview
+					}
+					let server = try ServerInstaller(app: signed, viewModel: status)
+					server.packageUrl = packageURL
+					status.status = .ready
+					guard let installURL = URL(string: server.iTunesLink) else {
+						throw ZagInlineInstallError.invalidInstallURL
+					}
+					UIApplication.shared.open(installURL)
+					try await _pollInstall(bundleID: signed.identifier ?? "")
+				} else if method == 1 {
+					let proxy = InstallationProxy(viewModel: status)
+					try await proxy.install(at: packageURL, suspend: false)
+					installationProgress = 1
+				} else {
+					try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+						try ZagRPPairingCore.shared.installGate4IPA(
+							at: packageURL,
+							deviceIP: "10.7.0.1",
+							progress: { percent in
+								installationProgress = Double(percent) / 100.0
+							}
+						) { result in
+							switch result {
+							case .success: continuation.resume()
+							case .failure(let error): continuation.resume(throwing: error)
+							}
+						}
+					}
+					installationProgress = 1
+				}
+
+				installedBundleID = signed.identifier
+				zagPhase = .idle
+			} catch {
+				_failTransaction(error.localizedDescription)
+			}
+		}
+	}
+
+	private func _pollInstall(bundleID: String) async throws {
+		guard !bundleID.isEmpty else { throw ZagInlineInstallError.missingBundleIdentifier }
+		var started = false
+		for _ in 0..<600 {
+			let raw = UIApplication.installProgress(for: bundleID) ?? 0
+			if raw > 0 { started = true }
+			if started {
+				installationProgress = min(1, max(0.03, (raw - 0.6) / 0.3))
+				if raw == 0 {
+					installationProgress = 1
+					return
+				}
+			}
+			try await Task.sleep(nanoseconds: 100_000_000)
+		}
+		throw ZagInlineInstallError.installTimedOut
 	}
 
 	private func _importedApp(uuid: String) -> Imported? {
@@ -276,6 +320,22 @@ struct DownloadButtonView: View {
 		case downloading
 		case signing
 		case installing
+	}
+
+	private enum ZagInlineInstallError: LocalizedError {
+		case semiLocalRequiresPreview
+		case invalidInstallURL
+		case missingBundleIdentifier
+		case installTimedOut
+
+		var errorDescription: String? {
+			switch self {
+			case .semiLocalRequiresPreview: return "Semi Local installation still requires the installation preview. Choose Fully Local, idevice, or RPPairing for inline repository installs."
+			case .invalidInstallURL: return "Zag Store could not create the local installation URL."
+			case .missingBundleIdentifier: return "The signed app has no bundle identifier."
+			case .installTimedOut: return "Zag Store could not confirm that installation completed."
+			}
+		}
 	}
 
 }
