@@ -152,12 +152,20 @@ private struct RPPairingView: View {
 				}
 			}
 
-			Button {
-				pairingCore.start()
+			Button(role: pairingCore.pairingFileExists ? .destructive : nil) {
+				if pairingCore.pairingFileExists {
+					showUnpairConfirmation = true
+				} else {
+					pairingCore.start()
+				}
 			} label: {
 				Label(
-					pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone",
-					systemImage: pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus"
+					pairingCore.pairingFileExists
+						? "Unpair This iPhone"
+						: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone"),
+					systemImage: pairingCore.pairingFileExists
+						? "link.badge.minus"
+						: (pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus")
 				)
 			}
 			.disabled(pairingCore.isRunning)
@@ -177,11 +185,6 @@ private struct RPPairingView: View {
 			}
 	
 
-			if pairingCore.pairingFileExists {
-				Button("Unpair This iPhone", systemImage: "link.badge.minus", role: .destructive) {
-					showUnpairConfirmation = true
-				}
-			}
 		}
 
 		Section {
