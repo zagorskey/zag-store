@@ -34,7 +34,8 @@ struct LibraryCellView: View {
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
 
-	@State private var pendingDestructiveAction: DestructiveAction?
+	@State private var isDeleteConfirmationPresented = false
+	@State private var isRemoveConfirmationPresented = false
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -155,37 +156,33 @@ struct LibraryCellView: View {
 				_actions(for: app)
 			}
 		}
-		.alert(item: $pendingDestructiveAction) { action in
-			switch action {
-			case .delete:
-				return Alert(
-					title: Text(.localized("Delete Stored Copy?")),
-					message: Text(
-						String(
-							format: .localized("Delete %@ from Zag Store? This removes Zag Store's stored copy, but does not uninstall the app from your iPhone."),
-							app.name ?? .localized("this app")
-						)
-					),
-					primaryButton: .destructive(Text(.localized("Delete"))) {
-						onDeleteApp?(app)
-					},
-					secondaryButton: .cancel()
-				)
-			case .remove:
-				return Alert(
-					title: Text(.localized("Remove App?")),
-					message: Text(
-						String(
-							format: .localized("Remove %@ from your iPhone? Its stored copy will remain in Zag Store so you can install it again later."),
-							app.name ?? .localized("this app")
-						)
-					),
-					primaryButton: .destructive(Text(.localized("Remove App"))) {
-						onRemoveManagedApp?(app)
-					},
-					secondaryButton: .cancel()
-				)
+		.alert(.localized("Delete Stored Copy?"), isPresented: $isDeleteConfirmationPresented) {
+			Button(.localized("Delete"), role: .destructive) {
+				onDeleteApp?(app)
 			}
+			Button(.localized("Cancel"), role: .cancel) {}
+		} message: {
+			Text(
+				String(
+					format: .localized("Delete %@ from Zag Store? This removes Zag Store's stored copy, but does not uninstall the app from your iPhone."),
+					app.name ?? .localized("this app")
+				)
+			)
+		}
+		.confirmationDialog(
+			String(
+				format: .localized("Remove “%@”?"),
+				app.name ?? .localized("this app")
+			),
+			isPresented: $isRemoveConfirmationPresented,
+			titleVisibility: .visible
+		) {
+			Button(.localized("Delete App"), role: .destructive) {
+				onRemoveManagedApp?(app)
+			}
+			Button(.localized("Cancel"), role: .cancel) {}
+		} message: {
+			Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
 		}
 	}
 
@@ -215,7 +212,7 @@ extension LibraryCellView {
 			systemImage: "trash",
 			role: .destructive
 		) {
-			pendingDestructiveAction = .delete
+			isDeleteConfirmationPresented = true
 		}
 
 		if isManagedInstalled {
@@ -224,7 +221,7 @@ extension LibraryCellView {
 				systemImage: isRemoving ? "hourglass" : "minus.circle",
 				role: .destructive
 			) {
-				pendingDestructiveAction = .remove
+				isRemoveConfirmationPresented = true
 			}
 			.disabled(isRemoving)
 		}
@@ -358,12 +355,3 @@ extension LibraryCellView {
 	}
 }
 
-
-private extension LibraryCellView {
-	enum DestructiveAction: String, Identifiable {
-		case delete
-		case remove
-
-		var id: String { rawValue }
-	}
-}
