@@ -2186,6 +2186,43 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		}
 	}
 
+	func prepareAsync(_ update: UpdateManager.AvailableUpdate) async throws -> String {
+		try await withCheckedThrowingContinuation { continuation in
+			prepare(update) { result in
+				continuation.resume(with: result)
+			}
+		}
+	}
+
+	func installPreparedUpdate(signedUUID: String) async throws {
+		guard let signed = signedApp(uuid: signedUUID) else {
+			throw ZagUpdateTransactionError.signedRecordNotFound
+		}
+
+		let viewModel = InstallerStatusViewModel(isIdevice: false)
+		let archiveHandler = ArchiveHandler(app: signed, viewModel: viewModel)
+		try await archiveHandler.move()
+		let packageURL = try await archiveHandler.archive()
+
+		defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
+
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+			Task { @MainActor in
+				do {
+					try ZagRPPairingCore.shared.installGate4IPA(
+						at: packageURL,
+						deviceIP: "10.7.0.1",
+						completion: { result in continuation.resume(with: result) }
+					)
+				} catch {
+					continuation.resume(throwing: error)
+				}
+			}
+		}
+
+		completeInstallation(signedUUID: signedUUID)
+	}
+
 	func completeInstallation(signedUUID: String) {
 		guard let pending = pendingBySignedUUID.removeValue(forKey: signedUUID) else {
 			return
