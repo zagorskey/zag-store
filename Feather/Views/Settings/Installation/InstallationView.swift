@@ -303,6 +303,7 @@ private struct RPPairingView: View {
 struct RPPairingDiagnosticsView: View {
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var showGate4Importer = false
+	@State private var healthMessage: String?
 
 	var body: some View {
 		NBList("Diagnostics") {
@@ -339,11 +340,15 @@ struct RPPairingDiagnosticsView: View {
 				}
 
 				Button {
+					guard pairingCore.pairingFileExists else {
+						healthMessage = "Pair this iPhone first. The full health check needs saved RPPairing credentials before it can test LocalDevVPN, Pair-Verify, RSD, Installation Proxy and AFC."
+						return
+					}
 					pairingCore.startGate2Probe()
 				} label: {
 					Label(pairingCore.isGate2Running ? "Running Health Check…" : "Run Full Health Check", systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope")
 				}
-				.disabled(pairingCore.isGate2Running || !pairingCore.pairingFileExists)
+				.disabled(pairingCore.isGate2Running)
 			} header: {
 				Text("Health Checks")
 			} footer: {
@@ -369,6 +374,14 @@ struct RPPairingDiagnosticsView: View {
 			} footer: {
 				Text("Runs the complete direct-install path with a signed disposable IPA. Do not select Zag Store itself.")
 			}
+		}
+		.alert("Health Check", isPresented: Binding(
+			get: { healthMessage != nil },
+			set: { if !$0 { healthMessage = nil } }
+		)) {
+			Button("OK", role: .cancel) { healthMessage = nil }
+		} message: {
+			Text(healthMessage ?? "")
 		}
 		.fileImporter(isPresented: $showGate4Importer, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
 			switch result {
