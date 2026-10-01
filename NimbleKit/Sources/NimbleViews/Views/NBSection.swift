@@ -53,9 +53,8 @@ public struct NBSection<Content, Footer>: View
 				}
 					
 				Text(_headerText)
-					.fontWeight(.bold)
-					.font(.title2)
-					.foregroundStyle(.primary)
+					.font(.footnote.weight(.semibold))
+					.foregroundStyle(.secondary)
 						
 					
 				Spacer()
@@ -91,6 +90,5 @@ public struct NBSection<Content, Footer>: View
 		) {
 			_content
 		}
-		.headerProminence(.increased)
 	}
 }
