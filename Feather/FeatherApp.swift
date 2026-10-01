@@ -162,6 +162,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_addDefaultCertificates()
 		ZagBackgroundUpdateRefresh.shared.register()
 		ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
+		application.isIdleTimerDisabled = UserDefaults.standard.bool(
+			forKey: "ZagStore.disableIdleTimeout"
+		)
 		return true
 	}
 	
