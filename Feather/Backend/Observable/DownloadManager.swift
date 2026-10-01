@@ -78,6 +78,9 @@ class DownloadManager: NSObject, ObservableObject {
 		zagImported: ((String?, Error?) -> Void)? = nil
 	) -> Download {
 		if let existingDownload = downloads.first(where: { $0.url == url }) {
+			if let zagImported {
+				existingDownload.zagImported = zagImported
+			}
 			resumeDownload(existingDownload)
 			return existingDownload
 		}
