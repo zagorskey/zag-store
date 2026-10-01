@@ -90,8 +90,7 @@ extension CertificatesCellView {
 					index: index,
 					count: pillItems.count
 				)
-				.frame(height: 30)
-				.clipped()
+				.scaleEffect(x: 1, y: 0.82)
 			}
 		}
 		.frame(maxWidth: .infinity)
