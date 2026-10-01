@@ -333,8 +333,15 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 	) -> [UIAction] {
 		if let versions = app.versions, !versions.isEmpty {
 			return versions.map { version in
-				UIAction(
-					title: version.version,
+				let title: String
+				if let build = version.build, !build.isEmpty {
+					title = "\(version.version) (\(build))"
+				} else {
+					title = version.version
+				}
+
+				return UIAction(
+					title: title,
 					image: image
 				) { _ in
 					action(version.downloadURL)
