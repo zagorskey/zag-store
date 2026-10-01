@@ -1108,6 +1108,17 @@ extension LibraryView {
 
 
 	private func _updateRepositoryUpdates() {
+		// Library's FetchedResults can change while repositories are still
+		// refreshing during launch. Never let that transient lifecycle event
+		// replace the last known-good Updates snapshot with an empty/partial one.
+		guard !sourcesViewModel.isRefreshing else {
+			print(
+				"[Zag Store Updates] Library reconciliation deferred: " +
+				"repository refresh is in progress"
+			)
+			return
+		}
+
 		let savedSourceURLs = Set(
 			Storage.shared.getSources().compactMap {
 				$0.sourceURL?.absoluteString
@@ -1127,6 +1138,17 @@ extension LibraryView {
 
 				return candidate.id == repository.id
 			}
+		}
+
+		// With configured sources, only a complete repository snapshot is
+		// authoritative. A partial cache must never clear valid update state.
+		guard savedSourceURLs.isEmpty || activeRepositories.count == savedSourceURLs.count else {
+			print(
+				"[Zag Store Updates] Library reconciliation deferred: " +
+				"repository snapshot is incomplete (" +
+				"\(activeRepositories.count)/\(savedSourceURLs.count))"
+			)
+			return
 		}
 
 		UpdateManager.shared.refresh(
