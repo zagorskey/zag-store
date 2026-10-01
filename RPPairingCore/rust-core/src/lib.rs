@@ -504,3 +504,123 @@ async fn run_gate4_install(
     emit(callback, 207, "Installation complete");
     Ok(())
 }
+
+
+/// Gate 4 uninstall: removes one installed app through the proven
+/// RPPairing -> TLS-PSK -> RSD -> installation_proxy path.
+///
+/// Callback codes:
+/// 301 = starting
+/// 302 = RPPairing pair-verify complete
+/// 303 = TLS-PSK tunnel established
+/// 304 = RSD established
+/// 305 = installation_proxy connected
+/// 306 = uninstall started
+/// 307 = uninstall complete
+/// -5  = uninstall failure
+#[no_mangle]
+pub unsafe extern "C" fn zag_gate4_uninstall(
+    device_ip: *const c_char,
+    pairing_path: *const c_char,
+    bundle_id: *const c_char,
+    callback: Option<ZagRPPairingCallback>,
+) -> bool {
+    let Some(callback) = callback else { return false; };
+    if device_ip.is_null() || pairing_path.is_null() || bundle_id.is_null() { return false; }
+
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
+    let Ok(bundle_id) = CStr::from_ptr(bundle_id).to_str().map(str::to_owned) else { return false; };
+
+    thread::spawn(move || {
+        emit(callback, 301, format!("Starting uninstall for {bundle_id}"));
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit(callback, -5, format!("Uninstall runtime failed: {error}"));
+                return;
+            }
+        };
+        runtime.block_on(async move {
+            if let Err(error) = run_gate4_uninstall(device_ip, pairing_path, bundle_id, callback).await {
+                emit(callback, -5, error);
+            }
+        });
+    });
+    true
+}
+
+async fn run_gate4_uninstall(
+    device_ip: String,
+    pairing_path: PathBuf,
+    bundle_id: String,
+    callback: ZagRPPairingCallback,
+) -> Result<(), String> {
+    let ip: IpAddr = device_ip
+        .parse()
+        .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
+
+    let mut pairing_file = RpPairingFile::read_from_file(&pairing_path)
+        .await
+        .map_err(|error| format!("Unable to read saved RPPairing credentials: {error}"))?;
+
+    let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 49152)))
+        .await
+        .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
+        .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
+
+    let conn = RpPairingSocket::new(stream);
+    let mut rpc = RemotePairingClient::new(conn, "Zag Store");
+    rpc.connect(&mut pairing_file, || async { "000000".to_string() })
+        .await
+        .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
+    emit(callback, 302, "Saved RPPairing credentials verified");
+
+    let tunnel_port = rpc
+        .create_tcp_listener()
+        .await
+        .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
+    let tunnel_stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, tunnel_port)))
+        .await
+        .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
+        .map_err(|error| format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}"))?;
+
+    let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
+        .await
+        .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
+    let client_ip: IpAddr = tunnel.info.client_address.parse()
+        .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
+    let server_ip: IpAddr = tunnel.info.server_address.parse()
+        .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
+    let mtu = tunnel.info.mtu as usize;
+    let rsd_port = tunnel.info.server_rsd_port;
+    emit(callback, 303, format!("CDTunnel established; RSD port {rsd_port}"));
+
+    let raw = tunnel.into_inner();
+    let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
+    adapter.set_mss(mtu.saturating_sub(60));
+    let mut adapter = adapter.to_async_handle();
+
+    let rsd_stream = adapter
+        .connect(rsd_port)
+        .await
+        .map_err(|error| format!("Unable to reach RSD through tunnel: {error}"))?;
+    let mut handshake = RsdHandshake::new(rsd_stream)
+        .await
+        .map_err(|error| format!("RSD handshake failed: {error}"))?;
+    emit(callback, 304, format!("RSD established; {} services", handshake.services.len()));
+
+    let mut installation_proxy = InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+        .await
+        .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
+    emit(callback, 305, "installation_proxy connected over RSD");
+
+    emit(callback, 306, format!("Uninstalling {bundle_id}"));
+    installation_proxy
+        .uninstall(bundle_id.clone(), None)
+        .await
+        .map_err(|error| format!("Direct uninstall failed for {bundle_id}: {error}"))?;
+
+    emit(callback, 307, format!("Uninstalled {bundle_id}"));
+    Ok(())
+}
