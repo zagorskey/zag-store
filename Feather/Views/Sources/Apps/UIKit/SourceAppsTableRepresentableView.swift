@@ -49,13 +49,25 @@ private final class ZagGitHubHistoryResolver {
 	}
 
 	private func upstreamRepository(for app: ASRepository.App) -> String? {
-		let text = [app.currentDescription, app.localizedDescription, app.description]
-			.compactMap { $0 }.joined(separator: "\n")
-		let pattern = #"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/|\)|\]|\s|$)"#
+		// Prefer the canonical upstream for apps whose feed mirrors a separately
+		// maintained project. The release assets themselves are still discovered
+		// live from GitHub; no historical versions or download URLs are hard-coded.
+		if app.currentName.localizedCaseInsensitiveContains("YTKACE") {
+			return "itzzace/ytkace"
+		}
+
+		var candidates = [app.currentDescription, app.localizedDescription, app.description]
+			.compactMap { $0 }
+		if let downloadURL = app.currentDownloadUrl?.absoluteString {
+			candidates.append(downloadURL)
+		}
+		let text = candidates.joined(separator: "\n")
+		let pattern = #"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"#
 		guard let regex = try? NSRegularExpression(pattern: pattern),
 			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
 			let range = Range(match.range(at: 1), in: text) else { return nil }
-		return String(text[range]).replacingOccurrences(of: ".git", with: "")
+		return String(text[range])
+			.replacingOccurrences(of: ".git", with: "")
 	}
 
 	private func parse(_ data: Data, currentVersion: String?) -> [ZagGitHubHistoricalIPA] {
