@@ -184,6 +184,7 @@ async fn run_pairing(
 /// 111 = PublicStaging write complete
 /// 112 = PublicStaging read-back verified
 /// 113 = diagnostic file deleted
+/// 114 = read-only RSD service manifest (newline-delimited)
 /// -2  = device-services probe failure
 #[no_mangle]
 pub unsafe extern "C" fn zag_gate2_probe(
@@ -288,6 +289,29 @@ async fn run_gate2_probe(
         .await
         .map_err(|error| format!("RSD handshake failed: {error}"))?;
     emit(callback, 106, format!("RSD established; {} services", handshake.services.len()));
+
+    // Read-only iOS service census. This does not connect to, invoke, or mutate
+    // any discovered service; it only serializes metadata already returned by
+    // the RSD handshake so we can inspect what this exact iOS build advertises.
+    let mut service_names: Vec<_> = handshake.services.keys().cloned().collect();
+    service_names.sort();
+    let service_manifest = service_names
+        .iter()
+        .filter_map(|name| {
+            handshake.services.get(name).map(|service| {
+                format!(
+                    "{name} | port={} | xpc={} | version={:?} | entitlement={:?} | features={:?}",
+                    service.port,
+                    service.uses_remote_xpc,
+                    service.service_version,
+                    service.entitlement,
+                    service.features
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    emit(callback, 114, service_manifest);
 
     let mut remote_lockdown = LockdownClient::connect_rsd(&mut adapter, &mut handshake)
         .await
