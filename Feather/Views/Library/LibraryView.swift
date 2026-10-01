@@ -680,7 +680,9 @@ struct LibraryView: View {
 
 
 
-								NBButton(.localized("Import"), style: .text)
+								ZagActionPill(title: .localized("Import")) {
+									_isImportingPresenting = true
+								}
 
 
 
