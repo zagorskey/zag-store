@@ -111,12 +111,7 @@ async fn run_pairing(
         .map_err(|error| format!("Unable to read pairing listener address: {error}"))?
         .port();
 
-    // Keep the host identity stable across launches. PairableHostInfo::generate()
-    // creates a fresh random alt_irk; iOS uses that IRK together with the stable
-    // service identifier to recognize an already-paired host from its mDNS authTag.
-    //
-    // RpPairingFile already persists alt_irk, so reuse it when an existing pairing
-    // file is present. A missing/invalid file deliberately starts a new identity.
+    // Preserve the host identity independently from the peer identity.
     let mut pairing_file = if output_path.exists() {
         let bytes = std::fs::read(&output_path)
             .map_err(|error| format!("Unable to read saved pairing credentials: {error}"))?;
@@ -126,15 +121,19 @@ async fn run_pairing(
         RpPairingFile::generate(&host_name)
     };
 
+    let host_identity_path = output_path.with_file_name("rppairing-host-identity.bin");
     let mut host_info = PairableHostInfo::generate(&host_name, "Mac17,7");
-    if let Some(saved_alt_irk) = pairing_file.alt_irk() {
-        if saved_alt_irk.len() == 16 {
-            host_info.alt_irk.copy_from_slice(saved_alt_irk);
+    match std::fs::read(&host_identity_path) {
+        Ok(saved) if saved.len() == 16 => host_info.alt_irk.copy_from_slice(&saved),
+        _ => {
+            if let Some(parent) = host_identity_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|error| format!("Unable to create host identity storage: {error}"))?;
+            }
+            std::fs::write(&host_identity_path, host_info.alt_irk)
+                .map_err(|error| format!("Unable to save host identity: {error}"))?;
         }
     }
-    // Ensure the IRK used for this advertisement/handshake is written back with
-    // the pairing credentials so the next launch presents the exact same host.
-    pairing_file.alt_irk = Some(host_info.alt_irk.to_vec());
 
     let service_identifier = pairing_file.identifier.clone();
 
