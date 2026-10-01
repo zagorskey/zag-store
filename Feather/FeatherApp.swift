@@ -365,6 +365,18 @@ final class ZagBackgroundUpdateRefresh {
 
 		guard !Task.isCancelled else { return false }
 
+		// Never publish a partial repository snapshot. A transient source
+		// failure would otherwise make valid updates disappear until the next
+		// successful refresh. The last complete snapshot remains authoritative.
+		guard repositories.count == sources.count else {
+			Logger.misc.warning(
+				"[Zag Store Background] Incomplete refresh: " +
+				"\(repositories.count)/\(sources.count) repositories. " +
+				"Keeping previous update state."
+			)
+			return false
+		}
+
 		await MainActor.run {
 			UpdateManager.shared.refresh(
 				repositories: repositories
@@ -374,6 +386,6 @@ final class ZagBackgroundUpdateRefresh {
 		Logger.misc.info(
 			"[Zag Store Background] Refreshed \(repositories.count) repositories"
 		)
-		return !repositories.isEmpty
+		return true
 	}
 }
