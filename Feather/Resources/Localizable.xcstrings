@@ -4,6 +4,15 @@
     "" : {
 
     },
+    " app from sources" : {
+
+    },
+    " apps" : {
+
+    },
+    " apps from sources" : {
+
+    },
     "%@ → %@" : {
       "localizations" : {
         "en" : {
@@ -13,6 +22,9 @@
           }
         }
       }
+    },
+    "%lld" : {
+
     },
     "%lld Apps" : {
       "comment" : "Repository app count",
@@ -577,6 +589,9 @@
         }
       }
     },
+    "%lld%%" : {
+
+    },
     "💜 This couldn't of been done without my sponsors!" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -641,6 +656,9 @@
           }
         }
       }
+    },
+    "0" : {
+
     },
     "2.0.0 → 2.0.1" : {
 
@@ -763,6 +781,9 @@
           }
         }
       }
+    },
+    "About Us" : {
+
     },
     "Add" : {
       "extractionState" : "manual",
@@ -1708,6 +1729,12 @@
     "Apps" : {
 
     },
+    "Apps, Games and More" : {
+
+    },
+    "Apps, Games in Repo" : {
+
+    },
     "Archive & Compression" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1773,7 +1800,19 @@
         }
       }
     },
+    "Automatic Installation" : {
+
+    },
+    "Automatic Preparation" : {
+
+    },
     "Background" : {
+
+    },
+    "Background Updates" : {
+
+    },
+    "Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions." : {
 
     },
     "Bad Password" : {
@@ -3000,6 +3039,12 @@
         }
       }
     },
+    "Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup." : {
+
+    },
+    "Connect to LocalDevVPN" : {
+
+    },
     "Copy" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3082,6 +3127,9 @@
           }
         }
       }
+    },
+    "Copy Certificate Name" : {
+
     },
     "Copy Download URLs" : {
       "extractionState" : "manual",
@@ -3218,6 +3266,9 @@
           }
         }
       }
+    },
+    "Custom" : {
+
     },
     "Custom Theme Color" : {
       "extractionState" : "manual",
@@ -3868,6 +3919,21 @@
         }
       }
     },
+    "Device" : {
+
+    },
+    "Diagnostics" : {
+
+    },
+    "Diagnostics & Health Checks" : {
+
+    },
+    "Direct Install Status" : {
+
+    },
+    "Disable Idle Timeout" : {
+
+    },
     "Dismiss" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3950,6 +4016,9 @@
           }
         }
       }
+    },
+    "Display" : {
+
     },
     "Display Names" : {
       "extractionState" : "manual",
@@ -4235,6 +4304,12 @@
           }
         }
       }
+    },
+    "Done Reordering" : {
+
+    },
+    "Download LocalDevVPN" : {
+
     },
     "Download StosVPN" : {
       "comment" : "Don't translate StosVPN, this is for linking the download to the required VPN for idevice",
@@ -5876,6 +5951,9 @@
         }
       }
     },
+    "Found" : {
+
+    },
     "Frameworks" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6672,6 +6750,9 @@
       }
     },
     "Headers" : {
+
+    },
+    "Health Checks" : {
 
     },
     "Heartbeat" : {
@@ -8144,6 +8225,9 @@
         }
       }
     },
+    "Installation Test" : {
+
+    },
     "Installation Type" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8258,6 +8342,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在安装"
+          }
+        }
+      }
+    },
+    "iOS %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "iOS %1$@%2$@"
           }
         }
       }
@@ -8445,6 +8539,9 @@
           }
         }
       }
+    },
+    "Last Updated" : {
+
     },
     "Learn more about how to setup a repository…" : {
       "extractionState" : "manual",
@@ -9029,6 +9126,12 @@
         }
       }
     },
+    "Name (A–Z)" : {
+
+    },
+    "Name (Z–A)" : {
+
+    },
     "New" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9413,6 +9516,9 @@
           }
         }
       }
+    },
+    "No computer-generated pairing file" : {
+
     },
     "No Entitlements listed." : {
       "extractionState" : "manual",
@@ -9872,6 +9978,9 @@
           }
         }
       }
+    },
+    "Not Found" : {
+
     },
     "OK" : {
       "extractionState" : "manual",
@@ -10516,6 +10625,18 @@
           }
         }
       }
+    },
+    "Pair This iPhone" : {
+
+    },
+    "Paired Device" : {
+
+    },
+    "PAIRING CODE" : {
+
+    },
+    "Pairing credentials saved" : {
+
     },
     "Pairing File Guide" : {
       "extractionState" : "manual",
@@ -11645,6 +11766,9 @@
     "Refresh Repositories" : {
 
     },
+    "Refreshing Apps" : {
+
+    },
     "Refreshing Repositories" : {
 
     },
@@ -12097,6 +12221,9 @@
         }
       }
     },
+    "Reorder" : {
+
+    },
     "Replace Substrate with ElleKit" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12220,6 +12347,9 @@
           }
         }
       }
+    },
+    "Repos, Apps, Games and More" : {
+
     },
     "Repositories" : {
       "extractionState" : "manual",
@@ -13082,6 +13212,27 @@
     "Rows" : {
 
     },
+    "RPPairing" : {
+
+    },
+    "RPPairing installs directly through this iPhone's device services. Run Health Check to verify the LocalDevVPN tunnel and complete direct-install path." : {
+
+    },
+    "Run Full Health Check" : {
+
+    },
+    "Run Installation Test…" : {
+
+    },
+    "Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test." : {
+
+    },
+    "Running Health Check…" : {
+
+    },
+    "Runs the complete direct-install path with a signed disposable IPA. Do not select Zag Store itself." : {
+
+    },
     "Save" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13199,6 +13350,9 @@
           }
         }
       }
+    },
+    "See all " : {
+
     },
     "See all apps from your sources" : {
       "comment" : "All repositories description",
@@ -13939,6 +14093,12 @@
         }
       }
     },
+    "Setup" : {
+
+    },
+    "Setup Required" : {
+
+    },
     "Show Separators" : {
 
     },
@@ -14503,6 +14663,9 @@
           }
         }
       }
+    },
+    "Sort Repositories" : {
+
     },
     "Source" : {
       "extractionState" : "manual",
@@ -15071,6 +15234,9 @@
           }
         }
       }
+    },
+    "Status" : {
+
     },
     "Status Dot Colour" : {
 
@@ -16344,6 +16510,9 @@
     "Update Indicator" : {
 
     },
+    "Update Notifications" : {
+
+    },
     "Update SSL Certificates" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16502,6 +16671,9 @@
           }
         }
       }
+    },
+    "User Apps" : {
+
     },
     "Value" : {
       "extractionState" : "manual",
@@ -16914,6 +17086,9 @@
         }
       }
     },
+    "Waiting for This iPhone…" : {
+
+    },
     "What's New" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17014,6 +17189,9 @@
         }
       }
     },
+    "You have " : {
+
+    },
     "Your pairing file is invalid and is incompatible with your device, please import a valid pairing file." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17066,6 +17244,12 @@
           }
         }
       }
+    },
+    "Zag Store" : {
+
+    },
+    "Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally." : {
+
     },
     "Zag Store Designer" : {
 

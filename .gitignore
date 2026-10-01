@@ -8,3 +8,8 @@ cert.json
 _build
 
 *.bak-pass10b1
+
+# Zag Store RPPairing generated build output
+RPPairingCore/ZagRPPairingCore.xcframework/
+RPPairingCore/build/
+RPPairingCore/rust-core/target/
