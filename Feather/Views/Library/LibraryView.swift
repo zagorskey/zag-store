@@ -52,6 +52,8 @@ import NukeUI
 
 struct LibraryView: View {
 
+	@Environment(\.scenePhase) private var scenePhase
+
 
 
 	@StateObject var downloadManager = DownloadManager.shared
@@ -794,6 +796,13 @@ struct LibraryView: View {
 
 
 			.environment(\.editMode, $_editMode)
+			.onChange(of: scenePhase) { phase in
+				guard phase == .active else { return }
+				_reconcileManagedInstalledApps()
+			}
+			.onAppear {
+				_reconcileManagedInstalledApps()
+			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
 				ZagUpdatesPopup(
@@ -1074,6 +1083,24 @@ extension LibraryView {
 		identifiers.insert(identifier)
 
 		if let encoded = try? JSONEncoder().encode(identifiers) {
+			_managedInstalledBundleIDsData = encoded
+		}
+	}
+
+	private func _reconcileManagedInstalledApps() {
+		let identifiers = _managedInstalledBundleIDs
+		guard !identifiers.isEmpty else { return }
+
+		// If LaunchServices cannot answer on this iOS build, preserve the
+		// existing state. Only IDs explicitly reported missing are removed.
+		let missing = identifiers.filter { identifier in
+			UIApplication.isAppInstalled(with: identifier) == false
+		}
+		guard !missing.isEmpty else { return }
+
+		var reconciled = identifiers
+		reconciled.subtract(missing)
+		if let encoded = try? JSONEncoder().encode(reconciled) {
 			_managedInstalledBundleIDsData = encoded
 		}
 	}
