@@ -220,6 +220,10 @@ final class UpdateManager: ObservableObject {
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
+	static let updateNotificationsEnabledKey =
+		"ZagStore.updateNotificationsEnabled"
+	private static let notifiedUpdateSignaturesKey =
+		"ZagStore.notifiedUpdateSignatures"
 
 	var updateCount: Int {
 		updates.isEmpty ? persistedUpdateCount : updates.count
@@ -255,7 +259,7 @@ final class UpdateManager: ObservableObject {
 	func requestBadgePermission() async {
 		do {
 			let granted = try await UNUserNotificationCenter.current()
-				.requestAuthorization(options: [.badge])
+				.requestAuthorization(options: [.badge, .alert, .sound])
 
 			print(
 				"[Zag Store Badge] Permission " +
@@ -270,6 +274,59 @@ final class UpdateManager: ObservableObject {
 				"[Zag Store Badge] Permission error: " +
 					error.localizedDescription
 			)
+		}
+	}
+
+	func requestUpdateNotificationPermission() async -> Bool {
+		do {
+			return try await UNUserNotificationCenter.current()
+				.requestAuthorization(options: [.badge, .alert, .sound])
+		} catch {
+			print("[Zag Store Notifications] Permission error: " + error.localizedDescription)
+			return false
+		}
+	}
+
+	private func notifyAboutNewUpdatesIfNeeded(_ updates: [AvailableUpdate]) {
+		guard UserDefaults.standard.bool(forKey: Self.updateNotificationsEnabledKey) else {
+			return
+		}
+
+		let signatures = Set(updates.map {
+			($0.app.id ?? $0.app.currentUniqueId) + "|" + $0.availableVersion
+		})
+		let defaults = UserDefaults.standard
+		let previous = Set(defaults.stringArray(forKey: Self.notifiedUpdateSignaturesKey) ?? [])
+		let newSignatures = signatures.subtracting(previous)
+
+		// Always update the snapshot. If an update disappears and later returns,
+		// it can notify again rather than remaining suppressed forever.
+		defaults.set(Array(signatures), forKey: Self.notifiedUpdateSignaturesKey)
+		guard !newSignatures.isEmpty else { return }
+
+		let newUpdates = updates.filter {
+			newSignatures.contains(($0.app.id ?? $0.app.currentUniqueId) + "|" + $0.availableVersion)
+		}
+
+		let content = UNMutableNotificationContent()
+		content.sound = .default
+		if newUpdates.count == 1, let update = newUpdates.first {
+			content.title = "Update Available"
+			content.body = "\(update.app.currentName) \(update.availableVersion) is available in Zag Store."
+		} else {
+			content.title = "Updates Available"
+			content.body = "\(newUpdates.count) app updates are available in Zag Store."
+		}
+
+		let request = UNNotificationRequest(
+			identifier: "ZagStore.update-notification." + UUID().uuidString,
+			content: content,
+			trigger: nil
+		)
+		UNUserNotificationCenter.current().add(request) { error in
+			if let error {
+				print("[Zag Store Notifications] Delivery failed: " + error.localizedDescription)
+			}
 		}
 	}
 
@@ -441,6 +498,8 @@ final class UpdateManager: ObservableObject {
 			persistedUpdateCount,
 			forKey: Self.persistedUpdateCountKey
 		)
+
+		notifyAboutNewUpdatesIfNeeded(updates)
 
 		Task {
 			await syncAppIconBadge()
