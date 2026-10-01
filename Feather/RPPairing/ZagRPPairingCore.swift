@@ -283,6 +283,17 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .stagingWrite(message)
 		case 112:
 			gate2State = .stagingVerify(message)
+		case 114:
+			// Persist the read-only RSD census where it can be retrieved without
+			// Xcode or a live console. Re-running Gate 2 simply replaces the file.
+			let outputURL = URL.documentsDirectory
+				.appendingPathComponent("Zag-RSD-Services.txt")
+			do {
+				try message.write(to: outputURL, atomically: true, encoding: .utf8)
+				zagRPPairingLog.notice("RSD service manifest saved to Documents/Zag-RSD-Services.txt")
+			} catch {
+				zagRPPairingLog.error("Unable to save RSD service manifest: \(error.localizedDescription)")
+			}
 		case 113:
 			let previous = gate2DeviceInfo ?? (name: "This iPhone", model: "", version: "", build: "")
 			let appResult: (Int, Bool)
