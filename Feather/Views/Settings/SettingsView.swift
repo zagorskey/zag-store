@@ -68,7 +68,7 @@ struct SettingsView: View {
 					}
 
 				} footer: {
-					Text(.localized("Add and manage certificates used for signing applications."))
+					Text(.localized("Add and manage certificates used for signing apps."))
 				}
                 
 				NBSection(.localized("Features")) {
