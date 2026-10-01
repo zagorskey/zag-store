@@ -316,6 +316,18 @@ final class ZagRPPairingCore: ObservableObject {
 		// Settings > Developer Mode. Ask for notification permission up front so
 		// the code can be surfaced without forcing a blind app switch.
 		UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+		let returnAction = UNNotificationAction(
+			identifier: "zag-rppairing-return",
+			title: "Return to Zag Store",
+			options: [.foreground]
+		)
+		let category = UNNotificationCategory(
+			identifier: "zag-rppairing-pin-category",
+			actions: [returnAction],
+			intentIdentifiers: [],
+			options: []
+		)
+		UNUserNotificationCenter.current().setNotificationCategories([category])
 		advertiser.stop()
 		beginPairingBackgroundTime()
 		state = .starting
@@ -330,34 +342,6 @@ final class ZagRPPairingCore: ObservableObject {
 			state = .failed("The RPPairing engine could not be started.")
 			return
 		}
-
-		// iOS has no public Developer Settings deep link. For this sideloaded build,
-		// experimentally try the private Settings routes after the pairing host has
-		// had a moment to bring up its listener. If iOS rejects them, pairing keeps
-		// running and the user can navigate to Developer Mode manually.
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-			guard let self, self.isRunning else { return }
-			self.openDeveloperPairingSettings()
-		}
-	}
-
-	private func openDeveloperPairingSettings() {
-		let candidates = [
-			"prefs:root=DEVELOPER_SETTINGS#DTPairedDevicesGroup",
-			"App-prefs:root=DEVELOPER_SETTINGS#DTPairedDevicesGroup",
-			"prefs:root=DEVELOPER_SETTINGS",
-			"App-prefs:root=DEVELOPER_SETTINGS"
-		]
-		openFirstSettingsURL(candidates[...])
-	}
-
-	private func openFirstSettingsURL(_ candidates: ArraySlice<String>) {
-		guard let candidate = candidates.first, let url = URL(string: candidate) else { return }
-		UIApplication.shared.open(url, options: [:]) { [weak self] opened in
-			guard !opened else { return }
-			self?.openFirstSettingsURL(candidates.dropFirst())
-		}
-	}
 
 	func resetStatus() {
 		guard !isRunning else { return }
@@ -403,6 +387,7 @@ final class ZagRPPairingCore: ObservableObject {
 				content.body = "\(message)  •  Tap to return to Zag Store"
 			}
 			content.sound = .default
+			content.categoryIdentifier = "zag-rppairing-pin-category"
 			if #available(iOS 15.0, *) {
 				content.interruptionLevel = .timeSensitive
 			}
