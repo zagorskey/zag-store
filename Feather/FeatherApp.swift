@@ -161,7 +161,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		ResetView.clearWorkCache()
 		_addDefaultCertificates()
 		ZagBackgroundUpdateRefresh.shared.register()
-		ZagBackgroundUpdateRefresh.shared.schedule()
+		ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
 		return true
 	}
 	
@@ -256,7 +256,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 	
 	func applicationDidEnterBackground(_ application: UIApplication) {
-		ZagBackgroundUpdateRefresh.shared.schedule()
+		ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
 	}
 
 }
@@ -270,6 +270,7 @@ final class ZagBackgroundUpdateRefresh {
 	private let taskIdentifier = "com.cwd43.gu29.background-update-check"
 	private let refreshInterval: TimeInterval = 60 * 60 * 4
 	private let dataService = NBFetchService()
+	static let enabledKey = "ZagStore.backgroundUpdatesEnabled"
 
 	private init() {}
 
@@ -286,7 +287,27 @@ final class ZagBackgroundUpdateRefresh {
 		}
 	}
 
+	func applySchedulingPreference() {
+		if UserDefaults.standard.bool(forKey: Self.enabledKey) {
+			schedule()
+		} else {
+			cancel()
+		}
+	}
+
+	func cancel() {
+		BGTaskScheduler.shared.cancel(
+			taskRequestWithIdentifier: taskIdentifier
+		)
+		Logger.misc.info("[Zag Store Background] Background updates disabled")
+	}
+
 	func schedule() {
+		guard UserDefaults.standard.bool(forKey: Self.enabledKey) else {
+			cancel()
+			return
+		}
+
 		BGTaskScheduler.shared.cancel(
 			taskRequestWithIdentifier: taskIdentifier
 		)
@@ -324,6 +345,10 @@ final class ZagBackgroundUpdateRefresh {
 		task.expirationHandler = {
 			work.cancel()
 		}
+	}
+
+	func refreshNow() async -> Bool {
+		await refreshRepositoriesAndUpdates()
 	}
 
 	private func refreshRepositoriesAndUpdates() async -> Bool {
