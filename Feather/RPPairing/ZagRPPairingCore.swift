@@ -458,13 +458,22 @@ final class ZagRPPairingCore: ObservableObject {
 		backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Zag RPPairing") { [weak self] in
 			Task { @MainActor in
 				guard let self else { return }
-				self.advertiser.stop()
+				let remaining = UIApplication.shared.backgroundTimeRemaining
+				zagRPPairingLog.notice("background assertion expired; remaining=\(remaining, privacy: .public)s state=\(String(describing: self.state), privacy: .public)")
+				// Expiration means iOS may suspend Zag Store; it does not mean the
+				// RPPairing transaction itself has failed. In particular, once Settings
+				// has connected and displayed the PIN, tearing down Bonjour here only
+				// destroys a transaction that can resume when Zag Store is foregrounded.
 				self.endPairingBackgroundTime()
-				if self.isRunning {
-					self.state = .failed("RPPairing background time expired. Keep Zag Store open and try again.")
-				}
 			}
 		}
+		zagRPPairingLog.notice("background assertion armed; remaining=\(UIApplication.shared.backgroundTimeRemaining, privacy: .public)s")
+	}
+
+	func refreshPairingBackgroundTime() {
+		guard isRunning else { return }
+		endPairingBackgroundTime()
+		beginPairingBackgroundTime()
 	}
 
 	private func endPairingBackgroundTime() {
