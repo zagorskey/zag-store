@@ -21,70 +21,127 @@ private final class ZagGitHubHistoryResolver {
 	private let lock = NSLock()
 
 	func cached(for app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
-		let key = app.id ?? app.name ?? ""
+		let key = cacheKey(for: app)
 		lock.lock(); defer { lock.unlock() }
 		return cache[key] ?? []
 	}
 
 	func prefetch(_ app: ASRepository.App, completion: @escaping () -> Void) {
-		guard let repository = upstreamRepository(for: app) else { return }
-		let key = app.id ?? app.name ?? repository
+		guard (app.versions?.count ?? 0) <= 1, let repository = repositoryForHistory(of: app) else { return }
+		let key = cacheKey(for: app)
 		lock.lock()
 		if cache[key] != nil || loading.contains(key) { lock.unlock(); return }
 		loading.insert(key)
 		lock.unlock()
 
-		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else { return }
+		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else {
+			finish(key: key, items: [], completion: completion)
+			return
+		}
 		var request = URLRequest(url: url)
 		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 		request.setValue("ZagStore", forHTTPHeaderField: "User-Agent")
 		URLSession.shared.dataTask(with: request) { data, _, _ in
-			let items = data.flatMap { self.parse($0, currentVersion: app.currentVersion) } ?? []
-			self.lock.lock()
-			self.cache[key] = items
-			self.loading.remove(key)
-			self.lock.unlock()
-			DispatchQueue.main.async { completion() }
+			let items = data.flatMap { self.parse($0, app: app) } ?? []
+			self.finish(key: key, items: items, completion: completion)
 		}.resume()
 	}
 
-	private func upstreamRepository(for app: ASRepository.App) -> String? {
-		// Prefer the canonical upstream for apps whose feed mirrors a separately
-		// maintained project. The release assets themselves are still discovered
-		// live from GitHub; no historical versions or download URLs are hard-coded.
+	private func finish(key: String, items: [ZagGitHubHistoricalIPA], completion: @escaping () -> Void) {
+		lock.lock()
+		cache[key] = items
+		loading.remove(key)
+		lock.unlock()
+		DispatchQueue.main.async { completion() }
+	}
+
+	private func cacheKey(for app: ASRepository.App) -> String {
+		(app.id ?? app.name ?? "") + "|" + (app.currentDownloadUrl?.absoluteString ?? "")
+	}
+
+	private func repositoryForHistory(of app: ASRepository.App) -> String? {
 		if app.currentName.localizedCaseInsensitiveContains("YTKACE") {
 			return "itzzace/ytkace"
 		}
 
-		var candidates = [app.currentDescription, app.localizedDescription, app.description]
+		var candidates = [app.currentDownloadUrl?.absoluteString, app.currentDescription, app.localizedDescription, app.description]
 			.compactMap { $0 }
-		if let downloadURL = app.currentDownloadUrl?.absoluteString {
-			candidates.append(downloadURL)
-		}
 		let text = candidates.joined(separator: "\n")
+
+		// Direct GitHub URLs, including release assets.
+		if let repo = githubRepository(in: text) { return repo }
+
+		// Aggregators/proxies frequently preserve the real GitHub release path in
+		// a query/path, e.g. ...apptesters-org/AppTesters_Repo/releases/download/...
+		let embeddedPattern = #"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/releases/download/"#
+		if let regex = try? NSRegularExpression(pattern: embeddedPattern),
+			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+			let range = Range(match.range(at: 1), in: text) {
+			return String(text[range])
+		}
+		return nil
+	}
+
+	private func githubRepository(in text: String) -> String? {
 		let pattern = #"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"#
 		guard let regex = try? NSRegularExpression(pattern: pattern),
 			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
 			let range = Range(match.range(at: 1), in: text) else { return nil }
-		return String(text[range])
-			.replacingOccurrences(of: ".git", with: "")
+		return String(text[range]).replacingOccurrences(of: ".git", with: "")
 	}
 
-	private func parse(_ data: Data, currentVersion: String?) -> [ZagGitHubHistoricalIPA] {
+	private func parse(_ data: Data, app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
 		guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+		let currentVersion = app.currentVersion
+		let currentAsset = app.currentDownloadUrl?.lastPathComponent.removingPercentEncoding ?? ""
+		let identityTokens = appIdentityTokens(app: app, currentAsset: currentAsset)
 		var result: [ZagGitHubHistoricalIPA] = []
+
 		for release in releases where (release["draft"] as? Bool) != true {
 			let tag = release["tag_name"] as? String ?? ""
 			guard let assets = release["assets"] as? [[String: Any]] else { continue }
 			for asset in assets {
-				guard let name = asset["name"] as? String, name.lowercased().hasSuffix(".ipa"),
-					let rawURL = asset["browser_download_url"] as? String, let url = URL(string: rawURL),
-					let version = versions(in: name).last, version != currentVersion else { continue }
+				guard let name = asset["name"] as? String,
+					name.lowercased().hasSuffix(".ipa"),
+					matchesApp(assetName: name, identityTokens: identityTokens),
+					let rawURL = asset["browser_download_url"] as? String,
+					let url = URL(string: rawURL),
+					let version = bestVersion(in: name, currentVersion: currentVersion),
+					version != currentVersion else { continue }
 				result.append(.init(version: version, release: tag, downloadURL: url))
 			}
 		}
 		var seen = Set<String>()
 		return result.filter { seen.insert($0.version + "|" + $0.downloadURL.absoluteString).inserted }
+	}
+
+	private func appIdentityTokens(app: ASRepository.App, currentAsset: String) -> [String] {
+		var values = [app.currentName, app.name ?? "", currentAsset]
+		if let id = app.id { values.append(id) }
+		return values.flatMap { tokenize($0) }.filter { $0.count >= 4 }
+	}
+
+	private func tokenize(_ value: String) -> [String] {
+		value.lowercased()
+			.replacingOccurrences(of: ".ipa", with: "")
+			.components(separatedBy: CharacterSet.alphanumerics.inverted)
+			.filter { !$0.isEmpty && versions(in: $0).isEmpty }
+	}
+
+	private func matchesApp(assetName: String, identityTokens: [String]) -> Bool {
+		let assetTokens = Set(tokenize(assetName))
+		guard !assetTokens.isEmpty else { return false }
+		return identityTokens.contains { assetTokens.contains($0) }
+	}
+
+	private func bestVersion(in value: String, currentVersion: String?) -> String? {
+		let found = versions(in: value)
+		guard !found.isEmpty else { return nil }
+		if let currentVersion, found.contains(currentVersion) { return currentVersion }
+		// IPA naming conventions overwhelmingly put the app version before tweak
+		// versions; choosing the first dotted numeric token avoids mistaking
+		// suffixes such as Premium_1.2.3 for the application version.
+		return found.first
 	}
 
 	private func versions(in value: String) -> [String] {
@@ -159,13 +216,6 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		let sortDirectionChanged = context.coordinator.sortAscending != sortAscending
 		
 		context.coordinator.sources = sources
-		for source in sources {
-			for app in source.apps where (app.versions?.count ?? 0) <= 1 {
-				ZagGitHubHistoryResolver.shared.prefetch(app) { [weak tableView] in
-					tableView?.reloadData()
-				}
-			}
-		}
 		context.coordinator.searchText = searchText
 		context.coordinator.sortOption = sortOption
 		context.coordinator.sortAscending = sortAscending
@@ -414,6 +464,11 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 	// MARK: Actions
 	
 	private func _previousVersionActions(for app: ASRepository.App) -> [UIAction] {
+		// Resolve history only when the user asks for this app. This keeps giant
+		// repositories from generating one GitHub request per catalog entry.
+		ZagGitHubHistoryResolver.shared.prefetch(app) { [weak self] in
+			self?.uiTableView?.reloadData()
+		}
 		let declared = (app.versions ?? []).filter { $0.version != app.currentVersion }.map { version in
 			let title = version.build.map { $0.isEmpty ? version.version : "\(version.version) (\($0))" } ?? version.version
 			return UIAction(title: title, image: UIImage(systemName: "arrow.down")) { _ in
