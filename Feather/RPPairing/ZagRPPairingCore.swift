@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import OSLog
 import UIKit
+import UserNotifications
 
 private let zagRPPairingLog = Logger(subsystem: "com.cwd43.gu29.rppairing", category: "Transport")
 
@@ -311,6 +312,10 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func start() {
 		guard !isRunning else { return }
+		// The PIN is generated after iOS connects while the user is normally in
+		// Settings > Developer Mode. Ask for notification permission up front so
+		// the code can be surfaced without forcing a blind app switch.
+		UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 		advertiser.stop()
 		beginPairingBackgroundTime()
 		state = .starting
@@ -343,6 +348,18 @@ final class ZagRPPairingCore: ObservableObject {
 			state = .connected
 		case 4:
 			state = .pin(message)
+			UIPasteboard.general.string = message
+			let content = UNMutableNotificationContent()
+			content.title = "Zag Store Pairing Code"
+			content.body = message
+			content.sound = .default
+			UNUserNotificationCenter.current().add(
+				UNNotificationRequest(
+					identifier: "zag-rppairing-pin",
+					content: content,
+					trigger: nil
+				)
+			)
 		case 5:
 			advertiser.stop()
 			endPairingBackgroundTime()
