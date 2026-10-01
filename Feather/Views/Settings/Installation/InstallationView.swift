@@ -202,6 +202,7 @@ private struct RPPairingView: View {
 					cancel: { showUnpairConfirmation = false }
 				)
 				.frame(width: 340)
+				.presentationCompactAdaptation(.popover)
 			}
 		} footer: {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
