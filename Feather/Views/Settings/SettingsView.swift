@@ -47,7 +47,7 @@ struct SettingsView: View {
 			Form {
 				NBSection("Display") {
 					NavigationLink(destination: AppearanceView()) {
-						Label(.localized("Appearance"), systemImage: "paintbrush")
+						Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
 					}
 					NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
 						Label(.localized("App Icon"), systemImage: "app.badge")
@@ -141,7 +141,7 @@ struct SettingsView: View {
                 
 				Section {
 					NavigationLink(destination: ResetView()) {
-						Label(.localized("Reset"), systemImage: "arrow.counterclockwise.circle")
+						Label(.localized("Reset"), systemImage: "arrow.counterclockwise")
 					}
 				} footer: {
 					Text(.localized("Reset the applications sources, certificates, apps, and general contents."))
