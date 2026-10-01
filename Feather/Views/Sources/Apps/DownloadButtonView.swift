@@ -9,6 +9,7 @@ import SwiftUI
 import Combine
 import AltSourceKit
 import NimbleViews
+import CoreData
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
@@ -19,6 +20,9 @@ struct DownloadButtonView: View {
 
 	@State private var downloadProgress: Double = 0
 	@State private var cancellable: AnyCancellable?
+	@State private var zagPhase: ZagGetPhase = .idle
+	@State private var installTarget: AnyApp?
+	@State private var transactionError: String?
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -81,12 +85,7 @@ struct DownloadButtonView: View {
 				.compatTransition()
 			} else {
 				Button {
-					if let url = app.currentDownloadUrl {
-						_ = downloadManager.startDownload(
-							from: url,
-							id: app.currentUniqueId
-						)
-					}
+					_startGetAndInstall()
 				} label: {
 					Text(title)
 						.font(
@@ -119,6 +118,22 @@ struct DownloadButtonView: View {
 		.onDisappear {
 			cancellable?.cancel()
 		}
+		.fullScreenCover(item: $installTarget) { target in
+			InstallPreviewView(
+				app: target.base,
+				onInstallCompleted: {
+					zagPhase = .idle
+				}
+			)
+		}
+		.alert(.localized("Unable to Install"), isPresented: Binding(
+			get: { transactionError != nil },
+			set: { if !$0 { transactionError = nil } }
+		)) {
+			Button(.localized("OK"), role: .cancel) {}
+		} message: {
+			Text(transactionError ?? "")
+		}
 		.onChange(
 			of: downloadManager.downloads.description
 		) { _ in
@@ -131,6 +146,101 @@ struct DownloadButtonView: View {
 					by: app.currentUniqueId
 				) != nil
 		)
+	}
+
+	private func _startGetAndInstall() {
+		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
+		zagPhase = .downloading
+
+		_ = downloadManager.startDownload(
+			from: url,
+			id: app.currentUniqueId,
+			zagImported: { uuid, error in
+				DispatchQueue.main.async {
+					if let error {
+						_failTransaction(error.localizedDescription)
+						return
+					}
+					guard let uuid, let imported = _importedApp(uuid: uuid) else {
+						_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
+						return
+					}
+					_signAndInstall(imported)
+				}
+			}
+		)
+	}
+
+	private func _signAndInstall(_ imported: Imported) {
+		zagPhase = .signing
+		var options = OptionsManager.shared.options
+		let selectedIndex = UserDefaults.standard.integer(forKey: "feather.selectedCert")
+		let certificate = Storage.shared.getCertificate(for: selectedIndex)
+
+		if options.signingOption == .default, certificate == nil {
+			_failTransaction(.localized("The app was downloaded and kept in Imported, but no signing certificate is selected."))
+			return
+		}
+
+		if
+			options.ppqProtection,
+			let identifier = imported.identifier,
+			let certificate,
+			certificate.ppQCheck
+		{
+			options.appIdentifier = "\(identifier).\(options.ppqString)"
+		}
+		if
+			let identifier = imported.identifier,
+			let mappedIdentifier = options.identifiers[identifier]
+		{
+			options.appIdentifier = mappedIdentifier
+		}
+		if
+			let name = imported.name,
+			let mappedName = options.displayNames[name]
+		{
+			options.appName = mappedName
+		}
+
+		var signedUUID: String?
+		FR.signPackageFile(
+			imported,
+			using: options,
+			icon: nil,
+			certificate: certificate,
+			signedUUID: { signedUUID = $0 }
+		) { error in
+			if let error {
+				_failTransaction(error.localizedDescription)
+				return
+			}
+			guard let signedUUID, let signed = _signedApp(uuid: signedUUID) else {
+				_failTransaction(.localized("Signing completed, but Zag Store could not locate the signed app."))
+				return
+			}
+			zagPhase = .installing
+			installTarget = AnyApp(base: signed)
+		}
+	}
+
+	private func _importedApp(uuid: String) -> Imported? {
+		let request = NSFetchRequest<Imported>(entityName: "Imported")
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "uuid == %@", uuid)
+		return try? Storage.shared.context.fetch(request).first
+	}
+
+	private func _signedApp(uuid: String) -> Signed? {
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "uuid == %@", uuid)
+		return try? Storage.shared.context.fetch(request).first
+	}
+
+	private func _failTransaction(_ message: String) {
+		zagPhase = .idle
+		transactionError = message
 	}
 
 	private func setupObserver() {
@@ -155,4 +265,11 @@ struct DownloadButtonView: View {
 				download.overallProgress
 		}
 	}
+	private enum ZagGetPhase {
+		case idle
+		case downloading
+		case signing
+		case installing
+	}
+
 }
