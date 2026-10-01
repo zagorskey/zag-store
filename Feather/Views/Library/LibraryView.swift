@@ -1799,6 +1799,16 @@ private struct ZagUpdateRow: View {
 	@ObservedObject private var transactionManager =
 		ZagUpdateTransactionManager.shared
 
+	private var _versionTransition: String {
+		let installed = update.installedBuild.map {
+			"\(update.installedVersion) (\($0))"
+		} ?? update.installedVersion
+		let available = update.availableBuild.map {
+			"\(update.availableVersion) (\($0))"
+		} ?? update.availableVersion
+		return "\(installed) → \(available)"
+	}
+
 	var body: some View {
 		HStack(spacing: 10) {
 			appIcon
@@ -1807,7 +1817,7 @@ private struct ZagUpdateRow: View {
 				Text(update.app.currentName)
 					.zagContentTitleStyle()
 
-				Text("\(update.installedVersion) → \(update.availableVersion)")
+				Text(_versionTransition)
 					.zagContentSubtitleStyle()
 			}
 
