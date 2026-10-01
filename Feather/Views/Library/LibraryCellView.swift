@@ -180,7 +180,9 @@ struct LibraryCellView: View {
 			Button(.localized("Delete App"), role: .destructive) {
 				onRemoveManagedApp?(app)
 			}
-			Button(.localized("Cancel"), role: .cancel) {}
+			Button(.localized("Cancel")) {
+				isRemoveConfirmationPresented = false
+			}
 		} message: {
 			Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
 		}
