@@ -360,6 +360,9 @@ final class ZagRPPairingCore: ObservableObject {
 		if FileManager.default.fileExists(atPath: Self.pairingFileURL.path) {
 			try FileManager.default.removeItem(at: Self.pairingFileURL)
 		}
+		if FileManager.default.fileExists(atPath: Self.hostIdentityURL.path) {
+			try FileManager.default.removeItem(at: Self.hostIdentityURL)
+		}
 		gate2DeviceInfo = nil
 		gate2LastAppResult = nil
 		gate2State = .idle
@@ -504,6 +507,13 @@ final class ZagRPPairingCore: ObservableObject {
 		guard backgroundTask != .invalid else { return }
 		UIApplication.shared.endBackgroundTask(backgroundTask)
 		backgroundTask = .invalid
+	}
+
+	private static var hostIdentityURL: URL {
+		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+		return base
+			.appendingPathComponent("ZagStore", isDirectory: true)
+			.appendingPathComponent("rppairing-host-identity.bin", isDirectory: false)
 	}
 
 	private static var pairingFileURL: URL {
