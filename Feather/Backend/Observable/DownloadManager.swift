@@ -141,6 +141,8 @@ class DownloadManager: NSObject, ObservableObject {
 	
 	func cancelDownload(_ download: Download) {
 		download.task?.cancel()
+		download.zagImported?(nil, URLError(.cancelled))
+		download.zagImported = nil
 		
 		if let index = downloads.firstIndex(where: { $0.id == download.id }) {
 			downloads.remove(at: index)
@@ -250,6 +252,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
 		}
 		
 		DispatchQueue.main.async {
+			download.zagImported?(nil, error)
+			download.zagImported = nil
 			if let index = self.getDownloadIndex(by: download.id) {
 				self.downloads.remove(at: index)
 			}
