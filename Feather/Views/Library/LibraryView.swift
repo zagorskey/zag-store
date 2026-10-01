@@ -2199,8 +2199,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 			throw ZagUpdateTransactionError.signedRecordNotFound
 		}
 
-		let viewModel = InstallerStatusViewModel(isIdevice: false)
-		let archiveHandler = ArchiveHandler(app: signed, viewModel: viewModel)
+		let archiveHandler = ArchiveHandler(app: signed)
 		try await archiveHandler.move()
 		let packageURL = try await archiveHandler.archive()
 
