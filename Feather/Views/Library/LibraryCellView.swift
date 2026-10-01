@@ -30,7 +30,11 @@ struct LibraryCellView: View {
 
 	var app: AppInfoPresentable
 	var isManagedInstalled: Bool = false
+	var isRemoving: Bool = false
+	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
+
+	@State private var pendingDestructiveAction: DestructiveAction?
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -103,7 +107,13 @@ struct LibraryCellView: View {
 			Spacer(minLength: 6)
 
 			if !isEditing {
-				_buttonActions(for: app)
+				if isRemoving {
+					ProgressView()
+						.controlSize(.small)
+						.accessibilityLabel(Text(.localized("Removing App")))
+				} else {
+					_buttonActions(for: app)
+				}
 			}
 		}
 		.padding(isRegular ? 12 : 0)
@@ -145,6 +155,38 @@ struct LibraryCellView: View {
 				_actions(for: app)
 			}
 		}
+		.alert(item: $pendingDestructiveAction) { action in
+			switch action {
+			case .delete:
+				return Alert(
+					title: Text(.localized("Delete Stored Copy?")),
+					message: Text(
+						String(
+							format: .localized("Delete %@ from Zag Store? This removes Zag Store's stored copy, but does not uninstall the app from your iPhone."),
+							app.name ?? .localized("this app")
+						)
+					),
+					primaryButton: .destructive(Text(.localized("Delete"))) {
+						onDeleteApp?(app)
+					},
+					secondaryButton: .cancel()
+				)
+			case .remove:
+				return Alert(
+					title: Text(.localized("Remove App?")),
+					message: Text(
+						String(
+							format: .localized("Remove %@ from your iPhone? Its stored copy will remain in Zag Store so you can install it again later."),
+							app.name ?? .localized("this app")
+						)
+					),
+					primaryButton: .destructive(Text(.localized("Remove App"))) {
+						onRemoveManagedApp?(app)
+					},
+					secondaryButton: .cancel()
+				)
+			}
+		}
 	}
 
 	// MARK: - Description
@@ -173,17 +215,18 @@ extension LibraryCellView {
 			systemImage: "trash",
 			role: .destructive
 		) {
-			Storage.shared.deleteApp(for: app)
+			pendingDestructiveAction = .delete
 		}
 
 		if isManagedInstalled {
 			Button(
-				.localized("Remove App"),
-				systemImage: "minus.circle",
+				isRemoving ? .localized("Removing…") : .localized("Remove App"),
+				systemImage: isRemoving ? "progress.indicator" : "minus.circle",
 				role: .destructive
 			) {
-				onRemoveManagedApp?(app)
+				pendingDestructiveAction = .remove
 			}
+			.disabled(isRemoving)
 		}
 	}
 
@@ -312,5 +355,15 @@ extension LibraryCellView {
 				selectedSigningAppPresenting = AnyApp(base: app)
 			}
 		}
+	}
+}
+
+
+private extension LibraryCellView {
+	enum DestructiveAction: String, Identifiable {
+		case delete
+		case remove
+
+		var id: String { rawValue }
 	}
 }
