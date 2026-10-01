@@ -14,20 +14,11 @@ private struct ZagGitHubHistoricalIPA: Hashable {
 	let downloadURL: URL
 }
 
-private struct ZagGitHubHistoryDiagnostic {
-	let repository: String
-	let status: Int
-	let releases: Int
-	let ipaAssets: Int
-	let matchedAssets: Int
-	let error: String?
-}
-
 private final class ZagGitHubHistoryResolver {
 	static let shared = ZagGitHubHistoryResolver()
 	private var cache: [String: [ZagGitHubHistoricalIPA]] = [:]
 	private var loading = Set<String>()
-	private var waiters: [String: [([ZagGitHubHistoricalIPA], ZagGitHubHistoryDiagnostic) -> Void]] = [:]
+	private var waiters: [String: [([ZagGitHubHistoricalIPA]) -> Void]] = [:]
 	private let lock = NSLock()
 
 	func cached(for app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
@@ -36,49 +27,114 @@ private final class ZagGitHubHistoryResolver {
 		return cache[key] ?? []
 	}
 
-	func resolve(_ app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA], ZagGitHubHistoryDiagnostic) -> Void) {
+	func resolve(_ app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA]) -> Void) {
 		guard let repository = repositoryForHistory(of: app) else {
-			let diagnostic = ZagGitHubHistoryDiagnostic(repository: "not resolved", status: -1, releases: 0, ipaAssets: 0, matchedAssets: 0, error: "No GitHub repository found")
-			DispatchQueue.main.async { completion([], diagnostic) }
+			DispatchQueue.main.async { completion([]) }
 			return
 		}
-
 		let key = cacheKey(for: app)
 		lock.lock()
+		if let cached = cache[key] {
+			lock.unlock()
+			DispatchQueue.main.async { completion(cached) }
+			return
+		}
 		waiters[key, default: []].append(completion)
 		if loading.contains(key) { lock.unlock(); return }
 		loading.insert(key)
 		lock.unlock()
 
-		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else {
-			finish(key: key, items: [], diagnostic: .init(repository: repository, status: -1, releases: 0, ipaAssets: 0, matchedAssets: 0, error: "Invalid API URL"))
-			return
+		resolveFromPublicGitHub(repository: repository, app: app) { items in
+			self.finish(key: key, items: items)
 		}
-		var request = URLRequest(url: url)
-		request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-		request.setValue("ZagStore", forHTTPHeaderField: "User-Agent")
-		request.cachePolicy = .reloadIgnoringLocalCacheData
-		request.timeoutInterval = 15
-		URLSession.shared.dataTask(with: request) { data, response, error in
-			let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-			let analysis = data.map { self.parseWithDiagnostic($0, app: app) } ?? ([], 0, 0)
-			let items = (status == 200 && error == nil) ? analysis.0 : []
-			let diagnostic = ZagGitHubHistoryDiagnostic(
-				repository: repository, status: status, releases: analysis.1,
-				ipaAssets: analysis.2, matchedAssets: items.count,
-				error: error?.localizedDescription
-			)
-			self.finish(key: key, items: items, diagnostic: diagnostic)
-		}.resume()
 	}
 
-	private func finish(key: String, items: [ZagGitHubHistoricalIPA], diagnostic: ZagGitHubHistoryDiagnostic) {
+	private func finish(key: String, items: [ZagGitHubHistoricalIPA]) {
 		lock.lock()
 		cache[key] = items
 		loading.remove(key)
 		let callbacks = waiters.removeValue(forKey: key) ?? []
 		lock.unlock()
-		DispatchQueue.main.async { callbacks.forEach { $0(items, diagnostic) } }
+		DispatchQueue.main.async { callbacks.forEach { $0(items) } }
+	}
+
+	// GitHub's REST API is rate-limited by public IP and returned 403 on-device.
+	// Public release HTML and expanded-assets fragments are not API endpoints, so
+	// use them for anonymous history discovery without embedding a GitHub token.
+	private func resolveFromPublicGitHub(repository: String, app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA]) -> Void) {
+		guard let url = URL(string: "https://github.com/\(repository)/releases") else {
+			completion([]); return
+		}
+		var request = URLRequest(url: url)
+		request.setValue("Mozilla/5.0 ZagStore", forHTTPHeaderField: "User-Agent")
+		request.timeoutInterval = 15
+		URLSession.shared.dataTask(with: request) { data, response, error in
+			guard error == nil,
+				(response as? HTTPURLResponse)?.statusCode == 200,
+				let data,
+				let html = String(data: data, encoding: .utf8)
+			else { completion([]); return }
+
+			let tags = self.releaseTags(in: html, repository: repository)
+			guard !tags.isEmpty else { completion([]); return }
+
+			let group = DispatchGroup()
+			let resultLock = NSLock()
+			var results: [ZagGitHubHistoricalIPA] = []
+			for tag in tags.prefix(30) {
+				guard let encoded = tag.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+					let assetsURL = URL(string: "https://github.com/\(repository)/releases/expanded_assets/\(encoded)")
+				else { continue }
+				group.enter()
+				var assetRequest = URLRequest(url: assetsURL)
+				assetRequest.setValue("Mozilla/5.0 ZagStore", forHTTPHeaderField: "User-Agent")
+				assetRequest.timeoutInterval = 15
+				URLSession.shared.dataTask(with: assetRequest) { assetData, assetResponse, _ in
+					defer { group.leave() }
+					guard (assetResponse as? HTTPURLResponse)?.statusCode == 200,
+						let assetData,
+						let fragment = String(data: assetData, encoding: .utf8)
+					else { return }
+					let found = self.parseAssetFragment(fragment, repository: repository, tag: tag, app: app)
+					resultLock.lock(); results.append(contentsOf: found); resultLock.unlock()
+				}.resume()
+			}
+			group.notify(queue: .global(qos: .userInitiated)) {
+				var seen = Set<String>()
+				completion(results.filter { seen.insert($0.version + "|" + $0.downloadURL.absoluteString).inserted })
+			}
+		}.resume()
+	}
+
+	private func releaseTags(in html: String, repository: String) -> [String] {
+		let escapedRepo = NSRegularExpression.escapedPattern(for: repository)
+		let pattern = #"/"# + escapedRepo + #"/releases/tag/([^"?#]+)"#
+		guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+		var seen = Set<String>()
+		return regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).compactMap {
+			guard let range = Range($0.range(at: 1), in: html) else { return nil }
+			let tag = String(html[range]).removingPercentEncoding ?? String(html[range])
+			return seen.insert(tag).inserted ? tag : nil
+		}
+	}
+
+	private func parseAssetFragment(_ html: String, repository: String, tag: String, app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
+		let escapedRepo = NSRegularExpression.escapedPattern(for: repository)
+		let pattern = #"href="(/"# + escapedRepo + #"/releases/download/[^"]+\.ipa)"#
+		guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+		let currentVersion = app.currentVersion
+		let currentAsset = app.currentDownloadUrl?.lastPathComponent.removingPercentEncoding ?? ""
+		let identityTokens = appIdentityTokens(app: app, currentAsset: currentAsset)
+		return regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).compactMap {
+			guard let range = Range($0.range(at: 1), in: html) else { return nil }
+			let path = String(html[range]).replacingOccurrences(of: "&amp;", with: "&")
+			guard let url = URL(string: "https://github.com" + path) else { return nil }
+			let name = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+			guard matchesApp(assetName: name, identityTokens: identityTokens),
+				let version = bestVersion(in: name, currentVersion: currentVersion),
+				version != currentVersion else { return nil }
+			return ZagGitHubHistoricalIPA(version: version, release: tag, downloadURL: url)
+		}
 	}
 
 	private func cacheKey(for app: ASRepository.App) -> String {
@@ -86,25 +142,14 @@ private final class ZagGitHubHistoryResolver {
 	}
 
 	private func repositoryForHistory(of app: ASRepository.App) -> String? {
-		if app.currentName.localizedCaseInsensitiveContains("YTKACE") {
-			return "itzzace/ytkace"
-		}
-
-		var candidates = [app.currentDownloadUrl?.absoluteString, app.currentDescription, app.localizedDescription, app.description]
-			.compactMap { $0 }
+		if app.currentName.localizedCaseInsensitiveContains("YTKACE") { return "itzzace/ytkace" }
+		let candidates = [app.currentDownloadUrl?.absoluteString, app.currentDescription, app.localizedDescription, app.description].compactMap { $0 }
 		let text = candidates.joined(separator: "\n")
-
-		// Direct GitHub URLs, including release assets.
 		if let repo = githubRepository(in: text) { return repo }
-
-		// Aggregators/proxies frequently preserve the real GitHub release path in
-		// a query/path, e.g. ...apptesters-org/AppTesters_Repo/releases/download/...
 		let embeddedPattern = #"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/releases/download/"#
 		if let regex = try? NSRegularExpression(pattern: embeddedPattern),
 			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-			let range = Range(match.range(at: 1), in: text) {
-			return String(text[range])
-		}
+			let range = Range(match.range(at: 1), in: text) { return String(text[range]) }
 		return nil
 	}
 
@@ -116,41 +161,6 @@ private final class ZagGitHubHistoryResolver {
 		return String(text[range]).replacingOccurrences(of: ".git", with: "")
 	}
 
-	private func parseWithDiagnostic(_ data: Data, app: ASRepository.App) -> ([ZagGitHubHistoricalIPA], Int, Int) {
-		guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return ([], 0, 0) }
-		let ipaAssets = releases.reduce(0) { count, release in
-			count + ((release["assets"] as? [[String: Any]])?.filter {
-				(($0["name"] as? String)?.lowercased().hasSuffix(".ipa") == true)
-			}.count ?? 0)
-		}
-		return (parse(data, app: app), releases.count, ipaAssets)
-	}
-
-	private func parse(_ data: Data, app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
-		guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
-		let currentVersion = app.currentVersion
-		let currentAsset = app.currentDownloadUrl?.lastPathComponent.removingPercentEncoding ?? ""
-		let identityTokens = appIdentityTokens(app: app, currentAsset: currentAsset)
-		var result: [ZagGitHubHistoricalIPA] = []
-
-		for release in releases where (release["draft"] as? Bool) != true {
-			let tag = release["tag_name"] as? String ?? ""
-			guard let assets = release["assets"] as? [[String: Any]] else { continue }
-			for asset in assets {
-				guard let name = asset["name"] as? String,
-					name.lowercased().hasSuffix(".ipa"),
-					matchesApp(assetName: name, identityTokens: identityTokens),
-					let rawURL = asset["browser_download_url"] as? String,
-					let url = URL(string: rawURL),
-					let version = bestVersion(in: name, currentVersion: currentVersion),
-					version != currentVersion else { continue }
-				result.append(.init(version: version, release: tag, downloadURL: url))
-			}
-		}
-		var seen = Set<String>()
-		return result.filter { seen.insert($0.version + "|" + $0.downloadURL.absoluteString).inserted }
-	}
-
 	private func appIdentityTokens(app: ASRepository.App, currentAsset: String) -> [String] {
 		var values = [app.currentName, app.name ?? "", currentAsset]
 		if let id = app.id { values.append(id) }
@@ -158,8 +168,7 @@ private final class ZagGitHubHistoryResolver {
 	}
 
 	private func tokenize(_ value: String) -> [String] {
-		value.lowercased()
-			.replacingOccurrences(of: ".ipa", with: "")
+		value.lowercased().replacingOccurrences(of: ".ipa", with: "")
 			.components(separatedBy: CharacterSet.alphanumerics.inverted)
 			.filter { !$0.isEmpty && versions(in: $0).isEmpty }
 	}
@@ -174,18 +183,9 @@ private final class ZagGitHubHistoryResolver {
 		let found = versions(in: value)
 		guard !found.isEmpty else { return nil }
 		if let currentVersion, found.contains(currentVersion) { return currentVersion }
-
-		// YTKACE upstream assets are named like:
-		// YTKACE_1.1.0_YouTube_21.38.3.ipa
-		// The first dotted value is the YTKACE release; the final value is the
-		// actual YouTube app version shown by the source.
 		if value.localizedCaseInsensitiveContains("YTKACE"),
 			value.localizedCaseInsensitiveContains("YouTube"),
-			let youtubeVersion = found.last {
-			return youtubeVersion
-		}
-
-		// Generic repositories commonly put the application version first.
+			let youtubeVersion = found.last { return youtubeVersion }
 		return found.first
 	}
 
@@ -530,15 +530,9 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		// UIDeferredMenuElement is UIKit's async menu API: it keeps Previous
 		// Versions open while GitHub history resolves, then inserts the actions.
 		let deferred = UIDeferredMenuElement.uncached { completion in
-			ZagGitHubHistoryResolver.shared.resolve(app) { discovered, diagnostic in
+			ZagGitHubHistoryResolver.shared.resolve(app) { discovered in
 				if discovered.isEmpty {
-					let errorSuffix = diagnostic.error.map { " — \($0)" } ?? ""
 					completion([
-						UIAction(title: "Diagnostic: \(diagnostic.repository)", attributes: [.disabled]) { _ in },
-						UIAction(title: "HTTP: \(diagnostic.status)\(errorSuffix)", attributes: [.disabled]) { _ in },
-						UIAction(title: "Releases: \(diagnostic.releases)", attributes: [.disabled]) { _ in },
-						UIAction(title: "IPA assets: \(diagnostic.ipaAssets)", attributes: [.disabled]) { _ in },
-						UIAction(title: "Matched: \(diagnostic.matchedAssets)", attributes: [.disabled]) { _ in },
 						UIAction(title: .localized("No previous versions found"), attributes: [.disabled]) { _ in }
 					])
 					return
