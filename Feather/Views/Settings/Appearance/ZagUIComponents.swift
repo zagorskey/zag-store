@@ -137,7 +137,7 @@ struct ZagActionPill: View {
 				}
 
 				Text(title)
-					.font(.headline)
+					.font(.system(size: 15, weight: .bold))
 					.lineLimit(1)
 			}
 			.frame(width: 88, height: 34)
