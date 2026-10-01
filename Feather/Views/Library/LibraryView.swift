@@ -2351,6 +2351,13 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		}
 
 		stages[pending.updateID] = nil
+
+		// The signed update is now the authoritative local copy. Reconcile the
+		// repository snapshot immediately so build-only updates disappear from
+		// Apps/Updates without waiting for a source refresh or relaunch.
+		UpdateManager.shared.refresh(
+			repositories: Array(SourcesViewModel.shared.sources.values)
+		)
 	}
 
 	func reset(_ update: UpdateManager.AvailableUpdate) {
