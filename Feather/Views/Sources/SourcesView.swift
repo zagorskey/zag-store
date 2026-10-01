@@ -925,12 +925,9 @@ struct SourcesView: View {
 						_isAddingPresenting =
 							true
 					} label: {
-						NBButton(
-							.localized(
-								"Add Source"
-							),
-							style: .text
-						)
+						ZagActionPill(title: .localized("Add Source")) {
+							_isAddingPresenting = true
+						}
 					}
 				}
 			}
