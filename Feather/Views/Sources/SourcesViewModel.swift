@@ -216,14 +216,26 @@ final class UpdateManager: ObservableObject {
 	}
 
 	@Published private(set) var updates: [AvailableUpdate] = []
+	@Published private(set) var persistedUpdateCount: Int
+
+	private static let persistedUpdateCountKey =
+		"ZagStore.persistedUpdateCount"
 
 	var updateCount: Int {
-		updates.count
+		updates.isEmpty ? persistedUpdateCount : updates.count
+	}
+
+	var hasVisibleUpdates: Bool {
+		updateCount > 0
 	}
 
 	private var repositoryRefreshDepth = 0
 
-	private init() {}
+	private init() {
+		persistedUpdateCount = UserDefaults.standard.integer(
+			forKey: Self.persistedUpdateCountKey
+		)
+	}
 
 	func beginRepositoryRefresh() {
 		repositoryRefreshDepth += 1
@@ -423,6 +435,12 @@ final class UpdateManager: ObservableObject {
 				$1.app.currentName
 			) == .orderedAscending
 		}
+
+		persistedUpdateCount = updates.count
+		UserDefaults.standard.set(
+			persistedUpdateCount,
+			forKey: Self.persistedUpdateCountKey
+		)
 
 		Task {
 			await syncAppIconBadge()
