@@ -161,7 +161,7 @@ private struct RPPairingView: View {
 			} label: {
 				HStack(spacing: 10) {
 					Image(systemName: pairingCore.pairingFileExists
-						? "link"
+						? "link.badge.minus"
 						: (pairingCore.isRunning ? "antenna.radiowaves.left.and.right" : "link.badge.plus"))
 						.frame(width: 22)
 					Text(
@@ -172,18 +172,22 @@ private struct RPPairingView: View {
 				}
 			}
 			.disabled(pairingCore.isRunning)
-			.confirmationDialog(
-				"Unpair This iPhone?",
-				isPresented: $showUnpairConfirmation,
-				titleVisibility: .visible
-			) {
-				Button("Unpair This iPhone", role: .destructive) {
-					do { try pairingCore.forgetPairing() }
-					catch { unpairError = error.localizedDescription }
-				}
-				Button("Cancel", role: .cancel) {}
-			} message: {
-				Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
+			.background {
+				Color.clear
+					.frame(maxWidth: .infinity, maxHeight: .infinity)
+					.confirmationDialog(
+						"Unpair This iPhone?",
+						isPresented: $showUnpairConfirmation,
+						titleVisibility: .visible
+					) {
+						Button("Unpair This iPhone", role: .destructive) {
+							do { try pairingCore.forgetPairing() }
+							catch { unpairError = error.localizedDescription }
+						}
+						Button("Cancel", role: .cancel) {}
+					} message: {
+						Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
+					}
 			}
 		} footer: {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
