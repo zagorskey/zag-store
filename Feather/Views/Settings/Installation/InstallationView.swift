@@ -188,6 +188,7 @@ private struct RPPairingView: View {
 				.frame(maxWidth: .infinity, alignment: .leading)
 			}
 			.buttonStyle(.plain)
+			.foregroundStyle(pairingCore.pairingFileExists ? Color.red : Color.accentColor)
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.contentShape(Rectangle())
 			.disabled(pairingCore.isRunning)
