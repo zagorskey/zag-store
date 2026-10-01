@@ -32,7 +32,7 @@ struct ZagCountBadge: View {
 			.lineLimit(1)
 			.fixedSize(horizontal: true, vertical: false)
 			.padding(.horizontal, max(6, badgeSize * 0.27))
-			.frame(minWidth: badgeSize, height: badgeSize, alignment: .center)
+			.frame(minWidth: badgeSize, minHeight: badgeSize, maxHeight: badgeSize, alignment: .center)
 			.background {
 				Capsule(style: .continuous)
 					.fill(
