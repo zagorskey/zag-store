@@ -12,7 +12,7 @@ import SwiftUI
 import IDeviceSwift
 
 final class ArchiveHandler: NSObject {
-	@ObservedObject var viewModel: InstallerStatusViewModel
+	private var viewModel: InstallerStatusViewModel?
 	
 	private let _fileManager = FileManager.default
 	private let _uuid = UUID().uuidString
@@ -21,7 +21,7 @@ final class ArchiveHandler: NSObject {
 	private var _app: AppInfoPresentable
 	private let _uniqueWorkDir: URL
 	
-	init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel) {
+	init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel? = nil) {
 		self.viewModel = viewModel
 		self._app = app
 		self._uniqueWorkDir = _fileManager.temporaryDirectory
@@ -60,7 +60,7 @@ final class ArchiveHandler: NSObject {
 				compression: ZipCompression.allCases[ArchiveHandler.getCompressionLevel()],
 				progress: { progress in
 					Task { @MainActor in
-						self.viewModel.packageProgress = progress
+						self.viewModel?.packageProgress = progress
 					}
 				})
 			
