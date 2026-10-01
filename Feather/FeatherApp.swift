@@ -274,6 +274,8 @@ final class ZagBackgroundUpdateRefresh {
 	private let refreshInterval: TimeInterval = 60 * 60 * 4
 	private let dataService = NBFetchService()
 	static let enabledKey = "ZagStore.backgroundUpdatesEnabled"
+	static let automaticPreparationKey = "ZagStore.automaticUpdatePreparation"
+	static let automaticInstallationKey = "ZagStore.automaticUpdateInstallation"
 
 	private init() {}
 
@@ -407,6 +409,30 @@ final class ZagBackgroundUpdateRefresh {
 			UpdateManager.shared.refresh(
 				repositories: repositories
 			)
+		}
+
+		guard !Task.isCancelled else { return false }
+
+		if UserDefaults.standard.bool(forKey: Self.automaticPreparationKey) {
+			let updates = await MainActor.run { UpdateManager.shared.updates }
+			for update in updates {
+				guard !Task.isCancelled else { return false }
+				do {
+					let signedUUID = try await ZagUpdateTransactionManager.shared.prepareAsync(update)
+					Logger.misc.info("[Zag Store Background] Prepared update for \(update.app.currentName)")
+
+					if UserDefaults.standard.bool(forKey: Self.automaticInstallationKey) {
+						guard UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 2 else {
+							Logger.misc.warning("[Zag Store Background] Automatic install skipped: RPPairing installation method is not selected")
+							continue
+						}
+						try await ZagUpdateTransactionManager.shared.installPreparedUpdate(signedUUID: signedUUID)
+						Logger.misc.info("[Zag Store Background] Installed update for \(update.app.currentName)")
+					}
+				} catch {
+					Logger.misc.error("[Zag Store Background] Automatic update failed for \(update.app.currentName): \(error.localizedDescription)")
+				}
+			}
 		}
 
 		Logger.misc.info(
