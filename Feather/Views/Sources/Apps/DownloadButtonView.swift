@@ -83,6 +83,8 @@ struct DownloadButtonView: View {
 					}
 				}
 				.compatTransition()
+			} else if zagPhase != .idle {
+				ProgressView().frame(width: 88, height: 34)
 			} else {
 				Button {
 					_startGetAndInstall()
