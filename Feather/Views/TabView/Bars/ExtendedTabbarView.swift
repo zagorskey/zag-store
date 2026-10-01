@@ -74,7 +74,7 @@ struct ExtendedTabbarView: View {
 		}
 		.tabViewStyle(.sidebarAdaptable)
 		.overlay(alignment: .bottom) {
-			if horizontalSizeClass == .compact, !updateManager.updates.isEmpty {
+			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
 				GeometryReader { proxy in
 					let itemWidth = proxy.size.width / CGFloat(TabEnum.defaultTabs.count)
 					Circle()
