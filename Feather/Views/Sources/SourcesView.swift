@@ -191,6 +191,9 @@ struct SourcesView: View {
 		items.move(fromOffsets: offsets, toOffset: destination)
 		_customOrderData = items.map(_sourceKey).joined(separator: "\n")
 	}
+	private func _finishReordering() {
+		_isRearrangingRepositories = false
+	}
 
 	private var _matchingApps:
 		[SourceAppsView.SourceAppRoute] {
@@ -462,36 +465,48 @@ struct SourcesView: View {
 		)
 	}
 	// MARK: Repository Sorting
+	@ViewBuilder
 	private var repositorySortMenu: some View {
-		Menu {
-			Button { _selectSort(.defaultOrder) } label: {
-				Label("Default", systemImage: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
+		if _isRearrangingRepositories {
+			Button {
+				_finishReordering()
+			} label: {
+				Image(systemName: "checkmark")
+					.font(.system(size: 19, weight: .semibold))
+					.frame(width: 26, height: 22)
 			}
-			Button { _selectSort(.nameAscending) } label: {
-				Label("Name (A–Z)", systemImage: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
+			.accessibilityLabel("Done Reordering")
+		} else {
+			Menu {
+				Button { _selectSort(.defaultOrder) } label: {
+					Label("Default", systemImage: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
+				}
+				Button { _selectSort(.nameAscending) } label: {
+					Label("Name (A–Z)", systemImage: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
+				}
+				Button { _selectSort(.nameDescending) } label: {
+					Label("Name (Z–A)", systemImage: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
+				}
+				Button { _selectSort(.lastUpdated) } label: {
+					Label("Last Updated", systemImage: _sortMode == .lastUpdated ? "checkmark" : "clock")
+				}
+				Button { _selectSort(.dateAdded) } label: {
+					Label("Date Added", systemImage: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
+				}
+				Button { _selectSort(.custom) } label: {
+					Label("Custom", systemImage: _sortMode == .custom ? "checkmark" : "list.bullet")
+				}
+				Divider()
+				Button { _beginRearranging() } label: {
+					Label("Reorder", systemImage: "arrow.up.arrow.down")
+				}
+			} label: {
+				Image(systemName: "line.3.horizontal.decrease")
+					.font(.system(size: 19, weight: .semibold))
+					.frame(width: 26, height: 22)
 			}
-			Button { _selectSort(.nameDescending) } label: {
-				Label("Name (Z–A)", systemImage: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
-			}
-			Button { _selectSort(.lastUpdated) } label: {
-				Label("Last Updated", systemImage: _sortMode == .lastUpdated ? "checkmark" : "clock")
-			}
-			Button { _selectSort(.dateAdded) } label: {
-				Label("Date Added", systemImage: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
-			}
-			Button { _selectSort(.custom) } label: {
-				Label("Custom", systemImage: _sortMode == .custom ? "checkmark" : "list.bullet")
-			}
-			Divider()
-			Button { _beginRearranging() } label: {
-				Label("Rearrange", systemImage: "slider.horizontal.3")
-			}
-		} label: {
-			Image(systemName: "line.3.horizontal.decrease")
-				.font(.system(size: 19, weight: .semibold))
-				.frame(width: 26, height: 22)
+			.accessibilityLabel("Sort Repositories")
 		}
-		.accessibilityLabel("Sort Repositories")
 	}
 
 	// MARK: Repository Transfer
