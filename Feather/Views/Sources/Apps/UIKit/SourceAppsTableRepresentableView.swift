@@ -138,9 +138,18 @@ private final class ZagGitHubHistoryResolver {
 		let found = versions(in: value)
 		guard !found.isEmpty else { return nil }
 		if let currentVersion, found.contains(currentVersion) { return currentVersion }
-		// IPA naming conventions overwhelmingly put the app version before tweak
-		// versions; choosing the first dotted numeric token avoids mistaking
-		// suffixes such as Premium_1.2.3 for the application version.
+
+		// YTKACE upstream assets are named like:
+		// YTKACE_1.1.0_YouTube_21.38.3.ipa
+		// The first dotted value is the YTKACE release; the final value is the
+		// actual YouTube app version shown by the source.
+		if value.localizedCaseInsensitiveContains("YTKACE"),
+			value.localizedCaseInsensitiveContains("YouTube"),
+			let youtubeVersion = found.last {
+			return youtubeVersion
+		}
+
+		// Generic repositories commonly put the application version first.
 		return found.first
 	}
 
