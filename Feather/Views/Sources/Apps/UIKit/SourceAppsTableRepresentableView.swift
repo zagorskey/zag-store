@@ -14,11 +14,20 @@ private struct ZagGitHubHistoricalIPA: Hashable {
 	let downloadURL: URL
 }
 
+private struct ZagGitHubHistoryDiagnostic {
+	let repository: String
+	let status: Int
+	let releases: Int
+	let ipaAssets: Int
+	let matchedAssets: Int
+	let error: String?
+}
+
 private final class ZagGitHubHistoryResolver {
 	static let shared = ZagGitHubHistoryResolver()
 	private var cache: [String: [ZagGitHubHistoricalIPA]] = [:]
 	private var loading = Set<String>()
-	private var waiters: [String: [([ZagGitHubHistoricalIPA]) -> Void]] = [:]
+	private var waiters: [String: [([ZagGitHubHistoricalIPA], ZagGitHubHistoryDiagnostic) -> Void]] = [:]
 	private let lock = NSLock()
 
 	func cached(for app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
@@ -27,29 +36,22 @@ private final class ZagGitHubHistoryResolver {
 		return cache[key] ?? []
 	}
 
-	func resolve(_ app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA]) -> Void) {
+	func resolve(_ app: ASRepository.App, completion: @escaping ([ZagGitHubHistoricalIPA], ZagGitHubHistoryDiagnostic) -> Void) {
 		guard let repository = repositoryForHistory(of: app) else {
-			DispatchQueue.main.async { completion([]) }
+			let diagnostic = ZagGitHubHistoryDiagnostic(repository: "not resolved", status: -1, releases: 0, ipaAssets: 0, matchedAssets: 0, error: "No GitHub repository found")
+			DispatchQueue.main.async { completion([], diagnostic) }
 			return
 		}
 
 		let key = cacheKey(for: app)
 		lock.lock()
-		if let cached = cache[key] {
-			lock.unlock()
-			DispatchQueue.main.async { completion(cached) }
-			return
-		}
 		waiters[key, default: []].append(completion)
-		if loading.contains(key) {
-			lock.unlock()
-			return
-		}
+		if loading.contains(key) { lock.unlock(); return }
 		loading.insert(key)
 		lock.unlock()
 
 		guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100") else {
-			finish(key: key, items: [])
+			finish(key: key, items: [], diagnostic: .init(repository: repository, status: -1, releases: 0, ipaAssets: 0, matchedAssets: 0, error: "Invalid API URL"))
 			return
 		}
 		var request = URLRequest(url: url)
@@ -59,23 +61,24 @@ private final class ZagGitHubHistoryResolver {
 		request.timeoutInterval = 15
 		URLSession.shared.dataTask(with: request) { data, response, error in
 			let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-			let items = (status == 200 && error == nil)
-				? (data.flatMap { self.parse($0, app: app) } ?? [])
-				: []
-			print("[Zag Store History] \(app.currentName) repo=\(repository) status=\(status) items=\(items.count) error=\(error?.localizedDescription ?? "none")")
-			self.finish(key: key, items: items)
+			let analysis = data.map { self.parseWithDiagnostic($0, app: app) } ?? ([], 0, 0)
+			let items = (status == 200 && error == nil) ? analysis.0 : []
+			let diagnostic = ZagGitHubHistoryDiagnostic(
+				repository: repository, status: status, releases: analysis.1,
+				ipaAssets: analysis.2, matchedAssets: items.count,
+				error: error?.localizedDescription
+			)
+			self.finish(key: key, items: items, diagnostic: diagnostic)
 		}.resume()
 	}
 
-	private func finish(key: String, items: [ZagGitHubHistoricalIPA]) {
+	private func finish(key: String, items: [ZagGitHubHistoricalIPA], diagnostic: ZagGitHubHistoryDiagnostic) {
 		lock.lock()
 		cache[key] = items
 		loading.remove(key)
 		let callbacks = waiters.removeValue(forKey: key) ?? []
 		lock.unlock()
-		DispatchQueue.main.async {
-			callbacks.forEach { $0(items) }
-		}
+		DispatchQueue.main.async { callbacks.forEach { $0(items, diagnostic) } }
 	}
 
 	private func cacheKey(for app: ASRepository.App) -> String {
@@ -111,6 +114,16 @@ private final class ZagGitHubHistoryResolver {
 			let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
 			let range = Range(match.range(at: 1), in: text) else { return nil }
 		return String(text[range]).replacingOccurrences(of: ".git", with: "")
+	}
+
+	private func parseWithDiagnostic(_ data: Data, app: ASRepository.App) -> ([ZagGitHubHistoricalIPA], Int, Int) {
+		guard let releases = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return ([], 0, 0) }
+		let ipaAssets = releases.reduce(0) { count, release in
+			count + ((release["assets"] as? [[String: Any]])?.filter {
+				(($0["name"] as? String)?.lowercased().hasSuffix(".ipa") == true)
+			}.count ?? 0)
+		}
+		return (parse(data, app: app), releases.count, ipaAssets)
 	}
 
 	private func parse(_ data: Data, app: ASRepository.App) -> [ZagGitHubHistoricalIPA] {
@@ -517,13 +530,16 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		// UIDeferredMenuElement is UIKit's async menu API: it keeps Previous
 		// Versions open while GitHub history resolves, then inserts the actions.
 		let deferred = UIDeferredMenuElement.uncached { completion in
-			ZagGitHubHistoryResolver.shared.resolve(app) { discovered in
+			ZagGitHubHistoryResolver.shared.resolve(app) { discovered, diagnostic in
 				if discovered.isEmpty {
+					let errorSuffix = diagnostic.error.map { " — \($0)" } ?? ""
 					completion([
-						UIAction(
-							title: .localized("No previous versions found"),
-							attributes: [.disabled]
-						) { _ in }
+						UIAction(title: "Diagnostic: \(diagnostic.repository)", attributes: [.disabled]) { _ in },
+						UIAction(title: "HTTP: \(diagnostic.status)\(errorSuffix)", attributes: [.disabled]) { _ in },
+						UIAction(title: "Releases: \(diagnostic.releases)", attributes: [.disabled]) { _ in },
+						UIAction(title: "IPA assets: \(diagnostic.ipaAssets)", attributes: [.disabled]) { _ in },
+						UIAction(title: "Matched: \(diagnostic.matchedAssets)", attributes: [.disabled]) { _ in },
+						UIAction(title: .localized("No previous versions found"), attributes: [.disabled]) { _ in }
 					])
 					return
 				}
