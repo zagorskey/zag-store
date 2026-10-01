@@ -5,4 +5,4 @@
 [submodule "IDeviceKitten"]
 	path = IDeviceKitten
 	url = https://github.com/zagorskey/IDeviceKit-Zag
-	branch = zag-ios16.4
+	branch = zag-ios16.4-v0.1.68-clean
