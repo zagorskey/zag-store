@@ -403,10 +403,33 @@ final class ZagRPPairingCore: ObservableObject {
 			advertiser.stop()
 			endPairingBackgroundTime()
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false)
+			let deviceName = fields.indices.contains(0) ? String(fields[0]) : "This iPhone"
 			state = .paired(
-				name: fields.indices.contains(0) ? String(fields[0]) : "This iPhone",
+				name: deviceName,
 				model: fields.indices.contains(1) ? String(fields[1]) : "",
 				udid: fields.indices.contains(2) ? String(fields[2]) : ""
+			)
+
+			// The PIN notification has served its purpose once iOS accepts the code.
+			// Replace it with a fresh completion notification so the user still has
+			// a foreground action back to Zag Store while Settings remains open.
+			UNUserNotificationCenter.current().removeDeliveredNotifications(
+				withIdentifiers: ["zag-rppairing-pin"]
+			)
+			let content = UNMutableNotificationContent()
+			content.title = "Pairing Complete"
+			content.body = "\(deviceName) is paired with Zag Store. Tap to return."
+			content.sound = .default
+			content.categoryIdentifier = "zag-rppairing-pin-category"
+			if #available(iOS 15.0, *) {
+				content.interruptionLevel = .timeSensitive
+			}
+			UNUserNotificationCenter.current().add(
+				UNNotificationRequest(
+					identifier: "zag-rppairing-complete",
+					content: content,
+					trigger: nil
+				)
 			)
 		case -1:
 			advertiser.stop()
