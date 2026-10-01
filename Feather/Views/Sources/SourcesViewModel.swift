@@ -64,6 +64,7 @@ final class SourcesViewModel: ObservableObject {
 
 		await MainActor.run {
 			self.isRefreshing = true
+			UpdateManager.shared.beginRepositoryRefresh()
 		}
 
 		defer {
@@ -71,6 +72,7 @@ final class SourcesViewModel: ObservableObject {
 
 			Task { @MainActor in
 				self.isRefreshing = false
+				UpdateManager.shared.endRepositoryRefresh()
 			}
 		}
 
@@ -219,7 +221,21 @@ final class UpdateManager: ObservableObject {
 		updates.count
 	}
 
+	private var repositoryRefreshDepth = 0
+
 	private init() {}
+
+	func beginRepositoryRefresh() {
+		repositoryRefreshDepth += 1
+	}
+
+	func endRepositoryRefresh() {
+		repositoryRefreshDepth = max(0, repositoryRefreshDepth - 1)
+	}
+
+	var isRepositoryRefreshInProgress: Bool {
+		repositoryRefreshDepth > 0
+	}
 
 
 	// MARK: - Zag Store App Icon Badge
