@@ -335,7 +335,9 @@ struct LibraryView: View {
 					.frame(width: 54, height: 46)
 				}
 				.frame(maxWidth: .infinity, alignment: .leading)
-				.padding(.top, -16)
+				// Native search scopes consume additional vertical space while
+				// search is active. Do not pull the animated Updates row into them.
+				.padding(.top, _searchFieldFocused ? 0 : -16)
 			}
 			.buttonStyle(.plain)
 			.listRowSeparator(.hidden)
