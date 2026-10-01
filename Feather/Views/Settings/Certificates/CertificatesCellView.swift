@@ -7,6 +7,7 @@
 
 import SwiftUI
 import NimbleViews
+import UIKit
 
 // MARK: - View
 struct CertificatesCellView: View {
@@ -29,12 +30,23 @@ struct CertificatesCellView: View {
 			}()
 
 			VStack(spacing: 2) {
-				Text(title)
-					.font(.system(size: 19, weight: .semibold))
-					.lineLimit(1)
-					.minimumScaleFactor(0.75)
-					.frame(maxWidth: .infinity)
-					.multilineTextAlignment(.center)
+				HStack(spacing: 7) {
+					Text(title)
+						.font(.system(size: 20, weight: .semibold))
+						.lineLimit(1)
+						.minimumScaleFactor(0.68)
+
+					Button {
+						UIPasteboard.general.string = title
+					} label: {
+						Image(systemName: "doc.on.doc")
+							.font(.system(size: 13, weight: .semibold))
+							.foregroundStyle(.white)
+					}
+					.buttonStyle(.plain)
+					.accessibilityLabel("Copy Certificate Name")
+				}
+				.frame(maxWidth: .infinity)
 
 				Text(data?.AppIDName ?? .localized("Unknown"))
 					.font(.subheadline)
