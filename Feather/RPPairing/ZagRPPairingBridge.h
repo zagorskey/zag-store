@@ -27,4 +27,11 @@ bool zag_gate4_install(
     ZagRPPairingCallback callback
 );
 
+bool zag_gate4_uninstall(
+    const char *device_ip,
+    const char *pairing_path,
+    const char *bundle_id,
+    ZagRPPairingCallback callback
+);
+
 #endif
