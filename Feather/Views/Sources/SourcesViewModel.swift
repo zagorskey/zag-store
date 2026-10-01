@@ -287,15 +287,13 @@ final class UpdateManager: ObservableObject {
 				importedApps: importedApps
 			)
 		} catch {
-			updates = []
-
-			Task {
-				await syncAppIconBadge()
-			}
-
+			// A transient Core Data failure must not erase the last known-good
+			// update snapshot. Keep it authoritative until a later successful
+			// reconciliation can replace it.
 			print(
 				"[Zag Store Updates] Core Data fetch failed: " +
-					error.localizedDescription
+					error.localizedDescription +
+					" — keeping previous update state"
 			)
 		}
 	}
