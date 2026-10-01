@@ -30,11 +30,12 @@ struct CertificatesCellView: View {
 			}()
 
 			VStack(spacing: 2) {
-				HStack(spacing: 7) {
+				HStack(spacing: 5) {
 					Text(title)
 						.font(.system(size: 20, weight: .semibold))
 						.lineLimit(1)
-						.minimumScaleFactor(0.68)
+						.minimumScaleFactor(0.62)
+						.layoutPriority(1)
 
 					Button {
 						UIPasteboard.general.string = title
@@ -42,6 +43,8 @@ struct CertificatesCellView: View {
 						Image(systemName: "doc.on.doc")
 							.font(.system(size: 13, weight: .semibold))
 							.foregroundStyle(.white)
+							.frame(width: 28, height: 24)
+							.contentShape(Rectangle())
 					}
 					.buttonStyle(.plain)
 					.accessibilityLabel("Copy Certificate Name")
@@ -49,7 +52,7 @@ struct CertificatesCellView: View {
 				.frame(maxWidth: .infinity)
 
 				Text(data?.AppIDName ?? .localized("Unknown"))
-					.font(.subheadline)
+					.font(.system(size: 14, weight: .regular))
 					.foregroundStyle(.secondary)
 					.lineLimit(1)
 					.frame(maxWidth: .infinity)
@@ -87,6 +90,8 @@ extension CertificatesCellView {
 					index: index,
 					count: pillItems.count
 				)
+				.frame(height: 30)
+				.clipped()
 			}
 		}
 		.frame(maxWidth: .infinity)
