@@ -260,6 +260,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 	
 	func applicationDidEnterBackground(_ application: UIApplication) {
 		ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
+		if ZagRPPairingCore.shared.isRunning {
+			ZagRPPairingCore.shared.refreshPairingBackgroundTime()
+		}
+	}
+
+	func applicationDidBecomeActive(_ application: UIApplication) {
+		if ZagRPPairingCore.shared.isRunning {
+			ZagRPPairingCore.shared.refreshPairingBackgroundTime()
+		}
 	}
 
 }
