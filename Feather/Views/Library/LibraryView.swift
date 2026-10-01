@@ -93,6 +93,7 @@ struct LibraryView: View {
 
 	@State private var _isDownloadingPresenting = false
 	@State private var _isUpdatesPresenting = false
+	@State private var _removingBundleIDs: Set<String> = []
 	@AppStorage("zagStore.managedInstalledBundleIDs")
 	private var _managedInstalledBundleIDsData: Data = Data()
 
@@ -419,6 +420,8 @@ struct LibraryView: View {
 							LibraryCellView(
 								app: app,
 								isManagedInstalled: true,
+								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
 								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
@@ -455,6 +458,8 @@ struct LibraryView: View {
 
 								app: app,
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
 
 
@@ -536,6 +541,8 @@ struct LibraryView: View {
 
 								app: app,
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
 
 
@@ -1105,21 +1112,52 @@ extension LibraryView {
 		}
 	}
 
+	private func _clearManagedInstalledMarker(_ identifier: String) {
+		var identifiers = _managedInstalledBundleIDs
+		identifiers.remove(identifier)
+		if let encoded = try? JSONEncoder().encode(identifiers) {
+			_managedInstalledBundleIDsData = encoded
+		}
+	}
+
+	private func _deleteStoredApp(_ app: AppInfoPresentable) {
+		if let identifier = app.identifier, !identifier.isEmpty {
+			_clearManagedInstalledMarker(identifier)
+		}
+		Storage.shared.deleteApp(for: app)
+	}
+
 	private func _removeManagedApp(_ app: AppInfoPresentable) {
 		guard let identifier = app.identifier, !identifier.isEmpty else {
 			return
 		}
+		guard !_removingBundleIDs.contains(identifier) else {
+			return
+		}
 
-		func clearInstalledMarker() {
-			var identifiers = _managedInstalledBundleIDs
-			identifiers.remove(identifier)
-			if let encoded = try? JSONEncoder().encode(identifiers) {
-				_managedInstalledBundleIDsData = encoded
+		_removingBundleIDs.insert(identifier)
+
+		func finishRemovalIfConfirmed() {
+			// installation_proxy has completed. Give LaunchServices a moment to
+			// publish the new state before removing the Installed marker.
+			DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+				let installed = UIApplication.isAppInstalled(with: identifier)
+				if installed == false || installed == nil {
+					_clearManagedInstalledMarker(identifier)
+					_removingBundleIDs.remove(identifier)
+				} else {
+					_removingBundleIDs.remove(identifier)
+					UIAlertController.showAlertWithOk(
+						title: .localized("Remove App"),
+						message: .localized("The uninstall completed, but iOS still reports the app as installed.")
+					)
+				}
 			}
 		}
 
 		func tryLaunchServicesFallback() {
 			guard UIApplication.removeApp(with: identifier) else {
+				_removingBundleIDs.remove(identifier)
 				UIAlertController.showAlertWithOk(
 					title: .localized("Remove App"),
 					message: .localized("Zag Store could not remove this application.")
@@ -1127,13 +1165,12 @@ extension LibraryView {
 				return
 			}
 
-			// LaunchServices may report that the request was accepted before iOS
-			// actually removes the app. Only update our Installed section after
-			// LaunchServices itself confirms the bundle is gone.
 			DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
 				if UIApplication.isAppInstalled(with: identifier) == false {
-					clearInstalledMarker()
+					_clearManagedInstalledMarker(identifier)
+					_removingBundleIDs.remove(identifier)
 				} else {
+					_removingBundleIDs.remove(identifier)
 					UIAlertController.showAlertWithOk(
 						title: .localized("Remove App"),
 						message: .localized("The uninstall request was sent, but iOS still reports the app as installed.")
@@ -1149,7 +1186,7 @@ extension LibraryView {
 			) { result in
 				switch result {
 				case .success:
-					clearInstalledMarker()
+					finishRemovalIfConfirmed()
 				case .failure:
 					// Fully Local Server and other non-RPPairing setups retain the
 					// existing LaunchServices uninstall path as a fallback.
@@ -1312,7 +1349,7 @@ extension LibraryView {
 
 
 
-			Storage.shared.deleteApp(for: app)
+			_deleteStoredApp(app)
 
 
 
