@@ -55,7 +55,10 @@ struct SettingsView: View {
 				}
                 
 				NBSection(.localized("Certificates")) {
-                    
+					NavigationLink(destination: CertificatesView()) {
+						Label(.localized("Certificates"), systemImage: "checkmark.seal")
+					}
+
 					if let cert = selectedCertificate {
 						CertificatesCellView(cert: cert)
 					} else {
@@ -63,10 +66,7 @@ struct SettingsView: View {
 							.font(.footnote)
 							.foregroundColor(.disabled())
 					}
-					NavigationLink(destination: CertificatesView()) {
-						Label(.localized("Certificates"), systemImage: "checkmark.seal")
-					}
-                 
+
 				} footer: {
 					Text(.localized("Add and manage certificates used for signing applications."))
 				}
@@ -113,7 +113,7 @@ struct SettingsView: View {
 					}
 
 					Toggle(isOn: $_automaticUpdatePreparation) {
-						Label("Automatic Update Preparation", systemImage: "shippingbox.and.arrow.backward")
+						Label("Automatic Preparation", systemImage: "shippingbox.and.arrow.backward")
 					}
 					.onChange(of: _automaticUpdatePreparation) { enabled in
 						if !enabled { _automaticUpdateInstallation = false }
@@ -132,7 +132,7 @@ struct SettingsView: View {
 					}
 
 				} footer: {
-					Text("Background Updates controls Zag Store’s scheduled checks. Automatic Update Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions.")
+					Text("Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions.")
 				}
                 
 
@@ -141,7 +141,7 @@ struct SettingsView: View {
                 
 				Section {
 					NavigationLink(destination: ResetView()) {
-						Label(.localized("Reset"), systemImage: "trash")
+						Label(.localized("Reset"), systemImage: "arrow.counterclockwise.circle")
 					}
 				} footer: {
 					Text(.localized("Reset the applications sources, certificates, apps, and general contents."))
