@@ -221,7 +221,7 @@ extension LibraryCellView {
 		if isManagedInstalled {
 			Button(
 				isRemoving ? .localized("Removing…") : .localized("Remove App"),
-				systemImage: isRemoving ? "progress.indicator" : "minus.circle",
+				systemImage: isRemoving ? "hourglass" : "minus.circle",
 				role: .destructive
 			) {
 				pendingDestructiveAction = .remove
