@@ -192,19 +192,26 @@ private struct RPPairingView: View {
 			.frame(maxWidth: .infinity, alignment: .leading)
 			.contentShape(Rectangle())
 			.disabled(pairingCore.isRunning)
-			.confirmationDialog(
-				"Unpair This iPhone?",
-				isPresented: $showUnpairConfirmation,
-				titleVisibility: .visible
-			) {
-				Button("Unpair This iPhone", role: .destructive) {
-					do { try pairingCore.forgetPairing() }
-					catch { unpairError = error.localizedDescription }
+			.overlay(alignment: .bottom) {
+				if showUnpairConfirmation {
+					ZagUnpairConfirmationBubble(
+						confirm: {
+							showUnpairConfirmation = false
+							do { try pairingCore.forgetPairing() }
+							catch { unpairError = error.localizedDescription }
+						},
+						cancel: {
+							withAnimation(.easeOut(duration: 0.16)) {
+								showUnpairConfirmation = false
+							}
+						}
+					)
+					.offset(y: -48)
+					.transition(.scale(scale: 0.96, anchor: .bottom).combined(with: .opacity))
+					.zIndex(20)
 				}
-				Button("Cancel", role: .cancel) {}
-			} message: {
-				Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
 			}
+			.animation(.easeOut(duration: 0.16), value: showUnpairConfirmation)
 		} footer: {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
 		}
@@ -355,6 +362,66 @@ private struct RPPairingView: View {
 		default:
 			return .secondary
 		}
+	}
+}
+
+
+private struct ZagUnpairConfirmationBubble: View {
+	let confirm: () -> Void
+	let cancel: () -> Void
+
+	var body: some View {
+		VStack(spacing: 0) {
+			VStack(alignment: .leading, spacing: 10) {
+				Text("Unpair This iPhone?")
+					.font(.title3.weight(.semibold))
+				Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
+					.font(.body)
+					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.padding(.horizontal, 20)
+			.padding(.top, 18)
+			.padding(.bottom, 14)
+
+			Divider()
+
+			Button(role: .destructive, action: confirm) {
+				Text("Unpair This iPhone")
+					.font(.body.weight(.semibold))
+					.frame(maxWidth: .infinity)
+					.frame(minHeight: 50)
+			}
+			.buttonStyle(.plain)
+			.foregroundStyle(.red)
+
+			Divider()
+
+			Button(action: cancel) {
+				Text("Cancel")
+					.font(.body.weight(.semibold))
+					.frame(maxWidth: .infinity)
+					.frame(minHeight: 50)
+			}
+			.buttonStyle(.plain)
+			.foregroundStyle(Color.accentColor)
+		}
+		.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+		.overlay {
+			RoundedRectangle(cornerRadius: 28, style: .continuous)
+				.strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+		}
+		.overlay(alignment: .bottom) {
+			Image(systemName: "triangle.fill")
+				.font(.system(size: 24))
+				.foregroundStyle(.regularMaterial)
+				.rotationEffect(.degrees(180))
+				.offset(y: 15)
+		}
+		.shadow(color: .black.opacity(0.28), radius: 24, y: 10)
+		.frame(maxWidth: .infinity)
+		.padding(.horizontal, 2)
 	}
 }
 
