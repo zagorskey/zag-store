@@ -117,7 +117,8 @@ struct ZagSectionHeader: View {
 struct ZagActionPill: View {
 	let title: String
 	var showsProgress: Bool = false
-	var width: CGFloat = 88
+	var width: CGFloat? = 88
+	var horizontalPadding: CGFloat = 14
 	let action: () -> Void
 
 	@Environment(\.colorScheme)
@@ -141,6 +142,7 @@ struct ZagActionPill: View {
 					.font(.headline)
 					.lineLimit(1)
 			}
+			.padding(.horizontal, width == nil ? horizontalPadding : 0)
 			.frame(width: width, height: 34)
 			.foregroundStyle(Color.accentColor)
 			.background(pillBackground)
