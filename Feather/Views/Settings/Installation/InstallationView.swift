@@ -65,6 +65,8 @@ private struct RPPairingView: View {
 	@State private var isLocalDevVpnAvailable = true
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var showGate4Importer = false
+	@State private var showUnpairConfirmation = false
+	@State private var unpairError: String?
 
 	var body: some View {
 		Section {
@@ -173,6 +175,13 @@ private struct RPPairingView: View {
 					UIApplication.open("https://apps.apple.com/us/app/localdevvpn/id6755608044")
 				}
 			}
+	
+
+			if pairingCore.pairingFileExists {
+				Button("Unpair This iPhone", systemImage: "link.badge.minus", role: .destructive) {
+					showUnpairConfirmation = true
+				}
+			}
 		}
 
 		Section {
@@ -185,6 +194,29 @@ private struct RPPairingView: View {
 			Text("Diagnostics")
 		} footer: {
 			Text("Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test.")
+		}
+
+
+		.confirmationDialog(
+			"Unpair This iPhone?",
+			isPresented: $showUnpairConfirmation,
+			titleVisibility: .visible
+		) {
+			Button("Unpair This iPhone", role: .destructive) {
+				do { try pairingCore.forgetPairing() }
+				catch { unpairError = error.localizedDescription }
+			}
+			Button("Cancel", role: .cancel) {}
+		} message: {
+			Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
+		}
+		.alert("Unable to Unpair", isPresented: Binding(
+			get: { unpairError != nil },
+			set: { if !$0 { unpairError = nil } }
+		)) {
+			Button("OK", role: .cancel) { unpairError = nil }
+		} message: {
+			Text(unpairError ?? "")
 		}
 
 
