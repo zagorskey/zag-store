@@ -1111,10 +1111,13 @@ extension LibraryView {
 		// Library's FetchedResults can change while repositories are still
 		// refreshing during launch. Never let that transient lifecycle event
 		// replace the last known-good Updates snapshot with an empty/partial one.
-		guard !sourcesViewModel.isRefreshing else {
+		guard
+			!sourcesViewModel.isRefreshing,
+			!UpdateManager.shared.isRepositoryRefreshInProgress
+		else {
 			print(
 				"[Zag Store Updates] Library reconciliation deferred: " +
-				"repository refresh is in progress"
+				"repository refresh transaction is in progress"
 			)
 			return
 		}
