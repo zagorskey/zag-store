@@ -161,46 +161,48 @@ private struct RPPairingView: View {
 			} label: {
 				HStack(spacing: 10) {
 					ZStack {
-					Image(systemName: "link")
-					if pairingCore.pairingFileExists {
-						Image(systemName: "minus.circle.fill")
-							.font(.system(size: 9, weight: .bold))
-							.background(Circle().fill(Color(.systemBackground)).padding(-1))
-							.offset(x: 8, y: 7)
-					} else if pairingCore.isRunning {
-						Image(systemName: "antenna.radiowaves.left.and.right")
-					} else {
-						Image(systemName: "plus.circle.fill")
-							.font(.system(size: 9, weight: .bold))
-							.background(Circle().fill(Color(.systemBackground)).padding(-1))
-							.offset(x: 8, y: 7)
+						Image(systemName: "link")
+						if pairingCore.pairingFileExists {
+							Image(systemName: "minus.circle.fill")
+								.font(.system(size: 9, weight: .bold))
+								.background(Circle().fill(Color(.systemBackground)).padding(-1))
+								.offset(x: 8, y: 7)
+						} else if pairingCore.isRunning {
+							Image(systemName: "antenna.radiowaves.left.and.right")
+						} else {
+							Image(systemName: "plus.circle.fill")
+								.font(.system(size: 9, weight: .bold))
+								.background(Circle().fill(Color(.systemBackground)).padding(-1))
+								.offset(x: 8, y: 7)
+						}
 					}
-				}
-				.frame(width: 22)
+					.frame(width: 22)
 					Text(
 						pairingCore.pairingFileExists
 							? "Unpair This iPhone"
 							: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone")
 					)
+					Spacer(minLength: 0)
 				}
+				.contentShape(Rectangle())
+				.frame(maxWidth: .infinity, alignment: .leading)
 			}
+			.buttonStyle(.plain)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.contentShape(Rectangle())
 			.disabled(pairingCore.isRunning)
-			.background {
-				Color.clear
-					.frame(maxWidth: .infinity, maxHeight: .infinity)
-					.confirmationDialog(
-						"Unpair This iPhone?",
-						isPresented: $showUnpairConfirmation,
-						titleVisibility: .visible
-					) {
-						Button("Unpair This iPhone", role: .destructive) {
-							do { try pairingCore.forgetPairing() }
-							catch { unpairError = error.localizedDescription }
-						}
-						Button("Cancel", role: .cancel) {}
-					} message: {
-						Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
-					}
+			.confirmationDialog(
+				"Unpair This iPhone?",
+				isPresented: $showUnpairConfirmation,
+				titleVisibility: .visible
+			) {
+				Button("Unpair This iPhone", role: .destructive) {
+					do { try pairingCore.forgetPairing() }
+					catch { unpairError = error.localizedDescription }
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used.")
 			}
 		} footer: {
 			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
