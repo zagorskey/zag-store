@@ -806,9 +806,11 @@ struct LibraryView: View {
 			.onChange(of: scenePhase) { phase in
 				guard phase == .active else { return }
 				_reconcileManagedInstalledApps()
+				_updateRepositoryUpdates()
 			}
 			.onAppear {
 				_reconcileManagedInstalledApps()
+				_updateRepositoryUpdates()
 			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
