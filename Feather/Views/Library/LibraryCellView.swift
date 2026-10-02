@@ -103,9 +103,9 @@ struct LibraryCellView: View {
 
 					if let repositoryIconURL {
 						Button {
-							if let source = repositoryOrigin?.0 {
-								onRepositoryBadgeTap?(source)
-							}
+							guard let source = repositoryOrigin?.0 else { return }
+							UIImpactFeedbackGenerator(style: .light).impactOccurred()
+							onRepositoryBadgeTap?(source)
 						} label: {
 							LazyImage(url: repositoryIconURL) { state in
 								if let image = state.image {
@@ -123,8 +123,12 @@ struct LibraryCellView: View {
 						}
 						.buttonStyle(.plain)
 						.accessibilityLabel(
-							Text("Open \(repositoryOrigin?.1.name ?? "Repository")")
+							Text("\(repositoryOrigin?.1.name ?? "Repository") repository")
 						)
+						.accessibilityHint(
+							Text("Opens this app's source repository")
+						)
+						.accessibilityAddTraits(.isButton)
 					}
 				}
 
