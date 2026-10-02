@@ -23,7 +23,7 @@ struct SourceAppsCellView: View {
 			HStack(spacing: 10) {
 				appInformation
 
-				DownloadButtonView(app: app)
+				DownloadButtonView(app: app, source: source)
 			}
 
 			if
