@@ -65,8 +65,7 @@ struct SourceAppsCellView: View {
 						app: app
 					)
 				)
-				.font(.subheadline)
-				.foregroundStyle(.secondary)
+				.zagContentSubtitleStyle()
 				.lineLimit(1)
 			}
 			.frame(
