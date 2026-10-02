@@ -17,6 +17,7 @@ struct CertificatesView: View {
 	@State private var _isSelectedInfoPresenting: CertificatePair?
 	@State private var _certToRename: CertificatePair?
 	@State private var _newNickname: String = ""
+	@State private var _pendingCertificateDelete: CertificatePair?
 
 	// MARK: Fetch
 	@FetchRequest(
@@ -78,13 +79,36 @@ struct CertificatesView: View {
 			CertificatesAddView()
 				.presentationDetents([.medium])
 		}
-		.alert(.localized("Change Nickname"), isPresented: $_isRenamingPresenting, presenting: _certToRename) { cert in
-			TextField(.localized("Nickname"), text: $_newNickname)
+		.alert(.localized("Change Name"), isPresented: $_isRenamingPresenting, presenting: _certToRename) { cert in
+			TextField(.localized("Name"), text: $_newNickname)
 			Button(.localized("Cancel"), role: .cancel) { }
 			Button(.localized("OK")) {
 				cert.nickname = _newNickname.isEmpty ? nil : _newNickname
 				Storage.shared.saveContext()
 			}
+		}
+		.alert(
+			.localized("Delete Certificate?"),
+			isPresented: Binding(
+				get: { _pendingCertificateDelete != nil },
+				set: { if !$0 { _pendingCertificateDelete = nil } }
+			),
+			presenting: _pendingCertificateDelete
+		) { cert in
+			Button(.localized("Delete"), role: .destructive) {
+				Storage.shared.deleteCertificate(for: cert)
+				_pendingCertificateDelete = nil
+			}
+			Button(.localized("Cancel"), role: .cancel) {
+				_pendingCertificateDelete = nil
+			}
+		} message: { cert in
+			Text(
+				String(
+					format: .localized("Delete %@ from Zag Store? This removes the certificate and its signing files."),
+					cert.nickname ?? Storage.shared.getProvisionFileDecoded(for: cert)?.Name ?? .localized("this certificate")
+				)
+			)
 		}
 	}
 }
@@ -131,12 +155,19 @@ extension CertificatesView {
 			}
 		}
 		.buttonStyle(.plain)
+		.swipeActions(edge: .trailing, allowsFullSwipe: false) {
+			Button(role: .destructive) {
+				_pendingCertificateDelete = cert
+			} label: {
+				Label(.localized("Delete"), systemImage: "trash")
+			}
+		}
 	}
 	
 	@ViewBuilder
 	private func _actions(for cert: CertificatePair) -> some View {
 		Button(.localized("Delete"), systemImage: "trash", role: .destructive) {
-			Storage.shared.deleteCertificate(for: cert)
+			_pendingCertificateDelete = cert
 		}
 	}
 	
@@ -145,10 +176,16 @@ extension CertificatesView {
 		Button(.localized("Get Info"), systemImage: "info.circle") {
 			_isSelectedInfoPresenting = cert
 		}
-		Button(.localized("Change Nickname"), systemImage: "pencil") {
+		Button(.localized("Change Name"), systemImage: "pencil") {
 			_newNickname = cert.nickname ?? ""
 			_certToRename = cert
 			_isRenamingPresenting = true
+		}
+		if cert.nickname != nil {
+			Button(.localized("Remove Name"), systemImage: "minus.circle", role: .destructive) {
+				cert.nickname = nil
+				Storage.shared.saveContext()
+			}
 		}
 		Divider()
 		Button(.localized("Check Revokage"), systemImage: "person.text.rectangle") {
