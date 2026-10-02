@@ -9,15 +9,14 @@ use idevice::remote_pairing::{
     connect_tls_psk_tunnel_native, PairableHost, PairableHostInfo, RemotePairingClient,
     RpPairingFile, RpPairingSocket,
 };
-use idevice::RsdService;
-use idevice::utils::installation::install_package_with_callback_rsd;
 use idevice::rsd::RsdHandshake;
-use idevice::services::lockdown::LockdownClient;
+use idevice::services::afc::{opcode::AfcFopenMode, AfcClient};
 use idevice::services::installation_proxy::InstallationProxyClient;
-use idevice::services::afc::{AfcClient, opcode::AfcFopenMode};
+use idevice::services::lockdown::LockdownClient;
+use idevice::utils::installation::install_package_with_callback_rsd;
+use idevice::RsdService;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
-
 
 pub type ZagRPPairingCallback = extern "C" fn(i32, *const c_char);
 
@@ -180,15 +179,11 @@ async fn run_pairing(
     emit(
         callback,
         5,
-        format!(
-            "{}|{}|{}",
-            peer.name, peer.model, peer.remotepairing_udid
-        ),
+        format!("{}|{}|{}", peer.name, peer.model, peer.remotepairing_udid),
     );
 
     Ok(())
 }
-
 
 /// Runs the RPPairing-native Gate 2 probe on a dedicated thread.
 ///
@@ -213,8 +208,12 @@ pub unsafe extern "C" fn zag_gate2_probe(
     pairing_path: *const c_char,
     callback: Option<ZagRPPairingCallback>,
 ) -> bool {
-    let Some(callback) = callback else { return false; };
-    if device_ip.is_null() || pairing_path.is_null() { return false; }
+    let Some(callback) = callback else {
+        return false;
+    };
+    if device_ip.is_null() || pairing_path.is_null() {
+        return false;
+    }
 
     let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else {
         return false;
@@ -225,7 +224,10 @@ pub unsafe extern "C" fn zag_gate2_probe(
 
     thread::spawn(move || {
         emit(callback, 101, "Starting RPPairing-native Gate 2 probe");
-        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
             Ok(runtime) => runtime,
             Err(error) => {
                 emit(callback, -2, format!("Gate 2 runtime failed: {error}"));
@@ -241,16 +243,22 @@ pub unsafe extern "C" fn zag_gate2_probe(
     true
 }
 
-async fn run_gate2_probe(
-    device_ip: String,
-    pairing_path: PathBuf,
-    callback: ZagRPPairingCallback,
-) -> Result<(), String> {
+async fn with_zag_device_session<F, Fut, T, P>(
+    device_ip: &str,
+    pairing_path: &PathBuf,
+    mut progress: P,
+    operation: F,
+) -> Result<T, String>
+where
+    P: FnMut(u8, String),
+    F: FnOnce(idevice::tcp::handle::AdapterHandle, RsdHandshake) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
     let ip: IpAddr = device_ip
         .parse()
         .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
 
-    let mut pairing_file = RpPairingFile::read_from_file(&pairing_path)
+    let mut pairing_file = RpPairingFile::read_from_file(pairing_path)
         .await
         .map_err(|error| format!("Unable to read saved RPPairing credentials: {error}"))?;
 
@@ -259,145 +267,233 @@ async fn run_gate2_probe(
         .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
         .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
 
-    emit(callback, 102, format!("RPPairing reachable at {device_ip}:49152"));
-    emit(callback, 103, "Verifying saved RPPairing credentials");
+    progress(1, format!("RPPairing reachable at {device_ip}:49152"));
+    progress(2, "Verifying saved RPPairing credentials".to_string());
 
     let conn = RpPairingSocket::new(stream);
     let mut rpc = RemotePairingClient::new(conn, "Zag Store");
+
     rpc.connect(&mut pairing_file, || async { "000000".to_string() })
         .await
         .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
 
-    // Persist in case idevice refreshed any pairing metadata.
     pairing_file
-        .write_to_file(&pairing_path)
+        .write_to_file(pairing_path)
         .await
         .map_err(|error| format!("Unable to persist verified RPPairing credentials: {error}"))?;
-    emit(callback, 104, "Saved RPPairing credentials verified");
+
+    progress(3, "Saved RPPairing credentials verified".to_string());
 
     let tunnel_port = rpc
         .create_tcp_listener()
         .await
         .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
-    let tunnel_addr = (ip, tunnel_port);
-    let tunnel_stream = timeout(Duration::from_secs(8), TcpStream::connect(tunnel_addr))
-        .await
-        .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
-        .map_err(|error| format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}"))?;
+
+    let tunnel_stream = timeout(
+        Duration::from_secs(8),
+        TcpStream::connect((ip, tunnel_port)),
+    )
+    .await
+    .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
+    .map_err(|error| {
+        format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}")
+    })?;
 
     let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
         .await
         .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
 
-    let client_ip: IpAddr = tunnel.info.client_address.parse()
+    let client_ip: IpAddr = tunnel
+        .info
+        .client_address
+        .parse()
         .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
-    let server_ip: IpAddr = tunnel.info.server_address.parse()
+
+    let server_ip: IpAddr = tunnel
+        .info
+        .server_address
+        .parse()
         .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
+
     let mtu = tunnel.info.mtu as usize;
     let rsd_port = tunnel.info.server_rsd_port;
-    emit(callback, 105, format!("CDTunnel established; RSD port {rsd_port}"));
+
+    progress(4, format!("CDTunnel established; RSD port {rsd_port}"));
 
     let raw = tunnel.into_inner();
     let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
+
     adapter.set_mss(mtu.saturating_sub(60));
+
     let mut adapter = adapter.to_async_handle();
 
     let rsd_stream = adapter
         .connect(rsd_port)
         .await
         .map_err(|error| format!("Unable to reach RSD through tunnel: {error}"))?;
-    let mut handshake = RsdHandshake::new(rsd_stream)
+
+    let handshake = RsdHandshake::new(rsd_stream)
         .await
         .map_err(|error| format!("RSD handshake failed: {error}"))?;
-    emit(callback, 106, format!("RSD established; {} services", handshake.services.len()));
 
-    let mut remote_lockdown = LockdownClient::connect_rsd(&mut adapter, &mut handshake)
-        .await
-        .map_err(|error| format!("RSD lockdownd connection failed: {error}"))?;
-    let values = remote_lockdown
-        .get_value(None, None)
-        .await
-        .map_err(|error| format!("Reading device information over RSD failed: {error}"))?;
+    progress(
+        5,
+        format!("RSD established; {} services", handshake.services.len()),
+    );
 
-    let dict = values.as_dictionary();
-    let device_name = dict.and_then(|d| d.get("DeviceName")).and_then(|v| v.as_string()).unwrap_or("This iPhone");
-    let product_type = dict.and_then(|d| d.get("ProductType")).and_then(|v| v.as_string()).unwrap_or("");
-    let product_version = dict.and_then(|d| d.get("ProductVersion")).and_then(|v| v.as_string()).unwrap_or("");
-    let build_version = dict.and_then(|d| d.get("BuildVersion")).and_then(|v| v.as_string()).unwrap_or("");
-
-    emit(callback, 107, format!("{device_name}|{product_type}|{product_version}|{build_version}"));
-
-    // Gate 3A is deliberately read-only: connect to installation_proxy over the
-    // already-proven RSD tunnel and ask it only for the user-app lookup table.
-    drop(remote_lockdown);
-    let mut installation_proxy = InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
-        .await
-        .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
-    emit(callback, 108, "installation_proxy connected over RSD");
-
-    let apps = installation_proxy
-        .get_apps(Some("User"), None)
-        .await
-        .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
-    let zag_store_found = apps.contains_key("com.cwd43.gu29");
-    emit(callback, 109, format!("{}|{}", apps.len(), zag_store_found));
-
-    // Gate 3B: prove the staging half of the install pipeline without staging
-    // an app. Create one tiny marker in PublicStaging, verify it byte-for-byte,
-    // then remove it before returning success.
-    drop(installation_proxy);
-    let mut afc = AfcClient::connect_rsd(&mut adapter, &mut handshake)
-        .await
-        .map_err(|error| format!("AFC over RSD failed: {error}"))?;
-    emit(callback, 110, "AFC connected over RSD");
-
-    let staging_path = "/PublicStaging/zag-gate3b-test.txt";
-    let marker = b"Zag Store Gate 3B AFC verification";
-    {
-        let mut file = afc
-            .open(staging_path, AfcFopenMode::Wr)
-            .await
-            .map_err(|error| format!("Opening PublicStaging diagnostic for write failed: {error}"))?;
-        file.write_entire(marker)
-            .await
-            .map_err(|error| format!("Writing PublicStaging diagnostic failed: {error}"))?;
-        file.close()
-            .await
-            .map_err(|error| format!("Closing PublicStaging diagnostic after write failed: {error}"))?;
-    }
-    emit(callback, 111, format!("Wrote {} bytes to {staging_path}", marker.len()));
-
-    let read_back = {
-        let mut file = afc
-            .open(staging_path, AfcFopenMode::RdOnly)
-            .await
-            .map_err(|error| format!("Opening PublicStaging diagnostic for read failed: {error}"))?;
-        let bytes = file.read_entire()
-            .await
-            .map_err(|error| format!("Reading PublicStaging diagnostic failed: {error}"))?;
-        file.close()
-            .await
-            .map_err(|error| format!("Closing PublicStaging diagnostic after read failed: {error}"))?;
-        bytes
-    };
-
-    if read_back != marker {
-        let _ = afc.remove(staging_path).await;
-        return Err(format!(
-            "PublicStaging verification mismatch: wrote {} bytes, read {} bytes",
-            marker.len(),
-            read_back.len()
-        ));
-    }
-    emit(callback, 112, format!("Verified {} bytes from {staging_path}", read_back.len()));
-
-    afc.remove(staging_path)
-        .await
-        .map_err(|error| format!("Removing PublicStaging diagnostic failed: {error}"))?;
-    emit(callback, 113, "PublicStaging diagnostic removed");
-    Ok(())
+    operation(adapter, handshake).await
 }
 
+async fn run_gate2_probe(
+    device_ip: String,
+    pairing_path: PathBuf,
+    callback: ZagRPPairingCallback,
+) -> Result<(), String> {
+    with_zag_device_session(
+        &device_ip,
+        &pairing_path,
+        |stage, message| {
+            let code = match stage {
+                1 => 102,
+                2 => 103,
+                3 => 104,
+                4 => 105,
+                5 => 106,
+                _ => return,
+            };
+            emit(callback, code, message);
+        },
+        |mut adapter, mut handshake| async move {
+            let mut remote_lockdown = LockdownClient::connect_rsd(&mut adapter, &mut handshake)
+                .await
+                .map_err(|error| format!("RSD lockdownd connection failed: {error}"))?;
+
+            let values = remote_lockdown
+                .get_value(None, None)
+                .await
+                .map_err(|error| format!("Reading device information over RSD failed: {error}"))?;
+
+            let dict = values.as_dictionary();
+            let device_name = dict
+                .and_then(|d| d.get("DeviceName"))
+                .and_then(|v| v.as_string())
+                .unwrap_or("This iPhone");
+            let product_type = dict
+                .and_then(|d| d.get("ProductType"))
+                .and_then(|v| v.as_string())
+                .unwrap_or("");
+            let product_version = dict
+                .and_then(|d| d.get("ProductVersion"))
+                .and_then(|v| v.as_string())
+                .unwrap_or("");
+            let build_version = dict
+                .and_then(|d| d.get("BuildVersion"))
+                .and_then(|v| v.as_string())
+                .unwrap_or("");
+
+            emit(
+                callback,
+                107,
+                format!("{device_name}|{product_type}|{product_version}|{build_version}"),
+            );
+
+            drop(remote_lockdown);
+
+            let mut installation_proxy =
+                InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+                    .await
+                    .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
+
+            emit(callback, 108, "installation_proxy connected over RSD");
+
+            let apps = installation_proxy
+                .get_apps(Some("User"), None)
+                .await
+                .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
+
+            let zag_store_found = apps.contains_key("com.cwd43.gu29");
+            emit(callback, 109, format!("{}|{}", apps.len(), zag_store_found));
+
+            drop(installation_proxy);
+
+            let mut afc = AfcClient::connect_rsd(&mut adapter, &mut handshake)
+                .await
+                .map_err(|error| format!("AFC over RSD failed: {error}"))?;
+
+            emit(callback, 110, "AFC connected over RSD");
+
+            let staging_path = "/PublicStaging/zag-gate3b-test.txt";
+            let marker = b"Zag Store Gate 3B AFC verification";
+
+            {
+                let mut file = afc
+                    .open(staging_path, AfcFopenMode::Wr)
+                    .await
+                    .map_err(|error| {
+                        format!("Opening PublicStaging diagnostic for write failed: {error}")
+                    })?;
+
+                file.write_entire(marker)
+                    .await
+                    .map_err(|error| format!("Writing PublicStaging diagnostic failed: {error}"))?;
+
+                file.close().await.map_err(|error| {
+                    format!("Closing PublicStaging diagnostic after write failed: {error}")
+                })?;
+            }
+
+            emit(
+                callback,
+                111,
+                format!("Wrote {} bytes to {staging_path}", marker.len()),
+            );
+
+            let read_back = {
+                let mut file =
+                    afc.open(staging_path, AfcFopenMode::RdOnly)
+                        .await
+                        .map_err(|error| {
+                            format!("Opening PublicStaging diagnostic for read failed: {error}")
+                        })?;
+
+                let bytes = file
+                    .read_entire()
+                    .await
+                    .map_err(|error| format!("Reading PublicStaging diagnostic failed: {error}"))?;
+
+                file.close().await.map_err(|error| {
+                    format!("Closing PublicStaging diagnostic after read failed: {error}")
+                })?;
+
+                bytes
+            };
+
+            if read_back != marker {
+                let _ = afc.remove(staging_path).await;
+                return Err(format!(
+                    "PublicStaging verification mismatch: wrote {} bytes, read {} bytes",
+                    marker.len(),
+                    read_back.len()
+                ));
+            }
+
+            emit(
+                callback,
+                112,
+                format!("Verified {} bytes from {staging_path}", read_back.len()),
+            );
+
+            afc.remove(staging_path)
+                .await
+                .map_err(|error| format!("Removing PublicStaging diagnostic failed: {error}"))?;
+
+            emit(callback, 113, "PublicStaging diagnostic removed");
+
+            Ok(())
+        },
+    )
+    .await
+}
 
 /// Gate 4: installs one already-signed IPA through the proven on-device
 /// RPPairing -> TLS-PSK -> RSD -> AFC/PublicStaging -> installation_proxy path.
@@ -418,16 +514,29 @@ pub unsafe extern "C" fn zag_gate4_install(
     ipa_path: *const c_char,
     callback: Option<ZagRPPairingCallback>,
 ) -> bool {
-    let Some(callback) = callback else { return false; };
-    if device_ip.is_null() || pairing_path.is_null() || ipa_path.is_null() { return false; }
+    let Some(callback) = callback else {
+        return false;
+    };
+    if device_ip.is_null() || pairing_path.is_null() || ipa_path.is_null() {
+        return false;
+    }
 
-    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
-    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
-    let Ok(ipa_path) = CStr::from_ptr(ipa_path).to_str().map(PathBuf::from) else { return false; };
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else {
+        return false;
+    };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else {
+        return false;
+    };
+    let Ok(ipa_path) = CStr::from_ptr(ipa_path).to_str().map(PathBuf::from) else {
+        return false;
+    };
 
     thread::spawn(move || {
         emit(callback, 201, "Starting controlled Gate 4 installation");
-        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
             Ok(runtime) => runtime,
             Err(error) => {
                 emit(callback, -4, format!("Gate 4 runtime failed: {error}"));
@@ -435,7 +544,8 @@ pub unsafe extern "C" fn zag_gate4_install(
             }
         };
         runtime.block_on(async move {
-            if let Err(error) = run_gate4_install(device_ip, pairing_path, ipa_path, callback).await {
+            if let Err(error) = run_gate4_install(device_ip, pairing_path, ipa_path, callback).await
+            {
                 emit(callback, -4, error);
             }
         });
@@ -449,84 +559,56 @@ async fn run_gate4_install(
     ipa_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
-    let ip: IpAddr = device_ip
-        .parse()
-        .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
-
     let metadata = std::fs::metadata(&ipa_path)
         .map_err(|error| format!("Unable to access selected IPA: {error}"))?;
     if !metadata.is_file() || metadata.len() == 0 {
         return Err("Selected IPA is missing or empty".to_string());
     }
 
-    let mut pairing_file = RpPairingFile::read_from_file(&pairing_path)
-        .await
-        .map_err(|error| format!("Unable to read saved RPPairing credentials: {error}"))?;
-
-    let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 49152)))
-        .await
-        .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
-        .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
-
-    let conn = RpPairingSocket::new(stream);
-    let mut rpc = RemotePairingClient::new(conn, "Zag Store");
-    rpc.connect(&mut pairing_file, || async { "000000".to_string() })
-        .await
-        .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
-    emit(callback, 202, "Saved RPPairing credentials verified");
-
-    let tunnel_port = rpc
-        .create_tcp_listener()
-        .await
-        .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
-    let tunnel_stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, tunnel_port)))
-        .await
-        .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
-        .map_err(|error| format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}"))?;
-
-    let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
-        .await
-        .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
-    let client_ip: IpAddr = tunnel.info.client_address.parse()
-        .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
-    let server_ip: IpAddr = tunnel.info.server_address.parse()
-        .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
-    let mtu = tunnel.info.mtu as usize;
-    let rsd_port = tunnel.info.server_rsd_port;
-    emit(callback, 203, format!("CDTunnel established; RSD port {rsd_port}"));
-
-    let raw = tunnel.into_inner();
-    let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
-    adapter.set_mss(mtu.saturating_sub(60));
-    let mut adapter = adapter.to_async_handle();
-
-    let rsd_stream = adapter
-        .connect(rsd_port)
-        .await
-        .map_err(|error| format!("Unable to reach RSD through tunnel: {error}"))?;
-    let mut handshake = RsdHandshake::new(rsd_stream)
-        .await
-        .map_err(|error| format!("RSD handshake failed: {error}"))?;
-    emit(callback, 204, format!("RSD established; {} services", handshake.services.len()));
-
-    emit(callback, 205, format!("Installing {}", ipa_path.file_name().and_then(|x| x.to_str()).unwrap_or("selected IPA")));
-    install_package_with_callback_rsd(
-        &mut adapter,
-        &mut handshake,
-        &ipa_path,
-        None,
-        |(percent, callback)| async move {
-            emit(callback, 206, percent.to_string());
+    with_zag_device_session(
+        &device_ip,
+        &pairing_path,
+        |stage, message| {
+            let code = match stage {
+                3 => 202,
+                4 => 203,
+                5 => 204,
+                _ => return,
+            };
+            emit(callback, code, message);
         },
-        callback,
+        |mut adapter, mut handshake| async move {
+            emit(
+                callback,
+                205,
+                format!(
+                    "Installing {}",
+                    ipa_path
+                        .file_name()
+                        .and_then(|x| x.to_str())
+                        .unwrap_or("selected IPA")
+                ),
+            );
+
+            install_package_with_callback_rsd(
+                &mut adapter,
+                &mut handshake,
+                &ipa_path,
+                None,
+                |(percent, callback)| async move {
+                    emit(callback, 206, percent.to_string());
+                },
+                callback,
+            )
+            .await
+            .map_err(|error| format!("Direct installation failed: {error}"))?;
+
+            emit(callback, 207, "Installation complete");
+            Ok(())
+        },
     )
     .await
-    .map_err(|error| format!("Direct installation failed: {error}"))?;
-
-    emit(callback, 207, "Installation complete");
-    Ok(())
 }
-
 
 /// Gate 4 uninstall: removes one installed app through the proven
 /// RPPairing -> TLS-PSK -> RSD -> installation_proxy path.
@@ -547,16 +629,29 @@ pub unsafe extern "C" fn zag_gate4_uninstall(
     bundle_id: *const c_char,
     callback: Option<ZagRPPairingCallback>,
 ) -> bool {
-    let Some(callback) = callback else { return false; };
-    if device_ip.is_null() || pairing_path.is_null() || bundle_id.is_null() { return false; }
+    let Some(callback) = callback else {
+        return false;
+    };
+    if device_ip.is_null() || pairing_path.is_null() || bundle_id.is_null() {
+        return false;
+    }
 
-    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
-    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
-    let Ok(bundle_id) = CStr::from_ptr(bundle_id).to_str().map(str::to_owned) else { return false; };
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else {
+        return false;
+    };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else {
+        return false;
+    };
+    let Ok(bundle_id) = CStr::from_ptr(bundle_id).to_str().map(str::to_owned) else {
+        return false;
+    };
 
     thread::spawn(move || {
         emit(callback, 301, format!("Starting uninstall for {bundle_id}"));
-        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
             Ok(runtime) => runtime,
             Err(error) => {
                 emit(callback, -5, format!("Uninstall runtime failed: {error}"));
@@ -564,7 +659,9 @@ pub unsafe extern "C" fn zag_gate4_uninstall(
             }
         };
         runtime.block_on(async move {
-            if let Err(error) = run_gate4_uninstall(device_ip, pairing_path, bundle_id, callback).await {
+            if let Err(error) =
+                run_gate4_uninstall(device_ip, pairing_path, bundle_id, callback).await
+            {
                 emit(callback, -5, error);
             }
         });
@@ -602,21 +699,36 @@ async fn run_gate4_uninstall(
         .create_tcp_listener()
         .await
         .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
-    let tunnel_stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, tunnel_port)))
-        .await
-        .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
-        .map_err(|error| format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}"))?;
+    let tunnel_stream = timeout(
+        Duration::from_secs(8),
+        TcpStream::connect((ip, tunnel_port)),
+    )
+    .await
+    .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
+    .map_err(|error| {
+        format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}")
+    })?;
 
     let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
         .await
         .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
-    let client_ip: IpAddr = tunnel.info.client_address.parse()
+    let client_ip: IpAddr = tunnel
+        .info
+        .client_address
+        .parse()
         .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
-    let server_ip: IpAddr = tunnel.info.server_address.parse()
+    let server_ip: IpAddr = tunnel
+        .info
+        .server_address
+        .parse()
         .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
     let mtu = tunnel.info.mtu as usize;
     let rsd_port = tunnel.info.server_rsd_port;
-    emit(callback, 303, format!("CDTunnel established; RSD port {rsd_port}"));
+    emit(
+        callback,
+        303,
+        format!("CDTunnel established; RSD port {rsd_port}"),
+    );
 
     let raw = tunnel.into_inner();
     let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
@@ -630,7 +742,11 @@ async fn run_gate4_uninstall(
     let mut handshake = RsdHandshake::new(rsd_stream)
         .await
         .map_err(|error| format!("RSD handshake failed: {error}"))?;
-    emit(callback, 304, format!("RSD established; {} services", handshake.services.len()));
+    emit(
+        callback,
+        304,
+        format!("RSD established; {} services", handshake.services.len()),
+    );
 
     let mut installation_proxy = InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
         .await

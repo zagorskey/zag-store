@@ -419,7 +419,13 @@ private struct ZagUnpairConfirmationBubble: View {
 
 struct RPPairingDiagnosticsView: View {
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
-	@State private var showGate4Importer = false
+	@FetchRequest(
+		entity: Signed.entity(),
+		sortDescriptors: [NSSortDescriptor(keyPath: \Signed.date, ascending: false)],
+		animation: .snappy
+	) private var signedApps: FetchedResults<Signed>
+
+	@State private var showGate4SignedPicker = false
 	@State private var healthMessage: String?
 
 	var body: some View {
@@ -481,15 +487,19 @@ struct RPPairingDiagnosticsView: View {
 					Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
 				}
 				Button {
-					showGate4Importer = true
+					showGate4SignedPicker = true
 				} label: {
 					Label("Run Installation Test…", systemImage: "shippingbox")
 				}
-				.disabled(pairingCore.isGate4Running || !pairingCore.pairingFileExists)
+				.disabled(
+					pairingCore.isGate4Running ||
+					!pairingCore.pairingFileExists ||
+					signedApps.isEmpty
+				)
 			} header: {
 				Text("Installation Test")
 			} footer: {
-				Text("Runs the complete direct-install path with a signed disposable IPA. Do not select Zag Store itself.")
+				Text("Select an app already signed by Zag Store. Diagnostics creates a temporary IPA and runs it through the complete RPPairing direct-install path.")
 			}
 		}
 		.alert("Health Check", isPresented: Binding(
@@ -500,14 +510,60 @@ struct RPPairingDiagnosticsView: View {
 		} message: {
 			Text(healthMessage ?? "")
 		}
-		.fileImporter(isPresented: $showGate4Importer, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
-			switch result {
-			case .success(let urls):
-				guard let url = urls.first else { return }
-				do { try pairingCore.installGate4IPA(at: url) }
-				catch { print("Gate 4 IPA import failed: \(error)") }
-			case .failure(let error):
-				print("Gate 4 file importer failed: \(error)")
+		.sheet(isPresented: $showGate4SignedPicker) {
+			NavigationStack {
+				List {
+					ForEach(signedApps, id: \.objectID) { app in
+						Button {
+							showGate4SignedPicker = false
+							runGate4InstallationTest(with: app)
+						} label: {
+							VStack(alignment: .leading, spacing: 4) {
+								Text(app.name ?? "Unknown App")
+									.foregroundStyle(.primary)
+
+								HStack(spacing: 6) {
+									if let version = app.version, !version.isEmpty {
+										Text(version)
+									}
+
+									if let identifier = app.identifier, !identifier.isEmpty {
+										Text(identifier)
+									}
+								}
+								.font(.caption)
+								.foregroundStyle(.secondary)
+							}
+						}
+						.disabled(app.identifier == "com.cwd43.gu29")
+					}
+				}
+				.navigationTitle("Choose Signed App")
+				.navigationBarTitleDisplayMode(.inline)
+				.toolbar {
+					ToolbarItem(placement: .cancellationAction) {
+						Button("Cancel") {
+							showGate4SignedPicker = false
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private func runGate4InstallationTest(with app: Signed) {
+		Task {
+			do {
+				let archive = ArchiveHandler(app: app)
+
+				try await archive.move()
+				let packageURL = try await archive.archive()
+
+				try pairingCore.installGate4IPA(at: packageURL)
+			} catch {
+				await MainActor.run {
+					healthMessage = "Installation test preparation failed: \(error.localizedDescription)"
+				}
 			}
 		}
 	}
