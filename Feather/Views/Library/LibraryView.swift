@@ -61,6 +61,7 @@ struct LibraryView: View {
 
 
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 
 
 
@@ -1848,6 +1849,7 @@ private struct ZagUpdateRow: View {
 	}
 
 	let onPreparedForInstall: (String) -> Void
+	let onSelect: () -> Void
 
 	@ObservedObject private var transactionManager =
 		ZagUpdateTransactionManager.shared
@@ -1903,7 +1905,7 @@ private struct ZagUpdateRow: View {
 	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 12) {
+		VStack(alignment: .leading, spacing: 8) {
 			HStack(alignment: .center, spacing: 12) {
 				appIcon
 
@@ -1944,7 +1946,12 @@ private struct ZagUpdateRow: View {
 				}
 			}
 		}
-		.padding(.vertical, 14)
+		.padding(.top, 14)
+		.padding(.bottom, releaseNotes == nil ? 14 : 10)
+		.contentShape(Rectangle())
+		.onTapGesture {
+			onSelect()
+		}
 	}
 
 	@ViewBuilder
@@ -2101,7 +2108,10 @@ private struct ZagUpdatesPopup: View {
 							ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
 								ZagUpdateRow(
 									update: update,
-									onPreparedForInstall: onPreparedForInstall
+									onPreparedForInstall: onPreparedForInstall,
+									onSelect: {
+										selectedUpdate = update
+									}
 								)
 								.padding(.horizontal, 16)
 								.padding(.top, index == 0 ? 8 : 0)
@@ -2132,6 +2142,12 @@ private struct ZagUpdatesPopup: View {
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
+			.navigationDestination(item: $selectedUpdate) { update in
+				SourceAppsDetailView(
+					source: update.source,
+					app: update.app
+				)
+			}
 			.interactiveDismissDisabled()
 			.toolbar {
 				ToolbarItem(placement: .topBarTrailing) {
