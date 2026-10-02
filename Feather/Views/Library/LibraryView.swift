@@ -2052,7 +2052,24 @@ private struct ZagUpdateRow: View {
 							.foregroundStyle(.primary)
 							.lineLimit(showsFullReleaseNotes ? nil : 2)
 							.frame(maxWidth: .infinity, alignment: .leading)
-							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
+							.mask {
+								if showsFullReleaseNotes {
+									Rectangle()
+								} else {
+									HStack(spacing: 0) {
+										Rectangle()
+										LinearGradient(
+											stops: [
+												.init(color: .white, location: 0),
+												.init(color: .clear, location: 1)
+											],
+											startPoint: .leading,
+											endPoint: .trailing
+										)
+										.frame(width: 54)
+									}
+								}
+							}
 
 						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
 							withAnimation(.easeInOut(duration: 0.2)) {
@@ -2701,7 +2718,24 @@ private struct ZagCachedUpdateRow: View {
 							.foregroundStyle(.primary)
 							.lineLimit(showsFullReleaseNotes ? nil : 2)
 							.frame(maxWidth: .infinity, alignment: .leading)
-							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
+							.mask {
+								if showsFullReleaseNotes {
+									Rectangle()
+								} else {
+									HStack(spacing: 0) {
+										Rectangle()
+										LinearGradient(
+											stops: [
+												.init(color: .white, location: 0),
+												.init(color: .clear, location: 1)
+											],
+											startPoint: .leading,
+											endPoint: .trailing
+										)
+										.frame(width: 54)
+									}
+								}
+							}
 						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
 							withAnimation(.easeInOut(duration: 0.2)) {
 								showsFullReleaseNotes.toggle()
