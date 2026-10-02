@@ -15,6 +15,7 @@ import NukeUI
 struct LibraryCellView: View {
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 	@Environment(\.editMode) private var editMode
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
 
 	var certInfo: Date.ExpirationInfo? {
 		Storage.shared
@@ -214,7 +215,38 @@ struct LibraryCellView: View {
 		guard let bundleID = app.identifier, !bundleID.isEmpty else {
 			return nil
 		}
-		let icons = UserDefaults.standard.dictionary(
+
+		let defaults = UserDefaults.standard
+		let origins = defaults.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String]
+		let origin = origins?[bundleID]
+
+		if let origin {
+			for (storedSource, repository) in sourcesViewModel.sources {
+				let isOrigin =
+					storedSource.sourceURL?.absoluteString == origin ||
+					repository.id == origin ||
+					repository.website?.absoluteString == origin ||
+					repository.name == origin
+				if isOrigin, let iconURL = repository.currentIconURL {
+					return iconURL
+				}
+			}
+		}
+
+		// Existing apps from before provenance tracking can still resolve
+		// immediately when exactly one configured repository owns the bundle ID.
+		let matches = sourcesViewModel.sources.values.filter { repository in
+			repository.apps.contains { $0.id == bundleID }
+		}
+		if origin == nil, matches.count == 1,
+		   let iconURL = matches.first?.currentIconURL {
+			return iconURL
+		}
+
+		// Keep the acquisition-time icon as an offline/removed-source fallback.
+		let icons = defaults.dictionary(
 			forKey: "zagStore.repositoryOriginIcons"
 		) as? [String: String]
 		guard
