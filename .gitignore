@@ -13,3 +13,6 @@ _build
 RPPairingCore/ZagRPPairingCore.xcframework/
 RPPairingCore/build/
 RPPairingCore/rust-core/target/
+
+# Local pairing experiments
+LocusPairingExperiment/
