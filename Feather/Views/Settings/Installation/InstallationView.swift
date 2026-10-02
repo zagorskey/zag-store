@@ -426,6 +426,8 @@ struct RPPairingDiagnosticsView: View {
 	) private var signedApps: FetchedResults<Signed>
 
 	@State private var showGate4SignedPicker = false
+	@State private var showInstalledAppsInventory = false
+	@State private var inventoryError: String?
 	@State private var healthMessage: String?
 
 	var body: some View {
@@ -479,6 +481,26 @@ struct RPPairingDiagnosticsView: View {
 			}
 
 			Section {
+				Button {
+					refreshInstalledAppsInventory()
+				} label: {
+					Label(
+						pairingCore.installedAppsState == .refreshing ? "Refreshing Installed Apps…" : "View Installed App Versions",
+						systemImage: "list.bullet.rectangle"
+					)
+				}
+				.disabled(!pairingCore.pairingFileExists || pairingCore.installedAppsState == .refreshing)
+
+				if case .loaded(let count) = pairingCore.installedAppsState {
+					LabeledContent("Last Inventory") { Text("\(count) apps") }
+				}
+			} header: {
+				Text("Installed App Inventory")
+			} footer: {
+				Text("Reads the actual user-app inventory from installation_proxy and shows the bundle identifier, installed version and build reported by this iPhone.")
+			}
+
+			Section {
 				LabeledContent("Status") { Text(gate4StatusText).foregroundStyle(gate4StatusColor) }
 				if case .progress(let percent) = pairingCore.gate4State {
 					ProgressView(value: Double(percent), total: 100) { Text("Installing") } currentValueLabel: { Text("\(percent)%") }
@@ -509,6 +531,41 @@ struct RPPairingDiagnosticsView: View {
 			Button("OK", role: .cancel) { healthMessage = nil }
 		} message: {
 			Text(healthMessage ?? "")
+		}
+		.sheet(isPresented: $showInstalledAppsInventory) {
+			NavigationStack {
+				List {
+					ForEach(pairingCore.installedApps.values.sorted { $0.bundleID.localizedCaseInsensitiveCompare($1.bundleID) == .orderedAscending }, id: \.bundleID) { app in
+						VStack(alignment: .leading, spacing: 4) {
+							Text(app.bundleID)
+								.font(.body.weight(.medium))
+								.textSelection(.enabled)
+							HStack(spacing: 8) {
+								Text("Version: \(app.version.isEmpty ? "—" : app.version)")
+								Text("Build: \(app.build.isEmpty ? "—" : app.build)")
+							}
+							.font(.caption)
+							.foregroundStyle(.secondary)
+						}
+						.padding(.vertical, 2)
+					}
+				}
+				.navigationTitle("Installed Apps")
+				.navigationBarTitleDisplayMode(.inline)
+				.toolbar {
+					ToolbarItem(placement: .confirmationAction) {
+						Button("Done") { showInstalledAppsInventory = false }
+					}
+				}
+			}
+		}
+		.alert("Installed Apps Lookup", isPresented: Binding(
+			get: { inventoryError != nil },
+			set: { if !$0 { inventoryError = nil } }
+		)) {
+			Button("OK", role: .cancel) { inventoryError = nil }
+		} message: {
+			Text(inventoryError ?? "")
 		}
 		.sheet(isPresented: $showGate4SignedPicker) {
 			NavigationStack {
@@ -548,6 +605,23 @@ struct RPPairingDiagnosticsView: View {
 					}
 				}
 			}
+		}
+	}
+
+	private func refreshInstalledAppsInventory() {
+		do {
+			try pairingCore.refreshInstalledApps { result in
+				DispatchQueue.main.async {
+					switch result {
+					case .success:
+						showInstalledAppsInventory = true
+					case .failure(let error):
+						inventoryError = error.localizedDescription
+					}
+				}
+			}
+		} catch {
+			inventoryError = error.localizedDescription
 		}
 	}
 
