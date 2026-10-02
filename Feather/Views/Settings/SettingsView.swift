@@ -54,6 +54,8 @@ struct SettingsView: View {
 	@State private var _isReorderingSettings = false
 	@AppStorage("ZagStore.settingsSectionOrder") private var _storedSettingsSectionOrder = ""
 	@AppStorage("ZagStore.settingsSectionSortMode") private var _settingsSectionSortMode = "default"
+	@AppStorage("ZagStore.advancedSettingsUnlocked") private var _advancedSettingsUnlocked = false
+	@State private var _showAdvancedSettingsWarning = false
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -92,6 +94,9 @@ struct SettingsView: View {
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
+					if _advancedSettingsUnlocked {
+						_advancedSettingsSections
+					}
 				}
 			}
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
@@ -100,7 +105,7 @@ struct SettingsView: View {
 			}
 			.zagWallpaperSurface()
 			.toolbar {
-				ToolbarItem(placement: .topBarLeading) {
+				ToolbarItemGroup(placement: .topBarLeading) {
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -126,6 +131,20 @@ struct SettingsView: View {
 							Image(systemName: "slider.horizontal.3")
 						}
 						.accessibilityLabel("Settings Options")
+
+						Button {
+							if _advancedSettingsUnlocked {
+								withAnimation(.snappy) {
+									_advancedSettingsUnlocked = false
+								}
+								UIImpactFeedbackGenerator(style: .light).impactOccurred()
+							} else {
+								_showAdvancedSettingsWarning = true
+							}
+						} label: {
+							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
+						}
+						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
 					}
 				}
 
@@ -141,6 +160,17 @@ struct SettingsView: View {
 		}
 		.sheet(item: $_selectedCertificateInfo) { cert in
 			CertificatesInfoView(cert: cert)
+		}
+		.alert("Advanced Settings", isPresented: $_showAdvancedSettingsWarning) {
+			Button("Proceed") {
+				UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				withAnimation(.snappy) {
+					_advancedSettingsUnlocked = true
+				}
+			}
+			Button("Cancel", role: .cancel) {}
+		} message: {
+			Text("Developer Options and Experimental Features are intended for advanced users. These settings may affect Zag Store’s behaviour and stability.")
 		}
 		.alert(
 			.localized("Delete Certificate?"),
@@ -170,6 +200,21 @@ struct SettingsView: View {
 
 // MARK: - View extension
 extension SettingsView {
+	@ViewBuilder
+	private var _advancedSettingsSections: some View {
+		Section {
+			EmptyView()
+		} header: {
+			Text("Developer Options")
+		}
+
+		Section {
+			EmptyView()
+		} header: {
+			Text("Experimental Features")
+		}
+	}
+
 	@ViewBuilder
 	private func _settingsSection(_ section: ZagSettingsSection) -> some View {
 		switch section {
