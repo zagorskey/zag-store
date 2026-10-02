@@ -99,6 +99,7 @@ struct LibraryView: View {
 	@State private var _isDownloadingPresenting = false
 	@State private var _isUpdatesPresenting = false
 	@State private var _removingBundleIDs: Set<String> = []
+	@State private var _pendingRemoveApp: AnyApp?
 	@AppStorage("zagStore.managedInstalledBundleIDs")
 	private var _managedInstalledBundleIDsData: Data = Data()
 
@@ -427,7 +428,7 @@ struct LibraryView: View {
 								isManagedInstalled: true,
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
-								onRemoveManagedApp: _removeManagedApp,
+								onRemoveManagedApp: _requestRemoveManagedApp,
 								onRepositoryBadgeTap: { source in
 									_selectedRepositorySource = source
 								},
@@ -468,7 +469,7 @@ struct LibraryView: View {
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
-								onRemoveManagedApp: _removeManagedApp,
+								onRemoveManagedApp: _requestRemoveManagedApp,
 								onRepositoryBadgeTap: { source in
 									_selectedRepositorySource = source
 								},
@@ -554,7 +555,7 @@ struct LibraryView: View {
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
-								onRemoveManagedApp: _removeManagedApp,
+								onRemoveManagedApp: _requestRemoveManagedApp,
 								onRepositoryBadgeTap: { source in
 									_selectedRepositorySource = source
 								},
@@ -847,6 +848,66 @@ struct LibraryView: View {
 				ZagUpdatesPopup(
 					updates: updateManager.updates
 				)
+			}
+
+			.sheet(item: $_pendingRemoveApp) { app in
+				VStack(spacing: 16) {
+					Text(
+						String(
+							format: .localized("Remove “%@”?"),
+							app.base.name ?? .localized("this app")
+						)
+					)
+					.font(.system(size: 22, weight: .semibold))
+					.multilineTextAlignment(.center)
+
+					Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
+						.font(.system(size: 16))
+						.foregroundStyle(.secondary)
+						.multilineTextAlignment(.center)
+						.fixedSize(horizontal: false, vertical: true)
+
+					Spacer(minLength: 4)
+
+					Button {
+						let target = app.base
+						_pendingRemoveApp = nil
+						DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+							_removeManagedApp(target)
+						}
+					} label: {
+						Text(.localized("Delete App"))
+							.font(.system(size: 18, weight: .semibold))
+							.foregroundStyle(.red)
+							.frame(maxWidth: .infinity)
+							.frame(height: 52)
+							.background(
+								Color(uiColor: .tertiarySystemFill),
+								in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+							)
+					}
+					.buttonStyle(.plain)
+
+					Button {
+						_pendingRemoveApp = nil
+					} label: {
+						Text(.localized("Cancel"))
+							.font(.system(size: 18, weight: .semibold))
+							.foregroundStyle(.primary)
+							.frame(maxWidth: .infinity)
+							.frame(height: 52)
+							.background(
+								Color(uiColor: .tertiarySystemFill),
+								in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+							)
+					}
+					.buttonStyle(.plain)
+				}
+				.padding(.horizontal, 20)
+				.padding(.top, 24)
+				.padding(.bottom, 14)
+				.presentationDetents([.height(330)])
+				.presentationDragIndicator(.visible)
 			}
 
 			.sheet(item: $_selectedInfoAppPresenting) { app in
@@ -1218,6 +1279,10 @@ extension LibraryView {
 			_clearManagedInstalledMarker(identifier)
 		}
 		Storage.shared.deleteApp(for: app)
+	}
+
+	private func _requestRemoveManagedApp(_ app: AppInfoPresentable) {
+		_pendingRemoveApp = AnyApp(base: app)
 	}
 
 	private func _removeManagedApp(_ app: AppInfoPresentable) {
