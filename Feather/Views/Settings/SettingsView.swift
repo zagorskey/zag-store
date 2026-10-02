@@ -67,10 +67,6 @@ struct SettingsView: View {
 
 					if let cert = selectedCertificate {
 						VStack(alignment: .leading, spacing: 8) {
-							Text(.localized("In Use"))
-								.font(.headline)
-								.foregroundStyle(.secondary)
-
 							CertificatesCellView(cert: cert)
 
 							Divider()
