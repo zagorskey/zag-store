@@ -39,6 +39,7 @@ import NimbleViews
 
 
 import NukeUI
+import AltSourceKit
 
 
 
@@ -62,6 +63,7 @@ struct LibraryView: View {
 
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
+	@State private var _selectedRepositorySource: AltSource?
 
 
 
@@ -425,6 +427,9 @@ struct LibraryView: View {
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
+								onRepositoryBadgeTap: { source in
+									_selectedRepositorySource = source
+								},
 								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -813,6 +818,20 @@ struct LibraryView: View {
 			}
 			.onAppear {
 				_refreshInstalledAppsFromDevice()
+			}
+
+			.navigationDestination(
+				isPresented: Binding(
+					get: { _selectedRepositorySource != nil },
+					set: { if !$0 { _selectedRepositorySource = nil } }
+				)
+			) {
+				if let source = _selectedRepositorySource {
+					SourceAppsView(
+						object: [source],
+						viewModel: sourcesViewModel
+					)
+				}
 			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
