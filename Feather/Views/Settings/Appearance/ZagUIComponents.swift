@@ -139,7 +139,7 @@ struct ZagActionPill: View {
 				}
 
 				Text(title)
-					.font(.system(size: 16, weight: .bold))
+					.font(.system(size: 17, weight: .bold))
 					.lineLimit(1)
 			}
 			.padding(.horizontal, width == nil ? horizontalPadding : 0)
