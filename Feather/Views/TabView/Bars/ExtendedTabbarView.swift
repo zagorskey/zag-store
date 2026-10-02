@@ -76,12 +76,17 @@ struct ExtendedTabbarView: View {
 		.overlay(alignment: .bottom) {
 			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
 				GeometryReader { proxy in
-					let itemWidth = proxy.size.width / CGFloat(TabEnum.defaultTabs.count)
+					// The native floating tab bar keeps its items inside a
+					// horizontal content inset. Preserve the original indicator
+					// geometry: 12pt to the right of the Apps icon centre.
+					let tabContentInset: CGFloat = 30
+					let contentWidth = proxy.size.width - (tabContentInset * 2)
+					let itemWidth = contentWidth / CGFloat(TabEnum.defaultTabs.count)
 					Circle()
 						.fill(Color(hex: "#EA3336"))
 						.frame(width: 7, height: 7)
 						.position(
-							x: itemWidth * 2.5 + 12,
+							x: tabContentInset + itemWidth * 2.5 + 12,
 							y: proxy.size.height - 55
 						)
 						.allowsHitTesting(false)
