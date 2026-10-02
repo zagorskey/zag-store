@@ -66,18 +66,28 @@ struct SettingsView: View {
 					}
 
 					if let cert = selectedCertificate {
-						CertificatesCellView(cert: cert)
-							.contentShape(Rectangle())
-							.onTapGesture {
-								_selectedCertificateInfo = cert
+						VStack(alignment: .leading, spacing: 8) {
+							Text(.localized("In Use"))
+								.font(.headline)
+								.foregroundStyle(.secondary)
+
+							CertificatesCellView(cert: cert)
+
+							Divider()
+								.frame(maxWidth: .infinity)
+						}
+						.contentShape(Rectangle())
+						.onTapGesture {
+							_selectedCertificateInfo = cert
+						}
+						.listRowSeparator(.hidden)
+						.swipeActions(edge: .trailing) {
+							Button(role: .destructive) {
+								_pendingCertificateDelete = cert
+							} label: {
+								Label(.localized("Delete"), systemImage: "trash")
 							}
-							.swipeActions(edge: .trailing, allowsFullSwipe: false) {
-								Button(role: .destructive) {
-									_pendingCertificateDelete = cert
-								} label: {
-									Label(.localized("Delete"), systemImage: "trash")
-								}
-							}
+						}
 					} else {
 						Text(.localized("No Certificate"))
 							.font(.footnote)
