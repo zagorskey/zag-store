@@ -851,7 +851,7 @@ struct LibraryView: View {
 			}
 
 			.sheet(item: $_pendingRemoveApp) { app in
-				VStack(spacing: 16) {
+				VStack(spacing: 10) {
 					Text(
 						String(
 							format: .localized("Remove “%@”?"),
@@ -883,7 +883,7 @@ struct LibraryView: View {
 							.frame(height: 52)
 							.background(
 								Color(uiColor: .tertiarySystemFill),
-								in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+								in: RoundedRectangle(cornerRadius: 26, style: .continuous)
 							)
 					}
 					.buttonStyle(.plain)
@@ -898,7 +898,7 @@ struct LibraryView: View {
 							.frame(height: 52)
 							.background(
 								Color(uiColor: .tertiarySystemFill),
-								in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+								in: RoundedRectangle(cornerRadius: 26, style: .continuous)
 							)
 					}
 					.buttonStyle(.plain)
