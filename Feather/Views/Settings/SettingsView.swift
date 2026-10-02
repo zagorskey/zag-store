@@ -113,13 +113,11 @@ struct SettingsView: View {
 					} else {
 						Menu {
 							Button { _selectSettingsSectionOrder("default") } label: {
-								Label("Default", systemImage: "ellipsis")
+								Label("Default", systemImage: _settingsSectionSortMode == "default" ? "checkmark" : "ellipsis")
 							}
-							.fontWeight(_settingsSectionSortMode == "default" ? .bold : .regular)
 							Button { _selectSettingsSectionOrder("custom") } label: {
-								Label("Custom", systemImage: "list.bullet")
+								Label("Custom", systemImage: _settingsSectionSortMode == "custom" ? "checkmark" : "list.bullet")
 							}
-							.fontWeight(_settingsSectionSortMode == "custom" ? .bold : .regular)
 							Divider()
 							Button { _beginSettingsSectionReordering() } label: {
 								Label("Reorder", systemImage: "arrow.up.arrow.down")
