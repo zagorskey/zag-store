@@ -119,13 +119,17 @@ struct ZagActionPill: View {
 	var showsProgress: Bool = false
 	var width: CGFloat? = 88
 	var horizontalPadding: CGFloat = 14
+	var backgroundColor: Color? = nil
 	let action: () -> Void
 
 	@Environment(\.colorScheme)
 	private var colorScheme
 
 	private var pillBackground: Color {
-		colorScheme == .dark
+		if let backgroundColor {
+			return backgroundColor
+		}
+		return colorScheme == .dark
 			? Color(hex: "#1C1C1E")
 			: Color(hex: "#EEEEF0")
 	}
