@@ -17,6 +17,7 @@ struct DownloadButtonView: View {
 	var title: String = .localized("Get")
 
 	@ObservedObject private var downloadManager = DownloadManager.shared
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@Environment(\.colorScheme) private var colorScheme
 
 	@State private var downloadProgress: Double = 0
@@ -58,9 +59,14 @@ struct DownloadButtonView: View {
 					} else {
 						_indeterminateRing()
 					}
-				} else if let installedBundleID {
+				} else if let bundleID = app.id,
+						  pairingCore.isInstalled(bundleID: bundleID) {
 					ZagActionPill(title: .localized("Open")) {
-						UIApplication.openApp(with: installedBundleID)
+						UIApplication.openApp(with: bundleID)
+					}
+				} else if _hasLocalSignedCopy {
+					ZagActionPill(title: .localized("Install")) {
+						_installExistingSignedCopy()
 					}
 				} else {
 					ZagActionPill(title: title) {
@@ -142,6 +148,25 @@ struct DownloadButtonView: View {
 		.animation(.smooth, value: progress)
 	}
 
+
+	private var _hasLocalSignedCopy: Bool {
+		_existingSignedCopy() != nil
+	}
+
+	private func _existingSignedCopy() -> Signed? {
+		guard let bundleID = app.id, !bundleID.isEmpty else { return nil }
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "identifier == %@", bundleID)
+		return try? Storage.shared.context.fetch(request).first
+	}
+
+	private func _installExistingSignedCopy() {
+		guard zagPhase == .idle, let signed = _existingSignedCopy() else { return }
+		zagPhase = .installing
+		installationProgress = 0
+		_installInline(signed)
+	}
 
 	private func _startGetAndInstall() {
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
@@ -274,6 +299,10 @@ struct DownloadButtonView: View {
 				}
 
 				installedBundleID = signed.identifier
+				if let bundleID = signed.identifier {
+					try? pairingCore.refreshInstalledApps()
+					_ = bundleID
+				}
 				zagPhase = .idle
 			} catch {
 				_failTransaction(error.localizedDescription)
