@@ -2070,6 +2070,7 @@ private struct ZagUpdateRow: View {
 									}
 								}
 							}
+							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
 
 						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
 							withAnimation(.easeInOut(duration: 0.2)) {
@@ -2736,6 +2737,7 @@ private struct ZagCachedUpdateRow: View {
 									}
 								}
 							}
+							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
 						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
 							withAnimation(.easeInOut(duration: 0.2)) {
 								showsFullReleaseNotes.toggle()
