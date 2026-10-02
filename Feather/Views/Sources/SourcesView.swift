@@ -322,11 +322,6 @@ struct SourcesView: View {
 		.onAppear {
 			_probeSystemDictation()
 		}
-		.task(id: Array(_sources)) {
-			await viewModel.fetchSources(
-				_sources
-			)
-		}
 		.navigationDestinationIfAvailable(
 			item: $_selectedSearchRoute
 		) { route in
