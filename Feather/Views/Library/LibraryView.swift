@@ -862,12 +862,13 @@ struct LibraryView: View {
 					.multilineTextAlignment(.center)
 
 					Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
-						.font(.system(size: 16))
+						.font(.system(size: 17))
 						.foregroundStyle(.secondary)
 						.multilineTextAlignment(.center)
 						.fixedSize(horizontal: false, vertical: true)
 
-					Spacer(minLength: 4)
+					Spacer()
+						.frame(height: 16)
 
 					Button {
 						let target = app.base
