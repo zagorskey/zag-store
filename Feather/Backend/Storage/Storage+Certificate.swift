@@ -111,3 +111,70 @@ extension Storage {
 		return (try? context.fetch(fetchRequest)) ?? []
 	}
 }
+
+
+enum ZagCertificateSelection {
+	static let askEveryTimeKey = "ZagStore.askCertificateEveryTime"
+
+	static var asksEveryTime: Bool {
+		UserDefaults.standard.bool(forKey: askEveryTimeKey)
+	}
+
+	@MainActor
+	static func chooseForSigning() async -> CertificatePair? {
+		let certificates = Storage.shared.getAllCertificates()
+		guard !certificates.isEmpty else { return nil }
+
+		guard asksEveryTime else {
+			let index = UserDefaults.standard.integer(forKey: "feather.selectedCert")
+			return certificates.indices.contains(index) ? certificates[index] : nil
+		}
+
+		return await withCheckedContinuation { continuation in
+			guard let presenter = UIApplication.topViewController() else {
+				continuation.resume(returning: nil)
+				return
+			}
+
+			let alert = UIAlertController(
+				title: .localized("Choose Certificate"),
+				message: .localized("Select the certificate to use for this signing."),
+				preferredStyle: .actionSheet
+			)
+
+			for certificate in certificates {
+				let decoded = Storage.shared.getProvisionFileDecoded(for: certificate)
+				let title =
+					certificate.nickname ??
+					decoded?.Name ??
+					decoded?.AppIDName ??
+					.localized("Unknown")
+
+				alert.addAction(
+					UIAlertAction(title: title, style: .default) { _ in
+						continuation.resume(returning: certificate)
+					}
+				)
+			}
+
+			alert.addAction(
+				UIAlertAction(title: .localized("Cancel"), style: .cancel) { _ in
+					continuation.resume(returning: nil)
+				}
+			)
+
+			if let popover = alert.popoverPresentationController {
+				popover.sourceView = presenter.view
+				popover.sourceRect = CGRect(
+					x: presenter.view.bounds.midX,
+					y: presenter.view.bounds.maxY - 1,
+					width: 1,
+					height: 1
+				)
+				popover.permittedArrowDirections = []
+			}
+
+			presenter.present(alert, animated: true)
+		}
+	}
+}
