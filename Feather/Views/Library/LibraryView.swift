@@ -2143,11 +2143,18 @@ private struct ZagUpdatesPopup: View {
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
-			.navigationDestination(item: $selectedUpdate) { update in
-				SourceAppsDetailView(
-					source: update.source,
-					app: update.app
+			.navigationDestination(
+				isPresented: Binding(
+					get: { selectedUpdate != nil },
+					set: { if !$0 { selectedUpdate = nil } }
 				)
+			) {
+				if let update = selectedUpdate {
+					SourceAppsDetailView(
+						source: update.source,
+						app: update.app
+					)
+				}
 			}
 			.interactiveDismissDisabled()
 			.toolbar {
