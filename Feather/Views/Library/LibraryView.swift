@@ -1954,7 +1954,10 @@ private struct ZagUpdateRow: View {
 			stage == .importing ||
 			stage == .signing
 
-		Button {
+		ZagActionPill(
+			title: stage?.title ?? .localized("Update"),
+			showsProgress: isBusy
+		) {
 			transactionManager.prepare(update) { result in
 				switch result {
 				case .success(let signedUUID):
@@ -1967,22 +1970,7 @@ private struct ZagUpdateRow: View {
 					)
 				}
 			}
-		} label: {
-			HStack(spacing: 6) {
-				if isBusy {
-					ProgressView()
-						.controlSize(.small)
-				}
-
-				Text(stage?.title ?? .localized("Update"))
-					.font(.system(size: 16, weight: .semibold))
-			}
-			.foregroundStyle(zagUpdatesBlue)
-			.padding(.horizontal, 16)
-			.frame(minWidth: 88, minHeight: 36)
-			.background(zagUpdatePillBackground, in: Capsule())
 		}
-		.buttonStyle(.plain)
 		.disabled(
 			isBusy ||
 			stage == .readyToInstall
@@ -2042,11 +2030,27 @@ private struct ZagUpdatesPopup: View {
 	let onPreparedForInstall: (String) -> Void
 
 	@Environment(\.dismiss) private var dismiss
+	@Environment(\.colorScheme) private var colorScheme
+
+	private var popupBackground: Color {
+		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
+	}
+
+	private var sectionBackground: Color {
+		colorScheme == .dark ? Color(hex: "#2C2C2E") : Color(hex: "#FFFFFF")
+	}
+
+	private var separatorColor: Color {
+		colorScheme == .dark ? Color(hex: "#403F44") : Color(hex: "#E7E7E9")
+	}
+
+	private var updatesBlue: Color {
+		colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8")
+	}
 
 	var body: some View {
 		ZStack {
-			(Color(uiColor: .systemBackground)
-				.opacity(0.94))
+			popupBackground
 				.ignoresSafeArea()
 
 			ScrollView {
@@ -2055,10 +2059,12 @@ private struct ZagUpdatesPopup: View {
 
 				updateAllCard
 
-				Text(.localized("Available Updates"))
-					.font(.system(size: 20, weight: .bold))
-					.foregroundStyle(.secondary)
-					.padding(.horizontal, 4)
+				Section {
+					EmptyView()
+				} header: {
+					Text(.localized("Available Updates"))
+				}
+				.textCase(nil)
 
 				VStack(spacing: 0) {
 					ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
@@ -2069,13 +2075,15 @@ private struct ZagUpdatesPopup: View {
 						.padding(.horizontal, 16)
 
 						if index < updates.count - 1 {
-							Divider()
-								.padding(.leading, 90)
+							Rectangle()
+								.fill(separatorColor)
+								.frame(height: 0.5)
+								.padding(.horizontal, 16)
 						}
 					}
 				}
 				.background(
-					Color(uiColor: .secondarySystemBackground),
+					sectionBackground,
 					in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 				)
 			}
@@ -2099,8 +2107,7 @@ private struct ZagUpdatesPopup: View {
 						dismiss()
 					} label: {
 						Image(systemName: "xmark")
-							.font(.system(size: 16, weight: .medium))
-							.frame(width: 36, height: 36)
+							.frame(width: 44, height: 44)
 					}
 					.buttonStyle(.glass)
 					.buttonBorderShape(.circle)
@@ -2123,8 +2130,8 @@ private struct ZagUpdatesPopup: View {
 	private var updateAllCard: some View {
 		HStack {
 			Text(.localized("Update All"))
-				.font(.system(size: 17, weight: .semibold))
-				.foregroundStyle(.blue)
+				.font(.system(size: 17, weight: .regular))
+				.foregroundStyle(updatesBlue)
 
 			Spacer()
 
@@ -2138,7 +2145,7 @@ private struct ZagUpdatesPopup: View {
 		.padding(.horizontal, 16)
 		.frame(minHeight: 54)
 		.background(
-			Color(uiColor: .secondarySystemBackground),
+			sectionBackground,
 			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
 		.accessibilityElement(children: .combine)
