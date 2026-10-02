@@ -2325,6 +2325,7 @@ private struct ZagUpdatesPopup: View {
 									)
 									.padding(.horizontal, 16)
 									.padding(.top, index == 0 ? 8 : 0)
+									.padding(.bottom, index == completedUpdates.count - 1 ? 16 : 0)
 									.transition(.opacity.combined(with: .move(edge: .top)))
 
 									if index < completedUpdates.count - 1 {
