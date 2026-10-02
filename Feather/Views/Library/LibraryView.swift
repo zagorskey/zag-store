@@ -2316,7 +2316,11 @@ private struct ZagUpdatesPopup: View {
 	}
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
-		updates.filter { !completedUpdateIDs.contains($0.id) }
+		let recentBundleIDs = Set(cachedRecentRows.map(\.bundleID))
+		return updates.filter {
+			!completedUpdateIDs.contains($0.id) &&
+			!recentBundleIDs.contains($0.app.id ?? $0.id)
+		}
 	}
 
 	private var displayedAvailableCount: Int {
@@ -2381,7 +2385,7 @@ private struct ZagUpdatesPopup: View {
 								sectionBackground,
 								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 							)
-						} else if !cachedAvailableRows.isEmpty && updateManager.isRepositoryRefreshInProgress {
+						} else if !cachedAvailableRows.isEmpty {
 							Text(.localized("Available Updates"))
 								.font(.headline)
 								.foregroundStyle(.secondary)
@@ -2398,43 +2402,7 @@ private struct ZagUpdatesPopup: View {
 							)
 						}
 
-						if !completedUpdates.isEmpty {
-							Text(.localized("Updated Recently"))
-								.font(.headline)
-								.foregroundStyle(.secondary)
-								.textCase(nil)
-								.padding(.leading, 16)
-								.padding(.top, 6)
-								.padding(.bottom, -8)
-
-							VStack(spacing: 0) {
-								ForEach(Array(completedUpdates.enumerated()), id: \.element.id) { index, update in
-									ZagUpdateRow(
-										update: update,
-										mode: .recentlyUpdated,
-										onSelect: {
-											selectedUpdate = update
-										},
-										onCompleted: {}
-									)
-									.padding(.horizontal, 16)
-									.padding(.top, index == 0 ? 8 : 0)
-									.padding(.bottom, index == completedUpdates.count - 1 ? 16 : 0)
-									.transition(.opacity.combined(with: .move(edge: .top)))
-
-									if index < completedUpdates.count - 1 {
-										Rectangle()
-											.fill(separatorColor)
-											.frame(height: 3.0 / UIScreen.main.scale)
-											.padding(.horizontal, 16)
-									}
-								}
-							}
-							.background(
-								sectionBackground,
-								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-							)
-						} else if !cachedRecentRows.isEmpty {
+						if !cachedRecentRows.isEmpty {
 							Text(.localized("Updated Recently"))
 								.font(.headline)
 								.foregroundStyle(.secondary)
@@ -2464,13 +2432,11 @@ private struct ZagUpdatesPopup: View {
 			}
 			.task {
 				_pruneCachedRecent()
-				_restoreUpdatedRecently()
 				_cacheAvailableRows()
 				let bundleIDs = updates.compactMap { $0.app.id }
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
 			.onReceive(sourcesViewModel.$sources) { _ in
-				_restoreUpdatedRecently()
 				_cacheAvailableRows()
 			}
 			.onReceive(updateManager.$updates) { _ in
@@ -2542,6 +2508,11 @@ private extension ZagUpdatesPopup {
 		ZagUpdateRowSnapshot.save(recent, key: ZagUpdateRowSnapshot.recentKey)
 		cachedRecentRows = recent
 
+		var available = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.availableKey)
+		available.removeAll { $0.bundleID == row.bundleID }
+		ZagUpdateRowSnapshot.save(available, key: ZagUpdateRowSnapshot.availableKey)
+		cachedAvailableRows = available
+
 		withAnimation(.easeInOut(duration: 0.35)) {
 			completedUpdateIDs.insert(update.id)
 			completedUpdates.removeAll { $0.id == update.id }
@@ -2607,32 +2578,7 @@ private extension ZagUpdatesPopup {
 		ZagUpdateRowSnapshot.save(rows, key: ZagUpdateRowSnapshot.recentKey)
 	}
 
-	func _restoreUpdatedRecently() {
-		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
-		guard !recent.isEmpty else { return }
 
-		var restored: [UpdateManager.AvailableUpdate] = []
-		for row in recent {
-			for repository in sourcesViewModel.sources.values {
-				guard let app = repository.apps.first(where: {
-					$0.id == row.bundleID
-				}) else { continue }
-				restored.append(
-					UpdateManager.AvailableUpdate(
-						app: app,
-						source: repository,
-						installedVersion: row.version,
-						availableVersion: row.version,
-						installedBuild: app.currentAppVersion?.build,
-						availableBuild: app.currentAppVersion?.build
-					)
-				)
-				break
-			}
-		}
-		completedUpdateIDs.formUnion(restored.map(\.id))
-		completedUpdates = restored
-	}
 }
 
 private struct ZagCachedUpdateSection: View {
