@@ -33,13 +33,23 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 		case .health: return "Health"
 		case .refreshingApps: return "Refreshing Apps"
 		case .aboutUs: return "About Us"
-		case .misc: return "Misc"
+		case .misc: return "Browse"
 		case .reset: return "Reset"
 		}
 	}
 }
 
-private let zagDefaultSettingsSectionOrder = ZagSettingsSection.allCases
+private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
+	.display,
+	.certificates,
+	.features,
+	.refreshingApps,
+	.health,
+	.diagnostics,
+	.aboutUs,
+	.misc,
+	.reset
+]
 
 // MARK: - View
 struct SettingsView: View {
@@ -103,6 +113,9 @@ struct SettingsView: View {
 					}
 				}
 			}
+			.safeAreaInset(edge: .bottom) {
+				Color.clear.frame(height: 48)
+			}
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.onAppear {
 				_loadSettingsSectionOrder()
@@ -143,7 +156,7 @@ struct SettingsView: View {
 								}
 								UIImpactFeedbackGenerator(style: .light).impactOccurred()
 							} else {
-								_showAdvancedSettingsWarning = true
+								_presentAdvancedSettingsWarning()
 							}
 						} label: {
 							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
@@ -164,17 +177,6 @@ struct SettingsView: View {
 		}
 		.sheet(item: $_selectedCertificateInfo) { cert in
 			CertificatesInfoView(cert: cert)
-		}
-		.alert("Advanced Settings", isPresented: $_showAdvancedSettingsWarning) {
-			Button("Proceed") {
-				UIImpactFeedbackGenerator(style: .light).impactOccurred()
-				withAnimation(.snappy) {
-					_advancedSettingsUnlocked = true
-				}
-			}
-			Button("Cancel", role: .cancel) {}
-		} message: {
-			Text("Developer Options and Experimental Features are intended for advanced users. These settings may affect Zag Store’s behaviour and stability.")
 		}
 		.alert(
 			.localized("Delete Certificate?"),
@@ -361,8 +363,8 @@ extension SettingsView {
 				NavigationLink(destination: ResetView()) {
 					Label(.localized("Reset"), systemImage: "arrow.counterclockwise")
 				}
-			} footer: {
-				Text(.localized("Reset the applications sources, certificates, apps, and general contents."))
+			} header: {
+				Text("Reset")
 			}
 		}
 	}
@@ -442,22 +444,41 @@ extension SettingsView {
 	@ViewBuilder
 	private func _directories() -> some View {
 		Section {
-			Button(.localized("Open Documents"), systemImage: "folder") {
+			Button(.localized("Documents"), systemImage: "folder") {
 				UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!)
 			}
-			Button(.localized("Open Archives"), systemImage: "folder") {
+			Button(.localized("Archives"), systemImage: "folder") {
 				UIApplication.open(FileManager.default.archives.toSharedDocumentsURL()!)
 			}
-			Button(.localized("Open Certificates"), systemImage: "folder") {
+			Button(.localized("Certificates"), systemImage: "folder") {
 				UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!)
 			}
 		} header: {
-			Text(.localized("Misc"))
+			Text("Browse")
 		} footer: {
 			Text(.localized("All of the apps files are contained in the documents directory, here are some quick links to these."))
 		}
 	}
     
+	private func _presentAdvancedSettingsWarning() {
+		let alert = UIAlertController(
+			title: "⚠︎  Advanced Settings",
+			message: "Developer Options and Experimental Features are intended for advanced users. These settings may affect Zag Store’s behaviour and stability.",
+			preferredStyle: .alert
+		)
+
+		let proceed = UIAlertAction(title: "Proceed", style: .default) { _ in
+			UIImpactFeedbackGenerator(style: .light).impactOccurred()
+			withAnimation(.snappy) {
+				_advancedSettingsUnlocked = true
+			}
+		}
+		proceed.setValue(UIColor.systemOrange, forKey: "titleTextColor")
+		alert.addAction(proceed)
+		alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+		UIApplication.shared.present(alert)
+	}
+
 	private func _makeGitHubIssueURL(url: String) -> String {
 		var configurationSection = "### App Configuration:\n"
 		
