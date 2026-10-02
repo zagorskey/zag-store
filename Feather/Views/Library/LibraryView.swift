@@ -872,6 +872,7 @@ struct LibraryView: View {
 						// Preserve the immediate UI response for every installer, then
 						// let device inventory confirm the authoritative state.
 						_markManagedAppInstalled(app.base)
+						_removeSupersededInstalledSignedCopies(keeping: app.base)
 						DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
 							_refreshInstalledAppsFromDevice()
 						}
@@ -1125,6 +1126,29 @@ extension LibraryView {
 
 		if let encoded = try? JSONEncoder().encode(identifiers) {
 			_managedInstalledBundleIDsData = encoded
+		}
+	}
+
+	private func _removeSupersededInstalledSignedCopies(
+		keeping installed: AppInfoPresentable
+	) {
+		guard
+			let bundleID = installed.identifier,
+			!bundleID.isEmpty,
+			let installedUUID = installed.uuid
+		else {
+			return
+		}
+
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.predicate = NSPredicate(format: "identifier == %@", bundleID)
+
+		guard let copies = try? Storage.shared.context.fetch(request) else {
+			return
+		}
+
+		for copy in copies where copy.uuid != installedUUID {
+			Storage.shared.deleteApp(for: copy)
 		}
 	}
 
