@@ -495,6 +495,64 @@ async fn run_gate2_probe(
     .await
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn zag_installed_apps(
+    device_ip: *const c_char,
+    pairing_path: *const c_char,
+    callback: Option<ZagRPPairingCallback>,
+) -> bool {
+    let Some(callback) = callback else { return false; };
+    if device_ip.is_null() || pairing_path.is_null() { return false; }
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
+
+    thread::spawn(move || {
+        emit(callback, 401, "Refreshing installed apps");
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit(callback, -6, format!("Installed-app inventory runtime failed: {error}"));
+                return;
+            }
+        };
+        runtime.block_on(async move {
+            if let Err(error) = run_installed_apps(device_ip, pairing_path, callback).await {
+                emit(callback, -6, error);
+            }
+        });
+    });
+    true
+}
+
+async fn run_installed_apps(
+    device_ip: String,
+    pairing_path: PathBuf,
+    callback: ZagRPPairingCallback,
+) -> Result<(), String> {
+    with_zag_device_session(
+        &device_ip,
+        &pairing_path,
+        |_stage, _message| {},
+        |mut adapter, mut handshake| async move {
+            let mut installation_proxy =
+                InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+                    .await
+                    .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
+            let apps = installation_proxy
+                .get_apps(Some("User"), None)
+                .await
+                .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
+            let count = apps.len();
+            for bundle_id in apps.keys() {
+                emit(callback, 402, bundle_id);
+            }
+            emit(callback, 403, count.to_string());
+            Ok(())
+        },
+    )
+    .await
+}
+
 /// Gate 4: installs one already-signed IPA through the proven on-device
 /// RPPairing -> TLS-PSK -> RSD -> AFC/PublicStaging -> installation_proxy path.
 ///
