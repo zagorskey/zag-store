@@ -63,6 +63,8 @@ struct LibraryView: View {
 
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
+	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
+	@State private var completedUpdateIDs: Set<String> = []
 	@State private var _selectedRepositorySource: AltSource?
 
 
@@ -1874,6 +1876,7 @@ private struct ZagUpdateRow: View {
 
 	@State private var showsFullReleaseNotes = false
 	@State private var ringRotation: Double = 0
+	@State private var justCompleted = false
 
 	private var useDarkIconAppearance: Bool {
 		shouldChangeIconsBasedOffStyle &&
@@ -1893,6 +1896,7 @@ private struct ZagUpdateRow: View {
 	}
 
 	let onSelect: () -> Void
+	let onCompleted: () -> Void
 
 	@ObservedObject private var transactionManager =
 		ZagUpdateTransactionManager.shared
@@ -2031,7 +2035,16 @@ private struct ZagUpdateRow: View {
 
 		VStack(spacing: 2) {
 			ZStack {
-				if stage != nil, !isFailed(stage) {
+				if justCompleted {
+					ZagActionPill(
+						title: .localized("Open"),
+						backgroundColor: zagUpdatePillBackground
+					) {
+						if let bundleID = update.app.id {
+							UIApplication.openApp(with: bundleID)
+						}
+					}
+				} else if stage != nil, !isFailed(stage) {
 					ZStack {
 						Circle()
 							.stroke(zagUpdatesBlue.opacity(0.22), lineWidth: 2.3)
@@ -2104,6 +2117,11 @@ private struct ZagUpdateRow: View {
 							signedUUID: signedUUID
 						)
 						try? pairingCore.refreshInstalledApps()
+						withAnimation(.easeInOut(duration: 0.2)) {
+							justCompleted = true
+						}
+						try? await Task.sleep(nanoseconds: 1_000_000_000)
+						onCompleted()
 					} catch {
 						transactionManager.failInstallation(
 							update: update,
@@ -2230,6 +2248,10 @@ private struct ZagUpdatesPopup: View {
 		colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8")
 	}
 
+	private var availableUpdates: [UpdateManager.AvailableUpdate] {
+		updates.filter { !completedUpdateIDs.contains($0.id) }
+	}
+
 	var body: some View {
 		NavigationStack {
 			ZStack {
@@ -2241,37 +2263,83 @@ private struct ZagUpdatesPopup: View {
 						updateAllCard
 							.padding(.top, 22)
 
-						Text(.localized("Available Updates"))
-							.font(.headline)
-							.foregroundStyle(.secondary)
-							.textCase(nil)
-							.padding(.leading, 16)
-							.padding(.top, 6)
-							.padding(.bottom, -8)
+						if !availableUpdates.isEmpty {
+							Text(.localized("Available Updates"))
+								.font(.headline)
+								.foregroundStyle(.secondary)
+								.textCase(nil)
+								.padding(.leading, 16)
+								.padding(.top, 6)
+								.padding(.bottom, -8)
 
-						VStack(spacing: 0) {
-							ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
-								ZagUpdateRow(
-									update: update,
-									onSelect: {
-										selectedUpdate = update
+							VStack(spacing: 0) {
+								ForEach(Array(availableUpdates.enumerated()), id: \.element.id) { index, update in
+									ZagUpdateRow(
+										update: update,
+										onSelect: {
+											selectedUpdate = update
+										},
+										onCompleted: {
+											_moveToUpdatedRecently(update)
+										}
+									)
+									.padding(.horizontal, 16)
+									.padding(.top, index == 0 ? 8 : 0)
+									.transition(
+										.asymmetric(
+											insertion: .opacity,
+											removal: .opacity.combined(with: .move(edge: .top))
+										)
+									)
+
+									if index < availableUpdates.count - 1 {
+										Rectangle()
+											.fill(separatorColor)
+											.frame(height: 3.0 / UIScreen.main.scale)
+											.padding(.horizontal, 16)
 									}
-								)
-								.padding(.horizontal, 16)
-								.padding(.top, index == 0 ? 8 : 0)
-
-								if index < updates.count - 1 {
-									Rectangle()
-										.fill(separatorColor)
-										.frame(height: 3.0 / UIScreen.main.scale)
-										.padding(.horizontal, 16)
 								}
 							}
+							.background(
+								sectionBackground,
+								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+							)
 						}
-						.background(
-							sectionBackground,
-							in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-						)
+
+						if !completedUpdates.isEmpty {
+							Text(.localized("Updated Recently"))
+								.font(.headline)
+								.foregroundStyle(.secondary)
+								.textCase(nil)
+								.padding(.leading, 16)
+								.padding(.top, 6)
+								.padding(.bottom, -8)
+
+							VStack(spacing: 0) {
+								ForEach(Array(completedUpdates.enumerated()), id: \.element.id) { index, update in
+									ZagUpdatedRecentlyRow(
+										update: update,
+										onSelect: {
+											selectedUpdate = update
+										}
+									)
+									.padding(.horizontal, 16)
+									.padding(.top, index == 0 ? 8 : 0)
+									.transition(.opacity.combined(with: .move(edge: .top)))
+
+									if index < completedUpdates.count - 1 {
+										Rectangle()
+											.fill(separatorColor)
+											.frame(height: 3.0 / UIScreen.main.scale)
+											.padding(.horizontal, 16)
+									}
+								}
+							}
+							.background(
+								sectionBackground,
+								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+							)
+						}
 					}
 					.padding(.horizontal, 16)
 					.padding(.top, 18)
@@ -2325,11 +2393,11 @@ private struct ZagUpdatesPopup: View {
 
 			Spacer()
 
-			Text(updates.count.description)
+			Text(availableUpdates.count.description)
 				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
-				.padding(.horizontal, updates.count > 99 ? 4 : 0)
+				.padding(.horizontal, availableUpdates.count > 99 ? 4 : 0)
 				.background(Color(hex: "#FF3B30"), in: Capsule())
 		}
 		.padding(.horizontal, 16)
@@ -2339,6 +2407,85 @@ private struct ZagUpdatesPopup: View {
 			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
 		.accessibilityElement(children: .combine)
+	}
+}
+
+
+private extension ZagUpdatesPopup {
+	func _moveToUpdatedRecently(_ update: UpdateManager.AvailableUpdate) {
+		guard !completedUpdateIDs.contains(update.id) else { return }
+
+		withAnimation(.easeInOut(duration: 0.35)) {
+			completedUpdateIDs.insert(update.id)
+			completedUpdates.removeAll { $0.id == update.id }
+			completedUpdates.insert(update, at: 0)
+		}
+	}
+}
+
+private struct ZagUpdatedRecentlyRow: View {
+	let update: UpdateManager.AvailableUpdate
+	let onSelect: () -> Void
+
+	@Environment(\.colorScheme) private var colorScheme
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
+
+	private var pillBackground: Color {
+		colorScheme == .dark
+			? Color(hex: "#3E3D42")
+			: Color(hex: "#EEEEF0")
+	}
+
+	var body: some View {
+		HStack(alignment: .center, spacing: 12) {
+			LazyImage(url: update.app.iconURL) { state in
+				if let image = state.image {
+					image
+						.resizable()
+						.aspectRatio(contentMode: .fill)
+				} else {
+					Image(systemName: "app.fill")
+						.resizable()
+						.scaledToFit()
+						.padding(10)
+						.foregroundStyle(.secondary)
+						.background(Color(uiColor: .secondarySystemBackground))
+				}
+			}
+			.frame(width: 62, height: 62)
+			.clipShape(
+				RoundedRectangle(
+					cornerRadius: 62 * 0.2677,
+					style: .continuous
+				)
+			)
+
+			VStack(alignment: .leading, spacing: 2) {
+				Text(update.app.currentName)
+					.zagContentTitleStyle()
+					.lineLimit(1)
+
+				Text(.localized("Today"))
+					.font(.subheadline)
+					.foregroundStyle(.secondary)
+			}
+
+			Spacer(minLength: 8)
+
+			ZagActionPill(
+				title: .localized("Open"),
+				backgroundColor: pillBackground
+			) {
+				if let bundleID = update.app.id {
+					UIApplication.openApp(with: bundleID)
+				}
+			}
+		}
+		.padding(.vertical, 14)
+		.contentShape(Rectangle())
+		.onTapGesture {
+			onSelect()
+		}
 	}
 }
 
