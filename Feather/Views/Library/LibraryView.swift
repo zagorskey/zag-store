@@ -1928,7 +1928,7 @@ private struct ZagUpdateRow: View {
 			if let releaseNotes {
 				ZStack(alignment: .bottomTrailing) {
 					Text(releaseNotes)
-						.font(.system(size: 16, weight: .regular))
+						.font(.system(size: 17, weight: .regular))
 						.foregroundStyle(.primary)
 						.lineLimit(showsFullReleaseNotes ? nil : 2)
 						.frame(maxWidth: .infinity, alignment: .leading)
@@ -1939,7 +1939,7 @@ private struct ZagUpdateRow: View {
 							showsFullReleaseNotes.toggle()
 						}
 					}
-					.font(.system(size: 16, weight: .regular))
+					.font(.system(size: 17, weight: .regular))
 					.foregroundStyle(zagUpdatesBlue)
 				}
 			}
@@ -2159,7 +2159,7 @@ private struct ZagUpdatesPopup: View {
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
 				.padding(.horizontal, updates.count > 99 ? 4 : 0)
-				.background(Color(hex: "#E93423"), in: Capsule())
+				.background(Color(hex: "#FF3B30"), in: Capsule())
 		}
 		.padding(.horizontal, 16)
 		.frame(minHeight: 60)
