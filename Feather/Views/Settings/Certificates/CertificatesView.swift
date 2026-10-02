@@ -38,11 +38,16 @@ struct CertificatesView: View {
 	
 	// MARK: Body
 	var body: some View {
-		NBGrid {
+		List {
 			ForEach(Array(_certificates.enumerated()), id: \.element.uuid) { index, cert in
 				_cellButton(for: cert, at: index)
+					.listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 			}
 		}
+		.listStyle(.plain)
+		.scrollContentBackground(.hidden)
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
 			if _certificates.isEmpty {
@@ -155,7 +160,7 @@ extension CertificatesView {
 			}
 		}
 		.buttonStyle(.plain)
-		.swipeActions(edge: .trailing, allowsFullSwipe: false) {
+		.swipeActions(edge: .trailing) {
 			Button(role: .destructive) {
 				_pendingCertificateDelete = cert
 			} label: {
