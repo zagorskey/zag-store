@@ -1928,7 +1928,7 @@ private struct ZagUpdateRow: View {
 			if let releaseNotes {
 				ZStack(alignment: .bottomTrailing) {
 					Text(releaseNotes)
-						.font(.system(size: 14))
+						.font(.system(size: 16, weight: .regular))
 						.foregroundStyle(.primary)
 						.lineLimit(showsFullReleaseNotes ? nil : 2)
 						.frame(maxWidth: .infinity, alignment: .leading)
@@ -1939,8 +1939,8 @@ private struct ZagUpdateRow: View {
 							showsFullReleaseNotes.toggle()
 						}
 					}
-					.font(.system(size: 14))
-					.foregroundStyle(.blue)
+					.font(.system(size: 16, weight: .regular))
+					.foregroundStyle(zagUpdatesBlue)
 				}
 			}
 		}
@@ -1981,48 +1981,66 @@ private struct ZagUpdateRow: View {
 
 	@ViewBuilder
 	private var appIcon: some View {
-		LazyImage(url: update.app.iconURL) { state in
-			if let image = state.image {
-				if shouldTintIcons {
-					image
-						.resizable()
-						.aspectRatio(contentMode: .fill)
-						.saturation(0)
-						.contrast(1.25)
-						.overlay(
-							Color(hex: selectedColorHex)
-								.opacity(0.82)
-								.blendMode(.color)
-						)
-				} else if useDarkIconAppearance {
-					image
-						.resizable()
-						.aspectRatio(contentMode: .fill)
-						.brightness(-0.18)
-						.contrast(1.08)
+		ZStack(alignment: .bottomLeading) {
+			LazyImage(url: update.app.iconURL) { state in
+				if let image = state.image {
+					if shouldTintIcons {
+						image
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+							.saturation(0)
+							.contrast(1.25)
+							.overlay(
+								Color(hex: selectedColorHex)
+									.opacity(0.82)
+									.blendMode(.color)
+							)
+					} else if useDarkIconAppearance {
+						image
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+							.brightness(-0.18)
+							.contrast(1.08)
+					} else {
+						image
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+					}
 				} else {
-					image
+					Image(systemName: "app.fill")
 						.resizable()
-						.aspectRatio(contentMode: .fill)
+						.scaledToFit()
+						.padding(10)
+						.foregroundStyle(.secondary)
+						.background(
+							Color(uiColor: .secondarySystemBackground)
+						)
 				}
-			} else {
-				Image(systemName: "app.fill")
-					.resizable()
-					.scaledToFit()
-					.padding(10)
-					.foregroundStyle(.secondary)
-					.background(
-						Color(uiColor: .secondarySystemBackground)
-					)
+			}
+			.frame(width: 62, height: 62)
+			.clipShape(
+				RoundedRectangle(
+					cornerRadius: 62 * 0.2677,
+					style: .continuous
+				)
+			)
+
+			if let sourceIconURL = update.source.currentIconURL {
+				LazyImage(url: sourceIconURL) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 20,
+								isCircle: true,
+								background: Color(
+									uiColor: .secondarySystemBackground
+								)
+							)
+							.offset(x: 46, y: 4)
+					}
+				}
 			}
 		}
-		.frame(width: 62, height: 62)
-		.clipShape(
-			RoundedRectangle(
-				cornerRadius: 62 * 0.2677,
-				style: .continuous
-			)
-		)
 	}
 }
 
