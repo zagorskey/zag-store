@@ -9,6 +9,7 @@ import SwiftUI
 import NimbleExtensions
 import NimbleViews
 import NukeUI
+import AltSourceKit
 
 // MARK: - View
 
@@ -35,6 +36,7 @@ struct LibraryCellView: View {
 	var isRemoving: Bool = false
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
+	var onRepositoryBadgeTap: ((AltSource) -> Void)? = nil
 
 	@State private var isDeleteConfirmationPresented = false
 	@State private var isRemoveConfirmationPresented = false
@@ -100,19 +102,29 @@ struct LibraryCellView: View {
 					)
 
 					if let repositoryIconURL {
-						LazyImage(url: repositoryIconURL) { state in
-							if let image = state.image {
-								image
-									.appIconStyle(
-										size: 20,
-										isCircle: true,
-										background: Color(
-											uiColor: .secondarySystemBackground
+						Button {
+							if let source = repositoryOrigin?.0 {
+								onRepositoryBadgeTap?(source)
+							}
+						} label: {
+							LazyImage(url: repositoryIconURL) { state in
+								if let image = state.image {
+									image
+										.appIconStyle(
+											size: 20,
+											isCircle: true,
+											background: Color(
+												uiColor: .secondarySystemBackground
+											)
 										)
-									)
-									.offset(x: 46, y: 4)
+										.offset(x: 46, y: 4)
+								}
 							}
 						}
+						.buttonStyle(.plain)
+						.accessibilityLabel(
+							Text("Open \(repositoryOrigin?.1.name ?? "Repository")")
+						)
 					}
 				}
 
@@ -168,6 +180,16 @@ struct LibraryCellView: View {
 			if !isEditing {
 				_contextActions(for: app)
 
+				if let repositoryName = repositoryOrigin?.1.name {
+					Label(
+						"Source: \(repositoryName)",
+						systemImage: "shippingbox"
+					)
+					.disabled(true)
+
+					Divider()
+				}
+
 				Divider()
 
 				_contextActionsExtra(for: app)
@@ -211,42 +233,42 @@ struct LibraryCellView: View {
 
 	// MARK: - Repository Origin
 
-	private var repositoryIconURL: URL? {
+	private var repositoryOrigin: (AltSource, ASRepository)? {
 		guard let bundleID = app.identifier, !bundleID.isEmpty else {
 			return nil
 		}
 
-		let defaults = UserDefaults.standard
-		let origins = defaults.dictionary(
+		let origins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOrigins"
 		) as? [String: String]
 		let origin = origins?[bundleID]
 
 		if let origin {
-			for (storedSource, repository) in sourcesViewModel.sources {
-				let isOrigin =
-					storedSource.sourceURL?.absoluteString == origin ||
-					repository.id == origin ||
-					repository.website?.absoluteString == origin ||
-					repository.name == origin
-				if isOrigin, let iconURL = repository.currentIconURL {
-					return iconURL
-				}
+			if let match = sourcesViewModel.sources.first(where: { storedSource, repository in
+				storedSource.sourceURL?.absoluteString == origin ||
+				repository.id == origin ||
+				repository.website?.absoluteString == origin ||
+				repository.name == origin
+			}) {
+				return match
 			}
 		}
 
-		// Existing apps from before provenance tracking can still resolve
-		// immediately when exactly one configured repository owns the bundle ID.
-		let matches = sourcesViewModel.sources.values.filter { repository in
+		let matches = sourcesViewModel.sources.filter { _, repository in
 			repository.apps.contains { $0.id == bundleID }
 		}
-		if origin == nil, matches.count == 1,
-		   let iconURL = matches.first?.currentIconURL {
+		return origin == nil && matches.count == 1 ? matches.first : nil
+	}
+
+	private var repositoryIconURL: URL? {
+		if let iconURL = repositoryOrigin?.1.currentIconURL {
 			return iconURL
 		}
 
-		// Keep the acquisition-time icon as an offline/removed-source fallback.
-		let icons = defaults.dictionary(
+		guard let bundleID = app.identifier, !bundleID.isEmpty else {
+			return nil
+		}
+		let icons = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOriginIcons"
 		) as? [String: String]
 		guard
