@@ -213,6 +213,8 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewCell.self, forCellReuseIdentifier: "AppCell")
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		tableView.separatorInset = UIEdgeInsets(top: 0, left: 88, bottom: 0, right: 16)
+		tableView.separatorStyle = .singleLine
+		// UIKit renders the standard single-line separator at one physical pixel.
 		tableView.separatorColor = UIColor { traits in
 			traits.userInterfaceStyle == .dark
 				? UIColor(red: 42.0 / 255.0, green: 42.0 / 255.0, blue: 44.0 / 255.0, alpha: 1)
