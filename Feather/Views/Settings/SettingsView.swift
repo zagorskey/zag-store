@@ -22,6 +22,8 @@ struct SettingsView: View {
 	@AppStorage(ZagBackgroundUpdateRefresh.automaticInstallationKey) private var _automaticUpdateInstallation = false
 	@AppStorage("ZagStore.disableIdleTimeout") private var _disableIdleTimeout = false
 	@State private var _currentIcon: String? = UIApplication.shared.alternateIconName
+	@State private var _selectedCertificateInfo: CertificatePair?
+	@State private var _pendingCertificateDelete: CertificatePair?
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -65,6 +67,17 @@ struct SettingsView: View {
 
 					if let cert = selectedCertificate {
 						CertificatesCellView(cert: cert)
+							.contentShape(Rectangle())
+							.onTapGesture {
+								_selectedCertificateInfo = cert
+							}
+							.swipeActions(edge: .trailing, allowsFullSwipe: false) {
+								Button(role: .destructive) {
+									_pendingCertificateDelete = cert
+								} label: {
+									Label(.localized("Delete"), systemImage: "trash")
+								}
+							}
 					} else {
 						Text(.localized("No Certificate"))
 							.font(.footnote)
@@ -180,6 +193,32 @@ struct SettingsView: View {
 					.accessibilityLabel("GitHub Repository")
 				}
 			}
+		}
+		.sheet(item: $_selectedCertificateInfo) { cert in
+			CertificatesInfoView(cert: cert)
+		}
+		.alert(
+			.localized("Delete Certificate?"),
+			isPresented: Binding(
+				get: { _pendingCertificateDelete != nil },
+				set: { if !$0 { _pendingCertificateDelete = nil } }
+			),
+			presenting: _pendingCertificateDelete
+		) { cert in
+			Button(.localized("Delete"), role: .destructive) {
+				Storage.shared.deleteCertificate(for: cert)
+				_pendingCertificateDelete = nil
+			}
+			Button(.localized("Cancel"), role: .cancel) {
+				_pendingCertificateDelete = nil
+			}
+		} message: { cert in
+			Text(
+				String(
+					format: .localized("Delete %@ from Zag Store? This removes the certificate and its signing files."),
+					cert.nickname ?? Storage.shared.getProvisionFileDecoded(for: cert)?.Name ?? .localized("this certificate")
+				)
+			)
 		}
 	}
 }
