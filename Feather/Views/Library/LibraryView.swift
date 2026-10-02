@@ -1948,7 +1948,7 @@ private struct ZagUpdateRow: View {
 			}
 
 			if let releaseNotes {
-				VStack(alignment: .leading, spacing: showsFullReleaseNotes ? 8 : 0) {
+				VStack(alignment: .leading, spacing: showsFullReleaseNotes ? 22 : 0) {
 					ZStack(alignment: .bottomTrailing) {
 						Text(releaseNotes)
 							.font(.system(size: 17, weight: .regular))
