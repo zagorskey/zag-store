@@ -3039,13 +3039,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 				stages[update.id] = .signing
 
-				let certificateIndex = UserDefaults.standard.integer(
-					forKey: "feather.selectedCert"
-				)
-
-				guard let certificate = Storage.shared.getCertificate(
-					for: certificateIndex
-				) else {
+				guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
 					throw ZagUpdateTransactionError.missingCertificate
 				}
 
