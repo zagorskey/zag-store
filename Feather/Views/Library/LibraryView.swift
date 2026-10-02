@@ -1908,8 +1908,7 @@ private struct ZagUpdateRow: View {
 
 				VStack(alignment: .leading, spacing: 2) {
 					Text(update.app.currentName)
-						.font(.system(size: 17, weight: .regular))
-						.foregroundStyle(.primary)
+						.zagContentTitleStyle()
 						.lineLimit(1)
 
 					if let releaseDateText {
@@ -2058,6 +2057,7 @@ private struct ZagUpdatesPopup: View {
 				ScrollView {
 					LazyVStack(alignment: .leading, spacing: 18) {
 						updateAllCard
+							.padding(.top, 6)
 
 						Text(.localized("Available Updates"))
 							.font(.headline)
@@ -2117,11 +2117,11 @@ private struct ZagUpdatesPopup: View {
 			Spacer()
 
 			Text(updates.count.description)
-				.font(.system(size: 14, weight: .bold))
+				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
 				.padding(.horizontal, updates.count > 99 ? 4 : 0)
-				.background(Color(hex: "#E93323"), in: Capsule())
+				.background(Color(hex: "#E93423"), in: Capsule())
 		}
 		.padding(.horizontal, 16)
 		.frame(minHeight: 60)
