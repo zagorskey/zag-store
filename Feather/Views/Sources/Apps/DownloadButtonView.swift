@@ -383,20 +383,31 @@ struct DownloadButtonView: View {
 	}
 
 	private func _signAndInstall(_ imported: Imported) {
+		Task { @MainActor in
+			guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+				if Storage.shared.getAllCertificates().isEmpty {
+					_failTransaction(
+						.localized("The app was downloaded and kept in Imported, but no signing certificate is selected.")
+					)
+				} else {
+					zagPhase = .idle
+				}
+				return
+			}
+			_signAndInstall(imported, certificate: certificate)
+		}
+	}
+
+	private func _signAndInstall(
+		_ imported: Imported,
+		certificate: CertificatePair
+	) {
 		zagPhase = .signing
 		var options = OptionsManager.shared.options
-		let selectedIndex = UserDefaults.standard.integer(forKey: "feather.selectedCert")
-		let certificate = Storage.shared.getCertificate(for: selectedIndex)
-
-		if options.signingOption == .default, certificate == nil {
-			_failTransaction(.localized("The app was downloaded and kept in Imported, but no signing certificate is selected."))
-			return
-		}
 
 		if
 			options.ppqProtection,
 			let identifier = imported.identifier,
-			let certificate,
 			certificate.ppQCheck
 		{
 			options.appIdentifier = "\(identifier).\(options.ppqString)"
