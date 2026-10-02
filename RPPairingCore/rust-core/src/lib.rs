@@ -29,7 +29,7 @@ fn emit(callback: ZagRPPairingCallback, code: i32, message: impl AsRef<str>) {
 
 #[no_mangle]
 pub extern "C" fn zag_rppairing_core_version() -> *mut c_char {
-    CString::new("Zag RPPairing Core 0.5")
+    CString::new("Zag RPPairing Core 0.6")
         .expect("static string")
         .into_raw()
 }
@@ -543,8 +543,21 @@ async fn run_installed_apps(
                 .await
                 .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
             let count = apps.len();
-            for bundle_id in apps.keys() {
-                emit(callback, 402, bundle_id);
+            for (bundle_id, metadata) in &apps {
+                let dictionary = metadata.as_dictionary();
+                let version = dictionary
+                    .and_then(|values| values.get("CFBundleShortVersionString"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
+                let build = dictionary
+                    .and_then(|values| values.get("CFBundleVersion"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
+
+                // 402 payload: bundleID<TAB>shortVersion<TAB>buildVersion.
+                // Tabs cannot occur in valid bundle identifiers or version strings and
+                // preserve the existing callback ABI while adding inventory metadata.
+                emit(callback, 402, format!("{bundle_id}\t{version}\t{build}"));
             }
             emit(callback, 403, count.to_string());
             Ok(())
