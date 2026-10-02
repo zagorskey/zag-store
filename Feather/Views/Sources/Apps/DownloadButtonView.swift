@@ -53,6 +53,8 @@ struct DownloadButtonView: View {
 								downloadManager.cancelDownload(currentDownload)
 							}
 						}
+				} else if zagPhase == .downloading {
+					_indeterminateRing()
 				} else if zagPhase == .signing {
 					_indeterminateRing()
 				} else if zagPhase == .installing {
@@ -484,11 +486,32 @@ struct DownloadButtonView: View {
 				}
 
 				installedBundleID = signed.identifier
+				_removeSupersededSignedCopies(keeping: signed)
 				try? pairingCore.refreshInstalledApps()
 				zagPhase = .idle
 			} catch {
 				_failTransaction(error.localizedDescription)
 			}
+		}
+	}
+
+	private func _removeSupersededSignedCopies(keeping installed: Signed) {
+		guard
+			let bundleID = installed.identifier,
+			!bundleID.isEmpty
+		else {
+			return
+		}
+
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.predicate = NSPredicate(format: "identifier == %@", bundleID)
+
+		guard let copies = try? Storage.shared.context.fetch(request) else {
+			return
+		}
+
+		for copy in copies where copy.objectID != installed.objectID {
+			Storage.shared.deleteApp(for: copy)
 		}
 	}
 
