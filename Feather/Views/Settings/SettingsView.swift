@@ -14,6 +14,7 @@ import IDeviceSwift
 // MARK: - View
 struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
+	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
 	@AppStorage(UpdateManager.updateNotificationsEnabledKey) private var _updateNotificationsEnabled = false
 	@AppStorage(ZagBackgroundUpdateRefresh.automaticPreparationKey) private var _automaticUpdatePreparation = false
@@ -68,6 +69,27 @@ struct SettingsView: View {
 							.font(.footnote)
 							.foregroundColor(.disabled())
 					}
+
+					Button {
+						_askCertificateEveryTime.toggle()
+					} label: {
+						HStack {
+							Text(.localized("Ask every time"))
+								.foregroundStyle(.primary)
+							Spacer()
+							Image(
+								systemName: _askCertificateEveryTime
+									? "checkmark.square.fill"
+									: "square"
+							)
+							.foregroundStyle(
+								_askCertificateEveryTime
+									? Color.accentColor
+									: Color.secondary
+							)
+						}
+					}
+					.buttonStyle(.plain)
 
 				} header: {
 					Text(.localized("Certificates"))
