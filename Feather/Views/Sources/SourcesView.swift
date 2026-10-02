@@ -474,22 +474,46 @@ struct SourcesView: View {
 		} else {
 			Menu {
 				Button { _selectSort(.defaultOrder) } label: {
-					Label("Default", systemImage: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
+					Label {
+						Text("Default").fontWeight(_sortMode == .defaultOrder ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
+					}
 				}
 				Button { _selectSort(.nameAscending) } label: {
-					Label("Name (A–Z)", systemImage: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
+					Label {
+						Text("Name (A–Z)").fontWeight(_sortMode == .nameAscending ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
+					}
 				}
 				Button { _selectSort(.nameDescending) } label: {
-					Label("Name (Z–A)", systemImage: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
+					Label {
+						Text("Name (Z–A)").fontWeight(_sortMode == .nameDescending ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
+					}
 				}
 				Button { _selectSort(.lastUpdated) } label: {
-					Label("Last Updated", systemImage: _sortMode == .lastUpdated ? "checkmark" : "clock")
+					Label {
+						Text("Last Updated").fontWeight(_sortMode == .lastUpdated ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .lastUpdated ? "checkmark" : "clock")
+					}
 				}
 				Button { _selectSort(.dateAdded) } label: {
-					Label("Date Added", systemImage: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
+					Label {
+						Text("Date Added").fontWeight(_sortMode == .dateAdded ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
+					}
 				}
 				Button { _selectSort(.custom) } label: {
-					Label("Custom", systemImage: _sortMode == .custom ? "checkmark" : "list.bullet")
+					Label {
+						Text("Custom").fontWeight(_sortMode == .custom ? .bold : .regular)
+					} icon: {
+						Image(systemName: _sortMode == .custom ? "checkmark" : "list.bullet")
+					}
 				}
 				Divider()
 				Button { _beginRearranging() } label: {
