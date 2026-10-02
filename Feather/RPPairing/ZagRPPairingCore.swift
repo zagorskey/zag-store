@@ -27,6 +27,13 @@ private func zagGate4UninstallCallback(_ code: Int32, _ message: UnsafePointer<C
 	}
 }
 
+private func zagInstalledAppIconsCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveInstalledAppIcons(code: code, message: text)
+	}
+}
+
 private func zagInstalledAppsCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -74,6 +81,8 @@ final class ZagRPPairingCore: ObservableObject {
 	@Published private(set) var installedApps: [String: InstalledAppInfo] = [:]
 	@Published private(set) var installedAppsDebugKeys: String?
 	@Published private(set) var installedAppsState: InstalledAppsState = .idle
+	@Published private(set) var installedAppIconURLs: [String: URL] = [:]
+	@Published private(set) var installedAppIconsRefreshing = false
 	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
 
@@ -309,6 +318,69 @@ final class ZagRPPairingCore: ObservableObject {
 			let completion = installedAppsCompletion
 			installedAppsCompletion = nil
 			completion?(.failure(InstalledAppsError.refreshFailed(message)))
+		default:
+			break
+		}
+	}
+
+	func refreshInstalledAppIcons(
+		bundleIDs: [String],
+		deviceIP: String = "10.7.0.1"
+	) throws {
+		guard !installedAppIconsRefreshing else { return }
+		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+
+		let requested = Array(Set(bundleIDs.filter { !$0.isEmpty })).sorted()
+		guard !requested.isEmpty else { return }
+
+		let directory = FileManager.default.urls(
+			for: .cachesDirectory,
+			in: .userDomainMask
+		).first!
+			.appendingPathComponent("ZagStore/InstalledAppIcons", isDirectory: true)
+		try FileManager.default.createDirectory(
+			at: directory,
+			withIntermediateDirectories: true
+		)
+
+		installedAppIconsRefreshing = true
+		let joined = requested.joined(separator: "\t")
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				joined.withCString { bundleIDs in
+					directory.path.withCString { outputDirectory in
+						zag_installed_app_icons(
+							ip,
+							pairingPath,
+							bundleIDs,
+							outputDirectory,
+							zagInstalledAppIconsCallback
+						)
+					}
+				}
+			}
+		}
+
+		if !started {
+			installedAppIconsRefreshing = false
+			throw InstalledAppsError.couldNotStart
+		}
+	}
+
+	fileprivate func receiveInstalledAppIcons(code: Int32, message: String) {
+		switch code {
+		case 501:
+			installedAppIconsRefreshing = true
+		case 502:
+			let fields = message.split(
+				separator: "\t",
+				maxSplits: 1,
+				omittingEmptySubsequences: false
+			).map(String.init)
+			guard fields.count == 2, !fields[0].isEmpty else { break }
+			installedAppIconURLs[fields[0]] = URL(fileURLWithPath: fields[1])
+		case 503, -7:
+			installedAppIconsRefreshing = false
 		default:
 			break
 		}
