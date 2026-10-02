@@ -78,10 +78,10 @@ struct ExtendedTabbarView: View {
 				GeometryReader { proxy in
 					let itemWidth = proxy.size.width / CGFloat(TabEnum.defaultTabs.count)
 					Circle()
-						.fill(Color(hex: "#E93323"))
+						.fill(Color(hex: "#EA3336"))
 						.frame(width: 7, height: 7)
 						.position(
-							x: itemWidth * 1.5 + 12,
+							x: itemWidth * 2.5 + 12,
 							y: proxy.size.height - 55
 						)
 						.allowsHitTesting(false)
