@@ -240,11 +240,59 @@ struct DownloadButtonView: View {
 	}
 
 	private func _existingSignedCopy() -> Signed? {
-		guard let bundleID = app.id, !bundleID.isEmpty else { return nil }
+		guard
+			let bundleID = app.id,
+			!bundleID.isEmpty,
+			let repositoryVersion = app.currentVersion,
+			!repositoryVersion.isEmpty
+		else {
+			return nil
+		}
+
 		let request = NSFetchRequest<Signed>(entityName: "Signed")
-		request.fetchLimit = 1
 		request.predicate = NSPredicate(format: "identifier == %@", bundleID)
-		return try? Storage.shared.context.fetch(request).first
+
+		guard let candidates = try? Storage.shared.context.fetch(request) else {
+			return nil
+		}
+
+		return candidates.first { signed in
+			guard
+				let signedVersion = signed.version,
+				!signedVersion.isEmpty,
+				_compareReleaseValue(signedVersion, repositoryVersion) == .orderedSame
+			else {
+				return false
+			}
+
+			guard
+				let repositoryBuild = app.currentAppVersion?.build,
+				!repositoryBuild.isEmpty,
+				let signedBuild = _signedBuildVersion(signed),
+				!signedBuild.isEmpty
+			else {
+				// A matching version is sufficient when either side does not
+				// expose a build number.
+				return true
+			}
+
+			return _compareReleaseValue(
+				signedBuild,
+				repositoryBuild
+			) == .orderedSame
+		}
+	}
+
+	private func _signedBuildVersion(_ signed: Signed) -> String? {
+		guard
+			let appURL = Storage.shared.getAppDirectory(for: signed),
+			let bundle = Bundle(url: appURL)
+		else {
+			return nil
+		}
+		return bundle.object(
+			forInfoDictionaryKey: "CFBundleVersion"
+		) as? String
 	}
 
 	private func _installExistingSignedCopy() {
