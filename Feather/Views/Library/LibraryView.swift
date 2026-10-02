@@ -468,6 +468,9 @@ struct LibraryView: View {
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
+								onRepositoryBadgeTap: { source in
+									_selectedRepositorySource = source
+								},
 
 
 
@@ -551,6 +554,9 @@ struct LibraryView: View {
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
 								onRemoveManagedApp: _removeManagedApp,
+								onRepositoryBadgeTap: { source in
+									_selectedRepositorySource = source
+								},
 
 
 
