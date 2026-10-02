@@ -12,6 +12,8 @@ import UIKit
 // MARK: - View
 struct CertificatesCellView: View {
 	@State var data: Certificate?
+	@State private var isCopyFeedbackActive = false
+	@State private var copyFeedbackResetTask: Task<Void, Never>?
 
 	@ObservedObject var cert: CertificatePair
 
@@ -38,16 +40,25 @@ struct CertificatesCellView: View {
 						.layoutPriority(1)
 
 					Button {
-						UIPasteboard.general.string = title
+						_copyCertificateName()
 					} label: {
 						Image(systemName: "doc.on.doc")
 							.font(.system(size: 13, weight: .semibold))
-							.foregroundStyle(.white)
+							.foregroundStyle(
+								isCopyFeedbackActive
+									? copyFeedbackColor
+									: Color(hex: "#CCCCCC")
+							)
 							.frame(width: 28, height: 24)
 							.contentShape(Rectangle())
+							.animation(
+								.easeInOut(duration: 0.18),
+								value: isCopyFeedbackActive
+							)
 					}
 					.buttonStyle(.plain)
 					.accessibilityLabel("Copy Certificate Name")
+					.accessibilityHint("Copies the original certificate name")
 				}
 				.frame(maxWidth: .infinity)
 
@@ -75,6 +86,36 @@ struct CertificatesCellView: View {
 
 // MARK: - Extension: View
 extension CertificatesCellView {
+	private var copyFeedbackColor: Color {
+		cert.expiration?.expirationInfo().color ?? .green
+	}
+
+	private func _copyCertificateName() {
+		// Always copy the certificate's original embedded name. A user-facing
+		// nickname is display-only and must never replace the copied value.
+		let certificateName = data?.Name ?? .localized("Unknown")
+		UIPasteboard.general.string = certificateName
+
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		UIAccessibility.post(
+			notification: .announcement,
+			argument: "Certificate name copied"
+		)
+
+		copyFeedbackResetTask?.cancel()
+		withAnimation(.easeInOut(duration: 0.18)) {
+			isCopyFeedbackActive = true
+		}
+
+		copyFeedbackResetTask = Task { @MainActor in
+			try? await Task.sleep(nanoseconds: 650_000_000)
+			guard !Task.isCancelled else { return }
+			withAnimation(.easeInOut(duration: 0.28)) {
+				isCopyFeedbackActive = false
+			}
+		}
+	}
+
 	@ViewBuilder
 	private func _certInfoPill(data: CertificatePair) -> some View {
 		let pillItems = _buildPills(from: data)
