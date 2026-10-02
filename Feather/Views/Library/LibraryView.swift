@@ -65,6 +65,7 @@ struct LibraryView: View {
 
 
 	@StateObject private var updateManager = UpdateManager.shared
+	@StateObject private var rppairingCore = ZagRPPairingCore.shared
 
 
 
@@ -807,12 +808,10 @@ struct LibraryView: View {
 			.environment(\.editMode, $_editMode)
 			.onChange(of: scenePhase) { phase in
 				guard phase == .active else { return }
-				_reconcileManagedInstalledApps()
-				_updateRepositoryUpdates()
+				_refreshInstalledAppsFromDevice()
 			}
 			.onAppear {
-				_reconcileManagedInstalledApps()
-				_updateRepositoryUpdates()
+				_refreshInstalledAppsFromDevice()
 			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
@@ -1095,6 +1094,41 @@ extension LibraryView {
 
 		if let encoded = try? JSONEncoder().encode(identifiers) {
 			_managedInstalledBundleIDsData = encoded
+		}
+	}
+
+	private func _refreshInstalledAppsFromDevice() {
+		guard rppairingCore.pairingFileExists else {
+			_reconcileManagedInstalledApps()
+			_updateRepositoryUpdates()
+			return
+		}
+
+		do {
+			try rppairingCore.refreshInstalledApps { result in
+				DispatchQueue.main.async {
+					switch result {
+					case .success(let installedBundleIDs):
+						if let encoded = try? JSONEncoder().encode(installedBundleIDs) {
+							_managedInstalledBundleIDsData = encoded
+						}
+						_updateRepositoryUpdates()
+
+					case .failure(let error):
+						print(
+							"[Zag Store Inventory] Device inventory refresh failed: " +
+							error.localizedDescription
+						)
+						_updateRepositoryUpdates()
+					}
+				}
+			}
+		} catch {
+			print(
+				"[Zag Store Inventory] Device inventory could not start: " +
+				error.localizedDescription
+			)
+			_updateRepositoryUpdates()
 		}
 	}
 
