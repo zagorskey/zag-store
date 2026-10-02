@@ -554,8 +554,7 @@ struct RPPairingDiagnosticsView: View {
 	private func runGate4InstallationTest(with app: Signed) {
 		Task {
 			do {
-				let status = InstallerStatusViewModel(isIdevice: false)
-				let archive = ArchiveHandler(app: app, viewModel: status)
+				let archive = ArchiveHandler(app: app)
 
 				try await archive.move()
 				let packageURL = try await archive.archive()
