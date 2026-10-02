@@ -1889,7 +1889,8 @@ private struct ZagUpdateRow: View {
 	private var releaseNotes: String? {
 		let notes =
 			update.app.currentAppVersion?.localizedDescription ??
-			update.app.versionDescription
+			update.app.versionDescription ??
+			update.app.localizedDescription
 
 		guard
 			let notes,
@@ -1925,21 +1926,21 @@ private struct ZagUpdateRow: View {
 			}
 
 			if let releaseNotes {
-				HStack(alignment: .lastTextBaseline, spacing: 5) {
+				ZStack(alignment: .bottomTrailing) {
 					Text(releaseNotes)
 						.font(.system(size: 14))
 						.foregroundStyle(.primary)
 						.lineLimit(showsFullReleaseNotes ? nil : 2)
-						.fixedSize(horizontal: false, vertical: true)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
 
-					if !showsFullReleaseNotes {
-						Button(.localized("more")) {
-							withAnimation(.easeInOut(duration: 0.2)) {
-								showsFullReleaseNotes = true
-							}
+					Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
+						withAnimation(.easeInOut(duration: 0.2)) {
+							showsFullReleaseNotes.toggle()
 						}
-						.font(.system(size: 14))
 					}
+					.font(.system(size: 14))
+					.foregroundStyle(.blue)
 				}
 			}
 		}
