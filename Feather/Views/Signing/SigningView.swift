@@ -264,8 +264,23 @@ extension SigningView {
 // MARK: - Extension: View (import)
 extension SigningView {
 	private func _start() {
+		if ZagCertificateSelection.asksEveryTime,
+		   _temporaryOptions.signingOption == .default {
+			Task { @MainActor in
+				guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+					return
+				}
+				_startSigning(using: certificate)
+			}
+			return
+		}
+
+		_startSigning(using: _selectedCert())
+	}
+
+	private func _startSigning(using certificate: CertificatePair?) {
 		guard
-			_selectedCert() != nil || _temporaryOptions.signingOption != .default
+			certificate != nil || _temporaryOptions.signingOption != .default
 		else {
 			UIAlertController.showAlertWithOk(
 				title: .localized("No Certificate"),
@@ -278,18 +293,28 @@ extension SigningView {
 		let generator = UIImpactFeedbackGenerator(style: .light)
 		generator.impactOccurred()
 		_isSigning = true
-		
+
+		var options = _temporaryOptions
+		if
+			options.ppqProtection,
+			let identifier = app.identifier,
+			let certificate,
+			certificate.ppQCheck
+		{
+			options.appIdentifier = "\(identifier).\(_optionsManager.options.ppqString)"
+		}
+
 		FR.signPackageFile(
 			app,
-			using: _temporaryOptions,
+			using: options,
 			icon: appIcon,
-			certificate: _selectedCert()
+			certificate: certificate
 		) { error in
 			if let error {
 				let ok = UIAlertAction(title: .localized("Dismiss"), style: .cancel) { _ in
 					dismiss()
 				}
-				
+
 				UIAlertController.showAlert(
 					title: "Error",
 					message: error.localizedDescription,
@@ -297,19 +322,21 @@ extension SigningView {
 				)
 			} else {
 				if
-					_temporaryOptions.post_deleteAppAfterSigned,
+					options.post_deleteAppAfterSigned,
 					!app.isSigned
 				{
 					Storage.shared.deleteApp(for: app)
 				}
-				
-				if _temporaryOptions.post_installAppAfterSigned {
+
+				if options.post_installAppAfterSigned {
 					DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-						NotificationCenter.default.post(name: Notification.Name("Feather.installApp"), object: nil)
+						NotificationCenter.default.post(
+							name: Notification.Name("Feather.installApp"),
+							object: nil
+						)
 					}
 				}
 				dismiss()
 			}
 		}
-	}
-}
+	}}
