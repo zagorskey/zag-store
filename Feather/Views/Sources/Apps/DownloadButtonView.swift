@@ -253,8 +253,18 @@ struct DownloadButtonView: View {
 		_installInline(signed)
 	}
 
+	private func _rememberRepositoryOrigin() {
+		guard let bundleID = app.id, !bundleID.isEmpty else { return }
+		var origins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
+		if let sourceURL = app.sourceURL?.absoluteString {
+			origins[bundleID] = sourceURL
+			UserDefaults.standard.set(origins, forKey: "zagStore.repositoryOrigins")
+		}
+	}
+
 	private func _startGetAndInstall() {
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
+		_rememberRepositoryOrigin()
 		zagPhase = .downloading
 
 		_ = downloadManager.startDownload(
