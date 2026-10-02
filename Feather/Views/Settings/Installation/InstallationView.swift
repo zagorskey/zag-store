@@ -492,10 +492,10 @@ struct RPPairingDiagnosticsView: View {
 					Label("Run Installation Test…", systemImage: "shippingbox")
 				}
 				.disabled(
-				pairingCore.isGate4Running ||
-				!pairingCore.pairingFileExists ||
-				signedApps.isEmpty
-			)
+					pairingCore.isGate4Running ||
+					!pairingCore.pairingFileExists ||
+					signedApps.isEmpty
+				)
 			} header: {
 				Text("Installation Test")
 			} footer: {
@@ -549,6 +549,7 @@ struct RPPairingDiagnosticsView: View {
 				}
 			}
 		}
+	}
 
 	private func runGate4InstallationTest(with app: Signed) {
 		Task {
