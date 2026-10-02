@@ -8,10 +8,14 @@
 import SwiftUI
 import NimbleViews
 import Zsign
+import AltSourceKit
+import NukeUI
 
 // MARK: - View
 struct LibraryInfoView: View {
 	var app: AppInfoPresentable
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+	@State private var selectedRepositorySource: AltSource?
 	
 	// MARK: Body
 	var body: some View {
@@ -23,6 +27,7 @@ struct LibraryInfoView: View {
 				}
 				
 				_infoSection(for: app)
+				_repositorySection
 				_certSection(for: app)
 				_bundleSection(for: app)
 				_executableSection(for: app)
@@ -31,6 +36,19 @@ struct LibraryInfoView: View {
 					Button(.localized("Open in Files"), systemImage: "folder") {
 						UIApplication.open(Storage.shared.getUuidDirectory(for: app)!.toSharedDocumentsURL()!)
 					}
+				}
+			}
+			.navigationDestination(
+				isPresented: Binding(
+					get: { selectedRepositorySource != nil },
+					set: { if !$0 { selectedRepositorySource = nil } }
+				)
+			) {
+				if let source = selectedRepositorySource {
+					SourceAppsView(
+						object: [source],
+						viewModel: sourcesViewModel
+					)
 				}
 			}
 			.toolbar {
@@ -63,6 +81,64 @@ extension LibraryInfoView {
 		}
 	}
 	
+	private var _repositoryOrigin: (AltSource, ASRepository)? {
+		guard let bundleID = app.identifier, !bundleID.isEmpty else { return nil }
+
+		let origins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String]
+		let origin = origins?[bundleID]
+
+		if let origin,
+		   let match = sourcesViewModel.sources.first(where: { storedSource, repository in
+			   storedSource.sourceURL?.absoluteString == origin ||
+			   repository.id == origin ||
+			   repository.website?.absoluteString == origin ||
+			   repository.name == origin
+		   }) {
+			return match
+		}
+
+		let matches = sourcesViewModel.sources.filter { _, repository in
+			repository.apps.contains { $0.id == bundleID }
+		}
+		return origin == nil && matches.count == 1 ? matches.first : nil
+	}
+
+	@ViewBuilder
+	private var _repositorySection: some View {
+		if let origin = _repositoryOrigin {
+			NBSection(.localized("Source")) {
+				Button {
+					selectedRepositorySource = origin.0
+				} label: {
+					HStack(spacing: 12) {
+						if let iconURL = origin.1.currentIconURL {
+							LazyImage(url: iconURL) { state in
+								if let image = state.image {
+									image.appIconStyle(
+										size: 34,
+										isCircle: true,
+										background: Color(uiColor: .secondarySystemBackground)
+									)
+								}
+							}
+							.frame(width: 34, height: 34)
+						}
+
+						Text(origin.1.name ?? .localized("Repository"))
+							.foregroundStyle(.primary)
+						Spacer()
+						Image(systemName: "chevron.right")
+							.font(.footnote.weight(.semibold))
+							.foregroundStyle(.tertiary)
+					}
+				}
+				.buttonStyle(.plain)
+			}
+		}
+	}
+
 	@ViewBuilder
 	private func _certSection(for app: AppInfoPresentable) -> some View {
 		if let cert = Storage.shared.getCertificate(from: app) {
