@@ -81,7 +81,7 @@ struct ExtendedTabbarView: View {
 						.fill(Color(hex: "#EA3336"))
 						.frame(width: 7, height: 7)
 						.position(
-							x: itemWidth * 2.5 + 12,
+							x: itemWidth * 2.5 + 2,
 							y: proxy.size.height - 55
 						)
 						.allowsHitTesting(false)
