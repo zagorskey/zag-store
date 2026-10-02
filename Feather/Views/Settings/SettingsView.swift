@@ -476,7 +476,20 @@ extension SettingsView {
 		proceed.setValue(UIColor.systemOrange, forKey: "titleTextColor")
 		alert.addAction(proceed)
 		alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-		UIApplication.shared.present(alert)
+		guard
+			let scene = UIApplication.shared.connectedScenes
+				.compactMap({ $0 as? UIWindowScene })
+				.first(where: { $0.activationState == .foregroundActive }),
+			let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+		else {
+			return
+		}
+
+		var presenter = root
+		while let presented = presenter.presentedViewController {
+			presenter = presented
+		}
+		presenter.present(alert, animated: true)
 	}
 
 	private func _makeGitHubIssueURL(url: String) -> String {
