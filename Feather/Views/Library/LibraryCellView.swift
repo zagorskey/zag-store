@@ -42,6 +42,10 @@ struct LibraryCellView: View {
 	@State private var isRemoveConfirmationPresented = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey)
 	private var allowSigningCustomisation = false
+	@AppStorage(ZagCertificateSelection.askEveryTimeKey)
+	private var askCertificateEveryTime = false
+	@State private var isSigningImmediately = false
+	@State private var signingRingRotation: Double = 0
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -448,19 +452,66 @@ extension LibraryCellView {
 				}
 			}
 		} else {
-			ZagActionPill(title: .localized("Sign")) {
-				if allowSigningCustomisation {
-					selectedSigningAppPresenting = AnyApp(base: app)
-				} else {
-					_signImmediately(app)
+			if isSigningImmediately && !allowSigningCustomisation && !askCertificateEveryTime {
+				VStack(spacing: 2) {
+					_signingIndeterminateRing()
+						.frame(width: 88, height: 34)
+
+					Text(.localized("Signing..."))
+						.font(.system(size: 9, weight: .medium))
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+						.frame(width: 88, height: 11)
+				}
+				.transition(.opacity)
+			} else {
+				ZagActionPill(title: .localized("Sign")) {
+					if allowSigningCustomisation {
+						selectedSigningAppPresenting = AnyApp(base: app)
+					} else {
+						_signImmediately(app)
+					}
 				}
 			}
 		}
 	}
 
+	private func _signingIndeterminateRing() -> some View {
+		ZStack {
+			Circle()
+				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
+			Circle()
+				.trim(from: 0.08, to: 0.72)
+				.stroke(
+					Color.accentColor,
+					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
+				)
+				.rotationEffect(.degrees(signingRingRotation - 90))
+		}
+		.frame(width: 31, height: 31)
+		.onAppear {
+			signingRingRotation = 0
+			withAnimation(
+				.linear(duration: 0.85)
+					.repeatForever(autoreverses: false)
+			) {
+				signingRingRotation = 360
+			}
+		}
+	}
+
 	private func _signImmediately(_ app: AppInfoPresentable) {
+		if !allowSigningCustomisation && !askCertificateEveryTime {
+			withAnimation(.easeInOut(duration: 0.25)) {
+				isSigningImmediately = true
+			}
+		}
+
 		Task { @MainActor in
 			guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isSigningImmediately = false
+				}
 				if Storage.shared.getAllCertificates().isEmpty {
 					UIAlertController.showAlertWithOk(
 						title: .localized("No Certificate"),
@@ -500,6 +551,10 @@ extension LibraryCellView {
 				icon: nil,
 				certificate: certificate
 			) { error in
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isSigningImmediately = false
+				}
+
 				if let error {
 					UIAlertController.showAlertWithOk(
 						title: .localized("Error"),
