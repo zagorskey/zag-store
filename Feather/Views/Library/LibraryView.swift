@@ -842,11 +842,7 @@ struct LibraryView: View {
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
 				ZagUpdatesPopup(
-					updates: updateManager.updates,
-					onPreparedForInstall: { signedUUID in
-						_isUpdatesPresenting = false
-						handlePreparedUpdate(signedUUID)
-					}
+					updates: updateManager.updates
 				)
 			}
 
@@ -1877,6 +1873,7 @@ private struct ZagUpdateRow: View {
 	private var shouldChangeIconsBasedOffStyle: Bool = false
 
 	@State private var showsFullReleaseNotes = false
+	@State private var ringRotation: Double = 0
 
 	private var useDarkIconAppearance: Bool {
 		shouldChangeIconsBasedOffStyle &&
@@ -1895,7 +1892,6 @@ private struct ZagUpdateRow: View {
 			: Color(hex: "#EEEEF0")
 	}
 
-	let onPreparedForInstall: (String) -> Void
 	let onSelect: () -> Void
 
 	@ObservedObject private var transactionManager =
@@ -2032,33 +2028,101 @@ private struct ZagUpdateRow: View {
 	@ViewBuilder
 	private var zagUpdateButton: some View {
 		let stage = transactionManager.stage(for: update)
-		let isBusy =
-			stage == .downloading ||
-			stage == .importing ||
-			stage == .signing
 
-		ZagActionPill(
-			title: stage?.title ?? .localized("Update"),
-			showsProgress: isBusy,
-			backgroundColor: zagUpdatePillBackground
-		) {
-			transactionManager.prepare(update) { result in
-				switch result {
-				case .success(let signedUUID):
-					onPreparedForInstall(signedUUID)
-
-				case .failure(let error):
-					UIAlertController.showAlertWithOk(
-						title: .localized("Update Failed"),
-						message: error.localizedDescription
-					)
+		VStack(spacing: 2) {
+			ZStack {
+				if stage != nil, !isFailed(stage) {
+					ZStack {
+						Circle()
+							.stroke(zagUpdatesBlue.opacity(0.22), lineWidth: 2.3)
+						Circle()
+							.trim(from: 0.08, to: 0.72)
+							.stroke(
+								zagUpdatesBlue,
+								style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
+							)
+							.rotationEffect(.degrees(ringRotation - 90))
+					}
+					.frame(width: 31, height: 31)
+					.onAppear {
+						ringRotation = 0
+						withAnimation(
+							.linear(duration: 0.85)
+								.repeatForever(autoreverses: false)
+						) {
+							ringRotation = 360
+						}
+					}
+				} else {
+					ZagActionPill(
+						title: stage?.title ?? .localized("Update"),
+						backgroundColor: zagUpdatePillBackground
+					) {
+						_startInlineUpdate()
+					}
 				}
 			}
+			.frame(width: 88, height: 34)
+
+			Text(_stageCaption(stage))
+				.font(.system(size: 9, weight: .medium))
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+				.frame(width: 88, height: 11)
+				.opacity(_stageCaption(stage).isEmpty ? 0 : 1)
 		}
-		.disabled(
-			isBusy ||
-			stage == .readyToInstall
-		)
+	}
+
+	private func isFailed(_ stage: ZagUpdateTransactionManager.Stage?) -> Bool {
+		if case .failed = stage { return true }
+		return false
+	}
+
+	private func _stageCaption(
+		_ stage: ZagUpdateTransactionManager.Stage?
+	) -> String {
+		switch stage {
+		case .downloading:
+			return .localized("Downloading…")
+		case .importing, .signing, .readyToInstall:
+			return .localized("Preparing…")
+		case .installing:
+			return .localized("Installing…")
+		default:
+			return ""
+		}
+	}
+
+	private func _startInlineUpdate() {
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		transactionManager.prepare(update) { result in
+			switch result {
+			case .success(let signedUUID):
+				Task {
+					do {
+						try await transactionManager.installPreparedUpdate(
+							signedUUID: signedUUID
+						)
+						try? pairingCore.refreshInstalledApps()
+					} catch {
+						transactionManager.failInstallation(
+							update: update,
+							error: error
+						)
+						UIAlertController.showAlertWithOk(
+							title: .localized("Update Failed"),
+							message: error.localizedDescription
+						)
+					}
+				}
+
+			case .failure(let error):
+				UIAlertController.showAlertWithOk(
+					title: .localized("Update Failed"),
+					message: error.localizedDescription
+				)
+			}
+		}
 	}
 
 	@ViewBuilder
@@ -2134,7 +2198,6 @@ private struct ZagUpdateRow: View {
 
 private struct ZagUpdatesPopup: View {
 	let updates: [UpdateManager.AvailableUpdate]
-	let onPreparedForInstall: (String) -> Void
 
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.colorScheme) private var colorScheme
@@ -2190,7 +2253,6 @@ private struct ZagUpdatesPopup: View {
 							ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
 								ZagUpdateRow(
 									update: update,
-									onPreparedForInstall: onPreparedForInstall,
 									onSelect: {
 										selectedUpdate = update
 									}
@@ -2474,6 +2536,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		case importing
 		case signing
 		case readyToInstall
+		case installing
 		case failed(String)
 
 		var title: String {
@@ -2486,6 +2549,8 @@ final class ZagUpdateTransactionManager: ObservableObject {
 				return "Signing"
 			case .readyToInstall:
 				return "Install"
+			case .installing:
+				return "Installing"
 			case .failed:
 				return "Retry"
 			}
@@ -2646,6 +2711,11 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		guard let signed = signedApp(uuid: signedUUID) else {
 			throw ZagUpdateTransactionError.signedRecordNotFound
 		}
+		guard let pending = pendingBySignedUUID[signedUUID] else {
+			throw ZagUpdateTransactionError.signedRecordNotFound
+		}
+
+		stages[pending.updateID] = .installing
 
 		let archiveHandler = ArchiveHandler(app: signed)
 		try await archiveHandler.move()
@@ -2694,6 +2764,13 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		UpdateManager.shared.refresh(
 			repositories: Array(SourcesViewModel.shared.sources.values)
 		)
+	}
+
+	func failInstallation(
+		update: UpdateManager.AvailableUpdate,
+		error: Error
+	) {
+		stages[update.id] = .failed(error.localizedDescription)
 	}
 
 	func reset(_ update: UpdateManager.AvailableUpdate) {
