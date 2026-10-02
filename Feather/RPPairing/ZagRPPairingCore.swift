@@ -27,6 +27,13 @@ private func zagGate4UninstallCallback(_ code: Int32, _ message: UnsafePointer<C
 	}
 }
 
+private func zagInstalledAppsCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveInstalledApps(code: code, message: text)
+	}
+}
+
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -49,6 +56,18 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	@Published private(set) var state: State = .idle
+
+	enum InstalledAppsState: Equatable {
+		case idle
+		case refreshing
+		case loaded(Int)
+		case failed(String)
+	}
+
+	@Published private(set) var installedBundleIDs: Set<String> = []
+	@Published private(set) var installedAppsState: InstalledAppsState = .idle
+	private var pendingInstalledBundleIDs: Set<String> = []
+	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
 
 	enum Gate2State: Equatable {
 		case idle
@@ -229,6 +248,56 @@ final class ZagRPPairingCore: ObservableObject {
 		default:
 			break
 		}
+	}
+
+	func refreshInstalledApps(
+		deviceIP: String = "10.7.0.1",
+		completion: ((Result<Set<String>, Error>) -> Void)? = nil
+	) throws {
+		guard installedAppsState != .refreshing else { throw InstalledAppsError.alreadyRunning }
+		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+
+		pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+		installedAppsCompletion = completion
+		installedAppsState = .refreshing
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				zag_installed_apps(ip, pairingPath, zagInstalledAppsCallback)
+			}
+		}
+		if !started {
+			installedAppsState = .failed(InstalledAppsError.couldNotStart.localizedDescription)
+			installedAppsCompletion = nil
+			throw InstalledAppsError.couldNotStart
+		}
+	}
+
+	fileprivate func receiveInstalledApps(code: Int32, message: String) {
+		switch code {
+		case 401:
+			pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+			installedAppsState = .refreshing
+		case 402:
+			if !message.isEmpty { pendingInstalledBundleIDs.insert(message) }
+		case 403:
+			installedBundleIDs = pendingInstalledBundleIDs
+			installedAppsState = .loaded(Int(message) ?? installedBundleIDs.count)
+			let completion = installedAppsCompletion
+			installedAppsCompletion = nil
+			completion?(.success(installedBundleIDs))
+		case -6:
+			pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+			installedAppsState = .failed(message)
+			let completion = installedAppsCompletion
+			installedAppsCompletion = nil
+			completion?(.failure(InstalledAppsError.refreshFailed(message)))
+		default:
+			break
+		}
+	}
+
+	func isInstalled(bundleID: String) -> Bool {
+		installedBundleIDs.contains(bundleID)
 	}
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
@@ -584,6 +653,23 @@ private enum PairingResetError: LocalizedError {
 
 	var errorDescription: String? {
 		"Stop the current RPPairing operation before forgetting this iPhone."
+	}
+}
+
+
+private enum InstalledAppsError: LocalizedError {
+	case alreadyRunning
+	case notPaired
+	case couldNotStart
+	case refreshFailed(String)
+
+	var errorDescription: String? {
+		switch self {
+		case .alreadyRunning: return "An installed-app refresh is already running."
+		case .notPaired: return "Pair this iPhone with Zag Store before refreshing installed apps."
+		case .couldNotStart: return "The installed-app refresh could not be started."
+		case .refreshFailed(let message): return message
+		}
 	}
 }
 
