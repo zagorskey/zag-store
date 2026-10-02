@@ -51,6 +51,7 @@ final class SourcesViewModel: ObservableObject {
 		}) {
 			// The repository snapshot is already complete. It is safe to
 			// reconcile updates against it without entering a refresh cycle.
+			reconcileRepositoryOrigins()
 			UpdateManager.shared.refresh(
 				repositories: Array(self.sources.values)
 			)
@@ -155,9 +156,71 @@ final class SourcesViewModel: ObservableObject {
 		// one completed refresh. Until this point the previous Updates
 		// pill/count and app-icon badge remain untouched.
 		self.sources = completedSources
+		reconcileRepositoryOrigins()
 		UpdateManager.shared.refresh(
 			repositories: completedRepositories
 		)
+	}
+
+	// MARK: - Repository Origin Provenance
+
+	@MainActor
+	func reconcileRepositoryOrigins() {
+		let defaults = UserDefaults.standard
+		var origins = defaults.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
+		var icons = defaults.dictionary(
+			forKey: "zagStore.repositoryOriginIcons"
+		) as? [String: String] ?? [:]
+
+		var repositoriesByBundleID: [String: [(AltSource, ASRepository)]] = [:]
+		for (storedSource, repository) in sources {
+			for app in repository.apps {
+				guard let bundleID = app.id, !bundleID.isEmpty else { continue }
+				repositoriesByBundleID[bundleID, default: []].append(
+					(storedSource, repository)
+				)
+			}
+		}
+
+		var changedOrigins = false
+		var changedIcons = false
+
+		for (bundleID, matches) in repositoriesByBundleID {
+			if origins[bundleID] == nil, matches.count == 1,
+			   let match = matches.first {
+				let repository = match.1
+				let stableKey =
+					match.0.sourceURL?.absoluteString ??
+					repository.id ??
+					repository.website?.absoluteString ??
+					repository.name
+				if let stableKey, !stableKey.isEmpty {
+					origins[bundleID] = stableKey
+					changedOrigins = true
+				}
+			}
+
+			guard let origin = origins[bundleID] else { continue }
+			if let match = matches.first(where: { storedSource, repository in
+				storedSource.sourceURL?.absoluteString == origin ||
+				repository.id == origin ||
+				repository.website?.absoluteString == origin ||
+				repository.name == origin
+			}), let icon = match.1.currentIconURL?.absoluteString,
+			   icons[bundleID] != icon {
+				icons[bundleID] = icon
+				changedIcons = true
+			}
+		}
+
+		if changedOrigins {
+			defaults.set(origins, forKey: "zagStore.repositoryOrigins")
+		}
+		if changedIcons {
+			defaults.set(icons, forKey: "zagStore.repositoryOriginIcons")
+		}
 	}
 
 	// MARK: - Source Cache Management
