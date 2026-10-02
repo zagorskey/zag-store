@@ -1835,6 +1835,18 @@ private struct ZagUpdateRow: View {
 		colorScheme == .dark
 	}
 
+	private var zagUpdatesBlue: Color {
+		colorScheme == .dark
+			? Color(hex: "#3F8EF7")
+			: Color(hex: "#3A85F8")
+	}
+
+	private var zagUpdatePillBackground: Color {
+		colorScheme == .dark
+			? Color(hex: "#3E3D42")
+			: Color(hex: "#EEEEF0")
+	}
+
 	let onPreparedForInstall: (String) -> Void
 
 	@ObservedObject private var transactionManager =
@@ -1942,10 +1954,7 @@ private struct ZagUpdateRow: View {
 			stage == .importing ||
 			stage == .signing
 
-		ZagActionPill(
-			title: stage?.title ?? .localized("Update"),
-			showsProgress: isBusy
-		) {
+		Button {
 			transactionManager.prepare(update) { result in
 				switch result {
 				case .success(let signedUUID):
@@ -1958,7 +1967,22 @@ private struct ZagUpdateRow: View {
 					)
 				}
 			}
+		} label: {
+			HStack(spacing: 6) {
+				if isBusy {
+					ProgressView()
+						.controlSize(.small)
+				}
+
+				Text(stage?.title ?? .localized("Update"))
+					.font(.system(size: 14, weight: .bold))
+			}
+			.foregroundStyle(zagUpdatesBlue)
+			.padding(.horizontal, 16)
+			.frame(minWidth: 82, minHeight: 32)
+			.background(zagUpdatePillBackground, in: Capsule())
 		}
+		.buttonStyle(.plain)
 		.disabled(
 			isBusy ||
 			stage == .readyToInstall
@@ -2067,30 +2091,15 @@ private struct ZagUpdatesPopup: View {
 				.font(.system(size: 17, weight: .semibold))
 
 			HStack {
-				Button {
-					dismiss()
-				} label: {
-					Image(systemName: "chevron.left")
-						.font(.system(size: 17, weight: .semibold))
-						.frame(width: 36, height: 36)
-						.background(
-							Color(uiColor: .secondarySystemBackground),
-							in: Circle()
-						)
-				}
-
 				Spacer()
 
 				Button {
 					dismiss()
 				} label: {
 					Image(systemName: "xmark")
-						.font(.system(size: 14, weight: .bold))
-						.frame(width: 36, height: 36)
-						.background(
-							Color(uiColor: .secondarySystemBackground),
-							in: Circle()
-						)
+						.font(.system(size: 17, weight: .regular))
+						.frame(width: 44, height: 44)
+						.background(.regularMaterial, in: Circle())
 				}
 			}
 		}
