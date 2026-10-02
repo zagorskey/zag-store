@@ -183,7 +183,7 @@ struct LibraryCellView: View {
 		}
 		.swipeActions {
 			if !isEditing {
-				_actions(for: app)
+				_swipeActions(for: app)
 			}
 		}
 		.contextMenu {
@@ -307,6 +307,31 @@ struct LibraryCellView: View {
 // MARK: - Actions
 
 extension LibraryCellView {
+	@ViewBuilder
+	private func _swipeActions(
+		for app: AppInfoPresentable
+	) -> some View {
+		Button {
+			isDeleteConfirmationPresented = true
+		} label: {
+			Label(.localized("Delete"), systemImage: "trash")
+		}
+		.tint(.red)
+
+		if isManagedInstalled {
+			Button {
+				isRemoveConfirmationPresented = true
+			} label: {
+				Label(
+					isRemoving ? .localized("Removing…") : .localized("Remove App"),
+					systemImage: isRemoving ? "hourglass" : "minus.circle"
+				)
+			}
+			.tint(.red)
+			.disabled(isRemoving)
+		}
+	}
+
 	@ViewBuilder
 	private func _actions(
 		for app: AppInfoPresentable
