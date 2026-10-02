@@ -5,6 +5,7 @@ use std::{
     thread,
 };
 
+use idevice::core_device::{AppIconTarget, IconServiceClient};
 use idevice::remote_pairing::{
     connect_tls_psk_tunnel_native, PairableHost, PairableHostInfo, RemotePairingClient,
     RpPairingFile, RpPairingSocket,
@@ -569,6 +570,121 @@ async fn run_installed_apps(
                 emit(callback, 402, format!("{bundle_id}\t{version}\t{build}"));
             }
             emit(callback, 403, count.to_string());
+            Ok(())
+        },
+    )
+    .await
+}
+
+/// Fetches rendered icons for installed apps through CoreDevice iconservice.
+///
+/// bundle_ids is a TAB-delimited list. Each successfully fetched icon is written
+/// as <bundle-id>.png under output_dir.
+///
+/// Callback codes:
+/// 501 = starting
+/// 502 = icon written (message: bundleID<TAB>absolutePath)
+/// 503 = complete (message: success count)
+/// -7  = icon refresh failure
+#[no_mangle]
+pub unsafe extern "C" fn zag_installed_app_icons(
+    device_ip: *const c_char,
+    pairing_path: *const c_char,
+    bundle_ids: *const c_char,
+    output_dir: *const c_char,
+    callback: Option<ZagRPPairingCallback>,
+) -> bool {
+    let Some(callback) = callback else { return false; };
+    if device_ip.is_null() || pairing_path.is_null() || bundle_ids.is_null() || output_dir.is_null() {
+        return false;
+    }
+
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
+    let Ok(bundle_ids) = CStr::from_ptr(bundle_ids).to_str().map(str::to_owned) else { return false; };
+    let Ok(output_dir) = CStr::from_ptr(output_dir).to_str().map(PathBuf::from) else { return false; };
+
+    thread::spawn(move || {
+        emit(callback, 501, "Refreshing installed app icons");
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit(callback, -7, format!("Installed-app icon runtime failed: {error}"));
+                return;
+            }
+        };
+        runtime.block_on(async move {
+            if let Err(error) = run_installed_app_icons(
+                device_ip,
+                pairing_path,
+                bundle_ids,
+                output_dir,
+                callback,
+            ).await {
+                emit(callback, -7, error);
+            }
+        });
+    });
+
+    true
+}
+
+async fn run_installed_app_icons(
+    device_ip: String,
+    pairing_path: PathBuf,
+    bundle_ids: String,
+    output_dir: PathBuf,
+    callback: ZagRPPairingCallback,
+) -> Result<(), String> {
+    let requested = bundle_ids
+        .split('\t')
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|error| format!("Unable to create installed icon cache: {error}"))?;
+
+    with_zag_device_session(
+        &device_ip,
+        &pairing_path,
+        |_stage, _message| {},
+        |mut adapter, mut handshake| async move {
+            let mut icon_service =
+                IconServiceClient::connect_rsd(&mut adapter, &mut handshake)
+                    .await
+                    .map_err(|error| format!("CoreDevice iconservice over RSD failed: {error}"))?;
+
+            let mut success_count = 0usize;
+            for bundle_id in requested {
+                let icon = match icon_service
+                    .fetch_icon(
+                        AppIconTarget::BundleIdentifier(bundle_id.clone()),
+                        62.0,
+                        62.0,
+                        3.0,
+                        false,
+                    )
+                    .await
+                {
+                    Ok(icon) if !icon.is_placeholder => icon,
+                    Ok(_) => continue,
+                    Err(_) => continue,
+                };
+
+                let path = output_dir.join(format!("{bundle_id}.png"));
+                let png: Vec<u8> = icon.png_data.into();
+                if std::fs::write(&path, png).is_ok() {
+                    success_count += 1;
+                    emit(
+                        callback,
+                        502,
+                        format!("{}\t{}", bundle_id, path.to_string_lossy()),
+                    );
+                }
+            }
+
+            emit(callback, 503, success_count.to_string());
             Ok(())
         },
     )
