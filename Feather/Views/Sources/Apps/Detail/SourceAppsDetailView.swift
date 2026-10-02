@@ -13,7 +13,9 @@ import NukeUI
 
 // MARK: - SourceAppsDetailView
 struct SourceAppsDetailView: View {
+	@Environment(\.scenePhase) private var scenePhase
 	@ObservedObject var downloadManager = DownloadManager.shared
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var _downloadProgress: Double = 0
 	@State var cancellable: AnyCancellable? // Combine
 	@State private var _isScreenshotPreviewPresented: Bool = false
@@ -57,7 +59,7 @@ struct SourceAppsDetailView: View {
 						
 						Spacer()
 						
-						DownloadButtonView(app: app)
+						DownloadButtonView(app: app, source: source)
 					}
 					.lineLimit(2)
 					.frame(maxWidth: .infinity, alignment: .leading)
@@ -131,6 +133,19 @@ struct SourceAppsDetailView: View {
 						if let version = app.currentVersion {
 							_infoRow(title: .localized("Version"), value: version)
 						}
+
+						if
+							let bundleID = app.id,
+							let installed = pairingCore.installedAppInfo(bundleID: bundleID)
+						{
+							let installedValue = installed.build.isEmpty
+								? installed.version
+								: "\(installed.version) (\(installed.build))"
+							_infoRow(
+								title: .localized("Installed"),
+								value: installedValue
+							)
+						}
 						
 						if let date = app.currentDate?.date {
 							_infoRow(title: .localized("Updated"), value: DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none))
@@ -201,6 +216,13 @@ struct SourceAppsDetailView: View {
 				UIActivityViewController.show(activityItems: [sharedString])
 			}
 		}
+		.onAppear {
+			_refreshInstalledState()
+		}
+		.onChange(of: scenePhase) { phase in
+			guard phase == .active else { return }
+			_refreshInstalledState()
+		}
 		.fullScreenCover(isPresented: $_isScreenshotPreviewPresented) {
 			if let screenshotURLs = app.screenshotURLs {
 				ScreenshotPreviewView(
@@ -221,6 +243,18 @@ struct SourceAppsDetailView: View {
 			.aspectRatio(contentMode: .fill)
 			.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
 			.clipped()
+	}
+}
+
+private extension SourceAppsDetailView {
+	func _refreshInstalledState() {
+		guard
+			pairingCore.pairingFileExists,
+			pairingCore.installedAppsState != .refreshing
+		else {
+			return
+		}
+		try? pairingCore.refreshInstalledApps()
 	}
 }
 
