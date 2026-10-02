@@ -532,9 +532,16 @@ final class UpdateManager: ObservableObject {
 			}
 		}
 
-		updates = foundUpdates.sorted {
-			$0.app.currentName.localizedCaseInsensitiveCompare(
-				$1.app.currentName
+		updates = foundUpdates.sorted { lhs, rhs in
+			let lhsDate = lhs.app.currentDate?.date ?? .distantPast
+			let rhsDate = rhs.app.currentDate?.date ?? .distantPast
+
+			if lhsDate != rhsDate {
+				return lhsDate > rhsDate
+			}
+
+			return lhs.app.currentName.localizedCaseInsensitiveCompare(
+				rhs.app.currentName
 			) == .orderedAscending
 		}
 
