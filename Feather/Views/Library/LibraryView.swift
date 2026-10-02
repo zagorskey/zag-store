@@ -1859,7 +1859,13 @@ private struct ZagUpdateIconAppearanceModifier: ViewModifier {
 }
 
 private struct ZagUpdateRow: View {
+	enum Mode {
+		case available
+		case recentlyUpdated
+	}
+
 	let update: UpdateManager.AvailableUpdate
+	var mode: Mode = .available
 	@Environment(\.colorScheme) private var colorScheme
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 
@@ -1905,6 +1911,9 @@ private struct ZagUpdateRow: View {
 	}
 
 	private var releaseDateText: String? {
+		if mode == .recentlyUpdated {
+			return .localized("Today")
+		}
 		guard let releaseDate else { return nil }
 
 		let calendar = Calendar.current
@@ -2033,7 +2042,16 @@ private struct ZagUpdateRow: View {
 
 		VStack(spacing: 2) {
 			ZStack {
-				if justCompleted {
+				if mode == .recentlyUpdated {
+					ZagActionPill(
+						title: .localized("Open"),
+						backgroundColor: zagUpdatePillBackground
+					) {
+						if let bundleID = update.app.id {
+							UIApplication.openApp(with: bundleID)
+						}
+					}
+				} else if justCompleted {
 					ZagActionPill(
 						title: .localized("Open"),
 						backgroundColor: zagUpdatePillBackground
@@ -2318,11 +2336,13 @@ private struct ZagUpdatesPopup: View {
 
 							VStack(spacing: 0) {
 								ForEach(Array(completedUpdates.enumerated()), id: \.element.id) { index, update in
-									ZagUpdatedRecentlyRow(
+									ZagUpdateRow(
 										update: update,
+										mode: .recentlyUpdated,
 										onSelect: {
 											selectedUpdate = update
-										}
+										},
+										onCompleted: {}
 									)
 									.padding(.horizontal, 16)
 									.padding(.top, index == 0 ? 8 : 0)
@@ -2424,73 +2444,6 @@ private extension ZagUpdatesPopup {
 		}
 	}
 }
-
-private struct ZagUpdatedRecentlyRow: View {
-	let update: UpdateManager.AvailableUpdate
-	let onSelect: () -> Void
-
-	@Environment(\.colorScheme) private var colorScheme
-	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
-
-	private var pillBackground: Color {
-		colorScheme == .dark
-			? Color(hex: "#3E3D42")
-			: Color(hex: "#EEEEF0")
-	}
-
-	var body: some View {
-		HStack(alignment: .center, spacing: 12) {
-			LazyImage(url: update.app.iconURL) { state in
-				if let image = state.image {
-					image
-						.resizable()
-						.aspectRatio(contentMode: .fill)
-				} else {
-					Image(systemName: "app.fill")
-						.resizable()
-						.scaledToFit()
-						.padding(10)
-						.foregroundStyle(.secondary)
-						.background(Color(uiColor: .secondarySystemBackground))
-				}
-			}
-			.frame(width: 62, height: 62)
-			.clipShape(
-				RoundedRectangle(
-					cornerRadius: 62 * 0.2677,
-					style: .continuous
-				)
-			)
-
-			VStack(alignment: .leading, spacing: 2) {
-				Text(update.app.currentName)
-					.zagContentTitleStyle()
-					.lineLimit(1)
-
-				Text(.localized("Today"))
-					.font(.subheadline)
-					.foregroundStyle(.secondary)
-			}
-
-			Spacer(minLength: 8)
-
-			ZagActionPill(
-				title: .localized("Open"),
-				backgroundColor: pillBackground
-			) {
-				if let bundleID = update.app.id {
-					UIApplication.openApp(with: bundleID)
-				}
-			}
-		}
-		.padding(.vertical, 14)
-		.contentShape(Rectangle())
-		.onTapGesture {
-			onSelect()
-		}
-	}
-}
-
 
 private struct ZagLibraryHeader: View {
 
