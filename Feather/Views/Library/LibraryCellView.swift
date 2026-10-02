@@ -8,6 +8,7 @@
 import SwiftUI
 import NimbleExtensions
 import NimbleViews
+import NukeUI
 
 // MARK: - View
 
@@ -91,10 +92,28 @@ struct LibraryCellView: View {
 			}
 
 			HStack(spacing: 10) {
-				FRAppIconView(
-					app: app,
-					size: 62
-				)
+				ZStack(alignment: .bottomLeading) {
+					FRAppIconView(
+						app: app,
+						size: 62
+					)
+
+					if let repositoryIconURL {
+						LazyImage(url: repositoryIconURL) { state in
+							if let image = state.image {
+								image
+									.appIconStyle(
+										size: 20,
+										isCircle: true,
+										background: Color(
+											uiColor: .secondarySystemBackground
+										)
+									)
+									.offset(x: 46, y: 4)
+							}
+						}
+					}
+				}
 
 				NBTitleWithSubtitleView(
 					title:
@@ -187,6 +206,24 @@ struct LibraryCellView: View {
 		} message: {
 			Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
 		}
+	}
+
+	// MARK: - Repository Origin
+
+	private var repositoryIconURL: URL? {
+		guard let bundleID = app.identifier, !bundleID.isEmpty else {
+			return nil
+		}
+		let icons = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOriginIcons"
+		) as? [String: String]
+		guard
+			let value = icons?[bundleID],
+			let url = URL(string: value)
+		else {
+			return nil
+		}
+		return url
 	}
 
 	// MARK: - Description
