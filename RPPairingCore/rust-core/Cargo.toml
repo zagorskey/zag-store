@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-idevice = { git = "https://github.com/zagorskey/IDeviceKit-Zag", rev = "473e4a6f35f587b7b26426171db35e5dde0893be", features = ["remote_pairing", "tunnel_tcp_stack", "rsd", "tcp", "xpc", "core_device_proxy", "pair", "installation_proxy", "afc", "aws-lc"] }
+idevice = { git = "https://github.com/zagorskey/IDeviceKit-Zag", rev = "473e4a6f35f587b7b26426171db35e5dde0893be", features = ["remote_pairing", "tunnel_tcp_stack", "rsd", "tcp", "xpc", "core_device", "core_device_proxy", "pair", "installation_proxy", "afc", "aws-lc"] }
 mdns-sd = "0.19"
 tokio = { version = "1.43", features = ["rt-multi-thread", "net", "time"] }
 uuid = { version = "1", features = ["v4"] }
