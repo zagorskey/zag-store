@@ -494,6 +494,17 @@ struct RPPairingDiagnosticsView: View {
 				if case .loaded(let count) = pairingCore.installedAppsState {
 					LabeledContent("Last Inventory") { Text("\(count) apps") }
 				}
+
+				if let debugKeys = pairingCore.installedAppsDebugKeys, !debugKeys.isEmpty {
+					VStack(alignment: .leading, spacing: 4) {
+						Text("Returned Metadata Keys")
+							.font(.caption.weight(.semibold))
+							.foregroundStyle(.secondary)
+						Text(debugKeys)
+							.font(.caption.monospaced())
+							.textSelection(.enabled)
+					}
+				}
 			} header: {
 				Text("Installed App Inventory")
 			} footer: {
