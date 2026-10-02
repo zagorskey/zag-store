@@ -74,7 +74,7 @@ struct SettingsView: View {
 			.environment(\.editMode, Binding(
 				get: { _isReorderingSettings ? .active : .inactive },
 				set: { mode in
-					_isReorderingSettings = mode?.isEditing == true
+					_isReorderingSettings = mode.isEditing
 				}
 			))
 			.onAppear {
