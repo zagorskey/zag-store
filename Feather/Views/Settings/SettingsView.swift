@@ -53,6 +53,7 @@ struct SettingsView: View {
 	@State private var _settingsSectionOrder = zagDefaultSettingsSectionOrder
 	@State private var _isReorderingSettings = false
 	@AppStorage("ZagStore.settingsSectionOrder") private var _storedSettingsSectionOrder = ""
+	@AppStorage("ZagStore.settingsSectionSortMode") private var _settingsSectionSortMode = "default"
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -111,11 +112,18 @@ struct SettingsView: View {
 						.accessibilityLabel("Done Reordering")
 					} else {
 						Menu {
-							Button {
-								withAnimation(.snappy) {
-									_isReorderingSettings = true
-								}
-							} label: {
+							Button { _selectSettingsSectionOrder("default") } label: {
+								Label {
+									Text("Default").fontWeight(_settingsSectionSortMode == "default" ? .bold : .regular)
+								} icon: { Image(systemName: "ellipsis") }
+							}
+							Button { _selectSettingsSectionOrder("custom") } label: {
+								Label {
+									Text("Custom").fontWeight(_settingsSectionSortMode == "custom" ? .bold : .regular)
+								} icon: { Image(systemName: "list.bullet") }
+							}
+							Divider()
+							Button { _beginSettingsSectionReordering() } label: {
 								Label("Reorder", systemImage: "arrow.up.arrow.down")
 							}
 						} label: {
@@ -301,14 +309,30 @@ extension SettingsView {
 		}
 	}
 
+	private func _selectSettingsSectionOrder(_ mode: String) {
+		_settingsSectionSortMode = mode
+		withAnimation(.snappy) {
+			_settingsSectionOrder = mode == "default" ? zagDefaultSettingsSectionOrder : _storedCustomSettingsSectionOrder()
+		}
+	}
+
+	private func _beginSettingsSectionReordering() {
+		if _settingsSectionSortMode == "default" {
+			_settingsSectionOrder = zagDefaultSettingsSectionOrder
+		}
+		_settingsSectionSortMode = "custom"
+		_isReorderingSettings = true
+	}
+
 	private func _moveSettingsSections(from source: IndexSet, to destination: Int) {
 		withAnimation(.snappy) {
 			_settingsSectionOrder.move(fromOffsets: source, toOffset: destination)
 		}
+		_settingsSectionSortMode = "custom"
 		_storedSettingsSectionOrder = _settingsSectionOrder.map(\.rawValue).joined(separator: ",")
 	}
 
-	private func _loadSettingsSectionOrder() {
+	private func _storedCustomSettingsSectionOrder() -> [ZagSettingsSection] {
 		let stored = _storedSettingsSectionOrder
 			.split(separator: ",")
 			.compactMap { ZagSettingsSection(rawValue: String($0)) }
@@ -316,7 +340,13 @@ extension SettingsView {
 			if !result.contains(section) { result.append(section) }
 		}
 		let missing = zagDefaultSettingsSectionOrder.filter { !unique.contains($0) }
-		_settingsSectionOrder = unique.isEmpty ? zagDefaultSettingsSectionOrder : unique + missing
+		return unique.isEmpty ? zagDefaultSettingsSectionOrder : unique + missing
+	}
+
+	private func _loadSettingsSectionOrder() {
+		_settingsSectionOrder = _settingsSectionSortMode == "custom"
+			? _storedCustomSettingsSectionOrder()
+			: zagDefaultSettingsSectionOrder
 	}
 	@ViewBuilder
 	private func _feedback() -> some View {
