@@ -20,6 +20,12 @@ bool zag_gate2_probe(
     ZagRPPairingCallback callback
 );
 
+bool zag_installed_apps(
+    const char *device_ip,
+    const char *pairing_path,
+    ZagRPPairingCallback callback
+);
+
 bool zag_gate4_install(
     const char *device_ip,
     const char *pairing_path,
