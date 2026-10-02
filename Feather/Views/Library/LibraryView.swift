@@ -52,6 +52,7 @@ import AltSourceKit
 
 
 struct LibraryView: View {
+	private static var didPerformInitialDeviceInventory = false
 
 	@Environment(\.scenePhase) private var scenePhase
 
@@ -823,6 +824,8 @@ struct LibraryView: View {
 				_refreshInstalledAppsFromDevice()
 			}
 			.onAppear {
+				guard !Self.didPerformInitialDeviceInventory else { return }
+				Self.didPerformInitialDeviceInventory = true
 				_refreshInstalledAppsFromDevice()
 			}
 
