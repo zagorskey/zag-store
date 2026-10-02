@@ -299,10 +299,7 @@ struct DownloadButtonView: View {
 				}
 
 				installedBundleID = signed.identifier
-				if let bundleID = signed.identifier {
-					try? pairingCore.refreshInstalledApps()
-					_ = bundleID
-				}
+				try? pairingCore.refreshInstalledApps()
 				zagPhase = .idle
 			} catch {
 				_failTransaction(error.localizedDescription)
