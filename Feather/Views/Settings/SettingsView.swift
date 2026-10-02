@@ -43,11 +43,11 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.display,
 	.certificates,
 	.features,
+	.misc,
 	.refreshingApps,
 	.health,
 	.diagnostics,
 	.aboutUs,
-	.misc,
 	.reset
 ]
 
