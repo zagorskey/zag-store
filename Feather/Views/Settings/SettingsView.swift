@@ -47,8 +47,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.refreshingApps,
 	.health,
 	.diagnostics,
-	.aboutUs,
-	.reset
+	.aboutUs
 ]
 
 // MARK: - View
@@ -108,6 +107,7 @@ struct SettingsView: View {
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
+					_settingsSection(.reset)
 					if _advancedSettingsUnlocked {
 						_advancedSettingsSections
 					}
@@ -396,6 +396,7 @@ extension SettingsView {
 		let stored = _storedSettingsSectionOrder
 			.split(separator: ",")
 			.compactMap { ZagSettingsSection(rawValue: String($0)) }
+			.filter { $0 != .reset }
 		let unique = stored.reduce(into: [ZagSettingsSection]()) { result, section in
 			if !result.contains(section) { result.append(section) }
 		}
