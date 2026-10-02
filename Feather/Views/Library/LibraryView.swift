@@ -731,7 +731,6 @@ struct LibraryView: View {
 					} label: {
 						Image(systemName: _editMode.isEditing ? "checkmark" : "square.and.pencil")
 							.font(.system(size: 20, weight: .semibold))
-							.contentTransition(.symbolEffect(.replace))
 					}
 					.accessibilityLabel(
 						_editMode.isEditing
