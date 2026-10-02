@@ -2017,7 +2017,7 @@ private struct ZagUpdateRow: View {
 		.frame(width: 62, height: 62)
 		.clipShape(
 			RoundedRectangle(
-				cornerRadius: 13,
+				cornerRadius: 62 * 0.2677,
 				style: .continuous
 			)
 		)
@@ -2057,7 +2057,7 @@ private struct ZagUpdatesPopup: View {
 				ScrollView {
 					LazyVStack(alignment: .leading, spacing: 18) {
 						updateAllCard
-							.padding(.top, 6)
+							.padding(.top, 22)
 
 						Text(.localized("Available Updates"))
 							.font(.headline)
@@ -2074,6 +2074,7 @@ private struct ZagUpdatesPopup: View {
 									onPreparedForInstall: onPreparedForInstall
 								)
 								.padding(.horizontal, 16)
+								.padding(.top, index == 0 ? 8 : 0)
 
 								if index < updates.count - 1 {
 									Rectangle()
