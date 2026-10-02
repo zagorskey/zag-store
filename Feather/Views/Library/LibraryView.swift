@@ -1956,7 +1956,8 @@ private struct ZagUpdateRow: View {
 
 		ZagActionPill(
 			title: stage?.title ?? .localized("Update"),
-			showsProgress: isBusy
+			showsProgress: isBusy,
+			backgroundColor: zagUpdatePillBackground
 		) {
 			transactionManager.prepare(update) { result in
 				switch result {
@@ -2031,6 +2032,11 @@ private struct ZagUpdatesPopup: View {
 
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.colorScheme) private var colorScheme
+	@FetchRequest(
+		entity: Source.entity(),
+		sortDescriptors: []
+	) private var sources: FetchedResults<Source>
+	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 
 	private var popupBackground: Color {
 		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
@@ -2079,7 +2085,7 @@ private struct ZagUpdatesPopup: View {
 								if index < updates.count - 1 {
 									Rectangle()
 										.fill(separatorColor)
-										.frame(height: 1.0 / UIScreen.main.scale)
+										.frame(height: 3.0 / UIScreen.main.scale)
 										.padding(.horizontal, 16)
 								}
 							}
@@ -2093,9 +2099,16 @@ private struct ZagUpdatesPopup: View {
 					.padding(.top, 18)
 					.padding(.bottom, 30)
 				}
+				.refreshable {
+					await sourcesViewModel.fetchSources(
+						sources,
+						refresh: true
+					)
+				}
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
+			.interactiveDismissDisabled()
 			.toolbar {
 				ToolbarItem(placement: .topBarTrailing) {
 					Button {
