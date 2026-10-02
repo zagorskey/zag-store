@@ -72,6 +72,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	@Published private(set) var installedBundleIDs: Set<String> = []
 	@Published private(set) var installedApps: [String: InstalledAppInfo] = [:]
+	@Published private(set) var installedAppsDebugKeys: String?
 	@Published private(set) var installedAppsState: InstalledAppsState = .idle
 	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
@@ -293,6 +294,8 @@ final class ZagRPPairingCore: ObservableObject {
 				build: fields.indices.contains(2) ? fields[2] : ""
 			)
 			pendingInstalledApps[bundleID] = info
+		case 404:
+			installedAppsDebugKeys = message
 		case 403:
 			installedApps = pendingInstalledApps
 			installedBundleIDs = Set(installedApps.keys)
