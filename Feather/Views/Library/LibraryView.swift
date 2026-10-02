@@ -2054,17 +2054,19 @@ private struct ZagUpdatesPopup: View {
 				.ignoresSafeArea()
 
 			ScrollView {
+				Color.clear.frame(height: 1)
 				LazyVStack(alignment: .leading, spacing: 18) {
 				header
 
 				updateAllCard
 
-				Section {
-					EmptyView()
-				} header: {
-					Text(.localized("Available Updates"))
-				}
-				.textCase(nil)
+				Text(.localized("Available Updates"))
+					.font(.headline)
+					.foregroundStyle(.secondary)
+					.textCase(nil)
+					.padding(.leading, 16)
+					.padding(.top, 6)
+					.padding(.bottom, -8)
 
 				VStack(spacing: 0) {
 					ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
@@ -2095,42 +2097,27 @@ private struct ZagUpdatesPopup: View {
 	}
 
 	private var header: some View {
-		ZStack {
-			Text(.localized("App Updates"))
-				.font(.system(size: 17, weight: .semibold))
+		HStack {
+			Spacer()
 
-			HStack {
-				Spacer()
-
-				if #available(iOS 26.0, *) {
-					Button {
-						dismiss()
-					} label: {
-						Image(systemName: "xmark")
-							.frame(width: 44, height: 44)
-					}
-					.buttonStyle(.glass)
-					.buttonBorderShape(.circle)
-				} else {
-					Button {
-						dismiss()
-					} label: {
-						Image(systemName: "xmark")
-							.font(.system(size: 17, weight: .medium))
-							.frame(width: 44, height: 44)
-					}
-					.buttonStyle(.bordered)
-					.clipShape(Circle())
-				}
+			Button {
+				dismiss()
+			} label: {
+				Image(systemName: "xmark")
+					.font(.system(size: 22, weight: .semibold))
+					.foregroundStyle(Color.white)
+					.frame(width: 50, height: 50)
+					.zagSearchGlass()
 			}
+			.buttonStyle(.plain)
+			.accessibilityLabel("Close")
 		}
-		.foregroundStyle(.primary)
 	}
 
 	private var updateAllCard: some View {
 		HStack {
 			Text(.localized("Update All"))
-				.font(.system(size: 17, weight: .regular))
+				.font(.system(size: 18, weight: .regular))
 				.foregroundStyle(updatesBlue)
 
 			Spacer()
@@ -2149,6 +2136,8 @@ private struct ZagUpdatesPopup: View {
 			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
 		.accessibilityElement(children: .combine)
+		.navigationTitle(.localized("App Updates"))
+		.navigationBarTitleDisplayMode(.inline)
 	}
 }
 
