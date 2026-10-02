@@ -23,10 +23,10 @@ struct ZagSourcesAtomIcon: View {
 
 	var body: some View {
 		ZStack {
-			RoundedRectangle(cornerRadius: 11, style: .continuous)
+			RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
 				.fill(Color(hex: themeColorHex))
 				.overlay {
-					RoundedRectangle(cornerRadius: 11, style: .continuous)
+					RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
 						.stroke(Color.primary.opacity(0.16), lineWidth: 1)
 				}
 
@@ -907,13 +907,12 @@ struct SourcesView: View {
 		if _sources.isEmpty {
 			if #available(iOS 17, *) {
 				ContentUnavailableView {
-					Label(
-						.localized(
-							"No Repositories"
-						),
-						systemImage:
-							"globe.desk.fill"
-					)
+					VStack(spacing: 8) {
+						Image(systemName: "atom")
+							.font(.system(size: 40, weight: .regular))
+						Text(.localized("No Repositories"))
+							.font(.title3.weight(.semibold))
+					}
 				} description: {
 					Text(
 						.localized(
