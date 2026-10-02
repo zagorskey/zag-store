@@ -213,8 +213,7 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewCell.self, forCellReuseIdentifier: "AppCell")
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		tableView.separatorInset = UIEdgeInsets(top: 0, left: 88, bottom: 0, right: 16)
-		tableView.separatorStyle = .singleLine
-		// UIKit renders the standard single-line separator at one physical pixel.
+		tableView.separatorStyle = .none
 		tableView.separatorColor = UIColor { traits in
 			traits.userInterfaceStyle == .dark
 				? UIColor(red: 42.0 / 255.0, green: 42.0 / 255.0, blue: 44.0 / 255.0, alpha: 1)
@@ -425,7 +424,15 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 
 		cell.backgroundColor = .clear
 		cell.contentConfiguration = UIHostingConfiguration {
-			SourceAppsCellView(source: entry.source, app: entry.app)
+			VStack(spacing: 0) {
+				SourceAppsCellView(source: entry.source, app: entry.app)
+					.frame(minHeight: 86)
+
+				Rectangle()
+					.fill(Color(uiColor: .separator))
+					.frame(height: 1.0 / UIScreen.main.scale)
+					.padding(.leading, 72)
+			}
 		}
 		.background(.clear)
 		return cell
