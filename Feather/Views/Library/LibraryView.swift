@@ -1888,6 +1888,26 @@ private struct ZagUpdateRow: View {
 		}
 	}
 
+	private var releaseMetadataText: String? {
+		var parts: [String] = []
+
+		if let version = update.app.currentVersion {
+			var versionText = String(format: .localized("Version %@"), version)
+			if let build = update.app.currentAppVersion?.build,
+			   !build.isEmpty,
+			   build != version {
+				versionText += " (\(build))"
+			}
+			parts.append(versionText)
+		}
+
+		if let size = update.app.size {
+			parts.append(size.formattedByteCount)
+		}
+
+		return parts.isEmpty ? nil : parts.joined(separator: " • ")
+	}
+
 	private var releaseNotes: String? {
 		let notes =
 			update.app.currentAppVersion?.localizedDescription ??
@@ -1905,7 +1925,7 @@ private struct ZagUpdateRow: View {
 	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 8) {
+		VStack(alignment: .leading, spacing: 6) {
 			HStack(alignment: .center, spacing: 12) {
 				appIcon
 
@@ -1928,26 +1948,34 @@ private struct ZagUpdateRow: View {
 			}
 
 			if let releaseNotes {
-				ZStack(alignment: .bottomTrailing) {
-					Text(releaseNotes)
-						.font(.system(size: 17, weight: .regular))
-						.foregroundStyle(.primary)
-						.lineLimit(showsFullReleaseNotes ? nil : 2)
-						.frame(maxWidth: .infinity, alignment: .leading)
-						.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
+				VStack(alignment: .leading, spacing: showsFullReleaseNotes ? 8 : 0) {
+					ZStack(alignment: .bottomTrailing) {
+						Text(releaseNotes)
+							.font(.system(size: 17, weight: .regular))
+							.foregroundStyle(.primary)
+							.lineLimit(showsFullReleaseNotes ? nil : 2)
+							.frame(maxWidth: .infinity, alignment: .leading)
+							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
 
-					Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
-						withAnimation(.easeInOut(duration: 0.2)) {
-							showsFullReleaseNotes.toggle()
+						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
+							withAnimation(.easeInOut(duration: 0.2)) {
+								showsFullReleaseNotes.toggle()
+							}
 						}
+						.font(.system(size: 17, weight: .regular))
+						.foregroundStyle(zagUpdatesBlue)
 					}
-					.font(.system(size: 17, weight: .regular))
-					.foregroundStyle(zagUpdatesBlue)
+
+					if showsFullReleaseNotes, let releaseMetadataText {
+						Text(releaseMetadataText)
+							.font(.system(size: 16, weight: .regular))
+							.foregroundStyle(.secondary)
+					}
 				}
 			}
 		}
 		.padding(.top, 14)
-		.padding(.bottom, releaseNotes == nil ? 14 : 10)
+		.padding(.bottom, releaseNotes == nil ? 14 : 8)
 		.contentShape(Rectangle())
 		.onTapGesture {
 			onSelect()
