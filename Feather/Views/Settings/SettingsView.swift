@@ -123,8 +123,15 @@ struct SettingsView: View {
 			) { result in
 				_importSettingsBackup(result)
 			}
-			.sheet(item: $_settingsBackupURL) { url in
-				ActivityView(activityItems: [url])
+			.sheet(
+				isPresented: Binding(
+					get: { _settingsBackupURL != nil },
+					set: { if !$0 { _settingsBackupURL = nil } }
+				)
+			) {
+				if let url = _settingsBackupURL {
+					ZagSettingsShareSheet(items: [url])
+				}
 			}
 			.alert(
 				"Settings Backup",
@@ -587,4 +594,15 @@ extension SettingsView {
 			.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 		return "\(url)/issues/new?template=bug.yml&title=\(encodedTitle)&text=\(encodedBody)"
 	}
+}
+
+
+private struct ZagSettingsShareSheet: UIViewControllerRepresentable {
+	let items: [Any]
+
+	func makeUIViewController(context: Context) -> UIActivityViewController {
+		UIActivityViewController(activityItems: items, applicationActivities: nil)
+	}
+
+	func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
