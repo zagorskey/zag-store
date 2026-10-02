@@ -1816,9 +1816,31 @@ private struct ZagFlashingUpdateDot: View {
 }
 
 
+private struct ZagUpdateIconAppearanceModifier: ViewModifier {
+	let shouldTint: Bool
+	let tintHex: String
+
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if shouldTint {
+			content
+				.saturation(0)
+				.contrast(1.25)
+				.overlay(
+					Color(hex: tintHex)
+						.opacity(0.82)
+						.blendMode(.color)
+				)
+		} else {
+			content
+		}
+	}
+}
+
 private struct ZagUpdateRow: View {
 	let update: UpdateManager.AvailableUpdate
 	@Environment(\.colorScheme) private var colorScheme
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 
 	@AppStorage("Feather.userTintColor")
 	private var selectedColorHex: String = "#4395F8"
@@ -2017,39 +2039,44 @@ private struct ZagUpdateRow: View {
 	@ViewBuilder
 	private var appIcon: some View {
 		ZStack(alignment: .bottomLeading) {
-			LazyImage(url: update.app.iconURL) { state in
-				if let image = state.image {
-					if shouldTintIcons {
-						image
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-							.saturation(0)
-							.contrast(1.25)
-							.overlay(
-								Color(hex: selectedColorHex)
-									.opacity(0.82)
-									.blendMode(.color)
-							)
-					} else if useDarkIconAppearance {
-						image
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-							.brightness(-0.18)
-							.contrast(1.08)
-					} else {
-						image
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-					}
-				} else {
-					Image(systemName: "app.fill")
+			Group {
+				if
+					let bundleID = update.app.id,
+					let deviceIconURL = pairingCore.installedAppIconURLs[bundleID],
+					let deviceImage = UIImage(contentsOfFile: deviceIconURL.path)
+				{
+					Image(uiImage: deviceImage)
 						.resizable()
-						.scaledToFit()
-						.padding(10)
-						.foregroundStyle(.secondary)
-						.background(
-							Color(uiColor: .secondarySystemBackground)
+						.aspectRatio(contentMode: .fill)
+						.modifier(
+							ZagUpdateIconAppearanceModifier(
+								shouldTint: shouldTintIcons,
+								tintHex: selectedColorHex
+							)
 						)
+				} else {
+					LazyImage(url: update.app.iconURL) { state in
+						if let image = state.image {
+							image
+								.resizable()
+								.aspectRatio(contentMode: .fill)
+								.modifier(
+									ZagUpdateIconAppearanceModifier(
+										shouldTint: shouldTintIcons,
+										tintHex: selectedColorHex
+									)
+								)
+						} else {
+							Image(systemName: "app.fill")
+								.resizable()
+								.scaledToFit()
+								.padding(10)
+								.foregroundStyle(.secondary)
+								.background(
+									Color(uiColor: .secondarySystemBackground)
+								)
+						}
+					}
 				}
 			}
 			.frame(width: 62, height: 62)
@@ -2096,6 +2123,7 @@ private struct ZagUpdatesPopup: View {
 		]
 	) private var sources: FetchedResults<AltSource>
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 
 	private var popupBackground: Color {
@@ -2168,6 +2196,10 @@ private struct ZagUpdatesPopup: View {
 						refresh: true
 					)
 				}
+			}
+			.task {
+				let bundleIDs = updates.compactMap { $0.app.id }
+				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
