@@ -543,8 +543,17 @@ async fn run_installed_apps(
                 .await
                 .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
             let count = apps.len();
+            let mut emitted_debug_keys = false;
             for (bundle_id, metadata) in &apps {
                 let dictionary = metadata.as_dictionary();
+
+                if !emitted_debug_keys {
+                    let keys = dictionary
+                        .map(|values| values.keys().cloned().collect::<Vec<_>>().join(", "))
+                        .unwrap_or_else(|| "<not a dictionary>".to_string());
+                    emit(callback, 404, format!("{bundle_id}: {keys}"));
+                    emitted_debug_keys = true;
+                }
                 let version = dictionary
                     .and_then(|values| values.get("CFBundleShortVersionString"))
                     .and_then(|value| value.as_string())
