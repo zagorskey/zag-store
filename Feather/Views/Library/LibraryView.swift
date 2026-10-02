@@ -1975,11 +1975,11 @@ private struct ZagUpdateRow: View {
 				}
 
 				Text(stage?.title ?? .localized("Update"))
-					.font(.system(size: 14, weight: .bold))
+					.font(.system(size: 15, weight: .bold))
 			}
 			.foregroundStyle(zagUpdatesBlue)
 			.padding(.horizontal, 16)
-			.frame(minWidth: 82, minHeight: 32)
+			.frame(minWidth: 82, minHeight: 34)
 			.background(zagUpdatePillBackground, in: Capsule())
 		}
 		.buttonStyle(.plain)
@@ -2093,13 +2093,26 @@ private struct ZagUpdatesPopup: View {
 			HStack {
 				Spacer()
 
-				Button {
-					dismiss()
-				} label: {
-					Image(systemName: "xmark")
-						.font(.system(size: 17, weight: .regular))
-						.frame(width: 44, height: 44)
-						.background(.regularMaterial, in: Circle())
+				if #available(iOS 26.0, *) {
+					Button {
+						dismiss()
+					} label: {
+						Image(systemName: "xmark")
+							.font(.system(size: 17, weight: .medium))
+							.frame(width: 44, height: 44)
+					}
+					.buttonStyle(.glass)
+					.buttonBorderShape(.circle)
+				} else {
+					Button {
+						dismiss()
+					} label: {
+						Image(systemName: "xmark")
+							.font(.system(size: 17, weight: .medium))
+							.frame(width: 44, height: 44)
+					}
+					.buttonStyle(.bordered)
+					.buttonBorderShape(.circle)
 				}
 			}
 		}
