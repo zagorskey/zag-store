@@ -64,9 +64,16 @@ final class ZagRPPairingCore: ObservableObject {
 		case failed(String)
 	}
 
+	struct InstalledAppInfo: Equatable {
+		let bundleID: String
+		let version: String
+		let build: String
+	}
+
 	@Published private(set) var installedBundleIDs: Set<String> = []
+	@Published private(set) var installedApps: [String: InstalledAppInfo] = [:]
 	@Published private(set) var installedAppsState: InstalledAppsState = .idle
-	private var pendingInstalledBundleIDs: Set<String> = []
+	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
 
 	enum Gate2State: Equatable {
@@ -257,7 +264,7 @@ final class ZagRPPairingCore: ObservableObject {
 		guard installedAppsState != .refreshing else { throw InstalledAppsError.alreadyRunning }
 		guard pairingFileExists else { throw InstalledAppsError.notPaired }
 
-		pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+		pendingInstalledApps.removeAll(keepingCapacity: true)
 		installedAppsCompletion = completion
 		installedAppsState = .refreshing
 		let started = deviceIP.withCString { ip in
@@ -275,18 +282,26 @@ final class ZagRPPairingCore: ObservableObject {
 	fileprivate func receiveInstalledApps(code: Int32, message: String) {
 		switch code {
 		case 401:
-			pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+			pendingInstalledApps.removeAll(keepingCapacity: true)
 			installedAppsState = .refreshing
 		case 402:
-			if !message.isEmpty { pendingInstalledBundleIDs.insert(message) }
+			let fields = message.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+			guard let bundleID = fields.first, !bundleID.isEmpty else { break }
+			let info = InstalledAppInfo(
+				bundleID: bundleID,
+				version: fields.indices.contains(1) ? fields[1] : "",
+				build: fields.indices.contains(2) ? fields[2] : ""
+			)
+			pendingInstalledApps[bundleID] = info
 		case 403:
-			installedBundleIDs = pendingInstalledBundleIDs
+			installedApps = pendingInstalledApps
+			installedBundleIDs = Set(installedApps.keys)
 			installedAppsState = .loaded(Int(message) ?? installedBundleIDs.count)
 			let completion = installedAppsCompletion
 			installedAppsCompletion = nil
 			completion?(.success(installedBundleIDs))
 		case -6:
-			pendingInstalledBundleIDs.removeAll(keepingCapacity: true)
+			pendingInstalledApps.removeAll(keepingCapacity: true)
 			installedAppsState = .failed(message)
 			let completion = installedAppsCompletion
 			installedAppsCompletion = nil
@@ -298,6 +313,10 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func isInstalled(bundleID: String) -> Bool {
 		installedBundleIDs.contains(bundleID)
+	}
+
+	func installedAppInfo(bundleID: String) -> InstalledAppInfo? {
+		installedApps[bundleID]
 	}
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
