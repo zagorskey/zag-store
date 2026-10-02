@@ -390,18 +390,60 @@ final class UpdateManager: ObservableObject {
 	) {
 		var localApps: [LocalApp] = []
 
-		for app in signedApps {
-			_addLocalApp(
-				name: app.name,
-				identifier: app.identifier,
-				version: app.version,
-				build: _buildVersion(for: app),
-				to: &localApps
+		let pairingCore = ZagRPPairingCore.shared
+		let deviceInventory = pairingCore.installedApps
+
+		if case .loaded = pairingCore.installedAppsState {
+			// Device inventory is authoritative for both installed state and
+			// the version/build actually present on the iPhone. A Signed record
+			// may represent a different IPA version and must not override it.
+			for installed in deviceInventory.values {
+				guard !installed.version.isEmpty else { continue }
+
+				let signedName = signedApps.first {
+					$0.identifier == installed.bundleID
+				}?.name
+
+				let repositoryName = repositories
+					.lazy
+					.flatMap { $0.apps }
+					.first { $0.id == installed.bundleID }?
+					.currentName
+
+				_addLocalApp(
+					name: signedName ?? repositoryName ?? installed.bundleID,
+					identifier: installed.bundleID,
+					version: installed.version,
+					build: installed.build.isEmpty ? nil : installed.build,
+					to: &localApps
+				)
+			}
+
+			print(
+				"[Zag Store Updates] Using authoritative device inventory: " +
+					"\(localApps.count) versioned app(s)"
+			)
+		} else {
+			// Preserve the previous behavior until the first successful device
+			// inventory is available. This keeps background/source refreshes
+			// functional when RPPairing has not established a snapshot yet.
+			for app in signedApps {
+				_addLocalApp(
+					name: app.name,
+					identifier: app.identifier,
+					version: app.version,
+					build: _buildVersion(for: app),
+					to: &localApps
+				)
+			}
+
+			print(
+				"[Zag Store Updates] Device inventory unavailable; " +
+					"using Signed fallback: \(localApps.count) app(s)"
 			)
 		}
 
-		// Zag Store: Imported packages are not installed-state evidence.
-		// Signed records are authoritative for update detection.
+		// Imported packages are never installed-state evidence.
 
 		print(
 			"[Zag Store Updates] Local identities: \(localApps.count)"
