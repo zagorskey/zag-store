@@ -117,6 +117,7 @@ struct LibraryCellView: View {
 				}
 			}
 		}
+		.frame(minHeight: isRegular ? nil : 76)
 		.padding(isRegular ? 12 : 0)
 		.zagAppStoreRowSeparator()
 		.background(
@@ -329,24 +330,24 @@ extension LibraryCellView {
 					Text(.localized("Revoked"))
 						.font(
 							.system(
-								size: 11,
-								weight: .medium
+								size: 10,
+								weight: .regular
 							)
 						)
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
-						.padding(.top, 4)
+						.padding(.top, 1)
 				} else if let certInfo {
 					Text(certInfo.formatted)
 						.font(
 							.system(
-								size: 11,
-								weight: .medium
+								size: 10,
+								weight: .regular
 							)
 						)
 						.foregroundStyle(certInfo.color)
 						.lineLimit(1)
-						.padding(.top, 4)
+						.padding(.top, 1)
 				}
 			}
 		} else {
