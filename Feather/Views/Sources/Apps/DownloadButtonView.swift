@@ -60,6 +60,12 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if let bundleID = app.id,
+						  pairingCore.isInstalled(bundleID: bundleID),
+						  UpdateManager.shared.hasUpdate(for: bundleID) {
+					ZagActionPill(title: .localized("Update")) {
+						_startGetAndInstall()
+					}
+				} else if let bundleID = app.id,
 						  pairingCore.isInstalled(bundleID: bundleID) {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: bundleID)
