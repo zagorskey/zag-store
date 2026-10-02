@@ -475,42 +475,42 @@ struct SourcesView: View {
 			Menu {
 				Button { _selectSort(.defaultOrder) } label: {
 					Label {
-						Text("Default").fontWeight(_sortMode == .defaultOrder ? .bold : .regular)
+						Text("Default")
 					} icon: {
 						Image(systemName: _sortMode == .defaultOrder ? "checkmark" : "ellipsis")
 					}
 				}
 				Button { _selectSort(.nameAscending) } label: {
 					Label {
-						Text("Name (A–Z)").fontWeight(_sortMode == .nameAscending ? .bold : .regular)
+						Text("Name (A–Z)")
 					} icon: {
 						Image(systemName: _sortMode == .nameAscending ? "checkmark" : "chevron.down")
 					}
 				}
 				Button { _selectSort(.nameDescending) } label: {
 					Label {
-						Text("Name (Z–A)").fontWeight(_sortMode == .nameDescending ? .bold : .regular)
+						Text("Name (Z–A)")
 					} icon: {
 						Image(systemName: _sortMode == .nameDescending ? "checkmark" : "chevron.up")
 					}
 				}
 				Button { _selectSort(.lastUpdated) } label: {
 					Label {
-						Text("Last Updated").fontWeight(_sortMode == .lastUpdated ? .bold : .regular)
+						Text("Last Updated")
 					} icon: {
 						Image(systemName: _sortMode == .lastUpdated ? "checkmark" : "clock")
 					}
 				}
 				Button { _selectSort(.dateAdded) } label: {
 					Label {
-						Text("Date Added").fontWeight(_sortMode == .dateAdded ? .bold : .regular)
+						Text("Date Added")
 					} icon: {
 						Image(systemName: _sortMode == .dateAdded ? "checkmark" : "calendar.badge.plus")
 					}
 				}
 				Button { _selectSort(.custom) } label: {
 					Label {
-						Text("Custom").fontWeight(_sortMode == .custom ? .bold : .regular)
+						Text("Custom")
 					} icon: {
 						Image(systemName: _sortMode == .custom ? "checkmark" : "list.bullet")
 					}
