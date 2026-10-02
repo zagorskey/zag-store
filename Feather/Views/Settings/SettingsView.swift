@@ -21,6 +21,18 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case reset
 
 	var id: String { rawValue }
+
+	var title: String {
+		switch self {
+		case .display: return "Display"
+		case .certificates: return "Certificates"
+		case .features: return "Features"
+		case .refreshingApps: return "Refreshing Apps"
+		case .aboutUs: return "About Us"
+		case .misc: return "Misc"
+		case .reset: return "Reset"
+		}
+	}
 }
 
 private let zagDefaultSettingsSectionOrder = ZagSettingsSection.allCases
@@ -66,17 +78,22 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				ForEach(_settingsSectionOrder) { section in
-					_settingsSection(section)
+				if _isReorderingSettings {
+					Section {
+						ForEach(_settingsSectionOrder) { section in
+							Text(section.title)
+						}
+						.onMove(perform: _moveSettingsSections)
+					} header: {
+						Text("Reorder Sections")
+					}
+				} else {
+					ForEach(_settingsSectionOrder) { section in
+						_settingsSection(section)
+					}
 				}
-				.onMove(perform: _moveSettingsSections)
 			}
-			.environment(\.editMode, Binding(
-				get: { _isReorderingSettings ? .active : .inactive },
-				set: { mode in
-					_isReorderingSettings = mode.isEditing
-				}
-			))
+			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.onAppear {
 				_loadSettingsSectionOrder()
 			}
