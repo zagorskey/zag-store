@@ -15,6 +15,8 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
 	case certificates
 	case features
+	case diagnostics
+	case health
 	case refreshingApps
 	case aboutUs
 	case misc
@@ -27,6 +29,8 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 		case .display: return "Display"
 		case .certificates: return "Certificates"
 		case .features: return "Features"
+		case .diagnostics: return "Diagnostics"
+		case .health: return "Health"
 		case .refreshingApps: return "Refreshing Apps"
 		case .aboutUs: return "About Us"
 		case .misc: return "Misc"
@@ -278,13 +282,26 @@ extension SettingsView {
 				NavigationLink(destination: ArchiveView()) {
 					Label(.localized("Archive & Compression"), systemImage: "archivebox")
 				}
-				NavigationLink(destination: RPPairingDiagnosticsView()) {
-					Label("Diagnostics & Health Checks", systemImage: "stethoscope")
-				}
 			} header: {
 				Text(.localized("Features"))
 			} footer: {
 				Text(.localized("Configure the apps way of installing, its zip compression levels, and custom modifications to apps."))
+			}
+
+		case .diagnostics:
+			Section {
+				EmptyView()
+			} header: {
+				Text("Diagnostics")
+			}
+
+		case .health:
+			Section {
+				NavigationLink(destination: RPPairingDiagnosticsView()) {
+					Label("Health Checks", systemImage: "stethoscope")
+				}
+			} header: {
+				Text("Health")
 			}
 
 		case .refreshingApps:
