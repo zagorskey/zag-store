@@ -2033,9 +2033,14 @@ private struct ZagUpdatesPopup: View {
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.colorScheme) private var colorScheme
 	@FetchRequest(
-		entity: Source.entity(),
-		sortDescriptors: []
-	) private var sources: FetchedResults<Source>
+		entity: AltSource.entity(),
+		sortDescriptors: [
+			NSSortDescriptor(
+				keyPath: \AltSource.name,
+				ascending: true
+			)
+		]
+	) private var sources: FetchedResults<AltSource>
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 
 	private var popupBackground: Color {
