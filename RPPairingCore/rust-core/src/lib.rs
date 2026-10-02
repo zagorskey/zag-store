@@ -559,111 +559,55 @@ async fn run_gate4_install(
     ipa_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
-    let ip: IpAddr = device_ip
-        .parse()
-        .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
-
     let metadata = std::fs::metadata(&ipa_path)
         .map_err(|error| format!("Unable to access selected IPA: {error}"))?;
     if !metadata.is_file() || metadata.len() == 0 {
         return Err("Selected IPA is missing or empty".to_string());
     }
 
-    let mut pairing_file = RpPairingFile::read_from_file(&pairing_path)
-        .await
-        .map_err(|error| format!("Unable to read saved RPPairing credentials: {error}"))?;
-
-    let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 49152)))
-        .await
-        .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
-        .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
-
-    let conn = RpPairingSocket::new(stream);
-    let mut rpc = RemotePairingClient::new(conn, "Zag Store");
-    rpc.connect(&mut pairing_file, || async { "000000".to_string() })
-        .await
-        .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
-    emit(callback, 202, "Saved RPPairing credentials verified");
-
-    let tunnel_port = rpc
-        .create_tcp_listener()
-        .await
-        .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
-    let tunnel_stream = timeout(
-        Duration::from_secs(8),
-        TcpStream::connect((ip, tunnel_port)),
-    )
-    .await
-    .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
-    .map_err(|error| {
-        format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}")
-    })?;
-
-    let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
-        .await
-        .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
-    let client_ip: IpAddr = tunnel
-        .info
-        .client_address
-        .parse()
-        .map_err(|error| format!("Invalid tunnel client address: {error}"))?;
-    let server_ip: IpAddr = tunnel
-        .info
-        .server_address
-        .parse()
-        .map_err(|error| format!("Invalid tunnel server address: {error}"))?;
-    let mtu = tunnel.info.mtu as usize;
-    let rsd_port = tunnel.info.server_rsd_port;
-    emit(
-        callback,
-        203,
-        format!("CDTunnel established; RSD port {rsd_port}"),
-    );
-
-    let raw = tunnel.into_inner();
-    let mut adapter = idevice::tcp::adapter::Adapter::new(Box::new(raw), client_ip, server_ip);
-    adapter.set_mss(mtu.saturating_sub(60));
-    let mut adapter = adapter.to_async_handle();
-
-    let rsd_stream = adapter
-        .connect(rsd_port)
-        .await
-        .map_err(|error| format!("Unable to reach RSD through tunnel: {error}"))?;
-    let mut handshake = RsdHandshake::new(rsd_stream)
-        .await
-        .map_err(|error| format!("RSD handshake failed: {error}"))?;
-    emit(
-        callback,
-        204,
-        format!("RSD established; {} services", handshake.services.len()),
-    );
-
-    emit(
-        callback,
-        205,
-        format!(
-            "Installing {}",
-            ipa_path
-                .file_name()
-                .and_then(|x| x.to_str())
-                .unwrap_or("selected IPA")
-        ),
-    );
-    install_package_with_callback_rsd(
-        &mut adapter,
-        &mut handshake,
-        &ipa_path,
-        None,
-        |(percent, callback)| async move {
-            emit(callback, 206, percent.to_string());
+    with_zag_device_session(
+        &device_ip,
+        &pairing_path,
+        |stage, message| {
+            let code = match stage {
+                3 => 202,
+                4 => 203,
+                5 => 204,
+                _ => return,
+            };
+            emit(callback, code, message);
         },
-        callback,
+        |mut adapter, mut handshake| async move {
+            emit(
+                callback,
+                205,
+                format!(
+                    "Installing {}",
+                    ipa_path
+                        .file_name()
+                        .and_then(|x| x.to_str())
+                        .unwrap_or("selected IPA")
+                ),
+            );
+
+            install_package_with_callback_rsd(
+                &mut adapter,
+                &mut handshake,
+                &ipa_path,
+                None,
+                |(percent, callback)| async move {
+                    emit(callback, 206, percent.to_string());
+                },
+                callback,
+            )
+            .await
+            .map_err(|error| format!("Direct installation failed: {error}"))?;
+
+            emit(callback, 207, "Installation complete");
+            Ok(())
+        },
     )
     .await
-    .map_err(|error| format!("Direct installation failed: {error}"))?;
-
-    emit(callback, 207, "Installation complete");
-    Ok(())
 }
 
 /// Gate 4 uninstall: removes one installed app through the proven
