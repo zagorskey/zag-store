@@ -14,6 +14,7 @@ import IDeviceSwift
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
+	var source: ASRepository? = nil
 	var title: String = .localized("Get")
 
 	@ObservedObject private var downloadManager = DownloadManager.shared
@@ -256,9 +257,21 @@ struct DownloadButtonView: View {
 	private func _rememberRepositoryOrigin() {
 		guard let bundleID = app.id, !bundleID.isEmpty else { return }
 		var origins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
-		if let sourceURL = app.sourceURL?.absoluteString {
-			origins[bundleID] = sourceURL
+		var originIcons = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOriginIcons") as? [String: String] ?? [:]
+
+		let repositoryKey =
+			source?.id ??
+			source?.website?.absoluteString ??
+			source?.name
+
+		if let repositoryKey, !repositoryKey.isEmpty {
+			origins[bundleID] = repositoryKey
 			UserDefaults.standard.set(origins, forKey: "zagStore.repositoryOrigins")
+		}
+
+		if let iconURL = source?.currentIconURL?.absoluteString {
+			originIcons[bundleID] = iconURL
+			UserDefaults.standard.set(originIcons, forKey: "zagStore.repositoryOriginIcons")
 		}
 	}
 
