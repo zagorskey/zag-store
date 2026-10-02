@@ -63,8 +63,6 @@ struct LibraryView: View {
 
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
-	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
-	@State private var completedUpdateIDs: Set<String> = []
 	@State private var _selectedRepositorySource: AltSource?
 
 
@@ -2216,6 +2214,9 @@ private struct ZagUpdateRow: View {
 
 private struct ZagUpdatesPopup: View {
 	let updates: [UpdateManager.AvailableUpdate]
+
+	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
+	@State private var completedUpdateIDs: Set<String> = []
 
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.colorScheme) private var colorScheme
