@@ -561,6 +561,11 @@ extension LibraryCellView {
 						message: error.localizedDescription,
 						isCancel: true
 					)
+				} else if !app.isSigned {
+					// Seamless Sign is a move from Imported -> Signed.
+					// FR has already persisted the Signed record at this point;
+					// only now is it safe to remove the original Imported copy.
+					Storage.shared.deleteApp(for: app)
 				}
 			}
 		}
