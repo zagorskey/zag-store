@@ -868,7 +868,7 @@ struct LibraryView: View {
 						.fixedSize(horizontal: false, vertical: true)
 
 					Spacer()
-						.frame(height: 16)
+						.frame(height: 10)
 
 					Button {
 						let target = app.base
@@ -906,8 +906,8 @@ struct LibraryView: View {
 				}
 				.padding(.horizontal, 20)
 				.padding(.top, 24)
-				.padding(.bottom, 14)
-				.presentationDetents([.height(330)])
+				.padding(.bottom, 8)
+				.presentationDetents([.height(302)])
 				.presentationDragIndicator(.visible)
 			}
 
