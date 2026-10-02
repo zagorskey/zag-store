@@ -40,6 +40,8 @@ struct LibraryCellView: View {
 
 	@State private var isDeleteConfirmationPresented = false
 	@State private var isRemoveConfirmationPresented = false
+	@AppStorage(ZagCertificateSelection.allowCustomisationKey)
+	private var allowSigningCustomisation = false
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -447,9 +449,67 @@ extension LibraryCellView {
 			}
 		} else {
 			ZagActionPill(title: .localized("Sign")) {
-				selectedSigningAppPresenting = AnyApp(base: app)
+				if allowSigningCustomisation {
+					selectedSigningAppPresenting = AnyApp(base: app)
+				} else {
+					_signImmediately(app)
+				}
 			}
 		}
 	}
+
+	private func _signImmediately(_ app: AppInfoPresentable) {
+		Task { @MainActor in
+			guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+				if Storage.shared.getAllCertificates().isEmpty {
+					UIAlertController.showAlertWithOk(
+						title: .localized("No Certificate"),
+						message: .localized("Please go to settings and import a valid certificate"),
+						isCancel: true
+					)
+				}
+				return
+			}
+
+			var options = OptionsManager.shared.options
+
+			if
+				options.ppqProtection,
+				let identifier = app.identifier,
+				certificate.ppQCheck
+			{
+				options.appIdentifier = "\(identifier).\(options.ppqString)"
+			}
+			if
+				let identifier = app.identifier,
+				let mappedIdentifier = options.identifiers[identifier]
+			{
+				options.appIdentifier = mappedIdentifier
+			}
+			if
+				let name = app.name,
+				let mappedName = options.displayNames[name]
+			{
+				options.appName = mappedName
+			}
+
+			UIImpactFeedbackGenerator(style: .light).impactOccurred()
+			FR.signPackageFile(
+				app,
+				using: options,
+				icon: nil,
+				certificate: certificate
+			) { error in
+				if let error {
+					UIAlertController.showAlertWithOk(
+						title: .localized("Error"),
+						message: error.localizedDescription,
+						isCancel: true
+					)
+				}
+			}
+		}
+	}
+
 }
 
