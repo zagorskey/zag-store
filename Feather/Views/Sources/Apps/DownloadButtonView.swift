@@ -60,15 +60,24 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if let bundleID = app.id,
-						  pairingCore.isInstalled(bundleID: bundleID),
-						  UpdateManager.shared.hasUpdate(for: bundleID) {
-					ZagActionPill(title: .localized("Update")) {
-						_startGetAndInstall()
-					}
-				} else if let bundleID = app.id,
 						  pairingCore.isInstalled(bundleID: bundleID) {
-					ZagActionPill(title: .localized("Open")) {
-						UIApplication.openApp(with: bundleID)
+					switch _installedReleaseRelationship(bundleID: bundleID) {
+					case .newer:
+						ZagActionPill(title: .localized("Update")) {
+							_startGetAndInstall()
+						}
+					case .same:
+						ZagActionPill(title: .localized("Open")) {
+							UIApplication.openApp(with: bundleID)
+						}
+					case .older:
+						ZagActionPill(title: .localized("Revert")) {
+							_startGetAndInstall()
+						}
+					case .unknown:
+						ZagActionPill(title: .localized("Open")) {
+							UIApplication.openApp(with: bundleID)
+						}
 					}
 				} else if _hasLocalSignedCopy {
 					ZagActionPill(title: .localized("Install")) {
@@ -154,6 +163,76 @@ struct DownloadButtonView: View {
 		.animation(.smooth, value: progress)
 	}
 
+
+	private enum InstalledReleaseRelationship {
+		case newer
+		case same
+		case older
+		case unknown
+	}
+
+	private func _installedReleaseRelationship(
+		bundleID: String
+	) -> InstalledReleaseRelationship {
+		guard
+			let installed = pairingCore.installedAppInfo(bundleID: bundleID),
+			let repositoryVersion = app.currentVersion,
+			!repositoryVersion.isEmpty,
+			!installed.version.isEmpty
+		else {
+			return .unknown
+		}
+
+		let versionResult = _compareReleaseValue(
+			repositoryVersion,
+			installed.version
+		)
+
+		if versionResult == .orderedDescending { return .newer }
+		if versionResult == .orderedAscending { return .older }
+
+		let repositoryBuild = app.currentAppVersion?.build
+		guard
+			let repositoryBuild,
+			!repositoryBuild.isEmpty,
+			!installed.build.isEmpty
+		else {
+			return .same
+		}
+
+		let buildResult = _compareReleaseValue(
+			repositoryBuild,
+			installed.build
+		)
+		if buildResult == .orderedDescending { return .newer }
+		if buildResult == .orderedAscending { return .older }
+		return .same
+	}
+
+	private func _compareReleaseValue(
+		_ lhs: String,
+		_ rhs: String
+	) -> ComparisonResult {
+		let lhsParts = lhs.split { !$0.isNumber }.compactMap { Int($0) }
+		let rhsParts = rhs.split { !$0.isNumber }.compactMap { Int($0) }
+
+		if !lhsParts.isEmpty, !rhsParts.isEmpty {
+			let count = max(lhsParts.count, rhsParts.count)
+			for index in 0..<count {
+				let left = index < lhsParts.count ? lhsParts[index] : 0
+				let right = index < rhsParts.count ? rhsParts[index] : 0
+				if left != right {
+					return left < right ? .orderedAscending : .orderedDescending
+				}
+			}
+			return .orderedSame
+		}
+
+		return lhs.compare(
+			rhs,
+			options: [.numeric, .caseInsensitive]
+		)
+	}
 
 	private var _hasLocalSignedCopy: Bool {
 		_existingSignedCopy() != nil
