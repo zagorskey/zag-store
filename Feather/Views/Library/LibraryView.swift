@@ -1975,11 +1975,11 @@ private struct ZagUpdateRow: View {
 				}
 
 				Text(stage?.title ?? .localized("Update"))
-					.font(.system(size: 15, weight: .bold))
+					.font(.system(size: 16, weight: .semibold))
 			}
 			.foregroundStyle(zagUpdatesBlue)
 			.padding(.horizontal, 16)
-			.frame(minWidth: 82, minHeight: 34)
+			.frame(minWidth: 88, minHeight: 36)
 			.background(zagUpdatePillBackground, in: Capsule())
 		}
 		.buttonStyle(.plain)
@@ -2045,7 +2045,8 @@ private struct ZagUpdatesPopup: View {
 
 	var body: some View {
 		ZStack {
-			Color(uiColor: .systemBackground)
+			(Color(uiColor: .systemBackground)
+				.opacity(0.94))
 				.ignoresSafeArea()
 
 			ScrollView {
@@ -2075,7 +2076,7 @@ private struct ZagUpdatesPopup: View {
 				}
 				.background(
 					Color(uiColor: .secondarySystemBackground),
-					in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+					in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 				)
 			}
 			.padding(.horizontal, 16)
@@ -2098,8 +2099,8 @@ private struct ZagUpdatesPopup: View {
 						dismiss()
 					} label: {
 						Image(systemName: "xmark")
-							.font(.system(size: 17, weight: .medium))
-							.frame(width: 44, height: 44)
+							.font(.system(size: 16, weight: .medium))
+							.frame(width: 36, height: 36)
 					}
 					.buttonStyle(.glass)
 					.buttonBorderShape(.circle)
@@ -2138,7 +2139,7 @@ private struct ZagUpdatesPopup: View {
 		.frame(minHeight: 54)
 		.background(
 			Color(uiColor: .secondarySystemBackground),
-			in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
 		.accessibilityElement(children: .combine)
 	}
