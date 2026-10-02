@@ -2235,6 +2235,8 @@ private struct ZagUpdatesPopup: View {
 
 	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
 	@State private var completedUpdateIDs: Set<String> = []
+	@State private var restoredRecentRecords: [ZagRecentUpdateRecord] = []
+	@ObservedObject private var updateManager = UpdateManager.shared
 
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.colorScheme) private var colorScheme
@@ -2269,6 +2271,13 @@ private struct ZagUpdatesPopup: View {
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
 		updates.filter { !completedUpdateIDs.contains($0.id) }
+	}
+
+	private var displayedAvailableCount: Int {
+		if !updates.isEmpty || !updateManager.isRepositoryRefreshInProgress {
+			return availableUpdates.count
+		}
+		return max(0, updateManager.persistedUpdateCount - completedUpdateIDs.count)
 	}
 
 	var body: some View {
@@ -2375,8 +2384,12 @@ private struct ZagUpdatesPopup: View {
 				}
 			}
 			.task {
+				_restoreUpdatedRecently()
 				let bundleIDs = updates.compactMap { $0.app.id }
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
+			}
+			.onReceive(sourcesViewModel.$sources) { _ in
+				_restoreUpdatedRecently()
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
@@ -2415,11 +2428,11 @@ private struct ZagUpdatesPopup: View {
 
 			Spacer()
 
-			Text(availableUpdates.count.description)
+			Text(displayedAvailableCount.description)
 				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
-				.padding(.horizontal, availableUpdates.count > 99 ? 4 : 0)
+				.padding(.horizontal, displayedAvailableCount > 99 ? 4 : 0)
 				.background(Color(hex: "#FF3B30"), in: Capsule())
 		}
 		.padding(.horizontal, 16)
@@ -2433,15 +2446,106 @@ private struct ZagUpdatesPopup: View {
 }
 
 
+private struct ZagRecentUpdateRecord: Codable {
+	let bundleID: String
+	let version: String
+	let completedAt: Date
+}
+
 private extension ZagUpdatesPopup {
+	static var recentUpdatesKey: String {
+		"ZagStore.updatedRecently"
+	}
+
 	func _moveToUpdatedRecently(_ update: UpdateManager.AvailableUpdate) {
 		guard !completedUpdateIDs.contains(update.id) else { return }
+
+		if let bundleID = update.app.id, !bundleID.isEmpty {
+			var records = _loadRecentRecords()
+			records.removeAll { $0.bundleID == bundleID }
+			records.insert(
+				ZagRecentUpdateRecord(
+					bundleID: bundleID,
+					version: update.availableVersion,
+					completedAt: Date()
+				),
+				at: 0
+			)
+			_saveRecentRecords(records)
+			restoredRecentRecords = records
+		}
 
 		withAnimation(.easeInOut(duration: 0.35)) {
 			completedUpdateIDs.insert(update.id)
 			completedUpdates.removeAll { $0.id == update.id }
 			completedUpdates.insert(update, at: 0)
 		}
+	}
+
+	func _restoreUpdatedRecently() {
+		let records = _loadRecentRecords()
+		restoredRecentRecords = records
+
+		var restored: [UpdateManager.AvailableUpdate] = []
+		for record in records {
+			for repository in sourcesViewModel.sources.values {
+				guard let app = repository.apps.first(where: {
+					$0.id == record.bundleID &&
+					$0.currentVersion == record.version
+				}) else {
+					continue
+				}
+
+				restored.append(
+					UpdateManager.AvailableUpdate(
+						app: app,
+						source: repository,
+						installedVersion: record.version,
+						availableVersion: record.version,
+						installedBuild: app.currentAppVersion?.build,
+						availableBuild: app.currentAppVersion?.build
+					)
+				)
+				break
+			}
+		}
+
+		guard !restored.isEmpty else { return }
+		completedUpdateIDs.formUnion(restored.map(\.id))
+		completedUpdates = restored
+	}
+
+	func _loadRecentRecords() -> [ZagRecentUpdateRecord] {
+		guard
+			let data = UserDefaults.standard.data(
+				forKey: Self.recentUpdatesKey
+			),
+			let decoded = try? JSONDecoder().decode(
+				[ZagRecentUpdateRecord].self,
+				from: data
+			)
+		else {
+			return []
+		}
+
+		let cutoff = Calendar.current.date(
+			byAdding: .day,
+			value: -30,
+			to: Date()
+		) ?? .distantPast
+		let retained = decoded
+			.filter { $0.completedAt >= cutoff }
+			.sorted { $0.completedAt > $1.completedAt }
+
+		if retained.count != decoded.count {
+			_saveRecentRecords(retained)
+		}
+		return retained
+	}
+
+	func _saveRecentRecords(_ records: [ZagRecentUpdateRecord]) {
+		guard let data = try? JSONEncoder().encode(records) else { return }
+		UserDefaults.standard.set(data, forKey: Self.recentUpdatesKey)
 	}
 }
 
