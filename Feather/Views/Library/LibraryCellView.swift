@@ -222,22 +222,77 @@ struct LibraryCellView: View {
 				)
 			)
 		}
-		.confirmationDialog(
-			String(
-				format: .localized("Remove “%@”?"),
-				app.name ?? .localized("this app")
-			),
-			isPresented: $isRemoveConfirmationPresented,
-			titleVisibility: .visible
-		) {
-			Button(.localized("Delete App"), role: .destructive) {
-				onRemoveManagedApp?(app)
+		.overlay {
+			if isRemoveConfirmationPresented {
+				ZStack(alignment: .bottom) {
+					Color.black.opacity(0.28)
+						.ignoresSafeArea()
+						.onTapGesture {
+							withAnimation(.easeInOut(duration: 0.2)) {
+								isRemoveConfirmationPresented = false
+							}
+						}
+
+					VStack(spacing: 14) {
+						Text(
+							String(
+								format: .localized("Remove “%@”?"),
+								app.name ?? .localized("this app")
+							)
+						)
+						.font(.system(size: 20, weight: .semibold))
+						.multilineTextAlignment(.center)
+
+						Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
+							.font(.system(size: 16))
+							.foregroundStyle(.secondary)
+							.multilineTextAlignment(.center)
+							.fixedSize(horizontal: false, vertical: true)
+
+						VStack(spacing: 10) {
+							Button {
+								isRemoveConfirmationPresented = false
+								onRemoveManagedApp?(app)
+							} label: {
+								Text(.localized("Delete App"))
+									.font(.system(size: 18, weight: .semibold))
+									.foregroundStyle(.red)
+									.frame(maxWidth: .infinity)
+									.frame(height: 52)
+									.background(
+										Color(uiColor: .tertiarySystemFill),
+										in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+									)
+							}
+
+							Button {
+								withAnimation(.easeInOut(duration: 0.2)) {
+									isRemoveConfirmationPresented = false
+								}
+							} label: {
+								Text(.localized("Cancel"))
+									.font(.system(size: 18, weight: .semibold))
+									.foregroundStyle(.primary)
+									.frame(maxWidth: .infinity)
+									.frame(height: 52)
+									.background(
+										Color(uiColor: .tertiarySystemFill),
+										in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+									)
+							}
+						}
+					}
+					.padding(20)
+					.background(
+						.ultraThinMaterial,
+						in: RoundedRectangle(cornerRadius: 30, style: .continuous)
+					)
+					.padding(.horizontal, 16)
+					.padding(.bottom, 12)
+					.transition(.move(edge: .bottom).combined(with: .opacity))
+				}
+				.zIndex(100)
 			}
-			Button(.localized("Cancel")) {
-				isRemoveConfirmationPresented = false
-			}
-		} message: {
-			Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
 		}
 	}
 
