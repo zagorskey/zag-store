@@ -2112,7 +2112,7 @@ private struct ZagUpdatesPopup: View {
 							.frame(width: 44, height: 44)
 					}
 					.buttonStyle(.bordered)
-					.buttonBorderShape(.circle)
+					.clipShape(Circle())
 				}
 			}
 		}
