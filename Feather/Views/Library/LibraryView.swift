@@ -1858,6 +1858,34 @@ private struct ZagUpdateIconAppearanceModifier: ViewModifier {
 	}
 }
 
+private struct ZagUpdateRowSnapshot: Codable, Identifiable {
+	let id: String
+	let bundleID: String
+	let name: String
+	let iconURL: String?
+	let sourceIconURL: String?
+	let releaseDateText: String?
+	let releaseNotes: String?
+	let metadataText: String?
+	let version: String
+	let completedAt: Date?
+
+	static let availableKey = "ZagStore.availableUpdateRows"
+	static let recentKey = "ZagStore.updatedRecentlyRows"
+
+	static func load(_ key: String) -> [Self] {
+		guard let data = UserDefaults.standard.data(forKey: key),
+			  let rows = try? JSONDecoder().decode([Self].self, from: data)
+		else { return [] }
+		return rows
+	}
+
+	static func save(_ rows: [Self], key: String) {
+		guard let data = try? JSONEncoder().encode(rows) else { return }
+		UserDefaults.standard.set(data, forKey: key)
+	}
+}
+
 private struct ZagUpdateRow: View {
 	enum Mode {
 		case available
@@ -1976,6 +2004,21 @@ private struct ZagUpdateRow: View {
 		}
 
 		return notes
+	}
+
+	var snapshot: ZagUpdateRowSnapshot {
+		ZagUpdateRowSnapshot(
+			id: update.id,
+			bundleID: update.app.id ?? update.id,
+			name: update.app.currentName,
+			iconURL: update.app.iconURL?.absoluteString,
+			sourceIconURL: update.source.currentIconURL?.absoluteString,
+			releaseDateText: releaseDateText,
+			releaseNotes: releaseNotes,
+			metadataText: releaseMetadataText,
+			version: update.availableVersion,
+			completedAt: mode == .recentlyUpdated ? Date() : nil
+		)
 	}
 
 	var body: some View {
@@ -2235,7 +2278,10 @@ private struct ZagUpdatesPopup: View {
 
 	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
 	@State private var completedUpdateIDs: Set<String> = []
-	@State private var restoredRecentRecords: [ZagRecentUpdateRecord] = []
+	@State private var cachedAvailableRows: [ZagUpdateRowSnapshot] =
+		ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.availableKey)
+	@State private var cachedRecentRows: [ZagUpdateRowSnapshot] =
+		ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
 	@ObservedObject private var updateManager = UpdateManager.shared
 
 	@Environment(\.dismiss) private var dismiss
@@ -2277,7 +2323,10 @@ private struct ZagUpdatesPopup: View {
 		if !updates.isEmpty || !updateManager.isRepositoryRefreshInProgress {
 			return availableUpdates.count
 		}
-		return max(0, updateManager.persistedUpdateCount - completedUpdateIDs.count)
+		return max(
+			cachedAvailableRows.count,
+			max(0, updateManager.persistedUpdateCount - completedUpdateIDs.count)
+		)
 	}
 
 	var body: some View {
@@ -2332,6 +2381,21 @@ private struct ZagUpdatesPopup: View {
 								sectionBackground,
 								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 							)
+						} else if !cachedAvailableRows.isEmpty && updateManager.isRepositoryRefreshInProgress {
+							Text(.localized("Available Updates"))
+								.font(.headline)
+								.foregroundStyle(.secondary)
+								.textCase(nil)
+								.padding(.leading, 16)
+								.padding(.top, 6)
+								.padding(.bottom, -8)
+
+							ZagCachedUpdateSection(
+								rows: cachedAvailableRows,
+								sectionBackground: sectionBackground,
+								separatorColor: separatorColor,
+								isRecent: false
+							)
 						}
 
 						if !completedUpdates.isEmpty {
@@ -2370,6 +2434,21 @@ private struct ZagUpdatesPopup: View {
 								sectionBackground,
 								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 							)
+						} else if !cachedRecentRows.isEmpty {
+							Text(.localized("Updated Recently"))
+								.font(.headline)
+								.foregroundStyle(.secondary)
+								.textCase(nil)
+								.padding(.leading, 16)
+								.padding(.top, 6)
+								.padding(.bottom, -8)
+
+							ZagCachedUpdateSection(
+								rows: cachedRecentRows,
+								sectionBackground: sectionBackground,
+								separatorColor: separatorColor,
+								isRecent: true
+							)
 						}
 					}
 					.padding(.horizontal, 16)
@@ -2384,12 +2463,18 @@ private struct ZagUpdatesPopup: View {
 				}
 			}
 			.task {
+				_pruneCachedRecent()
 				_restoreUpdatedRecently()
+				_cacheAvailableRows()
 				let bundleIDs = updates.compactMap { $0.app.id }
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
 			.onReceive(sourcesViewModel.$sources) { _ in
 				_restoreUpdatedRecently()
+				_cacheAvailableRows()
+			}
+			.onReceive(updateManager.$updates) { _ in
+				_cacheAvailableRows()
 			}
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
@@ -2446,62 +2531,98 @@ private struct ZagUpdatesPopup: View {
 }
 
 
-private struct ZagRecentUpdateRecord: Codable {
-	let bundleID: String
-	let version: String
-	let completedAt: Date
-}
-
 private extension ZagUpdatesPopup {
-	static var recentUpdatesKey: String {
-		"ZagStore.updatedRecently"
-	}
-
 	func _moveToUpdatedRecently(_ update: UpdateManager.AvailableUpdate) {
 		guard !completedUpdateIDs.contains(update.id) else { return }
 
-		if let bundleID = update.app.id, !bundleID.isEmpty {
-			var records = _loadRecentRecords()
-			records.removeAll { $0.bundleID == bundleID }
-			records.insert(
-				ZagRecentUpdateRecord(
-					bundleID: bundleID,
-					version: update.availableVersion,
-					completedAt: Date()
-				),
-				at: 0
-			)
-			_saveRecentRecords(records)
-			restoredRecentRecords = records
-		}
+		let row = _snapshot(for: update, completedAt: Date())
+		var recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		recent.removeAll { $0.bundleID == row.bundleID }
+		recent.insert(row, at: 0)
+		ZagUpdateRowSnapshot.save(recent, key: ZagUpdateRowSnapshot.recentKey)
+		cachedRecentRows = recent
 
 		withAnimation(.easeInOut(duration: 0.35)) {
 			completedUpdateIDs.insert(update.id)
 			completedUpdates.removeAll { $0.id == update.id }
 			completedUpdates.insert(update, at: 0)
 		}
+		_cacheAvailableRows()
+	}
+
+	func _snapshot(
+		for update: UpdateManager.AvailableUpdate,
+		completedAt: Date? = nil
+	) -> ZagUpdateRowSnapshot {
+		let notes =
+			update.app.currentAppVersion?.localizedDescription ??
+			update.app.versionDescription ??
+			update.app.localizedDescription
+
+		var metadata: [String] = []
+		if let version = update.app.currentVersion {
+			var value = String(format: .localized("Version %@"), version)
+			if let build = update.app.currentAppVersion?.build,
+			   !build.isEmpty, build != version {
+				value += " (\(build))"
+			}
+			metadata.append(value)
+		}
+		if let size = update.app.size {
+			metadata.append(size.formattedByteCount)
+		}
+
+		return ZagUpdateRowSnapshot(
+			id: update.id,
+			bundleID: update.app.id ?? update.id,
+			name: update.app.currentName,
+			iconURL: update.app.iconURL?.absoluteString,
+			sourceIconURL: update.source.currentIconURL?.absoluteString,
+			releaseDateText: nil,
+			releaseNotes: notes,
+			metadataText: metadata.isEmpty ? nil : metadata.joined(separator: " • "),
+			version: update.availableVersion,
+			completedAt: completedAt
+		)
+	}
+
+	func _cacheAvailableRows() {
+		guard !updates.isEmpty else { return }
+		let rows = availableUpdates.map { _snapshot(for: $0) }
+		cachedAvailableRows = rows
+		ZagUpdateRowSnapshot.save(rows, key: ZagUpdateRowSnapshot.availableKey)
+	}
+
+	func _pruneCachedRecent() {
+		let cutoff = Calendar.current.date(
+			byAdding: .day,
+			value: -30,
+			to: Date()
+		) ?? .distantPast
+		let rows = ZagUpdateRowSnapshot
+			.load(ZagUpdateRowSnapshot.recentKey)
+			.filter { ($0.completedAt ?? .distantPast) >= cutoff }
+			.sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+		cachedRecentRows = rows
+		ZagUpdateRowSnapshot.save(rows, key: ZagUpdateRowSnapshot.recentKey)
 	}
 
 	func _restoreUpdatedRecently() {
-		let records = _loadRecentRecords()
-		restoredRecentRecords = records
+		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		guard !recent.isEmpty else { return }
 
 		var restored: [UpdateManager.AvailableUpdate] = []
-		for record in records {
+		for row in recent {
 			for repository in sourcesViewModel.sources.values {
 				guard let app = repository.apps.first(where: {
-					$0.id == record.bundleID &&
-					$0.currentVersion == record.version
-				}) else {
-					continue
-				}
-
+					$0.id == row.bundleID
+				}) else { continue }
 				restored.append(
 					UpdateManager.AvailableUpdate(
 						app: app,
 						source: repository,
-						installedVersion: record.version,
-						availableVersion: record.version,
+						installedVersion: row.version,
+						availableVersion: row.version,
 						installedBuild: app.currentAppVersion?.build,
 						availableBuild: app.currentAppVersion?.build
 					)
@@ -2509,45 +2630,152 @@ private extension ZagUpdatesPopup {
 				break
 			}
 		}
-
-		guard !restored.isEmpty else { return }
 		completedUpdateIDs.formUnion(restored.map(\.id))
 		completedUpdates = restored
 	}
+}
 
-	func _loadRecentRecords() -> [ZagRecentUpdateRecord] {
-		guard
-			let data = UserDefaults.standard.data(
-				forKey: Self.recentUpdatesKey
-			),
-			let decoded = try? JSONDecoder().decode(
-				[ZagRecentUpdateRecord].self,
-				from: data
-			)
-		else {
-			return []
+private struct ZagCachedUpdateSection: View {
+	let rows: [ZagUpdateRowSnapshot]
+	let sectionBackground: Color
+	let separatorColor: Color
+	let isRecent: Bool
+
+	var body: some View {
+		VStack(spacing: 0) {
+			ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+				ZagCachedUpdateRow(row: row, isRecent: isRecent)
+					.padding(.horizontal, 16)
+					.padding(.top, index == 0 ? 8 : 0)
+					.padding(.bottom, isRecent && index == rows.count - 1 ? 16 : 0)
+
+				if index < rows.count - 1 {
+					Rectangle()
+						.fill(separatorColor)
+						.frame(height: 3.0 / UIScreen.main.scale)
+						.padding(.horizontal, 16)
+				}
+			}
 		}
-
-		let cutoff = Calendar.current.date(
-			byAdding: .day,
-			value: -30,
-			to: Date()
-		) ?? .distantPast
-		let retained = decoded
-			.filter { $0.completedAt >= cutoff }
-			.sorted { $0.completedAt > $1.completedAt }
-
-		if retained.count != decoded.count {
-			_saveRecentRecords(retained)
-		}
-		return retained
-	}
-
-	func _saveRecentRecords(_ records: [ZagRecentUpdateRecord]) {
-		guard let data = try? JSONEncoder().encode(records) else { return }
-		UserDefaults.standard.set(data, forKey: Self.recentUpdatesKey)
+		.background(
+			sectionBackground,
+			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+		)
 	}
 }
+
+private struct ZagCachedUpdateRow: View {
+	let row: ZagUpdateRowSnapshot
+	let isRecent: Bool
+	@Environment(\.colorScheme) private var colorScheme
+	@State private var showsFullReleaseNotes = false
+
+	private var blue: Color {
+		colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8")
+	}
+	private var pillBackground: Color {
+		colorScheme == .dark ? Color(hex: "#3E3D42") : Color(hex: "#EEEEF0")
+	}
+	private var dateText: String {
+		guard let completedAt = row.completedAt else {
+			return row.releaseDateText ?? ""
+		}
+		let days = Calendar.current.dateComponents(
+			[.day],
+			from: Calendar.current.startOfDay(for: completedAt),
+			to: Calendar.current.startOfDay(for: Date())
+		).day ?? 0
+		switch days {
+		case 0: return .localized("Today")
+		case 1: return .localized("Yesterday")
+		case 2: return .localized("Two Days Ago")
+		case 3: return .localized("Three Days Ago")
+		default:
+			let formatter = DateFormatter()
+			formatter.locale = .current
+			formatter.setLocalizedDateFormatFromTemplate("d MMM yyyy")
+			return formatter.string(from: completedAt)
+		}
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 22) {
+			HStack(alignment: .center, spacing: 12) {
+				ZStack(alignment: .bottomLeading) {
+					LazyImage(url: row.iconURL.flatMap(URL.init(string:))) { state in
+						if let image = state.image {
+							image.resizable().aspectRatio(contentMode: .fill)
+						} else {
+							Image(systemName: "app.fill")
+								.resizable().scaledToFit().padding(10)
+								.foregroundStyle(.secondary)
+						}
+					}
+					.frame(width: 62, height: 62)
+					.clipShape(RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous))
+
+					if let sourceURL = row.sourceIconURL.flatMap(URL.init(string:)) {
+						LazyImage(url: sourceURL) { state in
+							if let image = state.image {
+								image.appIconStyle(
+									size: 20,
+									isCircle: true,
+									background: Color(uiColor: .secondarySystemBackground)
+								).offset(x: 46, y: 4)
+							}
+						}
+					}
+				}
+
+				VStack(alignment: .leading, spacing: 2) {
+					Text(row.name).zagContentTitleStyle().lineLimit(1)
+					if !dateText.isEmpty {
+						Text(dateText).font(.subheadline).foregroundStyle(.secondary)
+					}
+				}
+				Spacer(minLength: 8)
+
+				ZagActionPill(
+					title: .localized(isRecent ? "Open" : "Update"),
+					backgroundColor: pillBackground
+				) {
+					if isRecent {
+						UIApplication.openApp(with: row.bundleID)
+					}
+				}
+				.disabled(!isRecent)
+			}
+
+			if let notes = row.releaseNotes,
+			   !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+				VStack(alignment: .leading, spacing: showsFullReleaseNotes ? 22 : 0) {
+					ZStack(alignment: .bottomTrailing) {
+						Text(notes)
+							.font(.system(size: 17, weight: .regular))
+							.foregroundStyle(.primary)
+							.lineLimit(showsFullReleaseNotes ? nil : 2)
+							.frame(maxWidth: .infinity, alignment: .leading)
+							.padding(.trailing, showsFullReleaseNotes ? 0 : 42)
+						Button(.localized(showsFullReleaseNotes ? "less" : "more")) {
+							withAnimation(.easeInOut(duration: 0.2)) {
+								showsFullReleaseNotes.toggle()
+							}
+						}
+						.font(.system(size: 17, weight: .regular))
+						.foregroundStyle(blue)
+					}
+					if showsFullReleaseNotes, let metadata = row.metadataText {
+						Text(metadata)
+							.font(.system(size: 16, weight: .regular))
+							.foregroundStyle(.secondary)
+					}
+				}
+			}
+		}
+		.padding(.vertical, 14)
+	}
+}
+
 
 private struct ZagLibraryHeader: View {
 
