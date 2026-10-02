@@ -115,6 +115,7 @@ extension Storage {
 
 enum ZagCertificateSelection {
 	static let askEveryTimeKey = "ZagStore.askCertificateEveryTime"
+	static let allowCustomisationKey = "ZagStore.allowSigningCustomisation"
 
 	static var asksEveryTime: Bool {
 		UserDefaults.standard.bool(forKey: askEveryTimeKey)
