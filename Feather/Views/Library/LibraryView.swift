@@ -2068,6 +2068,7 @@ private struct ZagUpdatesPopup: View {
 		]
 	) private var sources: FetchedResults<AltSource>
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 
 	private var popupBackground: Color {
 		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
