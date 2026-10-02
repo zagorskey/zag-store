@@ -126,8 +126,8 @@ struct ZagActionPill: View {
 
 	private var pillBackground: Color {
 		colorScheme == .dark
-			? Color(hex: "#1C1C1E")
-			: Color(hex: "#EEEEEF")
+			? Color(hex: "#3E3D42")
+			: Color(hex: "#EEEEF0")
 	}
 
 	var body: some View {
@@ -139,7 +139,7 @@ struct ZagActionPill: View {
 				}
 
 				Text(title)
-					.font(.headline)
+					.font(.system(size: 16, weight: .bold))
 					.lineLimit(1)
 			}
 			.padding(.horizontal, width == nil ? horizontalPadding : 0)
