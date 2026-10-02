@@ -878,7 +878,7 @@ struct LibraryView: View {
 						}
 					} label: {
 						Text(.localized("Delete App"))
-							.font(.system(size: 18, weight: .semibold))
+							.font(.system(size: 20, weight: .semibold))
 							.foregroundStyle(.red)
 							.frame(maxWidth: .infinity)
 							.frame(height: 52)
@@ -893,7 +893,7 @@ struct LibraryView: View {
 						_pendingRemoveApp = nil
 					} label: {
 						Text(.localized("Cancel"))
-							.font(.system(size: 18, weight: .semibold))
+							.font(.system(size: 20, weight: .semibold))
 							.foregroundStyle(.primary)
 							.frame(maxWidth: .infinity)
 							.frame(height: 52)
