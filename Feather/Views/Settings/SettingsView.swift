@@ -70,26 +70,11 @@ struct SettingsView: View {
 							.foregroundColor(.disabled())
 					}
 
-					Button {
-						_askCertificateEveryTime.toggle()
-					} label: {
-						HStack {
-							Text(.localized("Ask every time"))
-								.foregroundStyle(.primary)
-							Spacer()
-							Image(
-								systemName: _askCertificateEveryTime
-									? "checkmark.square.fill"
-									: "square"
-							)
-							.foregroundStyle(
-								_askCertificateEveryTime
-									? Color.accentColor
-									: Color.secondary
-							)
-						}
-					}
-					.buttonStyle(.plain)
+					Toggle(
+						.localized("Ask every time"),
+						isOn: $_askCertificateEveryTime
+					)
+					.tint(.green)
 
 				} header: {
 					Text(.localized("Certificates"))
