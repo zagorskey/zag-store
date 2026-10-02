@@ -28,6 +28,7 @@ struct DownloadButtonView: View {
 	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
 	@State private var ringRotation: Double = 0
+	@State private var actionClaimed = false
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -65,16 +66,23 @@ struct DownloadButtonView: View {
 					switch _installedReleaseRelationship(bundleID: bundleID) {
 					case .newer:
 						ZagActionPill(title: .localized("Update")) {
-							_startGetAndInstall()
+							_performAction { _startGetAndInstall() }
 						}
+						.disabled(actionClaimed)
+						.accessibilityLabel(Text("Update \(app.currentName)"))
 					case .same:
 						ZagActionPill(title: .localized("Open")) {
-							UIApplication.openApp(with: bundleID)
+							_performAction(claim: false) {
+								UIApplication.openApp(with: bundleID)
+							}
 						}
+						.accessibilityLabel(Text("Open \(app.currentName)"))
 					case .older:
 						ZagActionPill(title: .localized("Revert")) {
-							_startGetAndInstall()
+							_performAction { _startGetAndInstall() }
 						}
+						.disabled(actionClaimed)
+						.accessibilityLabel(Text("Revert \(app.currentName)"))
 					case .unknown:
 						ZagActionPill(title: .localized("Open")) {
 							UIApplication.openApp(with: bundleID)
@@ -82,12 +90,16 @@ struct DownloadButtonView: View {
 					}
 				} else if _hasLocalSignedCopy {
 					ZagActionPill(title: .localized("Install")) {
-						_installExistingSignedCopy()
+						_performAction { _installExistingSignedCopy() }
 					}
+					.disabled(actionClaimed)
+					.accessibilityLabel(Text("Install \(app.currentName)"))
 				} else {
 					ZagActionPill(title: title) {
-						_startGetAndInstall()
+						_performAction { _startGetAndInstall() }
 					}
+					.disabled(actionClaimed)
+					.accessibilityLabel(Text("\(title) \(app.currentName)"))
 				}
 			}
 			.frame(width: 88, height: 34)
@@ -112,7 +124,24 @@ struct DownloadButtonView: View {
 		.onChange(of: downloadManager.downloads.description) { _ in
 			setupObserver()
 		}
+		.onChange(of: zagPhase) { phase in
+			if phase == .idle {
+				actionClaimed = false
+			}
+		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
+	}
+
+	private func _performAction(
+		claim: Bool = true,
+		_ action: () -> Void
+	) {
+		guard !actionClaimed else { return }
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		if claim {
+			actionClaimed = true
+		}
+		action()
 	}
 
 	private var _stageCaption: String {
@@ -522,7 +551,7 @@ struct DownloadButtonView: View {
 				download.overallProgress
 		}
 	}
-	private enum ZagGetPhase {
+	private enum ZagGetPhase: Equatable {
 		case idle
 		case downloading
 		case signing
