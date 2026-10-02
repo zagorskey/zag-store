@@ -1906,16 +1906,17 @@ private struct ZagUpdateRow: View {
 			HStack(alignment: .center, spacing: 12) {
 				appIcon
 
-				VStack(alignment: .leading, spacing: 3) {
+				VStack(alignment: .leading, spacing: 2) {
 					Text(update.app.currentName)
-						.font(.system(size: 16, weight: .semibold))
+						.font(.system(size: 17, weight: .regular))
 						.foregroundStyle(.primary)
-						.lineLimit(2)
+						.lineLimit(1)
 
 					if let releaseDateText {
 						Text(releaseDateText)
-							.font(.system(size: 14))
+							.font(.subheadline)
 							.foregroundStyle(.secondary)
+							.lineLimit(1)
 					}
 				}
 
@@ -2049,75 +2050,68 @@ private struct ZagUpdatesPopup: View {
 	}
 
 	var body: some View {
-		ZStack {
-			popupBackground
-				.ignoresSafeArea()
+		NavigationStack {
+			ZStack {
+				popupBackground
+					.ignoresSafeArea()
 
-			ScrollView {
-				Color.clear.frame(height: 1)
-				LazyVStack(alignment: .leading, spacing: 18) {
-				header
+				ScrollView {
+					LazyVStack(alignment: .leading, spacing: 18) {
+						updateAllCard
 
-				updateAllCard
+						Text(.localized("Available Updates"))
+							.font(.headline)
+							.foregroundStyle(.secondary)
+							.textCase(nil)
+							.padding(.leading, 16)
+							.padding(.top, 6)
+							.padding(.bottom, -8)
 
-				Text(.localized("Available Updates"))
-					.font(.headline)
-					.foregroundStyle(.secondary)
-					.textCase(nil)
-					.padding(.leading, 16)
-					.padding(.top, 6)
-					.padding(.bottom, -8)
-
-				VStack(spacing: 0) {
-					ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
-						ZagUpdateRow(
-							update: update,
-							onPreparedForInstall: onPreparedForInstall
-						)
-						.padding(.horizontal, 16)
-
-						if index < updates.count - 1 {
-							Rectangle()
-								.fill(separatorColor)
-								.frame(height: 0.5)
+						VStack(spacing: 0) {
+							ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
+								ZagUpdateRow(
+									update: update,
+									onPreparedForInstall: onPreparedForInstall
+								)
 								.padding(.horizontal, 16)
+
+								if index < updates.count - 1 {
+									Rectangle()
+										.fill(separatorColor)
+										.frame(height: 1.0 / UIScreen.main.scale)
+										.padding(.horizontal, 16)
+								}
+							}
 						}
+						.background(
+							sectionBackground,
+							in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+						)
 					}
+					.padding(.horizontal, 16)
+					.padding(.top, 18)
+					.padding(.bottom, 30)
 				}
-				.background(
-					sectionBackground,
-					in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-				)
 			}
-			.padding(.horizontal, 16)
-			.padding(.top, 12)
-			.padding(.bottom, 30)
-		}
-		}
-	}
-
-	private var header: some View {
-		HStack {
-			Spacer()
-
-			Button {
-				dismiss()
-			} label: {
-				Image(systemName: "xmark")
-					.font(.system(size: 22, weight: .semibold))
-					.foregroundStyle(Color.white)
-					.frame(width: 50, height: 50)
-					.zagSearchGlass()
+			.navigationTitle(.localized("App Updates"))
+			.navigationBarTitleDisplayMode(.inline)
+			.toolbar {
+				ToolbarItem(placement: .topBarTrailing) {
+					Button {
+						dismiss()
+					} label: {
+						Image(systemName: "xmark")
+					}
+					.accessibilityLabel("Close")
+				}
 			}
-			.buttonStyle(.plain)
-			.accessibilityLabel("Close")
 		}
 	}
 
 	private var updateAllCard: some View {
 		HStack {
 			Text(.localized("Update All"))
-				.font(.system(size: 18, weight: .regular))
+				.font(.system(size: 20, weight: .regular))
 				.foregroundStyle(updatesBlue)
 
 			Spacer()
@@ -2127,17 +2121,15 @@ private struct ZagUpdatesPopup: View {
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
 				.padding(.horizontal, updates.count > 99 ? 4 : 0)
-				.background(Color(red: 0.91, green: 0.20, blue: 0.14), in: Capsule())
+				.background(Color(hex: "#E93323"), in: Capsule())
 		}
 		.padding(.horizontal, 16)
-		.frame(minHeight: 54)
+		.frame(minHeight: 60)
 		.background(
 			sectionBackground,
 			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
 		.accessibilityElement(children: .combine)
-		.navigationTitle(.localized("App Updates"))
-		.navigationBarTitleDisplayMode(.inline)
 	}
 }
 
