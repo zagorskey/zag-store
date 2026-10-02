@@ -1925,7 +1925,7 @@ private struct ZagUpdateRow: View {
 	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 6) {
+		VStack(alignment: .leading, spacing: 22) {
 			HStack(alignment: .center, spacing: 12) {
 				appIcon
 
@@ -1975,7 +1975,7 @@ private struct ZagUpdateRow: View {
 			}
 		}
 		.padding(.top, 14)
-		.padding(.bottom, releaseNotes == nil ? 14 : 8)
+		.padding(.bottom, releaseNotes == nil ? 14 : 14)
 		.contentShape(Rectangle())
 		.onTapGesture {
 			onSelect()
