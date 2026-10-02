@@ -844,7 +844,13 @@ struct LibraryView: View {
 					app: app.base,
 					isSharing: app.archive,
 					onInstallCompleted: {
+						// Preserve the immediate UI response for every installer, then
+						// let device inventory confirm the authoritative state.
 						_markManagedAppInstalled(app.base)
+						DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+							_refreshInstalledAppsFromDevice()
+						}
+
 						guard let signedUUID = app.base.uuid else { return }
 						ZagUpdateTransactionManager.shared.completeInstallation(
 							signedUUID: signedUUID
@@ -1175,21 +1181,15 @@ extension LibraryView {
 
 		_removingBundleIDs.insert(identifier)
 
-		func finishRemovalIfConfirmed() {
-			// installation_proxy has completed. Give LaunchServices a moment to
-			// publish the new state before removing the Installed marker.
+		func finishDirectRemoval() {
+			// installation_proxy success is authoritative for the operation.
+			// Update the UI immediately, then reconcile against the device
+			// inventory once SpringBoard/device services have published the change.
+			_clearManagedInstalledMarker(identifier)
+			_removingBundleIDs.remove(identifier)
+
 			DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-				let installed = UIApplication.isAppInstalled(with: identifier)
-				if installed == false || installed == nil {
-					_clearManagedInstalledMarker(identifier)
-					_removingBundleIDs.remove(identifier)
-				} else {
-					_removingBundleIDs.remove(identifier)
-					UIAlertController.showAlertWithOk(
-						title: .localized("Remove App"),
-						message: .localized("The uninstall completed, but iOS still reports the app as installed.")
-					)
-				}
+				_refreshInstalledAppsFromDevice()
 			}
 		}
 
@@ -1224,7 +1224,7 @@ extension LibraryView {
 			) { result in
 				switch result {
 				case .success:
-					finishRemovalIfConfirmed()
+					finishDirectRemoval()
 				case .failure:
 					// Fully Local Server and other non-RPPairing setups retain the
 					// existing LaunchServices uninstall path as a fallback.
