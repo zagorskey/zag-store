@@ -1828,42 +1828,110 @@ private struct ZagUpdateRow: View {
 	@AppStorage("Feather.shouldChangeIconsBasedOffStyle")
 	private var shouldChangeIconsBasedOffStyle: Bool = false
 
+	@State private var showsFullReleaseNotes = false
+
 	private var useDarkIconAppearance: Bool {
 		shouldChangeIconsBasedOffStyle &&
 		colorScheme == .dark
 	}
+
 	let onPreparedForInstall: (String) -> Void
 
 	@ObservedObject private var transactionManager =
 		ZagUpdateTransactionManager.shared
 
-	private var _versionTransition: String {
-		let installed = update.installedBuild.map {
-			"\(update.installedVersion) (\($0))"
-		} ?? update.installedVersion
-		let available = update.availableBuild.map {
-			"\(update.availableVersion) (\($0))"
-		} ?? update.availableVersion
-		return "\(installed) → \(available)"
+	private var releaseDate: Date? {
+		update.app.currentAppVersion?.date?.date ??
+		update.app.currentDate?.date
+	}
+
+	private var releaseDateText: String? {
+		guard let releaseDate else { return nil }
+
+		let calendar = Calendar.current
+		let today = calendar.startOfDay(for: Date())
+		let releaseDay = calendar.startOfDay(for: releaseDate)
+		let days = calendar.dateComponents(
+			[.day],
+			from: releaseDay,
+			to: today
+		).day ?? 0
+
+		switch days {
+		case 0:
+			return .localized("Today")
+		case 1:
+			return .localized("Yesterday")
+		case 2:
+			return .localized("Two Days Ago")
+		case 3:
+			return .localized("Three Days Ago")
+		default:
+			let formatter = DateFormatter()
+			formatter.locale = .current
+			formatter.setLocalizedDateFormatFromTemplate("d MMM yyyy")
+			return formatter.string(from: releaseDate)
+		}
+	}
+
+	private var releaseNotes: String? {
+		let notes =
+			update.app.currentAppVersion?.localizedDescription ??
+			update.app.versionDescription
+
+		guard
+			let notes,
+			!notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+		else {
+			return nil
+		}
+
+		return notes
 	}
 
 	var body: some View {
-		HStack(spacing: 10) {
-			appIcon
+		VStack(alignment: .leading, spacing: 12) {
+			HStack(alignment: .center, spacing: 12) {
+				appIcon
 
-			VStack(alignment: .leading, spacing: 4) {
-				Text(update.app.currentName)
-					.zagContentTitleStyle()
+				VStack(alignment: .leading, spacing: 3) {
+					Text(update.app.currentName)
+						.font(.system(size: 16, weight: .semibold))
+						.foregroundStyle(.primary)
+						.lineLimit(2)
 
-				Text(_versionTransition)
-					.zagContentSubtitleStyle()
+					if let releaseDateText {
+						Text(releaseDateText)
+							.font(.system(size: 14))
+							.foregroundStyle(.secondary)
+					}
+				}
+
+				Spacer(minLength: 8)
+
+				zagUpdateButton
 			}
 
-			Spacer()
+			if let releaseNotes {
+				HStack(alignment: .lastTextBaseline, spacing: 5) {
+					Text(releaseNotes)
+						.font(.system(size: 14))
+						.foregroundStyle(.primary)
+						.lineLimit(showsFullReleaseNotes ? nil : 2)
+						.fixedSize(horizontal: false, vertical: true)
 
-			zagUpdateButton
+					if !showsFullReleaseNotes {
+						Button(.localized("more")) {
+							withAnimation(.easeInOut(duration: 0.2)) {
+								showsFullReleaseNotes = true
+							}
+						}
+						.font(.system(size: 14))
+					}
+				}
+			}
 		}
-		.zagAppStoreRowSeparator()
+		.padding(.vertical, 14)
 	}
 
 	@ViewBuilder
@@ -1903,16 +1971,16 @@ private struct ZagUpdateRow: View {
 			if let image = state.image {
 				if shouldTintIcons {
 					image
-			.resizable()
-			.aspectRatio(contentMode: .fill)
-			.saturation(0)
-			.contrast(1.25)
-			.overlay(
-				Color(hex: selectedColorHex)
-					.opacity(0.82)
-					.blendMode(.color)
-			)
-			} else if useDarkIconAppearance {
+						.resizable()
+						.aspectRatio(contentMode: .fill)
+						.saturation(0)
+						.contrast(1.25)
+						.overlay(
+							Color(hex: selectedColorHex)
+								.opacity(0.82)
+								.blendMode(.color)
+						)
+				} else if useDarkIconAppearance {
 					image
 						.resizable()
 						.aspectRatio(contentMode: .fill)
@@ -1937,7 +2005,7 @@ private struct ZagUpdateRow: View {
 		.frame(width: 62, height: 62)
 		.clipShape(
 			RoundedRectangle(
-				cornerRadius: 11,
+				cornerRadius: 13,
 				style: .continuous
 			)
 		)
@@ -1952,33 +2020,105 @@ private struct ZagUpdatesPopup: View {
 	@Environment(\.dismiss) private var dismiss
 
 	var body: some View {
-		NavigationStack {
-			List {
-				ForEach(updates) { update in
-					ZagUpdateRow(
-						update: update,
-						onPreparedForInstall: onPreparedForInstall
-					)
-				}
-			}
-			.listStyle(.plain)
-			.listRowSeparator(.hidden)
-			.listRowBackground(Color.clear)
-			.navigationTitle(.localized("App Updates"))
-			.navigationBarTitleDisplayMode(.inline)
-			.toolbar {
-				ToolbarItem(placement: .topBarTrailing) {
-					Button {
-						dismiss()
-					} label: {
-						Image(systemName: "xmark")
-							.font(.system(size: 13, weight: .bold))
+		ZStack {
+			Color(uiColor: .systemBackground)
+				.ignoresSafeArea()
+
+			ScrollView {
+				LazyVStack(alignment: .leading, spacing: 18) {
+				header
+
+				updateAllCard
+
+				Text(.localized("Available Updates"))
+					.font(.system(size: 20, weight: .bold))
+					.foregroundStyle(.secondary)
+					.padding(.horizontal, 4)
+
+				VStack(spacing: 0) {
+					ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
+						ZagUpdateRow(
+							update: update,
+							onPreparedForInstall: onPreparedForInstall
+						)
+						.padding(.horizontal, 16)
+
+						if index < updates.count - 1 {
+							Divider()
+								.padding(.leading, 90)
+						}
 					}
-					.buttonStyle(.bordered)
-					.clipShape(Circle())
+				}
+				.background(
+					Color(uiColor: .secondarySystemBackground),
+					in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+				)
+			}
+			.padding(.horizontal, 16)
+			.padding(.top, 12)
+			.padding(.bottom, 30)
+		}
+		}
+	}
+
+	private var header: some View {
+		ZStack {
+			Text(.localized("App Updates"))
+				.font(.system(size: 17, weight: .semibold))
+
+			HStack {
+				Button {
+					dismiss()
+				} label: {
+					Image(systemName: "chevron.left")
+						.font(.system(size: 17, weight: .semibold))
+						.frame(width: 36, height: 36)
+						.background(
+							Color(uiColor: .secondarySystemBackground),
+							in: Circle()
+						)
+				}
+
+				Spacer()
+
+				Button {
+					dismiss()
+				} label: {
+					Image(systemName: "xmark")
+						.font(.system(size: 14, weight: .bold))
+						.frame(width: 36, height: 36)
+						.background(
+							Color(uiColor: .secondarySystemBackground),
+							in: Circle()
+						)
 				}
 			}
 		}
+		.foregroundStyle(.primary)
+	}
+
+	private var updateAllCard: some View {
+		HStack {
+			Text(.localized("Update All"))
+				.font(.system(size: 17, weight: .semibold))
+				.foregroundStyle(.blue)
+
+			Spacer()
+
+			Text(updates.count.description)
+				.font(.system(size: 14, weight: .bold))
+				.foregroundStyle(.white)
+				.frame(minWidth: 24, minHeight: 24)
+				.padding(.horizontal, updates.count > 99 ? 4 : 0)
+				.background(Color(red: 0.91, green: 0.20, blue: 0.14), in: Capsule())
+		}
+		.padding(.horizontal, 16)
+		.frame(minHeight: 54)
+		.background(
+			Color(uiColor: .secondarySystemBackground),
+			in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+		)
+		.accessibilityElement(children: .combine)
 	}
 }
 
