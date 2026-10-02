@@ -15,6 +15,7 @@ import IDeviceSwift
 struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
+	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
 	@AppStorage(UpdateManager.updateNotificationsEnabledKey) private var _updateNotificationsEnabled = false
 	@AppStorage(ZagBackgroundUpdateRefresh.automaticPreparationKey) private var _automaticUpdatePreparation = false
@@ -73,6 +74,12 @@ struct SettingsView: View {
 					Toggle(
 						.localized("Ask every time"),
 						isOn: $_askCertificateEveryTime
+					)
+					.tint(.green)
+
+					Toggle(
+						.localized("Allow Customisation"),
+						isOn: $_allowSigningCustomisation
 					)
 					.tint(.green)
 
