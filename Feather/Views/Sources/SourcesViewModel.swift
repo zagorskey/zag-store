@@ -1064,7 +1064,7 @@ final class UpdateManager: ObservableObject {
 		)
 	}
 
-	static func variantIdentity(
+	nonisolated static func variantIdentity(
 		appName: String,
 		variantDescription: String?
 	) -> String {
