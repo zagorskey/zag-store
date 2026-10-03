@@ -113,10 +113,6 @@ struct AppearanceView: View {
 					.listRowBackground(EmptyView())
 			} header: {
 				Text(.localized("Theme"))
-			} 
-				AppearanceTintColorView()
-					.listRowInsets(EdgeInsets())
-					.listRowBackground(EmptyView())
 			}
 
 			Section {
