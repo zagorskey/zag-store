@@ -216,7 +216,9 @@ extension SettingsView {
 		}
 
 		Section {
-			EmptyView()
+			NavigationLink(destination: ZagExperimentalSigningView()) {
+				Label("Signing", systemImage: "signature")
+			}
 		} header: {
 			Text("Experimental Features")
 		}
@@ -559,6 +561,32 @@ extension SettingsView {
 	}
 }
 
+
+
+
+private struct ZagExperimentalSigningView: View {
+	@StateObject private var optionsManager = OptionsManager.shared
+
+	var body: some View {
+		Form {
+			Section {
+				Toggle(isOn: $optionsManager.options.experiment_replaceSubstrateWithEllekit) {
+					Label("Replace Substrate with ElleKit", systemImage: "pencil")
+				}
+				Toggle(isOn: $optionsManager.options.experiment_supportLiquidGlass) {
+					Label("Enable Liquid Glass", systemImage: "26.circle")
+				}
+			} footer: {
+				Text("These experimental transformations modify apps while signing. Replace Substrate with ElleKit attempts to redirect injected tweaks that depend on CydiaSubstrate to ElleKit. Enable Liquid Glass attempts to make compatible apps use the newer Liquid Glass appearance. Compatibility varies by app and injected tweak.")
+			}
+		}
+		.navigationTitle("Signing")
+		.zagWallpaperSurface()
+		.onChange(of: optionsManager.options) { _ in
+			optionsManager.saveOptions()
+		}
+	}
+}
 
 
 private struct ZagSettingsBackupView: View {
