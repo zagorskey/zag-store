@@ -616,16 +616,16 @@ private struct ZagLoggingSettingsView: View {
 			}
 
 			Section {
-				_categoryMetric("Signing")
-				_categoryMetric("Installation")
-				_categoryMetric("RPPairing")
-				_categoryMetric("Updates")
-				LabeledContent("Warnings", value: "\(logSnapshot.warningCount)")
-				LabeledContent("Errors", value: "\(logSnapshot.errorCount)")
+				_activityLink("Sessions", count: logSnapshot.categoryCounts["Session", default: 0], mode: .sessions)
+				_activityLink("Signing", count: logSnapshot.categoryCounts["Signing", default: 0] + logSnapshot.categoryCounts["Manual Signing", default: 0], mode: .signing)
+				_activityLink("Installation", count: logSnapshot.categoryCounts["Installation", default: 0] + logSnapshot.categoryCounts["Repository Install", default: 0] + logSnapshot.categoryCounts["Repository Transaction", default: 0], mode: .installation)
+				_activityLink("RPPairing", count: logSnapshot.categoryCounts["RPPairing", default: 0], mode: .rppairing)
+				_activityLink("Updates", count: logSnapshot.categoryCounts["Updates", default: 0] + logSnapshot.categoryCounts["Notifications", default: 0], mode: .updates)
+				_activityLink("Warnings & Errors", count: logSnapshot.warningCount + logSnapshot.errorCount, mode: .problems)
 			} header: {
 				Text("Activity")
 			} footer: {
-				Text("Counts reflect the events currently retained in the Zag Store log.")
+				Text("Counts reflect retained events. Tap a row to open the matching filtered log.")
 			}
 
 			Section {
@@ -816,8 +816,17 @@ private struct ZagLoggingSettingsView: View {
 	}
 
 	@ViewBuilder
-	private func _categoryMetric(_ category: String) -> some View {
-		LabeledContent(category, value: "\(logSnapshot.categoryCounts[category, default: 0])")
+	private func _activityLink(_ title: String, count: Int, mode: ZagLogViewerView.LaunchMode) -> some View {
+		NavigationLink(destination: ZagLogViewerView(launchMode: mode)) {
+			HStack {
+				Text(title)
+				Spacer()
+				Text("\(count)")
+					.foregroundStyle(.secondary)
+					.monospacedDigit()
+			}
+		}
+		.disabled(count == 0)
 	}
 
 	private var _lastEventText: String {
@@ -1098,12 +1107,19 @@ private struct ZagLogViewerView: View {
 	enum LaunchMode {
 		case all
 		case currentProblems
+		case sessions
+		case signing
+		case installation
+		case rppairing
+		case updates
+		case problems
 	}
 
 	private enum Filter: String, CaseIterable, Identifiable {
 		case all = "All"
 		case currentSession = "Current Session"
 		case currentProblems = "Current Problems"
+		case sessions = "Sessions"
 		case signing = "Signing"
 		case installation = "Installation"
 		case rppairing = "RPPairing"
@@ -1181,7 +1197,18 @@ private struct ZagLogViewerView: View {
 	@State private var searchText = ""
 
 	init(launchMode: LaunchMode = .all) {
-		_selectedFilter = State(initialValue: launchMode == .currentProblems ? .currentProblems : .all)
+		let filter: Filter
+		switch launchMode {
+		case .all: filter = .all
+		case .currentProblems: filter = .currentProblems
+		case .sessions: filter = .sessions
+		case .signing: filter = .signing
+		case .installation: filter = .installation
+		case .rppairing: filter = .rppairing
+		case .updates: filter = .updates
+		case .problems: filter = .errors
+		}
+		_selectedFilter = State(initialValue: filter)
 	}
 	@State private var newestFirst = true
 	@State private var filteredShareURL: URL?
@@ -1209,6 +1236,8 @@ private struct ZagLogViewerView: View {
 				return true
 			case .currentProblems:
 				return entry.level == "ERROR" || entry.level == "WARN"
+			case .sessions:
+				return entry.category == "Session"
 			case .signing:
 				return entry.category == "Signing" || entry.category == "Manual Signing"
 			case .installation:
