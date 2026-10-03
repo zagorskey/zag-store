@@ -9,6 +9,7 @@ import SwiftUI
 import NimbleViews
 import AltSourceKit
 import NimbleJSON
+import NukeUI
 import OSLog
 import UIKit.UIImpactFeedbackGenerator
 
@@ -118,60 +119,66 @@ struct SourcesAddView: View {
 					)
 				}
 
-				if !_filteredRecommendedSourcesData
-					.isEmpty {
-
-					NBSection(
-						.localized("Featured")
-					) {
+				NBSection(
+					.localized("Featured")
+				) {
+					if _filteredRecommendedSourcesData.isEmpty {
+						HStack {
+							Spacer()
+							ProgressView()
+							Spacer()
+						}
+						.frame(height: 62)
+						.listRowSeparator(.hidden)
+					} else {
 						ForEach(
 							_filteredRecommendedSourcesData,
 							id: \.url
 						) { url, source in
-							HStack(
-								spacing: 2
-							) {
-								FRIconCellView(
-									title:
-										source.name ??
-										.localized(
-											"Unknown"
-										),
-									subtitle:
-										url.absoluteString,
-									iconUrl:
-										source.currentIconURL
-								)
+							HStack(spacing: 10) {
+								LazyImage(url: source.currentIconURL) { state in
+									if let image = state.image {
+										image.appIconStyle(size: 62)
+									} else {
+										Image("App_Unknown")
+											.appIconStyle(size: 62)
+									}
+								}
 
-								Button {
-									Storage.shared
-										.addSource(
-											url,
-											repository:
-												source
-										) { _ in
-											_refreshFilteredRecommendedSourcesData()
-										}
-								} label: {
-									NBButton(
-										.localized(
-											"Add"
-										),
-										systemImage:
-											"arrow.down",
-										style:
-											.text
-									)
+								VStack(alignment: .leading, spacing: 2) {
+									Text(source.name ?? .localized("Unknown"))
+										.zagContentTitleStyle()
+										.lineLimit(1)
+
+									Text(url.absoluteString)
+										.font(.system(size: 15, weight: .regular))
+										.foregroundStyle(Color(uiColor: .secondaryLabel))
+										.lineLimit(1)
+										.truncationMode(.tail)
+								}
+
+								Spacer(minLength: 8)
+
+								ZagActionPill(
+									title: .localized("Add")
+								) {
+									Storage.shared.addSource(
+										url,
+										repository: source
+									) { _ in
+										_refreshFilteredRecommendedSourcesData()
+									}
 								}
 							}
+							.zagAppStoreRowSeparator()
 						}
-					} footer: {
-						Text(
-							.localized(
-								"Open an [issue](https://github.com/claration/Feather/issues) on GitHub if you want your source to be featured."
-							)
-						)
 					}
+				} footer: {
+					Text(
+						.localized(
+							"Open an [issue](https://github.com/claration/Feather/issues) on GitHub if you want your source to be featured."
+						)
+					)
 				}
 			}
 			.toolbar {
