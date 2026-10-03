@@ -741,6 +741,27 @@ final class UpdateManager: ObservableObject {
 			for identity in repoIdentities.sorted() {
 				diagnosticLines.append("  repo: \(identity)")
 			}
+
+			let exactReleaseMatches = repositories.flatMap { repository in
+				repository.apps.compactMap { candidate -> String? in
+					guard candidate.id == installed.bundleID else { return nil }
+					let releases = candidate.versions ?? []
+					let exact = releases.contains { release in
+						guard release.version == installed.version else { return false }
+						if installed.build.isEmpty { return true }
+						guard let build = release.build, !build.isEmpty else { return false }
+						return build == installed.build
+					}
+					guard exact else { return nil }
+					return "\(candidate.currentName) | repo=\(repository.name ?? "<unknown>")"
+				}
+			}
+			if !exactReleaseMatches.isEmpty {
+				diagnosticLines.append("  EXACT INSTALLED RELEASE MATCHES:")
+				for match in Set(exactReleaseMatches).sorted() {
+					diagnosticLines.append("    • \(match)")
+				}
+			}
 		}
 
 		diagnosticLines.append("")
