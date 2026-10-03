@@ -92,9 +92,7 @@ struct DownloadButtonView: View {
 						}
 					}
 				} else if let bundleID = app.id,
-						  pairingCore.isInstalled(bundleID: bundleID),
-						  _hasTrackedVariant(bundleID: bundleID),
-						  !_matchesTrackedVariant(bundleID: bundleID) {
+						  _hasInstalledTrackedAlternative(bundleID: bundleID) {
 					ZagActionPill(title: .localized("Switch Variant")) {
 						_performAction { _startGetAndInstall() }
 					}
@@ -343,11 +341,30 @@ struct DownloadButtonView: View {
 		_installInline(signed)
 	}
 
-	private func _hasTrackedVariant(bundleID: String) -> Bool {
-		let variantOrigins = UserDefaults.standard.dictionary(
+	private func _hasInstalledTrackedAlternative(bundleID: String) -> Bool {
+		let defaults = UserDefaults.standard
+		let variantOrigins = defaults.dictionary(
 			forKey: "zagStore.repositoryVariantOrigins"
 		) as? [String: String] ?? [:]
-		return variantOrigins[bundleID] != nil
+
+		guard
+			let trackedVariant = variantOrigins[bundleID],
+			trackedVariant != UpdateManager.variantIdentity(for: app)
+		else {
+			return false
+		}
+
+		// The device inventory is authoritative when available. A tracked
+		// lineage is also sufficient here because it is only written after a
+		// successful install (or explicit legacy adoption), and it lets a
+		// repository sibling offer variant replacement even while the pairing
+		// inventory is refreshing.
+		if pairingCore.isInstalled(bundleID: bundleID) {
+			return true
+		}
+		return defaults.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] != nil
 	}
 
 	private func _matchesTrackedVariant(bundleID: String) -> Bool {
