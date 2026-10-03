@@ -1850,11 +1850,11 @@ private struct ZagUpdateDiagnosticsReportView: View {
 	@State private var copied = false
 
 	var body: some View {
-		ScrollView([.vertical, .horizontal], showsIndicators: true) {
+		ScrollView(.vertical, showsIndicators: true) {
 			Text(updateManager.diagnosticsReport)
 				.font(.system(.caption, design: .monospaced))
 				.textSelection(.enabled)
-				.fixedSize(horizontal: true, vertical: true)
+				.frame(maxWidth: .infinity, alignment: .leading)
 				.padding()
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
