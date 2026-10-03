@@ -503,12 +503,22 @@ extension SettingsView {
 			preferredStyle: .alert
 		)
 
+		let warningAmber = UIColor(Color.orange)
 		if let symbol = UIImage(
 			systemName: "exclamationmark.triangle.fill",
 			withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-		)?.withTintColor(.systemOrange, renderingMode: .alwaysOriginal) {
+		) {
+			let renderer = UIGraphicsImageRenderer(size: symbol.size)
+			let renderedSymbol = renderer.image { _ in
+				warningAmber.setFill()
+				symbol.withRenderingMode(.alwaysTemplate).draw(
+					in: CGRect(origin: .zero, size: symbol.size),
+					blendMode: .normal,
+					alpha: 1
+				)
+			}
 			let attachment = NSTextAttachment()
-			attachment.image = symbol
+			attachment.image = renderedSymbol.withRenderingMode(.alwaysOriginal)
 			attachment.bounds = CGRect(x: 0, y: -3, width: 18, height: 18)
 			let title = NSMutableAttributedString(attachment: attachment)
 			title.append(NSAttributedString(string: "  Advanced Settings"))
@@ -521,7 +531,7 @@ extension SettingsView {
 				_advancedSettingsUnlocked = true
 			}
 		}
-		proceed.setValue(UIColor.systemOrange, forKey: "titleTextColor")
+		proceed.setValue(warningAmber, forKey: "titleTextColor")
 		alert.addAction(proceed)
 		alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
 		guard
