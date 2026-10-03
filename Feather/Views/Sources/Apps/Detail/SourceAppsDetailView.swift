@@ -16,6 +16,7 @@ struct SourceAppsDetailView: View {
 	@Environment(\.scenePhase) private var scenePhase
 	@ObservedObject var downloadManager = DownloadManager.shared
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
+	@AppStorage("ZagStore.showInternalMetadata") private var _showInternalMetadata = false
 	@State private var _downloadProgress: Double = 0
 	@State var cancellable: AnyCancellable? // Combine
 	@State private var _isScreenshotPreviewPresented: Bool = false
@@ -164,6 +165,23 @@ struct SourceAppsDetailView: View {
 					}
 				}
 				
+				if _showInternalMetadata {
+					Divider()
+					NBSection("Developer Metadata") {
+						VStack(spacing: 12) {
+							_infoRow(title: "Bundle ID", value: app.id ?? "Unknown")
+							_infoRow(title: "Unique ID", value: app.currentUniqueId)
+							_infoRow(title: "Variant Identity", value: UpdateManager.variantIdentity(for: app))
+							_infoRow(title: "Repository ID", value: source.id ?? "Unknown")
+							_infoRow(title: "Tracked Repository", value: _trackedRepositoryValue())
+							_infoRow(title: "Tracked App Identity", value: _trackedAppIdentityValue())
+							_infoRow(title: "Tracked Variant", value: _trackedVariantValue())
+							_infoRow(title: "Device Inventory", value: _deviceInventoryValue())
+							_infoRow(title: "Download Host", value: app.currentDownloadUrl?.host ?? "Unknown")
+						}
+					}
+				}
+
 				if let appPermissions = app.appPermissions {
 					NBSection(.localized("Permissions")) {
 						Group {
@@ -254,6 +272,34 @@ struct SourceAppsDetailView: View {
 }
 
 private extension SourceAppsDetailView {
+	func _trackedRepositoryValue() -> String {
+		guard let bundleID = app.id else { return "None" }
+		let values = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
+		return values[bundleID] ?? "None"
+	}
+
+	func _trackedAppIdentityValue() -> String {
+		guard let bundleID = app.id else { return "None" }
+		let values = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryAppOrigins") as? [String: String] ?? [:]
+		return values[bundleID] ?? "None"
+	}
+
+	func _trackedVariantValue() -> String {
+		guard let bundleID = app.id else { return "None" }
+		let values = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryVariantOrigins") as? [String: String] ?? [:]
+		return values[bundleID] ?? "None"
+	}
+
+	func _deviceInventoryValue() -> String {
+		guard let bundleID = app.id else { return "Unknown" }
+		guard let installed = pairingCore.installedAppInfo(bundleID: bundleID) else {
+			return "Not present"
+		}
+		return installed.build.isEmpty
+			? "Installed • \(installed.version)"
+			: "Installed • \(installed.version) (\(installed.build))"
+	}
+
 	func _installedVariantLabel(bundleID: String) -> String? {
 		let defaults = UserDefaults.standard
 		let variantOrigins = defaults.dictionary(
