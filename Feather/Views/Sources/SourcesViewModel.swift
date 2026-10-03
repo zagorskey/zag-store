@@ -463,15 +463,37 @@ final class UpdateManager: ObservableObject {
 			for installed in deviceInventory.values {
 				guard !installed.version.isEmpty else { continue }
 
-				let signedName = signedApps.first {
-					$0.identifier == installed.bundleID
-				}?.name
+				let matchingSignedApps = signedApps.filter {
+					$0.identifier == installed.bundleID &&
+					$0.version == installed.version
+				}
 
-				let repositoryName = repositories
-					.lazy
+				let signedName: String? = {
+					if matchingSignedApps.count == 1 {
+						return matchingSignedApps[0].name
+					}
+
+					if !installed.build.isEmpty {
+						let buildMatches = matchingSignedApps.filter {
+							_buildVersion(for: $0) == installed.build
+						}
+						if buildMatches.count == 1 {
+							return buildMatches[0].name
+						}
+					}
+
+					let distinctNames = Set(
+						matchingSignedApps.compactMap { $0.name }.filter { !$0.isEmpty }
+					)
+					return distinctNames.count == 1 ? distinctNames.first : nil
+				}()
+
+				let repositoryMatches = repositories
 					.flatMap { $0.apps }
-					.first { $0.id == installed.bundleID }?
-					.currentName
+					.filter { $0.id == installed.bundleID }
+				let repositoryName = repositoryMatches.count == 1
+					? repositoryMatches[0].currentName
+					: nil
 
 				_addLocalApp(
 					name: signedName ?? repositoryName ?? installed.bundleID,
