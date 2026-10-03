@@ -414,7 +414,10 @@ extension SettingsView {
 	private var _backupAndRestoreSection: some View {
 		Section {
 			NavigationLink(destination: ZagSettingsBackupView()) {
-				Label("All Settings", systemImage: "externaldrive.badge.timemachine")
+				Label("Backup Settings", systemImage: "square.and.arrow.up")
+			}
+			NavigationLink(destination: ZagSettingsRestoreView()) {
+				Label("Restore Settings", systemImage: "square.and.arrow.down")
 			}
 		} header: {
 			Text("Backup & Restore")
@@ -558,7 +561,6 @@ extension SettingsView {
 
 private struct ZagSettingsBackupView: View {
 	@State private var backupURL: URL?
-	@State private var isImporterPresented = false
 	@State private var message: String?
 
 	var body: some View {
@@ -571,23 +573,12 @@ private struct ZagSettingsBackupView: View {
 						message = error.localizedDescription
 					}
 				}
-
-				Button("Import All Settings", systemImage: "square.and.arrow.down") {
-					isImporterPresented = true
-				}
 			} footer: {
-				Text("Export or restore all Zag Store settings. Certificates, private keys, pairing data, installed apps and caches are not included.")
+				Text("Exports all Zag Store settings. Certificates, private keys, pairing data, installed apps and caches are not included.")
 			}
 		}
-		.navigationTitle("All Settings")
+		.navigationTitle("Backup Settings")
 		.zagWallpaperSurface()
-		.fileImporter(
-			isPresented: $isImporterPresented,
-			allowedContentTypes: [.json, .data],
-			allowsMultipleSelection: false
-		) { result in
-			importBackup(result)
-		}
 		.sheet(
 			isPresented: Binding(
 				get: { backupURL != nil },
@@ -600,6 +591,43 @@ private struct ZagSettingsBackupView: View {
 		}
 		.alert(
 			"Settings Backup",
+			isPresented: Binding(
+				get: { message != nil },
+				set: { if !$0 { message = nil } }
+			)
+		) {
+			Button("OK", role: .cancel) { message = nil }
+		} message: {
+			Text(message ?? "")
+		}
+	}
+}
+
+private struct ZagSettingsRestoreView: View {
+	@State private var isImporterPresented = false
+	@State private var message: String?
+
+	var body: some View {
+		Form {
+			Section {
+				Button("Import All Settings", systemImage: "square.and.arrow.down") {
+					isImporterPresented = true
+				}
+			} footer: {
+				Text("Restores all settings contained in a Zag Store settings backup.")
+			}
+		}
+		.navigationTitle("Restore Settings")
+		.zagWallpaperSurface()
+		.fileImporter(
+			isPresented: $isImporterPresented,
+			allowedContentTypes: [.json, .data],
+			allowsMultipleSelection: false
+		) { result in
+			importBackup(result)
+		}
+		.alert(
+			"Settings Restore",
 			isPresented: Binding(
 				get: { message != nil },
 				set: { if !$0 { message = nil } }
