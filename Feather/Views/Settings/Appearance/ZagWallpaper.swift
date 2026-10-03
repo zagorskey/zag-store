@@ -61,8 +61,14 @@ struct ZagWallpaperBackground: View {
 					.frame(width: proxy.size.width, height: proxy.size.height)
 					.clipped()
 					.blur(radius: blurred ? blurAmount : 0)
-					.brightness(brightnessEnabled ? brightnessAmount - 1 : 0)
 					.scaleEffect(blurred ? 1 + min(blurAmount, 30) * 0.005 : 1)
+					.overlay {
+						if brightnessEnabled {
+							Color.black
+								.opacity(1 - brightnessAmount)
+						}
+					}
+					.compositingGroup()
 			}
 		}
 		.ignoresSafeArea()
