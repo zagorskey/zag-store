@@ -1003,6 +1003,7 @@ private struct ZagLogViewerView: View {
 	@State private var selectedFilter: Filter = .all
 	@State private var searchText = ""
 	@State private var newestFirst = true
+	@State private var filteredShareURL: URL?
 
 	private var allEntries: [Entry] {
 		logText
@@ -1109,11 +1110,42 @@ private struct ZagLogViewerView: View {
 			}
 		}
 		.navigationTitle("Zag Store Logs")
+		.toolbar {
+			ToolbarItem(placement: .navigationBarTrailing) {
+				Menu {
+					Button {
+						UIPasteboard.general.string = _filteredLogText
+					} label: {
+						Label("Copy Filtered Logs", systemImage: "doc.on.doc")
+					}
+					.disabled(filteredEntries.isEmpty)
+
+					Button {
+						filteredShareURL = _writeFilteredLogs()
+					} label: {
+						Label("Export Filtered Logs", systemImage: "square.and.arrow.up")
+					}
+					.disabled(filteredEntries.isEmpty)
+				} label: {
+					Image(systemName: "ellipsis.circle")
+				}
+			}
+		}
 		.searchable(text: $searchText, prompt: "Search logs")
 		.zagWallpaperSurface()
 		.onAppear(perform: _reload)
 		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
 			_reload()
+		}
+		.sheet(
+			isPresented: Binding(
+				get: { filteredShareURL != nil },
+				set: { if !$0 { filteredShareURL = nil } }
+			)
+		) {
+			if let filteredShareURL {
+				ZagSettingsShareSheet(items: [filteredShareURL])
+			}
 		}
 	}
 
@@ -1215,6 +1247,25 @@ private struct ZagLogViewerView: View {
 		.frame(maxWidth: .infinity)
 		.padding(.horizontal)
 		.padding(.top, 50)
+	}
+
+	private var _filteredLogText: String {
+		filteredEntries.map(\.raw).joined(separator: "\n") + (filteredEntries.isEmpty ? "" : "\n")
+	}
+
+	private func _writeFilteredLogs() -> URL? {
+		let safeFilter = selectedFilter.rawValue
+			.lowercased()
+			.replacingOccurrences(of: " ", with: "-")
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("zag-store-\(safeFilter)-logs.txt")
+		do {
+			try _filteredLogText.write(to: url, atomically: true, encoding: .utf8)
+			return url
+		} catch {
+			ZagLogger.shared.error("Logging", "Failed to export filtered logs: \(error.localizedDescription)")
+			return nil
+		}
 	}
 
 	private func _reload() {
