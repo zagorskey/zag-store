@@ -292,8 +292,15 @@ struct SourcesView: View {
 				)
 			}
 			.sheet(
-				isPresented:
-					$_isAddingPresenting
+				isPresented: $_isAddingPresenting,
+				onDismiss: {
+					Task {
+						await viewModel.fetchSources(
+							_sources,
+							refresh: false
+						)
+					}
+				}
 			) {
 				SourcesAddView()
 			}
