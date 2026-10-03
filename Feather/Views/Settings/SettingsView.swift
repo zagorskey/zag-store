@@ -584,7 +584,7 @@ private struct ZagLoggingSettingsView: View {
 	@AppStorage(ZagLogger.verboseKey) private var verboseLogging = false
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var logSnapshot = ZagLogger.shared.snapshot()
-	@State private var shareURL: URL?
+	@State private var shareURL: URL?\n\t@State private var diagnosticReport: String?
 	@State private var showClearConfirmation = false
 
 	var body: some View {
@@ -650,6 +650,16 @@ private struct ZagLoggingSettingsView: View {
 		}
 		.sheet(
 			isPresented: Binding(
+				get: { diagnosticReport != nil },
+				set: { if !$0 { diagnosticReport = nil } }
+			)
+		) {
+			if let diagnosticReport {
+				ZagDiagnosticReportPreview(report: diagnosticReport)
+			}
+		}
+		.sheet(
+			isPresented: Binding(
 				get: { shareURL != nil },
 				set: { if !$0 { shareURL = nil } }
 			)
@@ -693,9 +703,16 @@ private struct ZagLoggingSettingsView: View {
 		let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
 		let snapshot = ZagLogger.shared.snapshot()
 
+		let health = _healthSummary(snapshot: snapshot)
 		let report = """
 		Zag Store Diagnostic Report
 		Generated: \(ISO8601DateFormatter().string(from: Date()))
+
+		[Health Summary]
+		Pairing: \(health.pairing)
+		Inventory: \(health.inventory)
+		Provenance: \(health.provenance)
+		Recent Warnings / Errors: \(health.issueCount)
 
 		[Application]
 		Version: \(version)
@@ -733,11 +750,41 @@ private struct ZagLoggingSettingsView: View {
 			try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 			let url = directory.appendingPathComponent("zag-store-diagnostic-report.txt")
 			try report.write(to: url, atomically: true, encoding: .utf8)
-			shareURL = url
+			diagnosticReport = report
 			ZagLogger.shared.info("Diagnostics", "Diagnostic report generated")
 		} catch {
 			ZagLogger.shared.error("Diagnostics", "Could not generate diagnostic report: \(error.localizedDescription)")
 		}
+	}
+
+	private func _healthSummary(snapshot: ZagLogger.Snapshot) -> (pairing: String, inventory: String, provenance: String, issueCount: Int) {
+		let defaults = UserDefaults.standard
+		let repositoryOrigins = defaults.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
+		let variantOrigins = defaults.dictionary(forKey: "zagStore.repositoryVariantOrigins") as? [String: String] ?? [:]
+		let issues = snapshot.text
+			.split(separator: "\n")
+			.filter { $0.contains("[WARN]") || $0.contains("[ERROR]") }
+			.count
+
+		let pairing: String
+		if !pairingCore.pairingFileExists {
+			pairing = "Pairing file missing"
+		} else if case .failed(let message) = pairingCore.state {
+			pairing = "Pairing failed: \(message)"
+		} else {
+			pairing = "Pairing file present"
+		}
+
+		let inventory: String
+		switch pairingCore.installedAppsState {
+		case .loaded(let count): inventory = "Loaded (\(count))"
+		case .failed(let message): inventory = "Failed: \(message)"
+		case .refreshing: inventory = "Refreshing"
+		case .idle: inventory = "Not refreshed"
+		}
+
+		let provenance = "Repositories \(repositoryOrigins.count) • Variants \(variantOrigins.count)"
+		return (pairing, inventory, provenance, issues)
 	}
 
 	private var _pairingStateText: String {
@@ -792,6 +839,67 @@ private struct ZagLoggingSettingsView: View {
 		case .refreshing: return "Refreshing"
 		case .loaded(let count): return "Loaded (\(count))"
 		case .failed(let message): return "Failed: \(message)"
+		}
+	}
+}
+
+private struct ZagDiagnosticReportPreview: View {
+	@Environment(\.dismiss) private var dismiss
+	let report: String
+	@State private var shareURL: URL?
+
+	var body: some View {
+		NavigationView {
+			ScrollView {
+				Text(report)
+					.font(.system(size: 11, design: .monospaced))
+					.textSelection(.enabled)
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.padding()
+			}
+			.navigationTitle("Diagnostic Report")
+			.navigationBarTitleDisplayMode(.inline)
+			.toolbar {
+				ToolbarItem(placement: .topBarLeading) {
+					Button("Done") { dismiss() }
+				}
+				ToolbarItemGroup(placement: .topBarTrailing) {
+					Button {
+						UIPasteboard.general.string = report
+					} label: {
+						Image(systemName: "doc.on.doc")
+					}
+					Button {
+						shareURL = _writeReport()
+					} label: {
+						Image(systemName: "square.and.arrow.up")
+					}
+				}
+			}
+		}
+		.sheet(
+			isPresented: Binding(
+				get: { shareURL != nil },
+				set: { if !$0 { shareURL = nil } }
+			)
+		) {
+			if let shareURL {
+				ZagSettingsShareSheet(items: [shareURL])
+			}
+		}
+	}
+
+	private func _writeReport() -> URL? {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("ZagStoreDiagnostics", isDirectory: true)
+		do {
+			try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+			let url = directory.appendingPathComponent("zag-store-diagnostic-report.txt")
+			try report.write(to: url, atomically: true, encoding: .utf8)
+			return url
+		} catch {
+			ZagLogger.shared.error("Diagnostics", "Could not export diagnostic report: \(error.localizedDescription)")
+			return nil
 		}
 	}
 }
