@@ -649,17 +649,122 @@ private struct ZagLoggingSettingsView: View {
 }
 
 private struct ZagLogViewerView: View {
+	private enum Filter: String, CaseIterable, Identifiable {
+		case all = "All"
+		case signing = "Signing"
+		case installation = "Installation"
+		case rppairing = "RPPairing"
+		case updates = "Updates"
+		case errors = "Errors"
+
+		var id: String { rawValue }
+	}
+
 	@State private var logText = ""
+	@State private var selectedFilter: Filter = .all
+	@State private var searchText = ""
+	@State private var newestFirst = true
+
+	private var allLines: [String] {
+		logText.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+	}
+
+	private var filteredLines: [String] {
+		var lines = allLines.filter { line in
+			switch selectedFilter {
+			case .all:
+				return true
+			case .signing:
+				return line.contains("[Signing]") || line.contains("[Manual Signing]")
+			case .installation:
+				return line.contains("[Installation]") || line.contains("[Repository Install]") || line.contains("[Repository Transaction]")
+			case .rppairing:
+				return line.contains("[RPPairing]")
+			case .updates:
+				return line.contains("[Updates]") || line.contains("[Notifications]")
+			case .errors:
+				return line.contains("[ERROR]") || line.contains("[WARN]")
+			}
+		}
+
+		let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+		if !query.isEmpty {
+			lines = lines.filter { $0.localizedCaseInsensitiveContains(query) }
+		}
+		return newestFirst ? lines.reversed() : lines
+	}
 
 	var body: some View {
-		ScrollView {
-			Text(logText.isEmpty ? "No log entries yet." : logText)
-				.font(.system(.caption, design: .monospaced))
-				.textSelection(.enabled)
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.padding()
+		VStack(spacing: 0) {
+			ScrollView(.horizontal, showsIndicators: false) {
+				HStack(spacing: 8) {
+					ForEach(Filter.allCases) { filter in
+						Button {
+							selectedFilter = filter
+						} label: {
+							Text(filter.rawValue)
+								.font(.caption.weight(.semibold))
+								.padding(.horizontal, 12)
+								.padding(.vertical, 7)
+								.background(
+									Capsule()
+										.fill(selectedFilter == filter ? Color.accentColor : Color.secondary.opacity(0.14))
+								)
+								.foregroundStyle(selectedFilter == filter ? Color.white : Color.primary)
+						}
+						.buttonStyle(.plain)
+					}
+				}
+				.padding(.horizontal)
+				.padding(.vertical, 10)
+			}
+
+			Divider()
+
+			HStack {
+				Text("\(filteredLines.count) of \(allLines.count) entries")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+				Spacer()
+				Button {
+					newestFirst.toggle()
+				} label: {
+					Label(
+						newestFirst ? "Newest First" : "Oldest First",
+						systemImage: newestFirst ? "arrow.down" : "arrow.up"
+					)
+					.font(.caption)
+				}
+				.buttonStyle(.plain)
+			}
+			.padding(.horizontal)
+			.padding(.vertical, 8)
+
+			Divider()
+
+			ScrollView {
+				if filteredLines.isEmpty {
+					ContentUnavailableView(
+						searchText.isEmpty ? "No Log Entries" : "No Matches",
+						systemImage: searchText.isEmpty ? "doc.text" : "magnifyingglass",
+						description: Text(searchText.isEmpty ? "No entries match this category." : "Try a different search or category.")
+					)
+					.padding(.top, 50)
+				} else {
+					LazyVStack(alignment: .leading, spacing: 5) {
+						ForEach(Array(filteredLines.enumerated()), id: \.offset) { _, line in
+							Text(line)
+								.font(.system(size: 10, design: .monospaced))
+								.textSelection(.enabled)
+								.frame(maxWidth: .infinity, alignment: .leading)
+						}
+					}
+					.padding()
+				}
+			}
 		}
 		.navigationTitle("Zag Store Logs")
+		.searchable(text: $searchText, prompt: "Search logs")
 		.zagWallpaperSurface()
 		.onAppear(perform: _reload)
 		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
