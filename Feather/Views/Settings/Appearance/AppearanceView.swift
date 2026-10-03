@@ -209,9 +209,9 @@ struct AppearanceView: View {
 							isOn: $_shouldTintIcons
 						)
 					}
+				} header: {
+					Text(.localized("App Icons"))
 				}
-			} header: {
-				Text(.localized("App Icons"))
 			}
 
 			Section {
