@@ -78,11 +78,6 @@ struct SourcesAddView: View {
 					.toolbar {
 						ToolbarItem(placement: .keyboard) {
 							HStack(spacing: 8) {
-								Button(".json") {
-									_appendJSONSuffix()
-								}
-								.fontWeight(.semibold)
-
 								ForEach(0...9, id: \.self) { digit in
 									Button(String(digit)) {
 										_sourceURL.append(String(digit))
@@ -91,6 +86,11 @@ struct SourcesAddView: View {
 								}
 
 								Spacer(minLength: 4)
+
+								Button(".json") {
+									_appendJSONSuffix()
+								}
+								.fontWeight(.semibold)
 
 								Button(.localized("Done")) {
 									UIApplication.shared.sendAction(
@@ -179,18 +179,17 @@ struct SourcesAddView: View {
 					role: .cancel
 				)
 
-				ToolbarItem(placement: .confirmationAction) {
-					Button {
-						FR.handleSource(
-							_sourceURL
-						) {
-							dismiss()
-						}
-					} label: {
-						Image(systemName: "square.and.arrow.down")
+				NBToolbarButton(
+					.localized("Add"),
+					style: .text,
+					placement: .confirmationAction,
+					isDisabled: _sourceURL.isEmpty
+				) {
+					FR.handleSource(
+						_sourceURL
+					) {
+						dismiss()
 					}
-					.disabled(_sourceURL.isEmpty)
-					.accessibilityLabel(.localized("Save"))
 				}
 			}
 			.animation(
