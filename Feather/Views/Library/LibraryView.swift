@@ -444,6 +444,12 @@ struct LibraryView: View {
 								selectedAppUUIDs: $_selectedAppUUIDs
 							)
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+							.transition(
+								.asymmetric(
+									insertion: .opacity,
+									removal: .opacity.combined(with: .move(edge: .top))
+								)
+							)
 						}
 					}
 				}
@@ -503,6 +509,12 @@ struct LibraryView: View {
 
 
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+							.transition(
+								.asymmetric(
+									insertion: .opacity,
+									removal: .opacity.combined(with: .move(edge: .top))
+								)
+							)
 
 
 
@@ -589,6 +601,12 @@ struct LibraryView: View {
 
 
 							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+							.transition(
+								.asymmetric(
+									insertion: .opacity,
+									removal: .opacity.combined(with: .move(edge: .top))
+								)
+							)
 
 
 
@@ -637,6 +655,18 @@ struct LibraryView: View {
 			.animation(
 				.easeInOut(duration: 0.35),
 				value: updateManager.hasVisibleUpdates
+			)
+			.animation(
+				.easeInOut(duration: 0.35),
+				value: _filteredInstalledApps.compactMap(\.uuid)
+			)
+			.animation(
+				.easeInOut(duration: 0.35),
+				value: _filteredSignedOnlyApps.compactMap(\.uuid)
+			)
+			.animation(
+				.easeInOut(duration: 0.35),
+				value: _filteredImportedApps.compactMap(\.uuid)
 			)
 
 			.compatSearchScopes($_selectedScope) {
