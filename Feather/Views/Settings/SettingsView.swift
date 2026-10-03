@@ -498,10 +498,22 @@ extension SettingsView {
     
 	private func _presentAdvancedSettingsWarning() {
 		let alert = UIAlertController(
-			title: "⚠︎  Advanced Settings",
+			title: "Advanced Settings",
 			message: "Developer Options and Experimental Features are intended for advanced users. These settings may affect Zag Store’s behaviour and stability.",
 			preferredStyle: .alert
 		)
+
+		if let symbol = UIImage(
+			systemName: "exclamationmark.triangle.fill",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+		)?.withTintColor(.systemOrange, renderingMode: .alwaysOriginal) {
+			let attachment = NSTextAttachment()
+			attachment.image = symbol
+			attachment.bounds = CGRect(x: 0, y: -3, width: 18, height: 18)
+			let title = NSMutableAttributedString(attachment: attachment)
+			title.append(NSAttributedString(string: "  Advanced Settings"))
+			alert.setValue(title, forKey: "attributedTitle")
+		}
 
 		let proceed = UIAlertAction(title: "Proceed", style: .default) { _ in
 			UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1127,6 +1139,29 @@ private struct ZagLogViewerView: View {
 		case errors = "Errors"
 
 		var id: String { rawValue }
+
+		var icon: String {
+			switch self {
+			case .all: return "line.3.horizontal.decrease.circle"
+			case .currentSession: return "play.circle.fill"
+			case .currentProblems: return "exclamationmark.triangle.fill"
+			case .sessions: return "clock.arrow.circlepath"
+			case .signing: return "signature"
+			case .installation: return "square.and.arrow.down"
+			case .rppairing: return "link"
+			case .updates: return "arrow.triangle.2.circlepath"
+			case .errors: return "exclamationmark.octagon.fill"
+			}
+		}
+
+		var tint: Color {
+			switch self {
+			case .currentProblems: return .orange
+			case .errors: return .red
+			case .currentSession: return .green
+			default: return .accentColor
+			}
+		}
 	}
 
 	private struct Entry: Identifiable {
@@ -1266,15 +1301,18 @@ private struct ZagLogViewerView: View {
 						Button {
 							selectedFilter = filter
 						} label: {
-							Text(filter.rawValue)
-								.font(.caption.weight(.semibold))
-								.padding(.horizontal, 12)
-								.padding(.vertical, 7)
-								.background(
-									Capsule()
-										.fill(selectedFilter == filter ? Color.accentColor : Color.secondary.opacity(0.14))
-								)
-								.foregroundStyle(selectedFilter == filter ? Color.white : Color.primary)
+							HStack(spacing: 5) {
+								Image(systemName: filter.icon)
+								Text(filter.rawValue)
+							}
+							.font(.caption.weight(.semibold))
+							.padding(.horizontal, 12)
+							.padding(.vertical, 7)
+							.background(
+								Capsule()
+									.fill(selectedFilter == filter ? filter.tint : Color.secondary.opacity(0.14))
+							)
+							.foregroundStyle(selectedFilter == filter ? Color.white : filter.tint)
 						}
 						.buttonStyle(.plain)
 					}
@@ -1289,6 +1327,14 @@ private struct ZagLogViewerView: View {
 				Text("\(filteredEntries.count) of \(allEntries.count) entries")
 					.font(.caption)
 					.foregroundStyle(.secondary)
+				if selectedFilter == .currentProblems || selectedFilter == .errors {
+					Text("•")
+						.font(.caption)
+						.foregroundStyle(.secondary)
+					Text(_problemSummary)
+						.font(.caption.weight(.semibold))
+						.foregroundStyle(selectedFilter == .currentProblems ? Color.orange : Color.red)
+				}
 				Spacer()
 				Button {
 					newestFirst.toggle()
@@ -1461,6 +1507,12 @@ private struct ZagLogViewerView: View {
 		.frame(maxWidth: .infinity)
 		.padding(.horizontal)
 		.padding(.top, 50)
+	}
+
+	private var _problemSummary: String {
+		let warnings = filteredEntries.filter { $0.level == "WARN" }.count
+		let errors = filteredEntries.filter { $0.level == "ERROR" }.count
+		return "\(warnings) warning\(warnings == 1 ? "" : "s") • \(errors) error\(errors == 1 ? "" : "s")"
 	}
 
 	private var _filteredLogText: String {
