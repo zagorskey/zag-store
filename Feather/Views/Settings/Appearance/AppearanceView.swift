@@ -21,6 +21,12 @@ struct AppearanceView: View {
 	@AppStorage(ZagWallpaperStore.blurAmountKey)
 	private var _wallpaperBlurAmount: Double = 16
 
+	@AppStorage(ZagWallpaperStore.brightnessKey)
+	private var _wallpaperBrightnessEnabled = false
+
+	@AppStorage(ZagWallpaperStore.brightnessAmountKey)
+	private var _wallpaperBrightnessAmount: Double = 1
+
 	@State private var _wallpaperPickerPresenting = false
 	@AppStorage("Feather.userInterfaceStyle")
 	private var _userIntefacerStyle: Int =
@@ -127,7 +133,7 @@ struct AppearanceView: View {
 
 				if _wallpaperEnabled {
 					Toggle(
-						.localized("Blur Wallpaper"),
+						.localized("Blur"),
 						isOn: $_wallpaperBlurred
 					)
 
@@ -152,6 +158,30 @@ struct AppearanceView: View {
 							.accessibilityLabel("Wallpaper Blur")
 							.accessibilityValue("\(Int(_wallpaperBlurAmount))")
 						}
+					}
+
+					Toggle(
+						.localized("Brightness"),
+						isOn: $_wallpaperBrightnessEnabled
+					)
+
+					if _wallpaperBrightnessEnabled {
+						HStack {
+							Image(systemName: "sun.min")
+								.foregroundStyle(.secondary)
+
+							Slider(
+								value: $_wallpaperBrightnessAmount,
+								in: 0.05...1,
+								step: 0.01
+							)
+
+							Image(systemName: "sun.max.fill")
+								.foregroundStyle(.secondary)
+						}
+						.accessibilityElement(children: .combine)
+						.accessibilityLabel("Wallpaper Brightness")
+						.accessibilityValue("\(Int(_wallpaperBrightnessAmount * 100)) percent")
 					}
 
 					Button(role: .destructive) {
