@@ -622,6 +622,7 @@ final class UpdateManager: ObservableObject {
 				}()
 
 				let repositoryMatches = repositoryAppsByIdentifier[installed.bundleID] ?? []
+				guard !repositoryMatches.isEmpty else { continue }
 				let repositoryNames = Set(
 					repositoryMatches.map { $0.1.currentName }.filter { !$0.isEmpty }
 				)
@@ -806,8 +807,28 @@ final class UpdateManager: ObservableObject {
 				}
 
 				let recordedAppOrigin = recordedAppOrigins[identifier]
-				if recordedAppOrigin == nil,
-				   (repositoryAppNamesByIdentifier[identifier]?.count ?? 0) > 1 {
+				let repositoryNames = repositoryAppNamesByIdentifier[identifier] ?? []
+				let localNames = Set(candidates.map { _normalizedAppName($0.name) })
+				let legacyMatchedNames = repositoryNames.intersection(localNames)
+				let effectiveAppOrigin: String? = {
+					if let recordedAppOrigin, !recordedAppOrigin.isEmpty {
+						return recordedAppOrigin
+					}
+					if legacyMatchedNames.count == 1,
+					   let normalizedMatch = legacyMatchedNames.first,
+					   let candidate = (repositoryAppsByIdentifier[identifier] ?? []).first(where: {
+						_normalizedAppName($0.1.currentName) == normalizedMatch
+					   }) {
+						return candidate.1.currentName
+					}
+					if repositoryNames.count == 1,
+					   let candidate = (repositoryAppsByIdentifier[identifier] ?? []).first {
+						return candidate.1.currentName
+					}
+					return nil
+				}()
+
+				guard let effectiveAppOrigin else {
 					if warnedAmbiguousVariantIDs.insert(identifier).inserted {
 						print(
 							"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
@@ -820,16 +841,8 @@ final class UpdateManager: ObservableObject {
 					}
 					continue
 				}
-				if let recordedAppOrigin,
-				   _normalizedAppName(recordedAppOrigin) != _normalizedAppName(app.currentName) {
-					print(
-						"[Zag Store Updates] IGNORED VARIANT COLLISION: " +
-						"id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)"
-					)
-					ZagLogger.shared.debug(
-						"Updates",
-						"Ignored variant collision | id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)"
-					)
+
+				if _normalizedAppName(effectiveAppOrigin) != _normalizedAppName(app.currentName) {
 					continue
 				}
 
@@ -850,12 +863,8 @@ final class UpdateManager: ObservableObject {
 				}
 
 				for localApp in candidates {
-					let identityMatches = recordedAppOrigin != nil
-						? true
-						: _sameAppIdentity(
-							installedName: localApp.name,
-							repositoryName: app.currentName
-						)
+					let identityMatches =
+						_normalizedAppName(effectiveAppOrigin) == _normalizedAppName(app.currentName)
 					guard identityMatches else {
 						print(
 							"[Zag Store Updates] " +
