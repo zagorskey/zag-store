@@ -722,20 +722,19 @@ final class UpdateManager: ObservableObject {
 
 		let localAppsByIdentifier = Dictionary(grouping: localApps) { $0.identifier }
 		var repositoryAppNamesByIdentifier: [String: Set<String>] = [:]
-		for repository in repositories {
-			for candidate in repository.apps {
-				guard let identifier = candidate.id, !identifier.isEmpty else { continue }
-			repositoryAppNamesByIdentifier[identifier, default: []].insert(
+		for identifier in localAppsByIdentifier.keys {
+			for (_, candidate) in repositoryAppsByIdentifier[identifier] ?? [] {
+				repositoryAppNamesByIdentifier[identifier, default: []].insert(
 					_normalizedAppName(candidate.currentName)
 				)
 			}
 		}
 
-		for repository in repositories {
-			for app in repository.apps {
+		// Only installed/local bundle IDs can produce updates. Iterate their
+		// indexed repository candidates instead of walking the entire catalog.
+		for identifier in localAppsByIdentifier.keys {
+			for (repository, app) in repositoryAppsByIdentifier[identifier] ?? [] {
 				guard
-					let identifier = app.id,
-					!identifier.isEmpty,
 					let availableVersion = app.currentVersion,
 					!availableVersion.isEmpty
 				else {
