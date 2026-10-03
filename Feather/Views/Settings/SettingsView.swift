@@ -587,6 +587,7 @@ private struct ZagLoggingSettingsView: View {
 	@State private var shareURL: URL?
 	@State private var diagnosticReport: String?
 	@State private var showClearConfirmation = false
+	@State private var showCurrentProblems = false
 
 	var body: some View {
 		Form {
@@ -601,6 +602,13 @@ private struct ZagLoggingSettingsView: View {
 
 			Section {
 				_currentSessionHealthCard
+				NavigationLink(
+					destination: ZagLogViewerView(launchMode: .currentProblems),
+					isActive: $showCurrentProblems
+				) {
+					EmptyView()
+				}
+				.hidden()
 			} header: {
 				Text("Current Session")
 			} footer: {
@@ -736,22 +744,37 @@ private struct ZagLoggingSettingsView: View {
 		let metrics = _currentSessionMetrics
 		let status = _currentSessionStatus
 		VStack(alignment: .leading, spacing: 10) {
-			HStack(spacing: 8) {
-				Image(systemName: status.icon)
-					.foregroundStyle(status.color)
-				Text(status.title)
-					.font(.headline)
-				Spacer()
-				Text(metrics.startedAt)
-					.font(.caption)
-					.foregroundStyle(.secondary)
+			Button {
+				if metrics.warnings > 0 || metrics.errors > 0 {
+					showCurrentProblems = true
+				}
+			} label: {
+				HStack(spacing: 8) {
+					Image(systemName: status.icon)
+						.foregroundStyle(status.color)
+					Text(status.title)
+						.font(.headline)
+						.foregroundStyle(.primary)
+					Spacer()
+					Text(metrics.startedAt)
+						.font(.caption)
+						.foregroundStyle(.secondary)
+					if metrics.warnings > 0 || metrics.errors > 0 {
+						Image(systemName: "chevron.right")
+							.font(.caption.weight(.semibold))
+							.foregroundStyle(.tertiary)
+					}
+				}
 			}
+			.buttonStyle(.plain)
+			.disabled(metrics.warnings == 0 && metrics.errors == 0)
+
 			HStack {
 				_sessionMetric(title: "Events", value: metrics.entries)
 				Spacer()
-				_sessionMetric(title: "Warnings", value: metrics.warnings)
+				_sessionProblemMetric(title: "Warnings", value: metrics.warnings)
 				Spacer()
-				_sessionMetric(title: "Errors", value: metrics.errors)
+				_sessionProblemMetric(title: "Errors", value: metrics.errors)
 			}
 		}
 		.padding(.vertical, 4)
@@ -767,6 +790,19 @@ private struct ZagLoggingSettingsView: View {
 				.font(.caption2)
 				.foregroundStyle(.secondary)
 		}
+	}
+
+	@ViewBuilder
+	private func _sessionProblemMetric(title: String, value: Int) -> some View {
+		Button {
+			if value > 0 {
+				showCurrentProblems = true
+			}
+		} label: {
+			_sessionMetric(title: title, value: value)
+		}
+		.buttonStyle(.plain)
+		.disabled(value == 0)
 	}
 
 	private func _displayTimestamp(_ value: String) -> String {
@@ -1059,9 +1095,15 @@ private struct ZagDiagnosticReportPreview: View {
 }
 
 private struct ZagLogViewerView: View {
+	enum LaunchMode {
+		case all
+		case currentProblems
+	}
+
 	private enum Filter: String, CaseIterable, Identifiable {
 		case all = "All"
 		case currentSession = "Current Session"
+		case currentProblems = "Current Problems"
 		case signing = "Signing"
 		case installation = "Installation"
 		case rppairing = "RPPairing"
@@ -1135,8 +1177,12 @@ private struct ZagLogViewerView: View {
 	}
 
 	@State private var logText = ""
-	@State private var selectedFilter: Filter = .all
+	@State private var selectedFilter: Filter
 	@State private var searchText = ""
+
+	init(launchMode: LaunchMode = .all) {
+		_selectedFilter = State(initialValue: launchMode == .currentProblems ? .currentProblems : .all)
+	}
 	@State private var newestFirst = true
 	@State private var filteredShareURL: URL?
 
@@ -1154,11 +1200,15 @@ private struct ZagLogViewerView: View {
 	}
 
 	private var filteredEntries: [Entry] {
-		let sourceEntries = selectedFilter == .currentSession ? currentSessionEntries : allEntries
+		let sourceEntries = (selectedFilter == .currentSession || selectedFilter == .currentProblems)
+			? currentSessionEntries
+			: allEntries
 		var entries = sourceEntries.filter { entry in
 			switch selectedFilter {
 			case .all, .currentSession:
 				return true
+			case .currentProblems:
+				return entry.level == "ERROR" || entry.level == "WARN"
 			case .signing:
 				return entry.category == "Signing" || entry.category == "Manual Signing"
 			case .installation:
