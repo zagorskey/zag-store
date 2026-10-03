@@ -91,6 +91,15 @@ struct DownloadButtonView: View {
 							UIApplication.openApp(with: bundleID)
 						}
 					}
+				} else if let bundleID = app.id,
+						  pairingCore.isInstalled(bundleID: bundleID),
+						  _hasTrackedVariant(bundleID: bundleID),
+						  !_matchesTrackedVariant(bundleID: bundleID) {
+					ZagActionPill(title: .localized("Switch Variant")) {
+						_performAction { _startGetAndInstall() }
+					}
+					.disabled(actionClaimed)
+					.accessibilityLabel(Text("Switch to \(app.currentName)"))
 				} else if _hasLocalSignedCopy {
 					ZagActionPill(title: .localized("Install")) {
 						_performAction { _installExistingSignedCopy() }
@@ -332,6 +341,13 @@ struct DownloadButtonView: View {
 		zagPhase = .installing
 		installationProgress = 0
 		_installInline(signed)
+	}
+
+	private func _hasTrackedVariant(bundleID: String) -> Bool {
+		let variantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		return variantOrigins[bundleID] != nil
 	}
 
 	private func _matchesTrackedVariant(bundleID: String) -> Bool {
