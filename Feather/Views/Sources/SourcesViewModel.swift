@@ -294,6 +294,14 @@ final class SourcesViewModel: ObservableObject {
 final class UpdateManager: ObservableObject {
 	static let shared = UpdateManager()
 
+	struct LegacyVariantCandidate: Identifiable, Hashable {
+		let bundleID: String
+		let appName: String
+		let repositoryName: String
+
+		var id: String { bundleID + "|" + appName + "|" + repositoryName }
+	}
+
 	struct AvailableUpdate: Identifiable {
 		let app: ASRepository.App
 		let source: ASRepository
@@ -317,6 +325,7 @@ final class UpdateManager: ObservableObject {
 	@Published private(set) var updates: [AvailableUpdate] = []
 	@Published private(set) var persistedUpdateCount: Int
 	@Published private(set) var diagnosticsReport = "Run a repository refresh to capture update diagnostics."
+	@Published private(set) var legacyVariantCandidates: [LegacyVariantCandidate] = []
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
@@ -613,6 +622,38 @@ final class UpdateManager: ObservableObject {
 		let recordedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
 		) as? [String: String] ?? [:]
+
+		if case .loaded = pairingCore.installedAppsState {
+			var adoptionCandidates: [LegacyVariantCandidate] = []
+			for installed in deviceInventory.values {
+				guard recordedAppOrigins[installed.bundleID] == nil else { continue }
+				let matches = repositories.flatMap { repository in
+					repository.apps.compactMap { candidate -> LegacyVariantCandidate? in
+						guard candidate.id == installed.bundleID else { return nil }
+						return LegacyVariantCandidate(
+							bundleID: installed.bundleID,
+							appName: candidate.currentName,
+							repositoryName: repository.name ?? "Unknown Repository"
+						)
+					}
+				}
+				let uniqueNames = Set(matches.map { _normalizedAppName($0.appName) })
+				guard uniqueNames.count > 1 else { continue }
+				var seenNames = Set<String>()
+				for candidate in matches.sorted(by: {
+					if $0.appName == $1.appName { return $0.repositoryName < $1.repositoryName }
+					return $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending
+				}) {
+					let key = _normalizedAppName(candidate.appName)
+					if seenNames.insert(key).inserted {
+						adoptionCandidates.append(candidate)
+					}
+				}
+			}
+			legacyVariantCandidates = adoptionCandidates
+		} else {
+			legacyVariantCandidates = []
+		}
 
 		var repositoryOriginAliases: [String: Set<String>] = [:]
 		for (storedSource, candidateRepository) in SourcesViewModel.shared.sources {
@@ -937,6 +978,24 @@ final class UpdateManager: ObservableObject {
 	) -> Bool {
 		_normalizedAppName(installedName) ==
 			_normalizedAppName(repositoryName)
+	}
+
+	func adoptLegacyVariant(_ candidate: LegacyVariantCandidate) {
+		var appOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		appOrigins[candidate.bundleID] = candidate.appName
+		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
+		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
+	}
+
+	func clearLegacyVariantAdoption(bundleID: String) {
+		var appOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		appOrigins.removeValue(forKey: bundleID)
+		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
+		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
 	}
 
 	private func _repositoryMatchesRecordedOrigin(
