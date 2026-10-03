@@ -600,6 +600,19 @@ private struct ZagLoggingSettingsView: View {
 			}
 
 			Section {
+				_categoryMetric("Signing")
+				_categoryMetric("Installation")
+				_categoryMetric("RPPairing")
+				_categoryMetric("Updates")
+				LabeledContent("Warnings", value: "\(logSnapshot.warningCount)")
+				LabeledContent("Errors", value: "\(logSnapshot.errorCount)")
+			} header: {
+				Text("Activity")
+			} footer: {
+				Text("Counts reflect the events currently retained in the Zag Store log.")
+			}
+
+			Section {
 				Toggle(isOn: $verboseLogging) {
 					Label("Verbose Logging", systemImage: "text.alignleft")
 				}
@@ -679,6 +692,11 @@ private struct ZagLoggingSettingsView: View {
 			}
 			Button("Cancel", role: .cancel) {}
 		}
+	}
+
+	@ViewBuilder
+	private func _categoryMetric(_ category: String) -> some View {
+		LabeledContent(category, value: "\(logSnapshot.categoryCounts[category, default: 0])")
 	}
 
 	private var _lastEventText: String {
