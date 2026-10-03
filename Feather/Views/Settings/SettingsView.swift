@@ -293,7 +293,9 @@ extension SettingsView {
 
 		case .diagnostics:
 			Section {
-				EmptyView()
+				NavigationLink(destination: ZagUpdateDiagnosticsView()) {
+					Label("Update Diagnostics", systemImage: "waveform.path.ecg.rectangle")
+				}
 			} header: {
 				Text("Diagnostics")
 			}
@@ -658,4 +660,40 @@ private struct ZagSettingsShareSheet: UIViewControllerRepresentable {
 	}
 
 	func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+
+private struct ZagUpdateDiagnosticsView: View {
+	@ObservedObject private var updateManager = UpdateManager.shared
+	@State private var copied = false
+
+	var body: some View {
+		Form {
+			Section {
+				ScrollView(.horizontal, showsIndicators: true) {
+					Text(updateManager.diagnosticsReport)
+						.font(.system(.caption, design: .monospaced))
+						.textSelection(.enabled)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.padding(.vertical, 4)
+				}
+			} header: {
+				Text("Latest Repository Refresh")
+			} footer: {
+				Text("Refresh repositories before copying so this snapshot reflects the current installed apps and repository candidates.")
+			}
+
+			Section {
+				Button {
+					UIPasteboard.general.string = updateManager.diagnosticsReport
+					copied = true
+					UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				} label: {
+					Label(copied ? "Copied" : "Copy Diagnostics", systemImage: copied ? "checkmark" : "doc.on.doc")
+				}
+			}
+		}
+		.navigationTitle("Update Diagnostics")
+		.zagWallpaperSurface()
+	}
 }
