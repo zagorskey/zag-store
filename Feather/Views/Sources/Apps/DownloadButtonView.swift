@@ -337,6 +337,7 @@ struct DownloadButtonView: View {
 		guard let bundleID = app.id, !bundleID.isEmpty else { return }
 		var origins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
 		var originIcons = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOriginIcons") as? [String: String] ?? [:]
+		var appOrigins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryAppOrigins") as? [String: String] ?? [:]
 
 		let repositoryKey =
 			source?.id ??
@@ -346,6 +347,12 @@ struct DownloadButtonView: View {
 		if let repositoryKey, !repositoryKey.isEmpty {
 			origins[bundleID] = repositoryKey
 			UserDefaults.standard.set(origins, forKey: "zagStore.repositoryOrigins")
+		}
+
+		let appIdentity = app.currentName.trimmingCharacters(in: .whitespacesAndNewlines)
+		if !appIdentity.isEmpty {
+			appOrigins[bundleID] = appIdentity
+			UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
 		}
 
 		if let iconURL = source?.currentIconURL?.absoluteString {
