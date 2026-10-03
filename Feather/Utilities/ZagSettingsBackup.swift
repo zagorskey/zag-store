@@ -7,6 +7,21 @@ enum ZagSettingsBackup {
 		let exportedAt: Date
 		let appVersion: String
 		let settings: [String: Value]
+		let wallpaper: Data?
+
+		init(
+			formatVersion: Int,
+			exportedAt: Date,
+			appVersion: String,
+			settings: [String: Value],
+			wallpaper: Data? = nil
+		) {
+			self.formatVersion = formatVersion
+			self.exportedAt = exportedAt
+			self.appVersion = appVersion
+			self.settings = settings
+			self.wallpaper = wallpaper
+		}
 	}
 
 	enum Value: Codable {
@@ -100,7 +115,8 @@ enum ZagSettingsBackup {
 			formatVersion: 1,
 			exportedAt: Date(),
 			appVersion: Bundle.main.version,
-			settings: values
+			settings: values,
+			wallpaper: try? Data(contentsOf: ZagWallpaperStore.url)
 		)
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -133,6 +149,20 @@ enum ZagSettingsBackup {
 			UserDefaults.standard.set(value.propertyListValue, forKey: key)
 		}
 		UserDefaults.standard.synchronize()
+
+		if let wallpaper = document.wallpaper {
+			let directory = ZagWallpaperStore.url.deletingLastPathComponent()
+			try FileManager.default.createDirectory(
+				at: directory,
+				withIntermediateDirectories: true
+			)
+			try wallpaper.write(to: ZagWallpaperStore.url, options: .atomic)
+		} else if document.settings[ZagWallpaperStore.enabledKey] != nil {
+			// A backup that explicitly contains wallpaper settings but no image
+			// must not leave a stale wallpaper from the current installation behind.
+			try? FileManager.default.removeItem(at: ZagWallpaperStore.url)
+			UserDefaults.standard.set(false, forKey: ZagWallpaperStore.enabledKey)
+		}
 
 		if let data = UserDefaults.standard.data(forKey: "signing_options"),
 		   let options = try? JSONDecoder().decode(Options.self, from: data) {
