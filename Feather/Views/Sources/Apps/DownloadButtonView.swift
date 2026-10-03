@@ -44,7 +44,7 @@ struct DownloadButtonView: View {
 	}
 
 	var body: some View {
-		VStack(spacing: 2) {
+		VStack(spacing: 3) {
 			ZStack {
 				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
 					_progressRing(progress: downloadProgress, showsStop: downloadProgress < 0.75)
@@ -114,13 +114,18 @@ struct DownloadButtonView: View {
 			}
 			.frame(width: 88, height: 34)
 
-			Text(_stageCaption.isEmpty ? (_modificationLabel ?? "") : _stageCaption)
-				.font(.system(size: 9, weight: .medium))
-				.foregroundStyle(.secondary)
-				.lineLimit(1)
-				.minimumScaleFactor(0.75)
-				.frame(width: 88, height: 11)
-				.opacity((_stageCaption.isEmpty ? (_modificationLabel ?? "") : _stageCaption).isEmpty ? 0 : 1)
+			if let caption = _actionCaption {
+				Text(caption.text)
+					.font(.system(size: 10, weight: .regular))
+					.foregroundStyle(caption.color)
+					.lineLimit(1)
+					.minimumScaleFactor(0.75)
+					.frame(width: 88, height: 11)
+					.padding(.top, 1)
+			} else {
+				Color.clear
+					.frame(width: 88, height: 12)
+			}
 		}
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
@@ -153,6 +158,46 @@ struct DownloadButtonView: View {
 			actionClaimed = true
 		}
 		action()
+	}
+
+	private var _actionCaption: (text: String, color: Color)? {
+		if !_stageCaption.isEmpty {
+			return (_stageCaption, .secondary)
+		}
+
+		if
+			let bundleID = app.id,
+			pairingCore.isInstalled(bundleID: bundleID),
+			_matchesTrackedVariant(bundleID: bundleID),
+			let expiration = _installedCertificateExpiration(bundleID: bundleID)
+		{
+			let info = expiration.expirationInfo()
+			return (info.formatted, info.color)
+		}
+
+		if let modificationLabel = _modificationLabel {
+			return (modificationLabel, .secondary)
+		}
+		return nil
+	}
+
+	private func _installedCertificateExpiration(bundleID: String) -> Date? {
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.predicate = NSPredicate(format: "identifier == %@", bundleID)
+		guard let signed = try? Storage.shared.context.fetch(request).first else {
+			return nil
+		}
+
+		if let certificate = Storage.shared.getCertificate(from: signed) {
+			return certificate.expiration
+		}
+
+		let certificates = Storage.shared.getAllCertificates()
+		let selectedIndex = UserDefaults.standard.integer(forKey: "feather.selectedCert")
+		if certificates.indices.contains(selectedIndex) {
+			return certificates[selectedIndex].expiration
+		}
+		return certificates.first?.expiration
 	}
 
 	private var _modificationLabel: String? {
