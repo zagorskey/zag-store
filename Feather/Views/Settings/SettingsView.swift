@@ -584,7 +584,8 @@ private struct ZagLoggingSettingsView: View {
 	@AppStorage(ZagLogger.verboseKey) private var verboseLogging = false
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var logSnapshot = ZagLogger.shared.snapshot()
-	@State private var shareURL: URL?\n\t@State private var diagnosticReport: String?
+	@State private var shareURL: URL?
+	@State private var diagnosticReport: String?
 	@State private var showClearConfirmation = false
 
 	var body: some View {
