@@ -588,11 +588,11 @@ struct DownloadButtonView: View {
 			}
 			zagPhase = .installing
 			installationProgress = 0
-			_installInline(signed)
+			_installInline(signed, imported: imported)
 		}
 	}
 
-	private func _installInline(_ signed: Signed) {
+	private func _installInline(_ signed: Signed, imported: Imported? = nil) {
 		let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
 		let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
 
@@ -643,12 +643,29 @@ struct DownloadButtonView: View {
 
 				installedBundleID = signed.identifier
 				_rememberRepositoryOrigin()
+				_markManagedInstalled(signed)
 				_removeSupersededSignedCopies(keeping: signed)
+				if let imported {
+					Storage.shared.deleteApp(for: imported)
+				}
 				try? pairingCore.refreshInstalledApps()
 				zagPhase = .idle
 			} catch {
 				_failTransaction(error.localizedDescription)
 			}
+		}
+	}
+
+	private func _markManagedInstalled(_ signed: Signed) {
+		guard let bundleID = signed.identifier, !bundleID.isEmpty else { return }
+		let key = "zagStore.managedInstalledBundleIDs"
+		let defaults = UserDefaults.standard
+		let currentData = defaults.data(forKey: key) ?? Data()
+		var identifiers =
+			(try? JSONDecoder().decode(Set<String>.self, from: currentData)) ?? []
+		identifiers.insert(bundleID)
+		if let encoded = try? JSONEncoder().encode(identifiers) {
+			defaults.set(encoded, forKey: key)
 		}
 	}
 
