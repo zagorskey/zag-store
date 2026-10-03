@@ -588,6 +588,10 @@ final class UpdateManager: ObservableObject {
 						"[Zag Store Updates] AMBIGUOUS INSTALLED IDENTITY: " +
 						"id=\(installed.bundleID) — skipping cross-variant update matching"
 					)
+					ZagLogger.shared.warning(
+						"Ambiguous installed identity; skipped cross-variant matching | id=\(installed.bundleID)",
+						category: "Updates"
+					)
 					continue
 				}
 
@@ -745,6 +749,10 @@ final class UpdateManager: ObservableObject {
 						"[Zag Store Updates] IGNORED SOURCE COLLISION: " +
 						"id=\(identifier) | repo=\(repository.name ?? "unknown")"
 					)
+					ZagLogger.shared.debug(
+						"Ignored source collision | id=\(identifier) | repo=\(repository.name ?? "unknown")",
+						category: "Updates"
+					)
 					continue
 				}
 
@@ -760,6 +768,10 @@ final class UpdateManager: ObservableObject {
 						"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
 						"id=\(identifier) — exact app lineage required"
 					)
+					ZagLogger.shared.warning(
+						"Untracked ambiguous variant; exact lineage required | id=\(identifier)",
+						category: "Updates"
+					)
 					continue
 				}
 				if let recordedAppOrigin,
@@ -767,6 +779,10 @@ final class UpdateManager: ObservableObject {
 					print(
 						"[Zag Store Updates] IGNORED VARIANT COLLISION: " +
 						"id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)"
+					)
+					ZagLogger.shared.debug(
+						"Ignored variant collision | id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)",
+						category: "Updates"
 					)
 					continue
 				}
@@ -778,6 +794,10 @@ final class UpdateManager: ObservableObject {
 							"[Zag Store Updates] IGNORED VARIANT LINEAGE: " +
 							"id=\(identifier) | tracked=\(recordedVariantOrigin) | " +
 							"candidate=\(candidateVariantIdentity)"
+						)
+						ZagLogger.shared.debug(
+							"Ignored variant lineage | id=\(identifier) | tracked=\(recordedVariantOrigin) | candidate=\(candidateVariantIdentity)",
+							category: "Updates"
 						)
 						continue
 					}
@@ -944,6 +964,10 @@ final class UpdateManager: ObservableObject {
 					"\(update.installedVersion) -> " +
 					"\(update.availableVersion) | " +
 					"repo=\(update.source.name ?? "unknown")"
+			)
+			ZagLogger.shared.info(
+				"Matched update | \(update.app.currentName) | id=\(update.app.id ?? "nil") | \(update.installedVersion) -> \(update.availableVersion) | repo=\(update.source.name ?? "unknown")",
+				category: "Updates"
 			)
 		}
 	}
