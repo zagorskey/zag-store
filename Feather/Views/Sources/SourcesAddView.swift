@@ -83,7 +83,7 @@ struct SourcesAddView: View {
 								}
 								.fontWeight(.semibold)
 
-								ForEach(0...9, id: \\.self) { digit in
+								ForEach(0...9, id: \.self) { digit in
 									Button(String(digit)) {
 										_sourceURL.append(String(digit))
 									}
