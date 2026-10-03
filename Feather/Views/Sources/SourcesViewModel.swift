@@ -531,6 +531,20 @@ final class UpdateManager: ObservableObject {
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
 
+		// Build the expensive catalog lookups once. With large sources this avoids
+		// repeatedly flattening/scanning tens of thousands of apps for every
+		// installed bundle ID during refresh finalization.
+		let signedAppsByIdentifier = Dictionary(grouping: signedApps) {
+			$0.identifier ?? ""
+		}
+		var repositoryAppsByIdentifier: [String: [(ASRepository, ASRepository.App)]] = [:]
+		for repository in repositories {
+			for candidate in repository.apps {
+				guard let identifier = candidate.id, !identifier.isEmpty else { continue }
+				repositoryAppsByIdentifier[identifier, default: []].append((repository, candidate))
+			}
+		}
+
 		if case .loaded = pairingCore.installedAppsState {
 			// Device inventory is authoritative for both installed state and
 			// the version/build actually present on the iPhone. A Signed record
@@ -538,9 +552,7 @@ final class UpdateManager: ObservableObject {
 			for installed in deviceInventory.values {
 				guard !installed.version.isEmpty else { continue }
 
-				let bundleSignedApps = signedApps.filter {
-					$0.identifier == installed.bundleID
-				}
+				let bundleSignedApps = signedAppsByIdentifier[installed.bundleID] ?? []
 				let matchingSignedApps = bundleSignedApps.filter {
 					$0.version == installed.version
 				}
@@ -573,11 +585,9 @@ final class UpdateManager: ObservableObject {
 					return bundleNames.count == 1 ? bundleNames.first : nil
 				}()
 
-				let repositoryMatches = repositories
-					.flatMap { $0.apps }
-					.filter { $0.id == installed.bundleID }
+				let repositoryMatches = repositoryAppsByIdentifier[installed.bundleID] ?? []
 				let repositoryNames = Set(
-					repositoryMatches.map { $0.currentName }.filter { !$0.isEmpty }
+					repositoryMatches.map { $0.1.currentName }.filter { !$0.isEmpty }
 				)
 				let repositoryName = repositoryNames.count == 1
 					? repositoryNames.first
@@ -661,22 +671,20 @@ final class UpdateManager: ObservableObject {
 			var adoptionCandidates: [LegacyVariantCandidate] = []
 			for installed in deviceInventory.values {
 				guard recordedAppOrigins[installed.bundleID] == nil else { continue }
-				let matches = repositories.flatMap { repository in
-					repository.apps.compactMap { candidate -> LegacyVariantCandidate? in
-						guard candidate.id == installed.bundleID else { return nil }
-						let releaseDescription =
-							candidate.currentAppVersion?.localizedDescription ??
-							candidate.versionDescription ??
-							candidate.currentDescription
-						return LegacyVariantCandidate(
-							bundleID: installed.bundleID,
-							appName: candidate.currentName,
-							repositoryName: repository.name ?? "Unknown Repository",
-							version: candidate.currentVersion,
-							variantDescription: releaseDescription?
-								.trimmingCharacters(in: .whitespacesAndNewlines)
-						)
-					}
+				let matches = (repositoryAppsByIdentifier[installed.bundleID] ?? []).map {
+					repository, candidate in
+					let releaseDescription =
+						candidate.currentAppVersion?.localizedDescription ??
+						candidate.versionDescription ??
+						candidate.currentDescription
+					return LegacyVariantCandidate(
+						bundleID: installed.bundleID,
+						appName: candidate.currentName,
+						repositoryName: repository.name ?? "Unknown Repository",
+						version: candidate.currentVersion,
+						variantDescription: releaseDescription?
+							.trimmingCharacters(in: .whitespacesAndNewlines)
+					)
 				}
 				let uniqueNames = Set(matches.map { _normalizedAppName($0.appName) })
 				guard uniqueNames.count > 1 else { continue }
@@ -865,7 +873,7 @@ final class UpdateManager: ObservableObject {
 			let origin = recordedOrigins[installed.bundleID] ?? "<none>"
 			let appOrigin = recordedAppOrigins[installed.bundleID] ?? "<none>"
 			diagnosticLines.append("- id=\(installed.bundleID) | version=\(installed.version) | build=\(installed.build.isEmpty ? "<none>" : installed.build) | origin=\(origin) | appOrigin=\(appOrigin)")
-			let matchingSigned = signedApps.filter { $0.identifier == installed.bundleID }
+			let matchingSigned = signedAppsByIdentifier[installed.bundleID] ?? []
 			if matchingSigned.isEmpty {
 				diagnosticLines.append("  signed: <none>")
 			} else {
@@ -877,29 +885,26 @@ final class UpdateManager: ObservableObject {
 				}
 			}
 
-			let repoIdentities = Set(repositories.flatMap { repository in
-				repository.apps.compactMap { candidate -> String? in
-					guard candidate.id == installed.bundleID else { return nil }
-					return "\(candidate.currentName) | repo=\(repository.name ?? "<unknown>")"
+			let repoIdentities = Set(
+				(repositoryAppsByIdentifier[installed.bundleID] ?? []).map { repository, candidate in
+					"\(candidate.currentName) | repo=\(repository.name ?? "<unknown>")"
 				}
-			})
+			)
 			for identity in repoIdentities.sorted() {
 				diagnosticLines.append("  repo: \(identity)")
 			}
 
-			let exactReleaseMatches = repositories.flatMap { repository in
-				repository.apps.compactMap { candidate -> String? in
-					guard candidate.id == installed.bundleID else { return nil }
-					let releases = candidate.versions ?? []
-					let exact = releases.contains { release in
-						guard release.version == installed.version else { return false }
-						if installed.build.isEmpty { return true }
-						guard let build = release.build, !build.isEmpty else { return false }
-						return build == installed.build
-					}
-					guard exact else { return nil }
-					return "\(candidate.currentName) | repo=\(repository.name ?? "<unknown>")"
+			let exactReleaseMatches = (repositoryAppsByIdentifier[installed.bundleID] ?? []).compactMap {
+				repository, candidate -> String? in
+				let releases = candidate.versions ?? []
+				let exact = releases.contains { release in
+					guard release.version == installed.version else { return false }
+					if installed.build.isEmpty { return true }
+					guard let build = release.build, !build.isEmpty else { return false }
+					return build == installed.build
 				}
+				guard exact else { return nil }
+				return "\(candidate.currentName) | repo=\(repository.name ?? "<unknown>")"
 			}
 			if !exactReleaseMatches.isEmpty {
 				diagnosticLines.append("  EXACT INSTALLED RELEASE MATCHES:")
