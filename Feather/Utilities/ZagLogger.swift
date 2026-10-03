@@ -24,7 +24,13 @@ final class ZagLogger: ObservableObject {
 	private let maxBytes = 1_000_000
 	private let trimToBytes = 750_000
 
-	private init() {}
+	private init() {
+		_write(
+			level: .info,
+			category: "Session",
+			message: "Zag Store session started"
+		)
+	}
 
 	var isVerboseEnabled: Bool {
 		UserDefaults.standard.bool(forKey: Self.verboseKey)
@@ -72,6 +78,9 @@ final class ZagLogger: ObservableObject {
 		let byteCount: Int
 		let entryCount: Int
 		let lastEventDate: Date?
+		let categoryCounts: [String: Int]
+		let warningCount: Int
+		let errorCount: Int
 	}
 
 	func snapshot() -> Snapshot {
@@ -85,11 +94,28 @@ final class ZagLogger: ObservableObject {
 				formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 				return formatter.date(from: String(token))
 			}
+			var categoryCounts: [String: Int] = [:]
+			var warningCount = 0
+			var errorCount = 0
+			for line in lines {
+				let value = String(line)
+				if value.contains(" [WARN] ") { warningCount += 1 }
+				if value.contains(" [ERROR] ") { errorCount += 1 }
+				guard
+					let levelEnd = value.range(of: "] ["),
+					let categoryEnd = value.range(of: "] ", range: levelEnd.upperBound..<value.endIndex)
+				else { continue }
+				let category = String(value[levelEnd.upperBound..<categoryEnd.lowerBound])
+				categoryCounts[category, default: 0] += 1
+			}
 			return Snapshot(
 				text: text,
 				byteCount: data.count,
 				entryCount: lines.count,
-				lastEventDate: lastDate
+				lastEventDate: lastDate,
+				categoryCounts: categoryCounts,
+				warningCount: warningCount,
+				errorCount: errorCount
 			)
 		}
 	}
