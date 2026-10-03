@@ -22,6 +22,9 @@ struct SourcesAddView: View {
 	@Environment(\.dismiss)
 	var dismiss
 
+	@Environment(\.colorScheme)
+	private var colorScheme
+
 	private let _dataService = NBFetchService()
 
 	@State
@@ -54,6 +57,22 @@ struct SourcesAddView: View {
 		URL(string: $0)
 	}
 
+	private var popupBackground: Color {
+		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
+	}
+
+	private var sectionBackground: Color {
+		colorScheme == .dark ? Color(hex: "#2C2C2E") : Color(hex: "#FFFFFF")
+	}
+
+	private var separatorColor: Color {
+		colorScheme == .dark ? Color(hex: "#403F44") : Color(hex: "#E7E7E9")
+	}
+
+	private var pillBackground: Color {
+		colorScheme == .dark ? Color(hex: "#3E3D42") : Color(hex: "#EEEEF0")
+	}
+
 
 	// MARK: - Body
 
@@ -63,9 +82,7 @@ struct SourcesAddView: View {
 			displayMode: .inline
 		) {
 			Form {
-				NBSection(
-					.localized("Source URL")
-				) {
+				Section {
 					TextField(
 						.localized(
 							"Enter Source URL"
@@ -106,22 +123,24 @@ struct SourcesAddView: View {
 							.padding(.vertical, 6)
 						}
 					}
+				} header: {
+					Text(.localized("Source URL"))
+						.font(.headline)
+						.foregroundStyle(.secondary)
+						.textCase(nil)
 				} footer: {
-					Text(
-						.localized(
-							"The only supported repositories are AltStore repositories."
+					VStack(alignment: .leading, spacing: 4) {
+						Text(.localized("The only supported repositories are AltStore repositories."))
+						Text(
+							verbatim:
+								"[\(String.localized("Learn more about how to setup a repository..."))](https://faq.altstore.io/developers/make-a-source)"
 						)
-					)
-
-					Text(
-						verbatim:
-							"[\(String.localized("Learn more about how to setup a repository..."))](https://faq.altstore.io/developers/make-a-source)"
-					)
+					}
+					.font(.subheadline)
+					.foregroundStyle(.secondary)
 				}
 
-				NBSection(
-					.localized("Featured")
-				) {
+				Section {
 					if _filteredRecommendedSourcesData.isEmpty {
 						HStack {
 							Spacer()
@@ -160,7 +179,8 @@ struct SourcesAddView: View {
 								Spacer(minLength: 8)
 
 								ZagActionPill(
-									title: .localized("Add")
+									title: .localized("Add"),
+									backgroundColor: pillBackground
 								) {
 									Storage.shared.addSource(
 										url,
@@ -170,17 +190,32 @@ struct SourcesAddView: View {
 									}
 								}
 							}
-							.zagAppStoreRowSeparator()
+							.overlay(alignment: .bottom) {
+								if url != _filteredRecommendedSourcesData.last?.url {
+									Rectangle()
+										.fill(separatorColor)
+										.frame(height: 3.0 / UIScreen.main.scale)
+								}
+							}
 						}
 					}
+				} header: {
+					Text(.localized("Featured"))
+						.font(.headline)
+						.foregroundStyle(.secondary)
+						.textCase(nil)
 				} footer: {
 					Text(
 						.localized(
 							"Open an [issue](https://github.com/claration/Feather/issues) on GitHub if you want your source to be featured."
 						)
 					)
+					.font(.subheadline)
+					.foregroundStyle(.secondary)
 				}
 			}
+			.scrollContentBackground(.hidden)
+			.background(popupBackground)
 			.toolbar {
 				NBToolbarButton(
 					role: .cancel
