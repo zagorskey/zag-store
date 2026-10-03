@@ -292,6 +292,7 @@ extension SigningView {
 
 		let generator = UIImpactFeedbackGenerator(style: .light)
 		generator.impactOccurred()
+		ZagLogger.shared.info("Manual Signing", "Signing started: \(app.name ?? "Unknown") | id=\(app.identifier ?? "unknown") | version=\(app.version ?? "unknown")")
 		_isSigning = true
 
 		var options = _temporaryOptions
@@ -311,6 +312,7 @@ extension SigningView {
 			certificate: certificate
 		) { error in
 			if let error {
+				ZagLogger.shared.error("Manual Signing", "\(app.name ?? "Unknown") | id=\(app.identifier ?? "unknown") | \(error.localizedDescription)")
 				let ok = UIAlertAction(title: .localized("Dismiss"), style: .cancel) { _ in
 					dismiss()
 				}
@@ -321,6 +323,7 @@ extension SigningView {
 					actions: [ok]
 				)
 			} else {
+				ZagLogger.shared.info("Manual Signing", "Signing completed: \(app.name ?? "Unknown") | id=\(options.appIdentifier ?? app.identifier ?? "unknown") | installAfterSigning=\(options.post_installAppAfterSigned) | deleteImported=\(options.post_deleteAppAfterSigned)")
 				if
 					options.post_deleteAppAfterSigned,
 					!app.isSigned
