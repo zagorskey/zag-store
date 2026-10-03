@@ -332,35 +332,6 @@ final class SourcesViewModel: ObservableObject {
 final class UpdateManager: ObservableObject {
 	static let shared = UpdateManager()
 
-	struct LegacyVariantCandidate: Identifiable, Hashable {
-		let bundleID: String
-		let appName: String
-		let repositoryName: String
-		let repositoryKey: String?
-		let version: String?
-		let variantDescription: String?
-
-		var id: String {
-			bundleID + "|" + appName + "|" + repositoryName + "|" +
-			(repositoryKey ?? "") + "|" + (version ?? "") + "|" +
-			(variantDescription ?? "")
-		}
-
-		var displayName: String {
-			guard let variantDescription, !variantDescription.isEmpty else {
-				return appName
-			}
-			return appName + " — " + variantDescription
-		}
-
-		var variantIdentity: String {
-			UpdateManager.variantIdentity(
-				appName: appName,
-				variantDescription: variantDescription
-			)
-		}
-	}
-
 	struct AvailableUpdate: Identifiable {
 		let app: ASRepository.App
 		let source: ASRepository
@@ -384,7 +355,6 @@ final class UpdateManager: ObservableObject {
 	@Published private(set) var updates: [AvailableUpdate] = []
 	@Published private(set) var persistedUpdateCount: Int
 	@Published private(set) var diagnosticsReport = "Run a repository refresh to capture update diagnostics."
-	@Published private(set) var legacyVariantCandidates: [LegacyVariantCandidate] = []
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
@@ -717,54 +687,6 @@ final class UpdateManager: ObservableObject {
 		let recordedVariantOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryVariantOrigins"
 		) as? [String: String] ?? [:]
-
-		if case .loaded = pairingCore.installedAppsState {
-			var adoptionCandidates: [LegacyVariantCandidate] = []
-			for installed in deviceInventory.values {
-				guard recordedAppOrigins[installed.bundleID] == nil else { continue }
-				let signedHistory = signedAppsByIdentifier[installed.bundleID] ?? []
-				let hasZagLineage =
-					!signedHistory.isEmpty ||
-					persistedRepositoryOrigins[installed.bundleID] != nil
-				guard hasZagLineage else { continue }
-				let matches = (repositoryAppsByIdentifier[installed.bundleID] ?? []).map {
-					repository, candidate in
-					let releaseDescription =
-						candidate.currentAppVersion?.localizedDescription ??
-						candidate.versionDescription ??
-						candidate.currentDescription
-					let repositoryKey =
-						repository.id ??
-						repository.website?.absoluteString ??
-						repository.name
-					return LegacyVariantCandidate(
-						bundleID: installed.bundleID,
-						appName: candidate.currentName,
-						repositoryName: repository.name ?? "Unknown Repository",
-						repositoryKey: repositoryKey,
-						version: candidate.currentVersion,
-						variantDescription: releaseDescription?
-							.trimmingCharacters(in: .whitespacesAndNewlines)
-					)
-				}
-				let uniqueNames = Set(matches.map { _normalizedAppName($0.appName) })
-				guard uniqueNames.count > 1 else { continue }
-				var seenCandidates = Set<String>()
-				for candidate in matches.sorted(by: {
-					if $0.appName == $1.appName { return $0.repositoryName < $1.repositoryName }
-					return $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending
-				}) {
-					let key = _normalizedAppName(candidate.appName) + "|" +
-						(candidate.variantDescription ?? "").lowercased()
-					if seenCandidates.insert(key).inserted {
-						adoptionCandidates.append(candidate)
-					}
-				}
-			}
-			legacyVariantCandidates = adoptionCandidates
-		} else {
-			legacyVariantCandidates = []
-		}
 
 		var repositoryOriginAliases: [String: Set<String>] = [:]
 		for (storedSource, candidateRepository) in SourcesViewModel.shared.sources {
@@ -1149,54 +1071,6 @@ final class UpdateManager: ObservableObject {
 	) -> Bool {
 		_normalizedAppName(installedName) ==
 			_normalizedAppName(repositoryName)
-	}
-
-	func adoptLegacyVariant(_ candidate: LegacyVariantCandidate) {
-		var appOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryAppOrigins"
-		) as? [String: String] ?? [:]
-		appOrigins[candidate.bundleID] = candidate.appName
-		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
-		var variantOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryVariantOrigins"
-		) as? [String: String] ?? [:]
-		variantOrigins[candidate.bundleID] = candidate.variantIdentity
-		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
-
-		// Legacy adoption must establish repository provenance too. App name or
-		// bundle ID alone cannot distinguish tweaked variants that deliberately
-		// share the original application's identifier.
-		if let repositoryKey = candidate.repositoryKey, !repositoryKey.isEmpty {
-			var repositoryOrigins = UserDefaults.standard.dictionary(
-				forKey: "zagStore.repositoryOrigins"
-			) as? [String: String] ?? [:]
-			repositoryOrigins[candidate.bundleID] = repositoryKey
-			UserDefaults.standard.set(
-				repositoryOrigins,
-				forKey: "zagStore.repositoryOrigins"
-			)
-		}
-
-		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
-	}
-
-	func clearLegacyVariantAdoption(bundleID: String) {
-		var appOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryAppOrigins"
-		) as? [String: String] ?? [:]
-		appOrigins.removeValue(forKey: bundleID)
-		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
-		var variantOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryVariantOrigins"
-		) as? [String: String] ?? [:]
-		variantOrigins.removeValue(forKey: bundleID)
-		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
-		var repositoryOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOrigins"
-		) as? [String: String] ?? [:]
-		repositoryOrigins.removeValue(forKey: bundleID)
-		UserDefaults.standard.set(repositoryOrigins, forKey: "zagStore.repositoryOrigins")
-		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
 	}
 
 	static func variantIdentity(for app: ASRepository.App) -> String {
