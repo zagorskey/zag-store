@@ -563,6 +563,9 @@ final class UpdateManager: ObservableObject {
 		let persistedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
 		) as? [String: String] ?? [:]
+		let persistedRepositoryOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
 
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
@@ -623,6 +626,16 @@ final class UpdateManager: ObservableObject {
 
 				let repositoryMatches = repositoryAppsByIdentifier[installed.bundleID] ?? []
 				guard !repositoryMatches.isEmpty else { continue }
+
+				// Device inventory tells us what is installed, not who installed it.
+				// Only Zag Store signing history or persisted lineage makes an app
+				// eligible for repository update matching. This keeps ordinary App
+				// Store installations out of the sideload update resolver.
+				let hasZagLineage =
+					!bundleSignedApps.isEmpty ||
+					persistedAppOrigins[installed.bundleID] != nil ||
+					persistedRepositoryOrigins[installed.bundleID] != nil
+				guard hasZagLineage else { continue }
 				let repositoryNames = Set(
 					repositoryMatches.map { $0.1.currentName }.filter { !$0.isEmpty }
 				)
@@ -695,9 +708,7 @@ final class UpdateManager: ObservableObject {
 		var seenLocalApps = Set<String>()
 		var warnedAmbiguousVariantIDs = Set<String>()
 
-		let recordedOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOrigins"
-		) as? [String: String] ?? [:]
+		let recordedOrigins = persistedRepositoryOrigins
 		let recordedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
 		) as? [String: String] ?? [:]
@@ -709,6 +720,11 @@ final class UpdateManager: ObservableObject {
 			var adoptionCandidates: [LegacyVariantCandidate] = []
 			for installed in deviceInventory.values {
 				guard recordedAppOrigins[installed.bundleID] == nil else { continue }
+				let signedHistory = signedAppsByIdentifier[installed.bundleID] ?? []
+				let hasZagLineage =
+					!signedHistory.isEmpty ||
+					persistedRepositoryOrigins[installed.bundleID] != nil
+				guard hasZagLineage else { continue }
 				let matches = (repositoryAppsByIdentifier[installed.bundleID] ?? []).map {
 					repository, candidate in
 					let releaseDescription =
