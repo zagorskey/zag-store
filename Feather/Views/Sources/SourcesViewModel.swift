@@ -173,6 +173,7 @@ final class SourcesViewModel: ObservableObject {
 		// source refresh still requests a fresh inventory below when possible.
 		if case .refreshing = pairingCore.installedAppsState {
 			print("[Zag Store Updates] Installed-app inventory already refreshing; keeping previous update snapshot")
+			ZagLogger.shared.warning("Updates", "Installed-app inventory already refreshing; keeping previous update snapshot")
 			return
 		}
 
@@ -193,6 +194,7 @@ final class SourcesViewModel: ObservableObject {
 			case .failure(let error):
 				if case .loaded = pairingCore.installedAppsState {
 					print("[Zag Store Updates] Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
+					ZagLogger.shared.warning("Updates", "Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
 					UpdateManager.shared.refresh(repositories: repositories)
 				} else {
 					print("[Zag Store Updates] Live inventory unavailable; keeping previous update snapshot: \(error.localizedDescription)")
@@ -411,6 +413,7 @@ final class UpdateManager: ObservableObject {
 				.requestAuthorization(options: [.badge, .alert, .sound])
 		} catch {
 			print("[Zag Store Notifications] Permission error: " + error.localizedDescription)
+			ZagLogger.shared.error("Notifications", "Permission error: \(error.localizedDescription)")
 			return false
 		}
 	}
@@ -454,6 +457,7 @@ final class UpdateManager: ObservableObject {
 		UNUserNotificationCenter.current().add(request) { error in
 			if let error {
 				print("[Zag Store Notifications] Delivery failed: " + error.localizedDescription)
+				ZagLogger.shared.error("Notifications", "Delivery failed: \(error.localizedDescription)")
 			}
 		}
 	}
@@ -625,6 +629,7 @@ final class UpdateManager: ObservableObject {
 		print(
 			"[Zag Store Updates] Local identities: \(localApps.count)"
 		)
+		ZagLogger.shared.info("Updates", "Repository reconciliation running with \(localApps.count) local identities and \(repositories.count) repositories")
 
 		for localApp in localApps {
 			print(
