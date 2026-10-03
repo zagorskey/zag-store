@@ -133,7 +133,7 @@ struct AppearanceView: View {
 						systemImage: "photo"
 					)
 				}
-				.foregroundStyle(.white)
+				.foregroundStyle(Color(hex: _selectedColorHex))
 
 				if _wallpaperEnabled {
 					Toggle(isOn: $_wallpaperBlurred) {
