@@ -827,7 +827,13 @@ struct LibraryView: View {
 			.onAppear {
 				guard !Self.didPerformInitialDeviceInventory else { return }
 				Self.didPerformInitialDeviceInventory = true
-				_refreshInstalledAppsFromDevice()
+
+				// Let the Apps list commit its first frame before starting device
+				// inventory and repository reconciliation. The refresh remains
+				// automatic, but no longer competes with the initial tab transition.
+				DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+					_refreshInstalledAppsFromDevice()
+				}
 			}
 
 			.navigationDestination(
