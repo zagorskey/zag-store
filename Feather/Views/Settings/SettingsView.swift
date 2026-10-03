@@ -581,19 +581,94 @@ extension SettingsView {
 
 
 private struct ZagLoggingSettingsView: View {
+	@AppStorage(ZagLogger.verboseKey) private var verboseLogging = false
+	@State private var logText = ""
+	@State private var shareURL: URL?
+	@State private var showClearConfirmation = false
+
 	var body: some View {
 		Form {
 			Section {
-				LabeledContent("Status") {
-					Text("Standard")
-						.foregroundStyle(.secondary)
+				Toggle(isOn: $verboseLogging) {
+					Label("Verbose Logging", systemImage: "text.alignleft")
 				}
+				.tint(.green)
 			} footer: {
-				Text("Zag Store currently uses its standard diagnostic output. Verbose runtime logging, log viewing, exporting and clearing will be added here.")
+				Text("Records detailed Zag Store activity for troubleshooting. Warnings and errors are retained even when verbose logging is off. Logs are capped automatically to prevent unlimited storage growth.")
+			}
+
+			Section {
+				NavigationLink(destination: ZagLogViewerView()) {
+					Label("View Logs", systemImage: "doc.text")
+				}
+				Button {
+					UIPasteboard.general.string = ZagLogger.shared.read()
+				} label: {
+					Label("Copy Logs", systemImage: "doc.on.doc")
+				}
+				Button {
+					shareURL = ZagLogger.shared.logURL
+				} label: {
+					Label("Export Logs", systemImage: "square.and.arrow.up")
+				}
+				Button(role: .destructive) {
+					showClearConfirmation = true
+				} label: {
+					Label("Clear Logs", systemImage: "trash")
+				}
+			} header: {
+				Text("Log Management")
 			}
 		}
 		.navigationTitle("Logging")
 		.zagWallpaperSurface()
+		.onChange(of: verboseLogging) { enabled in
+			ZagLogger.shared.info("Logging", "Verbose logging \(enabled ? "enabled" : "disabled")")
+		}
+		.sheet(
+			isPresented: Binding(
+				get: { shareURL != nil },
+				set: { if !$0 { shareURL = nil } }
+			)
+		) {
+			if let shareURL {
+				ZagSettingsShareSheet(items: [shareURL])
+			}
+		}
+		.confirmationDialog(
+			"Clear all Zag Store logs?",
+			isPresented: $showClearConfirmation,
+			titleVisibility: .visible
+		) {
+			Button("Clear Logs", role: .destructive) {
+				ZagLogger.shared.clear()
+			}
+			Button("Cancel", role: .cancel) {}
+		}
+	}
+}
+
+private struct ZagLogViewerView: View {
+	@State private var logText = ""
+
+	var body: some View {
+		ScrollView {
+			Text(logText.isEmpty ? "No log entries yet." : logText)
+				.font(.system(.caption, design: .monospaced))
+				.textSelection(.enabled)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.padding()
+		}
+		.navigationTitle("Zag Store Logs")
+		.zagWallpaperSurface()
+		.onAppear(perform: _reload)
+		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
+			_reload()
+		}
+	}
+
+	private func _reload() {
+		logText = ZagLogger.shared.read()
 	}
 }
 
