@@ -502,6 +502,7 @@ struct DownloadButtonView: View {
 
 	private func _startGetAndInstall() {
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
+		ZagLogger.shared.info("Repository Install", "Download started: \(app.currentName) | id=\(app.id ?? "unknown") | version=\(app.currentVersion ?? "unknown")")
 		zagPhase = .downloading
 
 		_ = downloadManager.startDownload(
@@ -517,6 +518,7 @@ struct DownloadButtonView: View {
 						}
 						return
 					}
+					ZagLogger.shared.info("Repository Install", "Download/import completed: \(app.currentName) | importedUUID=\(uuid ?? "unknown")")
 					guard let uuid, let imported = _importedApp(uuid: uuid) else {
 						_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
 						return
@@ -547,6 +549,7 @@ struct DownloadButtonView: View {
 		_ imported: Imported,
 		certificate: CertificatePair
 	) {
+		ZagLogger.shared.info("Signing", "Signing started: \(app.currentName) | id=\(imported.identifier ?? app.id ?? "unknown")")
 		zagPhase = .signing
 		var options = OptionsManager.shared.options
 
@@ -582,6 +585,7 @@ struct DownloadButtonView: View {
 				_failTransaction(error.localizedDescription)
 				return
 			}
+			ZagLogger.shared.info("Signing", "Signing completed: \(app.currentName) | signedUUID=\(signedUUID ?? "unknown")")
 			guard let signedUUID, let signed = _signedApp(uuid: signedUUID) else {
 				_failTransaction(.localized("Signing completed, but Zag Store could not locate the signed app."))
 				return
@@ -595,6 +599,7 @@ struct DownloadButtonView: View {
 	private func _installInline(_ signed: Signed, imported: Imported? = nil) {
 		let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
 		let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
+		ZagLogger.shared.info("Installation", "Install started: \(signed.name ?? app.currentName) | id=\(signed.identifier ?? "unknown") | method=\(method)")
 
 		Task {
 			do {
@@ -649,6 +654,7 @@ struct DownloadButtonView: View {
 					Storage.shared.deleteApp(for: imported)
 				}
 				try? pairingCore.refreshInstalledApps()
+				ZagLogger.shared.info("Installation", "Install completed: \(signed.name ?? app.currentName) | id=\(signed.identifier ?? "unknown") | temporaryImportRemoved=\(imported != nil)")
 				zagPhase = .idle
 			} catch {
 				_failTransaction(error.localizedDescription)
@@ -722,6 +728,7 @@ struct DownloadButtonView: View {
 	}
 
 	private func _failTransaction(_ message: String) {
+		ZagLogger.shared.error("Repository Transaction", "\(app.currentName) | id=\(app.id ?? "unknown") | \(message)")
 		zagPhase = .idle
 		transactionError = message
 	}
