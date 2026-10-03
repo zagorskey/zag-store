@@ -49,10 +49,11 @@ final class SourcesViewModel: ObservableObject {
 		if !refresh, sources.allSatisfy({
 			self.sources[$0] != nil
 		}) {
-			// The repository snapshot is already complete. It is safe to
-			// reconcile updates against it without entering a refresh cycle.
+			// The repository snapshot is already complete. Refresh the device
+			// inventory before reconciling updates so shared bundle identifiers
+			// are never inferred from stale Signed records.
 			reconcileRepositoryOrigins()
-			UpdateManager.shared.refresh(
+			await _refreshUpdatesUsingInstalledInventory(
 				repositories: Array(self.sources.values)
 			)
 			return
@@ -157,9 +158,47 @@ final class SourcesViewModel: ObservableObject {
 		// pill/count and app-icon badge remain untouched.
 		self.sources = completedSources
 		reconcileRepositoryOrigins()
-		UpdateManager.shared.refresh(
+		await _refreshUpdatesUsingInstalledInventory(
 			repositories: completedRepositories
 		)
+	}
+
+	@MainActor
+	private func _refreshUpdatesUsingInstalledInventory(
+		repositories: [ASRepository]
+	) async {
+		let pairingCore = ZagRPPairingCore.shared
+
+		// If a valid inventory is already loaded, use it immediately. A full
+		// source refresh still requests a fresh inventory below when possible.
+		if case .refreshing = pairingCore.installedAppsState {
+			print("[Zag Store Updates] Installed-app inventory already refreshing; keeping previous update snapshot")
+			return
+		}
+
+		do {
+			let result: Result<Set<String>, Error> = await withCheckedContinuation { continuation in
+				do {
+					try pairingCore.refreshInstalledApps { result in
+						continuation.resume(returning: result)
+					}
+				} catch {
+					continuation.resume(returning: .failure(error))
+				}
+			}
+
+			switch result {
+			case .success:
+				UpdateManager.shared.refresh(repositories: repositories)
+			case .failure(let error):
+				if case .loaded = pairingCore.installedAppsState {
+					print("[Zag Store Updates] Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
+					UpdateManager.shared.refresh(repositories: repositories)
+				} else {
+					print("[Zag Store Updates] Live inventory unavailable; keeping previous update snapshot: \(error.localizedDescription)")
+				}
+			}
+		} 
 	}
 
 	// MARK: - Repository Origin Provenance
