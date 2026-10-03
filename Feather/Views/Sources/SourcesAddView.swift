@@ -310,6 +310,7 @@ struct SourcesAddView: View {
 							}
 						}
 					}
+				}
 			}
 
 			var results: [(url: URL, data: ASRepository)] = []
