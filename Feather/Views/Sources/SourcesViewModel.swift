@@ -312,6 +312,13 @@ final class UpdateManager: ObservableObject {
 			}
 			return appName + " — " + variantDescription
 		}
+
+		var variantIdentity: String {
+			UpdateManager.variantIdentity(
+				appName: appName,
+				variantDescription: variantDescription
+			)
+		}
 	}
 
 	struct AvailableUpdate: Identifiable {
@@ -637,6 +644,9 @@ final class UpdateManager: ObservableObject {
 		let recordedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
 		) as? [String: String] ?? [:]
+		let recordedVariantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
 
 		if case .loaded = pairingCore.installedAppsState {
 			var adoptionCandidates: [LegacyVariantCandidate] = []
@@ -754,6 +764,18 @@ final class UpdateManager: ObservableObject {
 						"id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)"
 					)
 					continue
+				}
+
+				if let recordedVariantOrigin = recordedVariantOrigins[identifier] {
+					let candidateVariantIdentity = Self.variantIdentity(for: app)
+					guard recordedVariantOrigin == candidateVariantIdentity else {
+						print(
+							"[Zag Store Updates] IGNORED VARIANT LINEAGE: " +
+							"id=\(identifier) | tracked=\(recordedVariantOrigin) | " +
+							"candidate=\(candidateVariantIdentity)"
+						)
+						continue
+					}
 				}
 
 				for localApp in candidates {
@@ -1009,6 +1031,11 @@ final class UpdateManager: ObservableObject {
 		) as? [String: String] ?? [:]
 		appOrigins[candidate.bundleID] = candidate.appName
 		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
+		var variantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		variantOrigins[candidate.bundleID] = candidate.variantIdentity
+		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
 		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
 	}
 
@@ -1018,7 +1045,36 @@ final class UpdateManager: ObservableObject {
 		) as? [String: String] ?? [:]
 		appOrigins.removeValue(forKey: bundleID)
 		UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
+		var variantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		variantOrigins.removeValue(forKey: bundleID)
+		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
 		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
+	}
+
+	static func variantIdentity(for app: ASRepository.App) -> String {
+		let description =
+			app.currentAppVersion?.localizedDescription ??
+			app.versionDescription ??
+			app.currentDescription
+		return variantIdentity(
+			appName: app.currentName,
+			variantDescription: description
+		)
+	}
+
+	static func variantIdentity(
+		appName: String,
+		variantDescription: String?
+	) -> String {
+		func normalized(_ value: String) -> String {
+			value
+				.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+				.lowercased()
+				.filter { $0.isLetter || $0.isNumber }
+		}
+		return normalized(appName) + "|" + normalized(variantDescription ?? "")
 	}
 
 	private func _repositoryMatchesRecordedOrigin(
