@@ -298,8 +298,20 @@ final class UpdateManager: ObservableObject {
 		let bundleID: String
 		let appName: String
 		let repositoryName: String
+		let version: String?
+		let variantDescription: String?
 
-		var id: String { bundleID + "|" + appName + "|" + repositoryName }
+		var id: String {
+			bundleID + "|" + appName + "|" + repositoryName + "|" +
+			(version ?? "") + "|" + (variantDescription ?? "")
+		}
+
+		var displayName: String {
+			guard let variantDescription, !variantDescription.isEmpty else {
+				return appName
+			}
+			return appName + " — " + variantDescription
+		}
 	}
 
 	struct AvailableUpdate: Identifiable {
@@ -633,22 +645,30 @@ final class UpdateManager: ObservableObject {
 				let matches = repositories.flatMap { repository in
 					repository.apps.compactMap { candidate -> LegacyVariantCandidate? in
 						guard candidate.id == installed.bundleID else { return nil }
+						let releaseDescription =
+							candidate.currentAppVersion?.localizedDescription ??
+							candidate.versionDescription ??
+							candidate.currentDescription
 						return LegacyVariantCandidate(
 							bundleID: installed.bundleID,
 							appName: candidate.currentName,
-							repositoryName: repository.name ?? "Unknown Repository"
+							repositoryName: repository.name ?? "Unknown Repository",
+							version: candidate.currentVersion,
+							variantDescription: releaseDescription?
+								.trimmingCharacters(in: .whitespacesAndNewlines)
 						)
 					}
 				}
 				let uniqueNames = Set(matches.map { _normalizedAppName($0.appName) })
 				guard uniqueNames.count > 1 else { continue }
-				var seenNames = Set<String>()
+				var seenCandidates = Set<String>()
 				for candidate in matches.sorted(by: {
 					if $0.appName == $1.appName { return $0.repositoryName < $1.repositoryName }
 					return $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending
 				}) {
-					let key = _normalizedAppName(candidate.appName)
-					if seenNames.insert(key).inserted {
+					let key = _normalizedAppName(candidate.appName) + "|" +
+						(candidate.variantDescription ?? "").lowercased()
+					if seenCandidates.insert(key).inserted {
 						adoptionCandidates.append(candidate)
 					}
 				}
