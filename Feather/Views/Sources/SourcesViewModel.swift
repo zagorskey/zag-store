@@ -501,6 +501,9 @@ final class UpdateManager: ObservableObject {
 		importedApps: [Imported]
 	) {
 		var localApps: [LocalApp] = []
+		let persistedAppOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
 
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
@@ -557,7 +560,7 @@ final class UpdateManager: ObservableObject {
 					? repositoryNames.first
 					: nil
 
-				guard let installedName = signedName ?? repositoryName else {
+				guard let installedName = persistedAppOrigins[installed.bundleID] ?? signedName ?? repositoryName else {
 					print(
 						"[Zag Store Updates] AMBIGUOUS INSTALLED IDENTITY: " +
 						"id=\(installed.bundleID) — skipping cross-variant update matching"
