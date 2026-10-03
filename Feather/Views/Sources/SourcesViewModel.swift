@@ -692,6 +692,7 @@ final class UpdateManager: ObservableObject {
 
 		var foundUpdates: [AvailableUpdate] = []
 		var seenLocalApps = Set<String>()
+		var warnedAmbiguousVariantIDs = Set<String>()
 
 		let recordedOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOrigins"
@@ -807,14 +808,16 @@ final class UpdateManager: ObservableObject {
 				let recordedAppOrigin = recordedAppOrigins[identifier]
 				if recordedAppOrigin == nil,
 				   (repositoryAppNamesByIdentifier[identifier]?.count ?? 0) > 1 {
-					print(
-						"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
-						"id=\(identifier) — exact app lineage required"
-					)
-					ZagLogger.shared.warning(
-						"Updates",
-						"Untracked ambiguous variant; exact lineage required | id=\(identifier)"
-					)
+					if warnedAmbiguousVariantIDs.insert(identifier).inserted {
+						print(
+							"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
+							"id=\(identifier) — exact app lineage required"
+						)
+						ZagLogger.shared.warning(
+							"Updates",
+							"Untracked ambiguous variant; exact lineage required | id=\(identifier)"
+						)
+					}
 					continue
 				}
 				if let recordedAppOrigin,
