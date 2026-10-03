@@ -321,6 +321,9 @@ struct SourcesAddView: View {
 														repo
 												)
 											)
+
+										continuation
+											.resume()
 									}
 
 								case .failure(
@@ -329,10 +332,10 @@ struct SourcesAddView: View {
 									Logger.misc.error(
 										"Failed to fetch \(url): \(error.localizedDescription)"
 									)
-								}
 
-								continuation
-									.resume()
+									continuation
+										.resume()
+								}
 							}
 					}
 				}
