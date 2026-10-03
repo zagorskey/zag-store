@@ -938,9 +938,6 @@ final class UpdateManager: ObservableObject {
 		var diagnosticLines: [String] = []
 		diagnosticLines.append("=== Zag Store Update Diagnostics ===")
 		diagnosticLines.append("Tracked Variant Lineage:")
-		let recordedVariantOrigins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryVariantOrigins"
-		) as? [String: String] ?? [:]
 		let trackedLineageIDs = Set(recordedOrigins.keys)
 			.union(recordedAppOrigins.keys)
 			.union(recordedVariantOrigins.keys)
