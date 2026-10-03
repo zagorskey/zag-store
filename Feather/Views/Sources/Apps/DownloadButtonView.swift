@@ -30,6 +30,7 @@ struct DownloadButtonView: View {
 	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
 	@State private var palInspectionInProgress = false
+	@State private var palInspectionResult: String?
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -156,6 +157,14 @@ struct DownloadButtonView: View {
 		} message: {
 			Text(transactionError ?? "")
 		}
+		.alert("PAL Package", isPresented: Binding(
+			get: { palInspectionResult != nil },
+			set: { if !$0 { palInspectionResult = nil } }
+		)) {
+			Button(.localized("OK"), role: .cancel) {}
+		} message: {
+			Text(palInspectionResult ?? "")
+		}
 		.onChange(of: downloadManager.downloads.description) { _ in
 			setupObserver()
 		}
@@ -177,6 +186,9 @@ struct DownloadButtonView: View {
 			let publicId: String?
 			let assetPath: String?
 			let installTargets: [InstallTarget]?
+			let alternativeDistributionKeyBlob: String?
+			let sha256: String?
+			let size: Int64?
 		}
 
 		let distributionPackageRevision: Int?
@@ -207,10 +219,12 @@ struct DownloadButtonView: View {
 				}
 
 				let manifest = try JSONDecoder().decode(PALManifest.self, from: data)
+				let rawObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+				let rawVariants = rawObject?["variants"] as? [[String: Any]] ?? []
 				let deviceModel = UIDevice.current.zagPALHardwareIdentifier
 				let variants = manifest.variants ?? []
-				let matchingVariants = variants.filter { variant in
-					guard let targets = variant.installTargets else { return false }
+				let matchingIndices = variants.indices.filter { index in
+					guard let targets = variants[index].installTargets else { return false }
 					return targets.contains { $0.device == deviceModel }
 				}
 
@@ -220,25 +234,61 @@ struct DownloadButtonView: View {
 				let build = manifest.bundleVersion ?? app.currentAppVersion?.build ?? "Unknown"
 				let marketplaceID = app.marketplaceID ?? manifest.appleItemId ?? "Unknown"
 
-				let message = """
-				PAL package inspected successfully.
+				var lines = [
+					"App: \(app.currentName)",
+					"Bundle ID: \(manifest.bundleId ?? app.id ?? "Unknown")",
+					"Marketplace ID: \(marketplaceID)",
+					"Version: \(version) (\(build))",
+					"Platform: \(platformText.isEmpty ? "Unknown" : platformText)",
+					"Minimum iOS: \(minimumOS)",
+					"Device: \(deviceModel)",
+					"Variants: \(variants.count)",
+					"Matching device variants: \(matchingIndices.count)"
+				]
 
-				App: \(app.currentName)
-				Bundle ID: \(manifest.bundleId ?? app.id ?? "Unknown")
-				Marketplace ID: \(marketplaceID)
-				Version: \(version) (\(build))
-				Platform: \(platformText.isEmpty ? "Unknown" : platformText)
-				Minimum iOS: \(minimumOS)
-				Device: \(deviceModel)
-				Variants: \(variants.count)
-				Matching device variants: \(matchingVariants.count)
+				for (position, index) in matchingIndices.enumerated() {
+					let variant = variants[index]
+					let raw = rawVariants.indices.contains(index) ? rawVariants[index] : [:]
+					let assetPath = variant.assetPath ?? (raw["assetPath"] as? String) ?? "Unknown"
+					let resolvedAssetURL = assetPath == "Unknown"
+						? "Unknown"
+						: (URL(string: assetPath, relativeTo: manifestURL)?.absoluteURL.absoluteString ?? assetPath)
+					let targets = (variant.installTargets ?? []).map {
+						[$0.device, $0.os].compactMap { $0 }.joined(separator: " / ")
+					}.joined(separator: ", ")
+					let keyBlobPresent =
+						variant.alternativeDistributionKeyBlob != nil ||
+						raw["alternativeDistributionKeyBlob"] != nil
+					let hash =
+						variant.sha256 ??
+						(raw["sha256"] as? String) ??
+						(raw["hash"] as? String)
+					let size =
+						variant.size.map(String.init) ??
+						(raw["size"] as? NSNumber)?.stringValue
 
-				The ADP is valid metadata, but its IPA variants are encrypted and require Apple's MarketplaceKit licensing flow.
-				"""
+					lines.append("")
+					lines.append("Matching Variant \(position + 1)")
+					lines.append("Public ID: \(variant.publicId ?? (raw["publicId"] as? String) ?? "Unknown")")
+					lines.append("Asset path: \(assetPath)")
+					lines.append("Asset URL: \(resolvedAssetURL)")
+					lines.append("Targets: \(targets.isEmpty ? "Unknown" : targets)")
+					lines.append("Key blob: \(keyBlobPresent ? "Present" : "Not exposed")")
+					if let hash { lines.append("Hash: \(hash)") }
+					if let size { lines.append("Size: \(size) bytes") }
+					let knownKeys = Set(["publicId", "assetPath", "installTargets", "alternativeDistributionKeyBlob", "sha256", "hash", "size"])
+					let extraKeys = raw.keys.filter { !knownKeys.contains($0) }.sorted()
+					if !extraKeys.isEmpty {
+						lines.append("Other metadata: \(extraKeys.joined(separator: ", "))")
+					}
+				}
+
+				lines.append("")
+				lines.append("Inspection only — no PAL asset was installed or passed to Zag Store's IPA signing path.")
 
 				await MainActor.run {
 					palInspectionInProgress = false
-					transactionError = message
+					palInspectionResult = lines.joined(separator: "\n")
 				}
 			} catch {
 				await MainActor.run {
