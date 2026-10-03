@@ -582,12 +582,22 @@ extension SettingsView {
 
 private struct ZagLoggingSettingsView: View {
 	@AppStorage(ZagLogger.verboseKey) private var verboseLogging = false
-	@State private var logText = ""
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
+	@State private var logSnapshot = ZagLogger.shared.snapshot()
 	@State private var shareURL: URL?
 	@State private var showClearConfirmation = false
 
 	var body: some View {
 		Form {
+			Section {
+				LabeledContent("Status", value: verboseLogging ? "Verbose" : "Standard")
+				LabeledContent("Entries", value: "\(logSnapshot.entryCount)")
+				LabeledContent("Log Size", value: ByteCountFormatter.string(fromByteCount: Int64(logSnapshot.byteCount), countStyle: .file))
+				LabeledContent("Last Event", value: _lastEventText)
+			} header: {
+				Text("Overview")
+			}
+
 			Section {
 				Toggle(isOn: $verboseLogging) {
 					Label("Verbose Logging", systemImage: "text.alignleft")
@@ -598,6 +608,12 @@ private struct ZagLoggingSettingsView: View {
 			}
 
 			Section {
+				Button {
+					_generateDiagnosticReport()
+				} label: {
+					Label("Generate Diagnostic Report", systemImage: "stethoscope")
+				}
+
 				NavigationLink(destination: ZagLogViewerView()) {
 					Label("View Logs", systemImage: "doc.text")
 				}
@@ -617,13 +633,20 @@ private struct ZagLoggingSettingsView: View {
 					Label("Clear Logs", systemImage: "trash")
 				}
 			} header: {
-				Text("Log Management")
+				Text("Diagnostics & Logs")
+			} footer: {
+				Text("Diagnostic reports contain app, RPPairing, inventory, repository provenance summary and logs. Pairing records, certificate material and private keys are not included.")
 			}
 		}
 		.navigationTitle("Logging")
 		.zagWallpaperSurface()
+		.onAppear(perform: _reloadMetrics)
+		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
+			_reloadMetrics()
+		}
 		.onChange(of: verboseLogging) { enabled in
 			ZagLogger.shared.info("Logging", "Verbose logging \(enabled ? "enabled" : "disabled")")
+			_reloadMetrics()
 		}
 		.sheet(
 			isPresented: Binding(
@@ -644,6 +667,131 @@ private struct ZagLoggingSettingsView: View {
 				ZagLogger.shared.clear()
 			}
 			Button("Cancel", role: .cancel) {}
+		}
+	}
+
+	private var _lastEventText: String {
+		guard let date = logSnapshot.lastEventDate else { return "None" }
+		let formatter = DateFormatter()
+		formatter.dateStyle = .short
+		formatter.timeStyle = .medium
+		return formatter.string(from: date)
+	}
+
+	private func _reloadMetrics() {
+		logSnapshot = ZagLogger.shared.snapshot()
+	}
+
+	private func _generateDiagnosticReport() {
+		let defaults = UserDefaults.standard
+		let repositoryOrigins = defaults.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
+		let appOrigins = defaults.dictionary(forKey: "zagStore.repositoryAppOrigins") as? [String: String] ?? [:]
+		let variantOrigins = defaults.dictionary(forKey: "zagStore.repositoryVariantOrigins") as? [String: String] ?? [:]
+		let managedBundleIDs = defaults.array(forKey: "zagStore.managedInstalledBundleIDs") as? [String] ?? []
+		let bundle = Bundle.main
+		let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+		let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+		let snapshot = ZagLogger.shared.snapshot()
+
+		let report = """
+		Zag Store Diagnostic Report
+		Generated: \(ISO8601DateFormatter().string(from: Date()))
+
+		[Application]
+		Version: \(version)
+		Build: \(build)
+		Verbose Logging: \(verboseLogging ? "Enabled" : "Disabled")
+
+		[RPPairing]
+		Core Version: \(ZagRPPairingCore.version)
+		Pairing File: \(pairingCore.pairingFileExists ? "Present" : "Missing")
+		Pairing State: \(_pairingStateText)
+		Gate2 State: \(_gate2StateText)
+		Gate4 State: \(_gate4StateText)
+
+		[Installed App Inventory]
+		State: \(_inventoryStateText)
+		Loaded Bundle IDs: \(pairingCore.installedBundleIDs.count)
+
+		[Repository Provenance]
+		Tracked Repositories: \(repositoryOrigins.count)
+		Tracked App Identities: \(appOrigins.count)
+		Tracked Variant Lineages: \(variantOrigins.count)
+		Managed Installed Bundle IDs: \(managedBundleIDs.count)
+
+		[Logging]
+		Entries: \(snapshot.entryCount)
+		Size: \(ByteCountFormatter.string(fromByteCount: Int64(snapshot.byteCount), countStyle: .file))
+		Last Event: \(_lastEventText)
+
+		[Logs]
+		\(snapshot.text.isEmpty ? "No log entries." : snapshot.text)
+		"""
+
+		let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ZagStoreDiagnostics", isDirectory: true)
+		do {
+			try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+			let url = directory.appendingPathComponent("zag-store-diagnostic-report.txt")
+			try report.write(to: url, atomically: true, encoding: .utf8)
+			shareURL = url
+			ZagLogger.shared.info("Diagnostics", "Diagnostic report generated")
+		} catch {
+			ZagLogger.shared.error("Diagnostics", "Could not generate diagnostic report: \(error.localizedDescription)")
+		}
+	}
+
+	private var _pairingStateText: String {
+		switch pairingCore.state {
+		case .idle: return "Idle"
+		case .starting: return "Starting"
+		case .advertising: return "Advertising"
+		case .connected: return "Connected"
+		case .pin: return "Awaiting PIN"
+		case .paired: return "Paired"
+		case .failed(let message): return "Failed: \(message)"
+		}
+	}
+
+	private var _gate2StateText: String {
+		switch pairingCore.gate2State {
+		case .idle: return "Idle"
+		case .starting: return "Starting"
+		case .lockdown: return "Lockdown"
+		case .pairing: return "Pairing"
+		case .pairRecord: return "Pair Record"
+		case .coreDevice: return "CoreDevice"
+		case .rsd: return "RSD"
+		case .deviceInfo: return "Device Info"
+		case .installationProxy: return "Installation Proxy"
+		case .installedApps: return "Installed Apps"
+		case .afc: return "AFC"
+		case .stagingWrite: return "Staging Write"
+		case .stagingVerify: return "Staging Verify"
+		case .complete: return "Complete"
+		case .failed(let message): return "Failed: \(message)"
+		}
+	}
+
+	private var _gate4StateText: String {
+		switch pairingCore.gate4State {
+		case .idle: return "Idle"
+		case .starting: return "Starting"
+		case .pairVerified: return "Pair Verified"
+		case .tunnel: return "Tunnel"
+		case .rsd: return "RSD"
+		case .installing: return "Installing"
+		case .progress(let percent): return "Installing \(percent)%"
+		case .complete: return "Complete"
+		case .failed(let message): return "Failed: \(message)"
+		}
+	}
+
+	private var _inventoryStateText: String {
+		switch pairingCore.installedAppsState {
+		case .idle: return "Idle"
+		case .refreshing: return "Refreshing"
+		case .loaded(let count): return "Loaded (\(count))"
+		case .failed(let message): return "Failed: \(message)"
 		}
 	}
 }
