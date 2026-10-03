@@ -179,6 +179,7 @@ final class ZagRPPairingCore: ObservableObject {
 		defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
 		try FileManager.default.copyItem(at: sourceURL, to: localURL)
 
+		ZagLogger.shared.info("RPPairing", "Gate4 install starting | deviceIP=\(deviceIP) | ipa=\(sourceURL.lastPathComponent)")
 		gate4State = .starting
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
@@ -207,11 +208,13 @@ final class ZagRPPairingCore: ObservableObject {
 			gate4State = .progress(percent)
 			gate4Progress?(percent)
 		case 207:
+			ZagLogger.shared.info("RPPairing", "Gate4 install completed")
 			gate4State = .complete
 			gate4Completion?(.success(()))
 			gate4Completion = nil
 			gate4Progress = nil
 		case -4:
+			ZagLogger.shared.error("RPPairing", "Gate4 install failed: \(message)")
 			gate4State = .failed(message)
 			let error = Gate4InstallError.installFailed(message)
 			gate4Completion?(.failure(error))
@@ -276,6 +279,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 		pendingInstalledApps.removeAll(keepingCapacity: true)
 		installedAppsCompletion = completion
+		ZagLogger.shared.info("RPPairing", "Installed-app inventory refresh starting | deviceIP=\(deviceIP)")
 		installedAppsState = .refreshing
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
@@ -306,6 +310,7 @@ final class ZagRPPairingCore: ObservableObject {
 		case 404:
 			installedAppsDebugKeys = message
 		case 403:
+			ZagLogger.shared.info("RPPairing", "Installed-app inventory loaded | count=\(Int(message) ?? pendingInstalledApps.count)")
 			installedApps = pendingInstalledApps
 			installedBundleIDs = Set(installedApps.keys)
 			installedAppsState = .loaded(Int(message) ?? installedBundleIDs.count)
@@ -313,6 +318,7 @@ final class ZagRPPairingCore: ObservableObject {
 			installedAppsCompletion = nil
 			completion?(.success(installedBundleIDs))
 		case -6:
+			ZagLogger.shared.error("RPPairing", "Installed-app inventory failed: \(message)")
 			pendingInstalledApps.removeAll(keepingCapacity: true)
 			installedAppsState = .failed(message)
 			let completion = installedAppsCompletion
@@ -396,6 +402,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
 		guard !isGate2Running else { return }
+		ZagLogger.shared.info("RPPairing", "Gate2 health probe starting | deviceIP=\(deviceIP)")
 		gate2State = .starting
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
@@ -448,6 +455,7 @@ final class ZagRPPairingCore: ObservableObject {
 		case 112:
 			gate2State = .stagingVerify(message)
 		case 113:
+			ZagLogger.shared.info("RPPairing", "Gate2 health probe completed")
 			let previous = gate2DeviceInfo ?? (name: "This iPhone", model: "", version: "", build: "")
 			let appResult: (Int, Bool)
 			switch gate2LastAppResult {
@@ -463,6 +471,7 @@ final class ZagRPPairingCore: ObservableObject {
 				zagStoreFound: appResult.1
 			)
 		case -2:
+			ZagLogger.shared.error("RPPairing", "Gate2 health probe failed: \(message)")
 			gate2State = .failed(message)
 		default:
 			break
@@ -475,6 +484,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func start() {
 		guard !isRunning else { return }
+		ZagLogger.shared.info("RPPairing", "Pairing session starting")
 		// The PIN is generated after iOS connects while the user is normally in
 		// Settings > Developer Mode. Ask for notification permission up front so
 		// the code can be surfaced without forcing a blind app switch.
@@ -566,6 +576,7 @@ final class ZagRPPairingCore: ObservableObject {
 				)
 			)
 		case 5:
+			ZagLogger.shared.info("RPPairing", "Pairing completed")
 			advertiser.stop()
 			endPairingBackgroundTime()
 			let fields = message.split(separator: "|", omittingEmptySubsequences: false)
@@ -598,6 +609,7 @@ final class ZagRPPairingCore: ObservableObject {
 				)
 			)
 		case -1:
+			ZagLogger.shared.error("RPPairing", "Pairing failed: \(message)")
 			advertiser.stop()
 			endPairingBackgroundTime()
 			state = .failed(message)
