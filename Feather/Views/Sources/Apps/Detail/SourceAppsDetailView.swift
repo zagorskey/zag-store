@@ -138,6 +138,13 @@ struct SourceAppsDetailView: View {
 							let bundleID = app.id,
 							let installed = pairingCore.installedAppInfo(bundleID: bundleID)
 						{
+							if let installedVariant = _installedVariantLabel(bundleID: bundleID) {
+								_infoRow(
+									title: .localized("Installed Variant"),
+									value: installedVariant
+								)
+							}
+
 							let installedValue = installed.build.isEmpty
 								? installed.version
 								: "\(installed.version) (\(installed.build))"
@@ -247,6 +254,34 @@ struct SourceAppsDetailView: View {
 }
 
 private extension SourceAppsDetailView {
+	func _installedVariantLabel(bundleID: String) -> String? {
+		let defaults = UserDefaults.standard
+		let variantOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		guard variantOrigins[bundleID] != nil else { return nil }
+
+		let appOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		guard let trackedName = appOrigins[bundleID], !trackedName.isEmpty else {
+			return .localized("Tracked Variant")
+		}
+
+		// Prefer the human-readable variant description from the currently
+		// opened repository entry when it is the tracked lineage.
+		if UpdateManager.variantIdentity(for: app) == variantOrigins[bundleID] {
+			let description =
+				app.currentAppVersion?.localizedDescription ??
+				app.versionDescription ??
+				app.currentDescription
+			if let description, !description.isEmpty {
+				return "\(trackedName) — \(description)"
+			}
+		}
+		return trackedName
+	}
+
 	func _refreshInstalledState() {
 		guard
 			pairingCore.pairingFileExists,
