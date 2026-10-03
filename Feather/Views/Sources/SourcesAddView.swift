@@ -284,66 +284,41 @@ struct SourcesAddView: View {
 	) async -> [
 		(url: URL, data: ASRepository)
 	] {
-		var results:
-			[(url: URL, data: ASRepository)] = []
-
 		let dataService = _dataService
 
-		await withTaskGroup(
-			of: Void.self
+		return await withTaskGroup(
+			of: (url: URL, data: ASRepository)?.self,
+			returning: [(url: URL, data: ASRepository)].self
 		) { group in
 			for url in urls {
 				group.addTask {
-					await withCheckedContinuation {
-						continuation in
+					await withCheckedContinuation { continuation in
+						dataService.fetch(from: url) {
+							(result: RepositoryDataHandler) in
 
-						dataService
-							.fetch(
-								from: url
-							) {
-								(result:
-									RepositoryDataHandler)
-								in
+							switch result {
+							case .success(let repository):
+								continuation.resume(
+									returning: (url: url, data: repository)
+								)
 
-								switch result {
-								case .success(
-									let repo
-								):
-									Task {
-										@MainActor in
-
-										results
-											.append(
-												(
-													url:
-														url,
-													data:
-														repo
-												)
-											)
-
-										continuation
-											.resume()
-									}
-
-								case .failure(
-									let error
-								):
-									Logger.misc.error(
-										"Failed to fetch \(url): \(error.localizedDescription)"
-									)
-
-									continuation
-										.resume()
-								}
+							case .failure(let error):
+								Logger.misc.error(
+									"Failed to fetch \(url): \(error.localizedDescription)"
+								)
+								continuation.resume(returning: nil)
 							}
+						}
 					}
-				}
 			}
 
-			await group.waitForAll()
+			var results: [(url: URL, data: ASRepository)] = []
+			for await result in group {
+				if let result {
+					results.append(result)
+				}
+			}
+			return results
 		}
-
-		return results
 	}
 }
