@@ -75,6 +75,25 @@ struct SourcesAddView: View {
 					.textInputAutocapitalization(
 						.never
 					)
+					.toolbar {
+						ToolbarItemGroup(placement: .keyboard) {
+							Button(".json") {
+								_appendJSONSuffix()
+							}
+							.fontWeight(.semibold)
+
+							Spacer()
+
+							Button(.localized("Done")) {
+								UIApplication.shared.sendAction(
+									#selector(UIResponder.resignFirstResponder),
+									to: nil,
+									from: nil,
+									for: nil
+								)
+							}
+						}
+					}
 				} footer: {
 					Text(
 						.localized(
@@ -176,6 +195,24 @@ struct SourcesAddView: View {
 				await _fetchRecommendedRepositories()
 			}
 		}
+	}
+
+
+	// MARK: - Source URL Keyboard
+
+	private func _appendJSONSuffix() {
+		let trimmed = _sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else {
+			_sourceURL = ".json"
+			return
+		}
+
+		guard !trimmed.lowercased().hasSuffix(".json") else {
+			_sourceURL = trimmed
+			return
+		}
+
+		_sourceURL = trimmed + ".json"
 	}
 
 
