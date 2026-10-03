@@ -362,9 +362,10 @@ struct DownloadButtonView: View {
 		if pairingCore.isInstalled(bundleID: bundleID) {
 			return true
 		}
-		return defaults.dictionary(
+		let appOrigins = defaults.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
-		) as? [String: String] != nil
+		) as? [String: String] ?? [:]
+		return appOrigins[bundleID] != nil
 	}
 
 	private func _matchesTrackedVariant(bundleID: String) -> Bool {
