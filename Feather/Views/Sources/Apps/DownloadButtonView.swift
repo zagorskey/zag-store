@@ -356,7 +356,6 @@ struct DownloadButtonView: View {
 
 	private func _startGetAndInstall() {
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
-		_rememberRepositoryOrigin()
 		zagPhase = .downloading
 
 		_ = downloadManager.startDownload(
@@ -497,6 +496,7 @@ struct DownloadButtonView: View {
 				}
 
 				installedBundleID = signed.identifier
+				_rememberRepositoryOrigin()
 				_removeSupersededSignedCopies(keeping: signed)
 				try? pairingCore.refreshInstalledApps()
 				zagPhase = .idle
