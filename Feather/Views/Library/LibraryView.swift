@@ -2458,8 +2458,16 @@ private struct ZagUpdatesPopup: View {
 
 				ScrollView {
 					LazyVStack(alignment: .leading, spacing: 18) {
-						updateAllCard
-							.padding(.top, 22)
+						if displayedAvailableCount > 0 {
+							updateAllCard
+								.padding(.top, 22)
+								.transition(
+									.asymmetric(
+										insertion: .opacity.combined(with: .move(edge: .top)),
+										removal: .opacity.combined(with: .move(edge: .top))
+									)
+								)
+						}
 
 						if !availableUpdates.isEmpty {
 							Text(.localized("Available Updates"))
@@ -2559,6 +2567,7 @@ private struct ZagUpdatesPopup: View {
 			.onReceive(updateManager.$updates) { _ in
 				_cacheAvailableRows()
 			}
+			.animation(.easeInOut(duration: 0.35), value: displayedAvailableCount)
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
 			.navigationDestination(
