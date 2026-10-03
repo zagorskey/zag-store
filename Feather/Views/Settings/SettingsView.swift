@@ -600,6 +600,14 @@ private struct ZagLoggingSettingsView: View {
 			}
 
 			Section {
+				_currentSessionHealthCard
+			} header: {
+				Text("Current Session")
+			} footer: {
+				Text("Session health reflects only events recorded since the latest Zag Store launch marker.")
+			}
+
+			Section {
 				_categoryMetric("Signing")
 				_categoryMetric("Installation")
 				_categoryMetric("RPPairing")
@@ -692,6 +700,83 @@ private struct ZagLoggingSettingsView: View {
 			}
 			Button("Cancel", role: .cancel) {}
 		}
+	}
+
+	private var _currentSessionMetrics: (hasMarker: Bool, entries: Int, warnings: Int, errors: Int, startedAt: String) {
+		let lines = logSnapshot.text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+		guard let sessionIndex = lines.lastIndex(where: { $0.contains(" [Session] ") }) else {
+			return (false, 0, 0, 0, "Unavailable")
+		}
+		let sessionLines = Array(lines[sessionIndex...])
+		let warnings = sessionLines.filter { $0.contains(" [WARN] ") }.count
+		let errors = sessionLines.filter { $0.contains(" [ERROR] ") }.count
+		let timestamp = sessionLines.first?
+			.split(separator: " ", maxSplits: 1)
+			.first
+			.map(String.init) ?? "Unknown"
+		return (true, sessionLines.count, warnings, errors, _displayTimestamp(timestamp))
+	}
+
+	private var _currentSessionStatus: (title: String, icon: String, color: Color) {
+		let metrics = _currentSessionMetrics
+		guard metrics.hasMarker else {
+			return ("No Session Marker", "questionmark.circle.fill", .secondary)
+		}
+		if metrics.errors > 0 {
+			return ("Errors", "xmark.octagon.fill", .red)
+		}
+		if metrics.warnings > 0 {
+			return ("Attention", "exclamationmark.triangle.fill", .orange)
+		}
+		return ("Healthy", "checkmark.circle.fill", .green)
+	}
+
+	@ViewBuilder
+	private var _currentSessionHealthCard: some View {
+		let metrics = _currentSessionMetrics
+		let status = _currentSessionStatus
+		VStack(alignment: .leading, spacing: 10) {
+			HStack(spacing: 8) {
+				Image(systemName: status.icon)
+					.foregroundStyle(status.color)
+				Text(status.title)
+					.font(.headline)
+				Spacer()
+				Text(metrics.startedAt)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			HStack {
+				_sessionMetric(title: "Events", value: metrics.entries)
+				Spacer()
+				_sessionMetric(title: "Warnings", value: metrics.warnings)
+				Spacer()
+				_sessionMetric(title: "Errors", value: metrics.errors)
+			}
+		}
+		.padding(.vertical, 4)
+	}
+
+	@ViewBuilder
+	private func _sessionMetric(title: String, value: Int) -> some View {
+		VStack(alignment: .leading, spacing: 2) {
+			Text("\(value)")
+				.font(.title3.weight(.semibold))
+				.monospacedDigit()
+			Text(title)
+				.font(.caption2)
+				.foregroundStyle(.secondary)
+		}
+	}
+
+	private func _displayTimestamp(_ value: String) -> String {
+		let formatter = ISO8601DateFormatter()
+		formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+		guard let date = formatter.date(from: value) else { return value }
+		let output = DateFormatter()
+		output.dateStyle = .none
+		output.timeStyle = .short
+		return output.string(from: date)
 	}
 
 	@ViewBuilder
