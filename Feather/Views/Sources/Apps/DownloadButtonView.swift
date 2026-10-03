@@ -93,7 +93,7 @@ struct DownloadButtonView: View {
 					}
 				} else if let bundleID = app.id,
 						  _hasInstalledTrackedAlternative(bundleID: bundleID) {
-					ZagActionPill(title: .localized("Switch Variant")) {
+					ZagActionPill(title: .localized("Switch")) {
 						_performAction { _startGetAndInstall() }
 					}
 					.disabled(actionClaimed)
@@ -114,12 +114,13 @@ struct DownloadButtonView: View {
 			}
 			.frame(width: 88, height: 34)
 
-			Text(_stageCaption)
+			Text(_stageCaption.isEmpty ? (_modificationLabel ?? "") : _stageCaption)
 				.font(.system(size: 9, weight: .medium))
 				.foregroundStyle(.secondary)
 				.lineLimit(1)
+				.minimumScaleFactor(0.75)
 				.frame(width: 88, height: 11)
-				.opacity(_stageCaption.isEmpty ? 0 : 1)
+				.opacity((_stageCaption.isEmpty ? (_modificationLabel ?? "") : _stageCaption).isEmpty ? 0 : 1)
 		}
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
@@ -152,6 +153,32 @@ struct DownloadButtonView: View {
 			actionClaimed = true
 		}
 		action()
+	}
+
+	private var _modificationLabel: String? {
+		let fields: [String] = [
+			app.currentAppVersion?.localizedDescription,
+			app.versionDescription,
+			app.subtitle,
+			app.localizedDescription,
+			app.description
+		].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+		let text = fields.joined(separator: "\n").lowercased()
+
+		// Source metadata has no standardized modification flag. Keep these
+		// matches deliberately explicit: this label reports what the source
+		// declares, rather than claiming Zag Store inspected the IPA itself.
+		let rules: [(String, String)] = [
+			("tweak injected", "Tweak Injected"),
+			("tweaks injected", "Tweak Injected"),
+			("injected with", "Injected"),
+			("injected", "Injected"),
+			("cracked", "Cracked"),
+			("patched", "Patched"),
+			("modified", "Modified"),
+			("modded", "Modified")
+		]
+		return rules.first { text.contains($0.0) }?.1
 	}
 
 	private var _stageCaption: String {
