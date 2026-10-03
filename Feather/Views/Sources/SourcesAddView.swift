@@ -76,22 +76,33 @@ struct SourcesAddView: View {
 						.never
 					)
 					.toolbar {
-						ToolbarItemGroup(placement: .keyboard) {
-							Button(".json") {
-								_appendJSONSuffix()
-							}
-							.fontWeight(.semibold)
+						ToolbarItem(placement: .keyboard) {
+							HStack(spacing: 8) {
+								Button(".json") {
+									_appendJSONSuffix()
+								}
+								.fontWeight(.semibold)
 
-							Spacer()
+								ForEach(0...9, id: \\.self) { digit in
+									Button(String(digit)) {
+										_sourceURL.append(String(digit))
+									}
+									.font(.callout.monospacedDigit())
+								}
 
-							Button(.localized("Done")) {
-								UIApplication.shared.sendAction(
-									#selector(UIResponder.resignFirstResponder),
-									to: nil,
-									from: nil,
-									for: nil
-								)
+								Spacer(minLength: 4)
+
+								Button(.localized("Done")) {
+									UIApplication.shared.sendAction(
+										#selector(UIResponder.resignFirstResponder),
+										to: nil,
+										from: nil,
+										for: nil
+									)
+								}
+								.fontWeight(.semibold)
 							}
+							.padding(.vertical, 6)
 						}
 					}
 				} footer: {
@@ -168,19 +179,18 @@ struct SourcesAddView: View {
 					role: .cancel
 				)
 
-				NBToolbarButton(
-					.localized("Save"),
-					style: .text,
-					placement:
-						.confirmationAction,
-					isDisabled:
-						_sourceURL.isEmpty
-				) {
-					FR.handleSource(
-						_sourceURL
-					) {
-						dismiss()
+				ToolbarItem(placement: .confirmationAction) {
+					Button {
+						FR.handleSource(
+							_sourceURL
+						) {
+							dismiss()
+						}
+					} label: {
+						Image(systemName: "square.and.arrow.down")
 					}
+					.disabled(_sourceURL.isEmpty)
+					.accessibilityLabel(.localized("Save"))
 				}
 			}
 			.animation(
