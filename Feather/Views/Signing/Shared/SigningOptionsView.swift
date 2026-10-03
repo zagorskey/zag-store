@@ -152,13 +152,17 @@ struct SigningOptionsView: View {
 				temporaryValue: temporaryOptions?.post_installAppAfterSigned
 			)
 			_toggle(
-				.localized("Delete After Signing"),
+				.localized("Delete Imported App After Signing"),
 				systemImage: "trash",
 				isOn: $options.post_deleteAppAfterSigned,
 				temporaryValue: temporaryOptions?.post_deleteAppAfterSigned
 			)
 		} footer: {
-			Text(.localized("This will delete your imported application after signing, to save on using unneeded space."))
+			Text(
+				.localized(
+					"These options apply to manually imported apps. Install After Signing automatically installs a manual import once signing succeeds. Delete Imported App After Signing removes the original imported copy after a successful sign. Apps downloaded from Sources are always installed automatically and their temporary imported copy is cleaned up automatically."
+				)
+			)
 		}
 		
 		NBSection(.localized("Experiments")) {
