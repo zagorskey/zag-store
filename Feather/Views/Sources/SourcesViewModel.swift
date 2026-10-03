@@ -610,6 +610,9 @@ final class UpdateManager: ObservableObject {
 		let recordedOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOrigins"
 		) as? [String: String] ?? [:]
+		let recordedAppOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
 
 		var repositoryOriginAliases: [String: Set<String>] = [:]
 		for (storedSource, candidateRepository) in SourcesViewModel.shared.sources {
@@ -662,11 +665,24 @@ final class UpdateManager: ObservableObject {
 					continue
 				}
 
+				let recordedAppOrigin = recordedAppOrigins[identifier]
+				if let recordedAppOrigin,
+				   _normalizedAppName(recordedAppOrigin) != _normalizedAppName(app.currentName) {
+					print(
+						"[Zag Store Updates] IGNORED VARIANT COLLISION: " +
+						"id=\(identifier) | tracked=\(recordedAppOrigin) | candidate=\(app.currentName)"
+					)
+					continue
+				}
+
 				for localApp in candidates {
-					guard _sameAppIdentity(
-						installedName: localApp.name,
-						repositoryName: app.currentName
-					) else {
+					let identityMatches = recordedAppOrigin != nil
+						? true
+						: _sameAppIdentity(
+							installedName: localApp.name,
+							repositoryName: app.currentName
+						)
+					guard identityMatches else {
 						print(
 							"[Zag Store Updates] " +
 								"IGNORED COLLISION: " +
@@ -719,7 +735,8 @@ final class UpdateManager: ObservableObject {
 		diagnosticLines.append("Raw device inventory:")
 		for installed in deviceInventory.values.sorted(by: { $0.bundleID < $1.bundleID }) {
 			let origin = recordedOrigins[installed.bundleID] ?? "<none>"
-			diagnosticLines.append("- id=\(installed.bundleID) | version=\(installed.version) | build=\(installed.build.isEmpty ? "<none>" : installed.build) | origin=\(origin)")
+			let appOrigin = recordedAppOrigins[installed.bundleID] ?? "<none>"
+			diagnosticLines.append("- id=\(installed.bundleID) | version=\(installed.version) | build=\(installed.build.isEmpty ? "<none>" : installed.build) | origin=\(origin) | appOrigin=\(appOrigin)")
 			let matchingSigned = signedApps.filter { $0.identifier == installed.bundleID }
 			if matchingSigned.isEmpty {
 				diagnosticLines.append("  signed: <none>")
