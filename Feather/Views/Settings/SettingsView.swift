@@ -926,6 +926,7 @@ private struct ZagDiagnosticReportPreview: View {
 private struct ZagLogViewerView: View {
 	private enum Filter: String, CaseIterable, Identifiable {
 		case all = "All"
+		case currentSession = "Current Session"
 		case signing = "Signing"
 		case installation = "Installation"
 		case rppairing = "RPPairing"
@@ -1009,10 +1010,18 @@ private struct ZagLogViewerView: View {
 			.map { Entry(String($0)) }
 	}
 
+	private var currentSessionEntries: [Entry] {
+		guard let sessionIndex = allEntries.lastIndex(where: { $0.category == "Session" }) else {
+			return allEntries
+		}
+		return Array(allEntries[sessionIndex...])
+	}
+
 	private var filteredEntries: [Entry] {
-		var entries = allEntries.filter { entry in
+		let sourceEntries = selectedFilter == .currentSession ? currentSessionEntries : allEntries
+		var entries = sourceEntries.filter { entry in
 			switch selectedFilter {
-			case .all:
+			case .all, .currentSession:
 				return true
 			case .signing:
 				return entry.category == "Signing" || entry.category == "Manual Signing"
@@ -1088,7 +1097,11 @@ private struct ZagLogViewerView: View {
 				} else {
 					LazyVStack(spacing: 8) {
 						ForEach(filteredEntries) { entry in
-							_entryView(entry)
+							if entry.category == "Session" {
+								_sessionView(entry)
+							} else {
+								_entryView(entry)
+							}
 						}
 					}
 					.padding()
@@ -1101,6 +1114,37 @@ private struct ZagLogViewerView: View {
 		.onAppear(perform: _reload)
 		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
 			_reload()
+		}
+	}
+
+	@ViewBuilder
+	private func _sessionView(_ entry: Entry) -> some View {
+		HStack(spacing: 8) {
+			Rectangle()
+				.fill(Color.secondary.opacity(0.25))
+				.frame(height: 1)
+			Image(systemName: "play.circle.fill")
+				.font(.caption)
+				.foregroundStyle(.secondary)
+			Text("Session Started")
+				.font(.caption.weight(.semibold))
+				.foregroundStyle(.secondary)
+			if !entry.shortTimestamp.isEmpty {
+				Text(entry.shortTimestamp)
+					.font(.caption2.monospacedDigit())
+					.foregroundStyle(.secondary)
+			}
+			Rectangle()
+				.fill(Color.secondary.opacity(0.25))
+				.frame(height: 1)
+		}
+		.padding(.vertical, 4)
+		.contextMenu {
+			Button {
+				UIPasteboard.general.string = entry.raw
+			} label: {
+				Label("Copy Session Marker", systemImage: "doc.on.doc")
+			}
 		}
 	}
 
