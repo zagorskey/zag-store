@@ -630,6 +630,15 @@ final class UpdateManager: ObservableObject {
 		}
 
 		let localAppsByIdentifier = Dictionary(grouping: localApps) { $0.identifier }
+		var repositoryAppNamesByIdentifier: [String: Set<String>] = [:]
+		for repository in repositories {
+			for candidate in repository.apps {
+				guard let identifier = candidate.id, !identifier.isEmpty else { continue }
+			repositoryAppNamesByIdentifier[identifier, default: []].insert(
+					_normalizedAppName(candidate.currentName)
+				)
+			}
+		}
 
 		for repository in repositories {
 			for app in repository.apps {
@@ -666,6 +675,14 @@ final class UpdateManager: ObservableObject {
 				}
 
 				let recordedAppOrigin = recordedAppOrigins[identifier]
+				if recordedAppOrigin == nil,
+				   (repositoryAppNamesByIdentifier[identifier]?.count ?? 0) > 1 {
+					print(
+						"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
+						"id=\(identifier) — exact app lineage required"
+					)
+					continue
+				}
 				if let recordedAppOrigin,
 				   _normalizedAppName(recordedAppOrigin) != _normalizedAppName(app.currentName) {
 					print(
