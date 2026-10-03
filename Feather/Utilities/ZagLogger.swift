@@ -67,6 +67,33 @@ final class ZagLogger: ObservableObject {
 		}
 	}
 
+	struct Snapshot {
+		let text: String
+		let byteCount: Int
+		let entryCount: Int
+		let lastEventDate: Date?
+	}
+
+	func snapshot() -> Snapshot {
+		queue.sync {
+			let text = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+			let data = Data(text.utf8)
+			let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+			let lastDate = lines.last.flatMap { line -> Date? in
+				guard let token = line.split(separator: " ", maxSplits: 1).first else { return nil }
+				let formatter = ISO8601DateFormatter()
+				formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+				return formatter.date(from: String(token))
+			}
+			return Snapshot(
+				text: text,
+				byteCount: data.count,
+				entryCount: lines.count,
+				lastEventDate: lastDate
+			)
+		}
+	}
+
 	func clear() {
 		queue.async {
 			try? FileManager.default.removeItem(at: self.logURL)
