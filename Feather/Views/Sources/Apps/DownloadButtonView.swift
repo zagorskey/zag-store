@@ -64,6 +64,14 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if let bundleID = app.id,
+						  installedBundleID == bundleID {
+					ZagActionPill(title: .localized("Open")) {
+						_performAction(claim: false) {
+							UIApplication.openApp(with: bundleID)
+						}
+					}
+					.accessibilityLabel(Text("Open \(app.currentName)"))
+				} else if let bundleID = app.id,
 						  pairingCore.isInstalled(bundleID: bundleID),
 						  _matchesTrackedVariant(bundleID: bundleID) {
 					switch _installedReleaseRelationship(bundleID: bundleID) {
