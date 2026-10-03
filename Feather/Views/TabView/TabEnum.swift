@@ -41,6 +41,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		case .home: NBNavigationView(.localized("Home")) {
 			Color.clear
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
+				.zagWallpaperSurface()
 		}
 		case .sources: SourcesView()
 		case .library: LibraryView()
