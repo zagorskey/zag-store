@@ -126,22 +126,22 @@ struct AppearanceView: View {
 					_wallpaperPickerPresenting = true
 				} label: {
 					Label(
-						.localized(_wallpaperEnabled ? "Change Wallpaper" : "Choose Wallpaper"),
+						 .localized(_wallpaperEnabled ? "Change" : "Browse"),
 						systemImage: "photo"
 					)
 				}
+				.foregroundStyle(.white)
 
 				if _wallpaperEnabled {
-					Toggle(
-						.localized("Blur"),
-						isOn: $_wallpaperBlurred
-					)
+					Toggle(isOn: $_wallpaperBlurred) {
+						Label("Blur", systemImage: "drop.fill")
+							.foregroundStyle(.blue)
+					}
 
 					if _wallpaperBlurred {
 						VStack(alignment: .leading, spacing: 8) {
 							HStack {
-								Image(systemName: "circle")
-									.font(.system(size: 9))
+								Image(systemName: "minus")
 									.foregroundStyle(.secondary)
 
 								Slider(
@@ -150,8 +150,7 @@ struct AppearanceView: View {
 									step: 1
 								)
 
-								Image(systemName: "circle.fill")
-									.font(.system(size: 14))
+								Image(systemName: "plus")
 									.foregroundStyle(.secondary)
 							}
 							.accessibilityElement(children: .combine)
@@ -160,10 +159,10 @@ struct AppearanceView: View {
 						}
 					}
 
-					Toggle(
-						.localized("Brightness"),
-						isOn: $_wallpaperBrightnessEnabled
-					)
+					Toggle(isOn: $_wallpaperBrightnessEnabled) {
+						Label("Brightness", systemImage: "sun.max.fill")
+							.foregroundStyle(.blue)
+					}
 
 					if _wallpaperBrightnessEnabled {
 						HStack {
@@ -188,7 +187,7 @@ struct AppearanceView: View {
 						ZagWallpaperStore.clear()
 						_wallpaperEnabled = false
 					} label: {
-						Label(.localized("Clear Wallpaper"), systemImage: "trash")
+						Label(.localized("Clear"), systemImage: "trash")
 					}
 				}
 			}
