@@ -277,6 +277,7 @@ final class UpdateManager: ObservableObject {
 
 	@Published private(set) var updates: [AvailableUpdate] = []
 	@Published private(set) var persistedUpdateCount: Int
+	@Published private(set) var diagnosticsReport = "Run a repository refresh to capture update diagnostics."
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
@@ -673,6 +674,43 @@ final class UpdateManager: ObservableObject {
 				}
 			}
 		}
+
+		var diagnosticLines: [String] = []
+		diagnosticLines.append("=== Zag Store Update Diagnostics ===")
+		diagnosticLines.append("Installed identities:")
+		for localApp in localApps.sorted(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) {
+			let origin = recordedOrigins[localApp.identifier] ?? "<none>"
+			diagnosticLines.append("- \(localApp.name) | id=\(localApp.identifier) | version=\(localApp.version) | build=\(localApp.build ?? "<none>") | origin=\(origin)")
+		}
+		diagnosticLines.append("")
+		diagnosticLines.append("Accepted updates:")
+		if foundUpdates.isEmpty {
+			diagnosticLines.append("- <none>")
+		} else {
+			for update in foundUpdates {
+				diagnosticLines.append("- \(update.app.currentName) | id=\(update.app.id ?? "<none>") | \(update.installedVersion) -> \(update.availableVersion) | repo=\(update.source.name ?? "<unknown>")")
+			}
+		}
+		diagnosticLines.append("")
+		diagnosticLines.append("Shared bundle candidates:")
+		let repositoryAppsByID = Dictionary(grouping: repositories.flatMap { repository in
+			repository.apps.map { (repository, $0) }
+		}) { pair in pair.1.id ?? "" }
+		for localApp in localApps.sorted(by: { $0.identifier < $1.identifier }) {
+			guard let matches = repositoryAppsByID[localApp.identifier], matches.count > 1 else { continue }
+			diagnosticLines.append("- INSTALLED \(localApp.name) | id=\(localApp.identifier)")
+			for (repository, candidate) in matches {
+				let originMatch = _repositoryMatchesRecordedOrigin(
+					identifier: localApp.identifier,
+					repository: repository,
+					origins: recordedOrigins,
+					repositoryOriginAliases: repositoryOriginAliases
+				)
+				let nameMatch = _sameAppIdentity(installedName: localApp.name, repositoryName: candidate.currentName)
+				diagnosticLines.append("  • \(candidate.currentName) | version=\(candidate.currentVersion ?? "<none>") | repo=\(repository.name ?? "<unknown>") | nameMatch=\(nameMatch) | originMatch=\(originMatch)")
+			}
+		}
+		diagnosticsReport = diagnosticLines.joined(separator: "\n")
 
 		updates = foundUpdates.sorted { lhs, rhs in
 			let lhsDate = lhs.app.currentDate?.date ?? .distantPast
