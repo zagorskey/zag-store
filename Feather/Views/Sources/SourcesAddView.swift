@@ -95,20 +95,23 @@ struct SourcesAddView: View {
 					)
 					.toolbar {
 						ToolbarItem(placement: .keyboard) {
-							HStack(spacing: 8) {
-								ForEach(0...9, id: \.self) { digit in
-									Button(String(digit)) {
-										_sourceURL.append(String(digit))
+							HStack(spacing: 4) {
+								HStack(spacing: 0) {
+									ForEach(0...9, id: \.self) { digit in
+										Button(String(digit)) {
+											_sourceURL.append(String(digit))
+										}
+										.font(.callout.monospacedDigit())
+										.frame(maxWidth: .infinity)
 									}
-									.font(.callout.monospacedDigit())
 								}
-
-								Spacer(minLength: 4)
+								.frame(maxWidth: .infinity)
 
 								Button(".json") {
 									_appendJSONSuffix()
 								}
 								.fontWeight(.semibold)
+								.fixedSize()
 
 								Button(.localized("Done")) {
 									UIApplication.shared.sendAction(
@@ -119,7 +122,9 @@ struct SourcesAddView: View {
 									)
 								}
 								.fontWeight(.semibold)
+								.fixedSize()
 							}
+							.frame(maxWidth: .infinity)
 							.padding(.vertical, 6)
 						}
 					}
@@ -190,11 +195,13 @@ struct SourcesAddView: View {
 									}
 								}
 							}
+							.listRowSeparator(.hidden)
 							.overlay(alignment: .bottom) {
 								if url != _filteredRecommendedSourcesData.last?.url {
 									Rectangle()
 										.fill(separatorColor)
 										.frame(height: 3.0 / UIScreen.main.scale)
+										.padding(.horizontal, 16)
 								}
 							}
 						}
