@@ -85,7 +85,6 @@ enum ZagSettingsBackup {
 		"Feather.installationMethod",
 		"Feather.ipFix",
 		"Feather.serverMethod",
-		"feather.selectedCert",
 		"signing_options",
 		"ZagStore.disableIdleTimeout",
 		"ZagStore.settingsSectionOrder",

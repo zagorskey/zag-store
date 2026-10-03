@@ -18,17 +18,28 @@ struct LibraryCellView: View {
 	@Environment(\.editMode) private var editMode
 	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
 
+	private var displayCertificate: CertificatePair? {
+		if let certificate = Storage.shared.getCertificate(from: app) {
+			return certificate
+		}
+
+		let certificates = Storage.shared.getAllCertificates()
+		let selectedIndex = UserDefaults.standard.integer(forKey: "feather.selectedCert")
+		if certificates.indices.contains(selectedIndex) {
+			return certificates[selectedIndex]
+		}
+
+		return certificates.first
+	}
+
 	var certInfo: Date.ExpirationInfo? {
-		Storage.shared
-			.getCertificate(from: app)?
+		displayCertificate?
 			.expiration?
 			.expirationInfo()
 	}
 
 	var certRevoked: Bool {
-		Storage.shared
-			.getCertificate(from: app)?
-			.revoked == true
+		displayCertificate?.revoked == true
 	}
 
 	var app: AppInfoPresentable
@@ -178,6 +189,8 @@ struct LibraryCellView: View {
 		.onTapGesture {
 			if isEditing {
 				_toggleSelection()
+			} else {
+				selectedInfoAppPresenting = AnyApp(base: app)
 			}
 		}
 		.swipeActions {
@@ -276,14 +289,50 @@ struct LibraryCellView: View {
 	// MARK: - Description
 
 	private var _desc: String {
-		if
-			let version = app.version,
-			let id = app.identifier
-		{
-			return "\(version) • \(id)"
+		let version = app.version
+
+		let storedDate: Date?
+		if let signed = app as? Signed {
+			storedDate = signed.date
+		} else if let imported = app as? Imported {
+			storedDate = imported.date
 		} else {
-			return .localized("Unknown")
+			storedDate = nil
 		}
+
+		guard let storedDate else {
+			return version ?? .localized("Unknown")
+		}
+
+		let calendar = Calendar.current
+		let startOfToday = calendar.startOfDay(for: Date())
+		let startOfStoredDate = calendar.startOfDay(for: storedDate)
+		let dayDifference = calendar.dateComponents(
+			[.day],
+			from: startOfStoredDate,
+			to: startOfToday
+		).day
+
+		let dateText: String
+		switch dayDifference {
+		case 0:
+			dateText = "Today"
+		case 1:
+			dateText = "Yesterday"
+		case 2:
+			dateText = "Two Days Ago"
+		case 3:
+			dateText = "Three Days Ago"
+		default:
+			let formatter = DateFormatter()
+			formatter.dateFormat = "d MMM yyyy"
+			dateText = formatter.string(from: storedDate)
+		}
+
+		if let version, !version.isEmpty {
+			return "\(dateText) • \(version)"
+		}
+		return dateText
 	}
 }
 

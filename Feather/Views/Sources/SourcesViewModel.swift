@@ -535,6 +535,22 @@ final class UpdateManager: ObservableObject {
 					continue
 				}
 
+				// A shared bundle identifier is not enough to establish update
+				// lineage. Tweaked variants (for example Regram/RyukGram) can
+				// deliberately retain the original App Store bundle identifier.
+				// When Zag Store knows which repository supplied the installed
+				// package, only that repository may offer its updates.
+				guard _repositoryMatchesRecordedOrigin(
+					identifier: identifier,
+					repository: repository
+				) else {
+					print(
+						"[Zag Store Updates] IGNORED SOURCE COLLISION: " +
+						"id=\(identifier) | repo=\(repository.name ?? "unknown")"
+					)
+					continue
+				}
+
 				let candidates = localApps.filter {
 					$0.identifier == identifier
 				}
@@ -719,6 +735,47 @@ final class UpdateManager: ObservableObject {
 			_normalizedAppName(repositoryName)
 	}
 
+	private func _repositoryMatchesRecordedOrigin(
+		identifier: String,
+		repository: ASRepository
+	) -> Bool {
+		let origins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String]
+
+		guard
+			let origin = origins?[identifier],
+			!origin.isEmpty
+		else {
+			return true
+		}
+
+		if repository.id == origin ||
+			repository.website?.absoluteString == origin ||
+			repository.name == origin {
+			return true
+		}
+
+		// reconcileRepositoryOrigins may have persisted the source URL as its
+		// stable key. Resolve that form through the live source snapshot.
+		if SourcesViewModel.shared.sources.contains(where: { source, candidate in
+			source.sourceURL?.absoluteString == origin &&
+			(candidate.id == repository.id ||
+			 candidate.website?.absoluteString == repository.website?.absoluteString ||
+			 candidate.name == repository.name)
+		}) {
+			return true
+		}
+
+		// The origin is known and belongs to another active repository.
+		return !SourcesViewModel.shared.sources.contains(where: { source, candidate in
+			source.sourceURL?.absoluteString == origin ||
+			candidate.id == origin ||
+			candidate.website?.absoluteString == origin ||
+			candidate.name == origin
+		})
+	}
+
 	private func _normalizedAppName(
 		_ name: String
 	) -> String {
@@ -756,6 +813,15 @@ final class UpdateManager: ObservableObject {
 		installedVersion: String,
 		installedBuild: String?
 	) -> Bool {
+		// Some repositories expose rolling/nightly artifacts with labels such
+		// as "Build 813" in the version field. That is a build channel, not a
+		// semantic successor to an installed release such as 1.3.2. Comparing
+		// 813 against 1.3.2 numerically creates a permanent false update.
+		if _isBuildOnlyVersion(availableVersion) &&
+			!_isBuildOnlyVersion(installedVersion) {
+			return false
+		}
+
 		let versionResult = _compareVersions(
 			availableVersion,
 			installedVersion
@@ -781,6 +847,19 @@ final class UpdateManager: ObservableObject {
 
 
 	// MARK: - Version Comparison
+
+	private func _isBuildOnlyVersion(_ value: String) -> Bool {
+		let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { return false }
+
+		let lowercased = trimmed.lowercased()
+		guard lowercased.hasPrefix("build") else { return false }
+
+		let suffix = lowercased.dropFirst("build".count)
+		let digits = suffix.filter(\.isNumber)
+		return !digits.isEmpty &&
+			suffix.allSatisfy { $0.isNumber || $0.isWhitespace || $0 == "-" || $0 == "#" }
+	}
 
 	private func _compareVersions(
 		_ lhs: String,
