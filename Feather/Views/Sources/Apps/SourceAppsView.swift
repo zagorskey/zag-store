@@ -606,7 +606,19 @@ struct SourceAppsView: View {
 	struct SourceAppRoute: Identifiable, Hashable {
 		let source: ASRepository
 		let app: ASRepository.App
-		let id: String = UUID().uuidString
+
+		// Keep repository/search rows stable across SwiftUI re-renders.
+		// A random UUID here recreated DownloadButtonView whenever download,
+		// signing, or Core Data state changed, interrupting its multi-stage
+		// Get -> progress -> install -> Open animation sequence.
+		var id: String {
+			let sourceIdentity =
+				source.id ??
+				source.website?.absoluteString ??
+				source.name ??
+				"repository"
+			return sourceIdentity + "|" + app.currentUniqueId
+		}
 	}
 }
 
