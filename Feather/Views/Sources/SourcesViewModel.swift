@@ -815,11 +815,17 @@ final class UpdateManager: ObservableObject {
 						return recordedAppOrigin
 					}
 					if legacyMatchedNames.count == 1,
-					   let normalizedMatch = legacyMatchedNames.first,
-					   let candidate = (repositoryAppsByIdentifier[identifier] ?? []).first(where: {
-						_normalizedAppName($0.1.currentName) == normalizedMatch
-					   }) {
-						return candidate.1.currentName
+					   let normalizedMatch = legacyMatchedNames.first {
+						let matchingRepositoryApps = (repositoryAppsByIdentifier[identifier] ?? []).filter {
+							_normalizedAppName($0.1.currentName) == normalizedMatch
+						}
+						let variantIdentities = Set(matchingRepositoryApps.map {
+							Self.variantIdentity(for: $0.1)
+						})
+						if variantIdentities.count == 1,
+						   let candidate = matchingRepositoryApps.first {
+							return candidate.1.currentName
+						}
 					}
 					if repositoryNames.count == 1,
 					   let candidate = (repositoryAppsByIdentifier[identifier] ?? []).first {
