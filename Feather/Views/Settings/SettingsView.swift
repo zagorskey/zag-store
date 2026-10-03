@@ -69,9 +69,6 @@ struct SettingsView: View {
 	@AppStorage("ZagStore.settingsSectionSortMode") private var _settingsSectionSortMode = "default"
 	@AppStorage("ZagStore.advancedSettingsUnlocked") private var _advancedSettingsUnlocked = false
 	@State private var _showAdvancedSettingsWarning = false
-	@State private var _settingsBackupURL: URL?
-	@State private var _isSettingsImporterPresented = false
-	@State private var _settingsBackupMessage: String?
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -110,39 +107,12 @@ struct SettingsView: View {
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
+					_backupAndRestoreSection
 					_settingsSection(.reset)
 					if _advancedSettingsUnlocked {
 						_advancedSettingsSections
 					}
 				}
-			}
-			.fileImporter(
-				isPresented: $_isSettingsImporterPresented,
-				allowedContentTypes: [.json, .data],
-				allowsMultipleSelection: false
-			) { result in
-				_importSettingsBackup(result)
-			}
-			.sheet(
-				isPresented: Binding(
-					get: { _settingsBackupURL != nil },
-					set: { if !$0 { _settingsBackupURL = nil } }
-				)
-			) {
-				if let url = _settingsBackupURL {
-					ZagSettingsShareSheet(items: [url])
-				}
-			}
-			.alert(
-				"Settings Backup",
-				isPresented: Binding(
-					get: { _settingsBackupMessage != nil },
-					set: { if !$0 { _settingsBackupMessage = nil } }
-				)
-			) {
-				Button("OK", role: .cancel) { _settingsBackupMessage = nil }
-			} message: {
-				Text(_settingsBackupMessage ?? "")
 			}
 			.safeAreaInset(edge: .bottom) {
 				Color.clear.frame(height: 48)
@@ -441,6 +411,17 @@ extension SettingsView {
 			: zagDefaultSettingsSectionOrder
 	}
 	@ViewBuilder
+	private var _backupAndRestoreSection: some View {
+		Section {
+			NavigationLink(destination: ZagSettingsBackupView()) {
+				Label("All Settings", systemImage: "externaldrive.badge.timemachine")
+			}
+		} header: {
+			Text("Backup & Restore")
+		}
+	}
+
+	@ViewBuilder
 	private func _feedback() -> some View {
 		Section {
 			NavigationLink(destination: AboutView()) {
@@ -485,18 +466,6 @@ extension SettingsView {
 			Button(.localized("Certificates"), systemImage: "folder") {
 				UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!)
 			}
-
-			Button("Export Settings", systemImage: "square.and.arrow.up") {
-				do {
-					_settingsBackupURL = try ZagSettingsBackup.exportURL()
-				} catch {
-					_settingsBackupMessage = error.localizedDescription
-				}
-			}
-
-			Button("Import Settings", systemImage: "square.and.arrow.down") {
-				_isSettingsImporterPresented = true
-			}
 		} header: {
 			Text("Browse")
 		} footer: {
@@ -504,17 +473,6 @@ extension SettingsView {
 		}
 	}
     
-	private func _importSettingsBackup(_ result: Result<[URL], Error>) {
-		do {
-			guard let url = try result.get().first else { return }
-			let count = try ZagSettingsBackup.importSettings(from: url)
-			_loadSettingsSectionOrder()
-			_settingsBackupMessage = "Imported \(count) settings successfully. Some changes may require reopening their page to refresh."
-		} catch {
-			_settingsBackupMessage = error.localizedDescription
-		}
-	}
-
 	private func _presentAdvancedSettingsWarning() {
 		let alert = UIAlertController(
 			title: "⚠︎  Advanced Settings",
@@ -596,6 +554,73 @@ extension SettingsView {
 	}
 }
 
+
+
+private struct ZagSettingsBackupView: View {
+	@State private var backupURL: URL?
+	@State private var isImporterPresented = false
+	@State private var message: String?
+
+	var body: some View {
+		Form {
+			Section {
+				Button("Export All Settings", systemImage: "square.and.arrow.up") {
+					do {
+						backupURL = try ZagSettingsBackup.exportURL()
+					} catch {
+						message = error.localizedDescription
+					}
+				}
+
+				Button("Import All Settings", systemImage: "square.and.arrow.down") {
+					isImporterPresented = true
+				}
+			} footer: {
+				Text("Export or restore all Zag Store settings. Certificates, private keys, pairing data, installed apps and caches are not included.")
+			}
+		}
+		.navigationTitle("All Settings")
+		.zagWallpaperSurface()
+		.fileImporter(
+			isPresented: $isImporterPresented,
+			allowedContentTypes: [.json, .data],
+			allowsMultipleSelection: false
+		) { result in
+			importBackup(result)
+		}
+		.sheet(
+			isPresented: Binding(
+				get: { backupURL != nil },
+				set: { if !$0 { backupURL = nil } }
+			)
+		) {
+			if let url = backupURL {
+				ZagSettingsShareSheet(items: [url])
+			}
+		}
+		.alert(
+			"Settings Backup",
+			isPresented: Binding(
+				get: { message != nil },
+				set: { if !$0 { message = nil } }
+			)
+		) {
+			Button("OK", role: .cancel) { message = nil }
+		} message: {
+			Text(message ?? "")
+		}
+	}
+
+	private func importBackup(_ result: Result<[URL], Error>) {
+		do {
+			guard let url = try result.get().first else { return }
+			let count = try ZagSettingsBackup.importSettings(from: url)
+			message = "Imported \(count) settings successfully. Some changes may require reopening their page to refresh."
+		} catch {
+			message = error.localizedDescription
+		}
+	}
+}
 
 private struct ZagSettingsShareSheet: UIViewControllerRepresentable {
 	let items: [Any]
