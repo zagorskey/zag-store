@@ -723,6 +723,9 @@ private struct ZagLoggingSettingsView: View {
 		let snapshot = ZagLogger.shared.snapshot()
 
 		let health = _healthSummary(snapshot: snapshot)
+		let currentSession = _currentSessionSummary(snapshot: snapshot)
+		let categorySummary = _categorySummary(snapshot: snapshot)
+		let recentProblems = _recentProblems(snapshot: snapshot)
 		let report = """
 		Zag Store Diagnostic Report
 		Generated: \(ISO8601DateFormatter().string(from: Date()))
@@ -731,7 +734,19 @@ private struct ZagLoggingSettingsView: View {
 		Pairing: \(health.pairing)
 		Inventory: \(health.inventory)
 		Provenance: \(health.provenance)
-		Recent Warnings / Errors: \(health.issueCount)
+		Retained Warnings / Errors: \(health.issueCount)
+
+		[Current Session]
+		Entries: \(currentSession.entryCount)
+		Warnings: \(currentSession.warningCount)
+		Errors: \(currentSession.errorCount)
+		Started: \(currentSession.startedAt)
+
+		[Activity by Category]
+		\(categorySummary)
+
+		[Recent Problems]
+		\(recentProblems)
 
 		[Application]
 		Version: \(version)
@@ -776,14 +791,49 @@ private struct ZagLoggingSettingsView: View {
 		}
 	}
 
+	private func _currentSessionSummary(snapshot: ZagLogger.Snapshot) -> (entryCount: Int, warningCount: Int, errorCount: Int, startedAt: String) {
+		let lines = snapshot.text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+		guard let sessionIndex = lines.lastIndex(where: { $0.contains(" [Session] ") }) else {
+			let warnings = lines.filter { $0.contains(" [WARN] ") }.count
+			let errors = lines.filter { $0.contains(" [ERROR] ") }.count
+			return (lines.count, warnings, errors, "No session marker retained")
+		}
+		let sessionLines = Array(lines[sessionIndex...])
+		let warnings = sessionLines.filter { $0.contains(" [WARN] ") }.count
+		let errors = sessionLines.filter { $0.contains(" [ERROR] ") }.count
+		let startedAt = sessionLines.first?
+			.split(separator: " ", maxSplits: 1)
+			.first
+			.map(String.init) ?? "Unknown"
+		return (sessionLines.count, warnings, errors, startedAt)
+	}
+
+	private func _categorySummary(snapshot: ZagLogger.Snapshot) -> String {
+		guard !snapshot.categoryCounts.isEmpty else { return "No categorized events." }
+		return snapshot.categoryCounts
+			.sorted {
+				if $0.value == $1.value { return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+				return $0.value > $1.value
+			}
+			.map { "\($0.key): \($0.value)" }
+			.joined(separator: "\n")
+	}
+
+	private func _recentProblems(snapshot: ZagLogger.Snapshot) -> String {
+		let problems = snapshot.text
+			.split(separator: "\n", omittingEmptySubsequences: true)
+			.map(String.init)
+			.filter { $0.contains(" [WARN] ") || $0.contains(" [ERROR] ") }
+			.suffix(10)
+		guard !problems.isEmpty else { return "None." }
+		return problems.joined(separator: "\n")
+	}
+
 	private func _healthSummary(snapshot: ZagLogger.Snapshot) -> (pairing: String, inventory: String, provenance: String, issueCount: Int) {
 		let defaults = UserDefaults.standard
 		let repositoryOrigins = defaults.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
 		let variantOrigins = defaults.dictionary(forKey: "zagStore.repositoryVariantOrigins") as? [String: String] ?? [:]
-		let issues = snapshot.text
-			.split(separator: "\n")
-			.filter { $0.contains("[WARN]") || $0.contains("[ERROR]") }
-			.count
+		let issues = snapshot.warningCount + snapshot.errorCount
 
 		let pairing: String
 		if !pairingCore.pairingFileExists {
