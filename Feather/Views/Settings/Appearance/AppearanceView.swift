@@ -135,7 +135,7 @@ struct AppearanceView: View {
 				if _wallpaperEnabled {
 					Toggle(isOn: $_wallpaperBlurred) {
 						Label("Blur", systemImage: "drop.fill")
-							.foregroundStyle(.blue)
+							.foregroundStyle(Color(hex: _selectedColorHex))
 					}
 
 					if _wallpaperBlurred {
@@ -161,7 +161,7 @@ struct AppearanceView: View {
 
 					Toggle(isOn: $_wallpaperBrightnessEnabled) {
 						Label("Brightness", systemImage: "sun.max.fill")
-							.foregroundStyle(.blue)
+							.foregroundStyle(Color(hex: _selectedColorHex))
 					}
 
 					if _wallpaperBrightnessEnabled {
