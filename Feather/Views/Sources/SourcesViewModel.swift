@@ -524,6 +524,27 @@ final class UpdateManager: ObservableObject {
 		var foundUpdates: [AvailableUpdate] = []
 		var seenLocalApps = Set<String>()
 
+		let recordedOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
+
+		var repositoryOriginAliases: [String: Set<String>] = [:]
+		for (storedSource, candidateRepository) in SourcesViewModel.shared.sources {
+			let aliases = [
+				storedSource.sourceURL?.absoluteString,
+				candidateRepository.id,
+				candidateRepository.website?.absoluteString,
+				candidateRepository.name
+			].compactMap { $0 }.filter { !$0.isEmpty }
+
+			let aliasSet = Set(aliases)
+			for alias in aliases {
+				repositoryOriginAliases[alias, default: []].formUnion(aliasSet)
+			}
+		}
+
+		let localAppsByIdentifier = Dictionary(grouping: localApps) { $0.identifier }
+
 		for repository in repositories {
 			for app in repository.apps {
 				guard
@@ -542,7 +563,9 @@ final class UpdateManager: ObservableObject {
 				// package, only that repository may offer its updates.
 				guard _repositoryMatchesRecordedOrigin(
 					identifier: identifier,
-					repository: repository
+					repository: repository,
+					origins: recordedOrigins,
+					repositoryOriginAliases: repositoryOriginAliases
 				) else {
 					print(
 						"[Zag Store Updates] IGNORED SOURCE COLLISION: " +
@@ -551,11 +574,8 @@ final class UpdateManager: ObservableObject {
 					continue
 				}
 
-				let candidates = localApps.filter {
-					$0.identifier == identifier
-				}
-
-				guard !candidates.isEmpty else {
+				guard let candidates = localAppsByIdentifier[identifier],
+					!candidates.isEmpty else {
 					continue
 				}
 
@@ -737,43 +757,35 @@ final class UpdateManager: ObservableObject {
 
 	private func _repositoryMatchesRecordedOrigin(
 		identifier: String,
-		repository: ASRepository
+		repository: ASRepository,
+		origins: [String: String],
+		repositoryOriginAliases: [String: Set<String>]
 	) -> Bool {
-		let origins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOrigins"
-		) as? [String: String]
-
 		guard
-			let origin = origins?[identifier],
+			let origin = origins[identifier],
 			!origin.isEmpty
 		else {
 			return true
 		}
 
-		if repository.id == origin ||
-			repository.website?.absoluteString == origin ||
-			repository.name == origin {
+		let candidateAliases = Set([
+			repository.id,
+			repository.website?.absoluteString,
+			repository.name
+		].compactMap { $0 }.filter { !$0.isEmpty })
+
+		if candidateAliases.contains(origin) {
 			return true
 		}
 
-		// reconcileRepositoryOrigins may have persisted the source URL as its
-		// stable key. Resolve that form through the live source snapshot.
-		if SourcesViewModel.shared.sources.contains(where: { source, candidate in
-			source.sourceURL?.absoluteString == origin &&
-			(candidate.id == repository.id ||
-			 candidate.website?.absoluteString == repository.website?.absoluteString ||
-			 candidate.name == repository.name)
-		}) {
-			return true
+		if let aliases = repositoryOriginAliases[origin] {
+			return !candidateAliases.isDisjoint(with: aliases)
 		}
 
-		// The origin is known and belongs to another active repository.
-		return !SourcesViewModel.shared.sources.contains(where: { source, candidate in
-			source.sourceURL?.absoluteString == origin ||
-			candidate.id == origin ||
-			candidate.website?.absoluteString == origin ||
-			candidate.name == origin
-		})
+		// A stale origin must not permanently hide updates if its repository
+		// has been removed. Only reject when the recorded origin still resolves
+		// to a different active repository.
+		return true
 	}
 
 	private func _normalizedAppName(
