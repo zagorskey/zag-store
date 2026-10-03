@@ -120,7 +120,7 @@ struct AppearanceView: View {
 					selection: _tintColorBinding,
 					supportsOpacity: false
 				) {
-					Label(.localized("Custom Theme Color"), systemImage: "eyedropper")
+					Label(.localized("Custom Colour"), systemImage: "eyedropper")
 				}
 			}
 
