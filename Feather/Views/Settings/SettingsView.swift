@@ -744,11 +744,19 @@ private struct ZagLogViewerView: View {
 
 			ScrollView {
 				if filteredLines.isEmpty {
-					ContentUnavailableView(
-						searchText.isEmpty ? "No Log Entries" : "No Matches",
-						systemImage: searchText.isEmpty ? "doc.text" : "magnifyingglass",
-						description: Text(searchText.isEmpty ? "No entries match this category." : "Try a different search or category.")
-					)
+					VStack(spacing: 10) {
+						Image(systemName: searchText.isEmpty ? "doc.text" : "magnifyingglass")
+							.font(.system(size: 30))
+							.foregroundStyle(.secondary)
+						Text(searchText.isEmpty ? "No Log Entries" : "No Matches")
+							.font(.headline)
+						Text(searchText.isEmpty ? "No entries match this category." : "Try a different search or category.")
+							.font(.subheadline)
+							.foregroundStyle(.secondary)
+							.multilineTextAlignment(.center)
+					}
+					.frame(maxWidth: .infinity)
+					.padding(.horizontal)
 					.padding(.top, 50)
 				} else {
 					LazyVStack(alignment: .leading, spacing: 5) {
