@@ -1752,13 +1752,6 @@ private struct ZagSettingsShareSheet: UIViewControllerRepresentable {
 private struct ZagUpdateDiagnosticsView: View {
 	@ObservedObject private var updateManager = UpdateManager.shared
 	@State private var copied = false
-	@State private var selectedBundleID: String?
-
-	private var groupedCandidates: [(String, [UpdateManager.LegacyVariantCandidate])] {
-		Dictionary(grouping: updateManager.legacyVariantCandidates, by: { $0.bundleID })
-			.map { ($0.key, $0.value) }
-			.sorted { $0.0 < $1.0 }
-	}
 
 	private var diagnosticLineCount: Int {
 		updateManager.diagnosticsReport
@@ -1768,40 +1761,6 @@ private struct ZagUpdateDiagnosticsView: View {
 
 	var body: some View {
 		Form {
-			if !groupedCandidates.isEmpty {
-				Section {
-					ForEach(groupedCandidates, id: \.0) { bundleID, candidates in
-						Menu {
-							ForEach(candidates) { candidate in
-								Button {
-									updateManager.adoptLegacyVariant(candidate)
-									selectedBundleID = candidate.bundleID
-									UIImpactFeedbackGenerator(style: .light).impactOccurred()
-								} label: {
-									VStack(alignment: .leading) {
-										Text(candidate.displayName)
-										if let version = candidate.version {
-											Text(version + " • " + candidate.repositoryName)
-										}
-									}
-								}
-							}
-						} label: {
-							VStack(alignment: .leading, spacing: 3) {
-								Text(bundleID)
-									.foregroundStyle(.primary)
-								Text("Choose installed variant")
-									.font(.caption)
-									.foregroundStyle(.secondary)
-							}
-						}
-					}
-				} header: {
-					Text("Untracked Variants")
-				} footer: {
-					Text("Choose only the variant that is currently installed. Zag Store will use that exact identity for future update checks.")
-				}
-			}
 
 			Section {
 				NavigationLink(destination: ZagUpdateDiagnosticsReportView()) {
@@ -1831,18 +1790,7 @@ private struct ZagUpdateDiagnosticsView: View {
 		}
 		.navigationTitle("Update Diagnostics")
 		.zagWallpaperSurface()
-		.alert(
-			"Variant Tracked",
-			isPresented: Binding(
-				get: { selectedBundleID != nil },
-				set: { if !$0 { selectedBundleID = nil } }
-			)
-		) {
-			Button("OK", role: .cancel) { selectedBundleID = nil }
-		} message: {
-			Text("The installed variant is now tracked. Repository updates have been recalculated.")
-		}
-	}
+
 }
 
 private struct ZagUpdateDiagnosticsReportView: View {
