@@ -686,7 +686,12 @@ private struct ZagUpdateDiagnosticsView: View {
 									selectedBundleID = candidate.bundleID
 									UIImpactFeedbackGenerator(style: .light).impactOccurred()
 								} label: {
-									Text(candidate.appName)
+									VStack(alignment: .leading) {
+										Text(candidate.displayName)
+										if let version = candidate.version {
+											Text(version + " • " + candidate.repositoryName)
+										}
+									}
 								}
 							}
 						} label: {
