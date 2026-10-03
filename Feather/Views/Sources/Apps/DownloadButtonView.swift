@@ -120,7 +120,7 @@ struct DownloadButtonView: View {
 					.accessibilityLabel(Text("\(title) \(app.currentName)"))
 				}
 			}
-			.frame(width: 88, height: 34)
+			.frame(width: 88, height: 34, alignment: .center)
 
 			if let caption = _actionCaption {
 				Text(caption.text)
