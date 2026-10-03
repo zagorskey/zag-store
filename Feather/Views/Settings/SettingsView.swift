@@ -1760,6 +1760,12 @@ private struct ZagUpdateDiagnosticsView: View {
 			.sorted { $0.0 < $1.0 }
 	}
 
+	private var diagnosticLineCount: Int {
+		updateManager.diagnosticsReport
+			.split(separator: "\n", omittingEmptySubsequences: false)
+			.count
+	}
+
 	var body: some View {
 		Form {
 			if !groupedCandidates.isEmpty {
@@ -1798,17 +1804,19 @@ private struct ZagUpdateDiagnosticsView: View {
 			}
 
 			Section {
-				ScrollView(.horizontal, showsIndicators: true) {
-					Text(updateManager.diagnosticsReport)
-						.font(.system(.caption, design: .monospaced))
-						.textSelection(.enabled)
-						.frame(maxWidth: .infinity, alignment: .leading)
-						.padding(.vertical, 4)
+				NavigationLink(destination: ZagUpdateDiagnosticsReportView()) {
+					HStack {
+						Label("View Full Report", systemImage: "doc.text.magnifyingglass")
+						Spacer()
+						Text("\(diagnosticLineCount) lines")
+							.font(.caption)
+							.foregroundStyle(.secondary)
+					}
 				}
 			} header: {
 				Text("Latest Repository Refresh")
 			} footer: {
-				Text("Refresh repositories before copying so this snapshot reflects the current installed apps and repository candidates.")
+				Text("Open the full report when needed. Refresh repositories first so the snapshot reflects the current installed apps and repository candidates.")
 			}
 
 			Section {
@@ -1836,3 +1844,35 @@ private struct ZagUpdateDiagnosticsView: View {
 		}
 	}
 }
+
+private struct ZagUpdateDiagnosticsReportView: View {
+	@ObservedObject private var updateManager = UpdateManager.shared
+	@State private var copied = false
+
+	var body: some View {
+		ScrollView([.vertical, .horizontal], showsIndicators: true) {
+			Text(updateManager.diagnosticsReport)
+				.font(.system(.caption, design: .monospaced))
+				.textSelection(.enabled)
+				.fixedSize(horizontal: true, vertical: true)
+				.padding()
+		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+		.navigationTitle("Diagnostics Report")
+		.navigationBarTitleDisplayMode(.inline)
+		.zagWallpaperSurface()
+		.toolbar {
+			ToolbarItem(placement: .topBarTrailing) {
+				Button {
+					UIPasteboard.general.string = updateManager.diagnosticsReport
+					copied = true
+					UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				} label: {
+					Image(systemName: copied ? "checkmark" : "doc.on.doc")
+				}
+				.accessibilityLabel(copied ? "Copied Diagnostics" : "Copy Diagnostics")
+			}
+		}
+	}
+}
+
