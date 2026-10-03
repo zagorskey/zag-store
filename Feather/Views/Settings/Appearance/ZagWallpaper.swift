@@ -5,6 +5,8 @@ enum ZagWallpaperStore {
 	static let enabledKey = "zagStore.wallpaper.enabled"
 	static let blurKey = "zagStore.wallpaper.blur"
 	static let blurAmountKey = "zagStore.wallpaper.blurAmount"
+	static let brightnessKey = "zagStore.wallpaper.brightness"
+	static let brightnessAmountKey = "zagStore.wallpaper.brightnessAmount"
 
 	static var url: URL {
 		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -46,6 +48,8 @@ struct ZagWallpaperBackground: View {
 	@AppStorage(ZagWallpaperStore.enabledKey) private var enabled = false
 	@AppStorage(ZagWallpaperStore.blurKey) private var blurred = false
 	@AppStorage(ZagWallpaperStore.blurAmountKey) private var blurAmount: Double = 16
+	@AppStorage(ZagWallpaperStore.brightnessKey) private var brightnessEnabled = false
+	@AppStorage(ZagWallpaperStore.brightnessAmountKey) private var brightnessAmount: Double = 1
 	@State private var image: UIImage?
 
 	var body: some View {
@@ -57,6 +61,7 @@ struct ZagWallpaperBackground: View {
 					.frame(width: proxy.size.width, height: proxy.size.height)
 					.clipped()
 					.blur(radius: blurred ? blurAmount : 0)
+					.brightness(brightnessEnabled ? brightnessAmount - 1 : 0)
 					.scaleEffect(blurred ? 1 + min(blurAmount, 30) * 0.005 : 1)
 			}
 		}
