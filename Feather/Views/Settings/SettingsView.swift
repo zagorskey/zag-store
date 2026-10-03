@@ -660,38 +660,103 @@ private struct ZagLogViewerView: View {
 		var id: String { rawValue }
 	}
 
+	private struct Entry: Identifiable {
+		let id = UUID()
+		let raw: String
+		let timestamp: String
+		let level: String
+		let category: String
+		let message: String
+
+		init(_ raw: String) {
+			self.raw = raw
+			let pattern = #"^(\\S+) \\[(DEBUG|INFO|WARN|ERROR)\\] \\[(.*?)\\] (.*)$"#
+			if let expression = try? NSRegularExpression(pattern: pattern),
+			   let match = expression.firstMatch(
+				in: raw,
+				range: NSRange(raw.startIndex..., in: raw)
+			),
+			   match.numberOfRanges == 5 {
+				func value(_ index: Int) -> String {
+					guard let range = Range(match.range(at: index), in: raw) else { return "" }
+					return String(raw[range])
+				}
+				timestamp = value(1)
+				level = value(2)
+				category = value(3)
+				message = value(4)
+			} else {
+				timestamp = ""
+				level = "INFO"
+				category = "Log"
+				message = raw
+			}
+		}
+
+		var shortTimestamp: String {
+			guard !timestamp.isEmpty else { return "" }
+			let formatter = ISO8601DateFormatter()
+			formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+			guard let date = formatter.date(from: timestamp) else { return timestamp }
+			let output = DateFormatter()
+			output.dateStyle = .none
+			output.timeStyle = .medium
+			return output.string(from: date)
+		}
+
+		var levelIcon: String {
+			switch level {
+			case "ERROR": return "xmark.octagon.fill"
+			case "WARN": return "exclamationmark.triangle.fill"
+			case "DEBUG": return "ladybug.fill"
+			default: return "info.circle.fill"
+			}
+		}
+
+		var levelColor: Color {
+			switch level {
+			case "ERROR": return .red
+			case "WARN": return .orange
+			case "DEBUG": return .secondary
+			default: return .accentColor
+			}
+		}
+	}
+
 	@State private var logText = ""
 	@State private var selectedFilter: Filter = .all
 	@State private var searchText = ""
 	@State private var newestFirst = true
 
-	private var allLines: [String] {
-		logText.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+	private var allEntries: [Entry] {
+		logText
+			.split(separator: "\n", omittingEmptySubsequences: true)
+			.map { Entry(String($0)) }
 	}
 
-	private var filteredLines: [String] {
-		var lines = allLines.filter { line in
+	private var filteredEntries: [Entry] {
+		var entries = allEntries.filter { entry in
 			switch selectedFilter {
 			case .all:
 				return true
 			case .signing:
-				return line.contains("[Signing]") || line.contains("[Manual Signing]")
+				return entry.category == "Signing" || entry.category == "Manual Signing"
 			case .installation:
-				return line.contains("[Installation]") || line.contains("[Repository Install]") || line.contains("[Repository Transaction]")
+				return entry.category == "Installation" || entry.category == "Repository Install" || entry.category == "Repository Transaction"
 			case .rppairing:
-				return line.contains("[RPPairing]")
+				return entry.category == "RPPairing"
 			case .updates:
-				return line.contains("[Updates]") || line.contains("[Notifications]")
+				return entry.category == "Updates" || entry.category == "Notifications"
 			case .errors:
-				return line.contains("[ERROR]") || line.contains("[WARN]")
+				return entry.level == "ERROR" || entry.level == "WARN"
 			}
 		}
 
 		let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 		if !query.isEmpty {
-			lines = lines.filter { $0.localizedCaseInsensitiveContains(query) }
+			entries = entries.filter { $0.raw.localizedCaseInsensitiveContains(query) }
 		}
-		return newestFirst ? lines.reversed() : lines
+		return newestFirst ? entries.reversed() : entries
 	}
 
 	var body: some View {
@@ -722,7 +787,7 @@ private struct ZagLogViewerView: View {
 			Divider()
 
 			HStack {
-				Text("\(filteredLines.count) of \(allLines.count) entries")
+				Text("\(filteredEntries.count) of \(allEntries.count) entries")
 					.font(.caption)
 					.foregroundStyle(.secondary)
 				Spacer()
@@ -743,28 +808,12 @@ private struct ZagLogViewerView: View {
 			Divider()
 
 			ScrollView {
-				if filteredLines.isEmpty {
-					VStack(spacing: 10) {
-						Image(systemName: searchText.isEmpty ? "doc.text" : "magnifyingglass")
-							.font(.system(size: 30))
-							.foregroundStyle(.secondary)
-						Text(searchText.isEmpty ? "No Log Entries" : "No Matches")
-							.font(.headline)
-						Text(searchText.isEmpty ? "No entries match this category." : "Try a different search or category.")
-							.font(.subheadline)
-							.foregroundStyle(.secondary)
-							.multilineTextAlignment(.center)
-					}
-					.frame(maxWidth: .infinity)
-					.padding(.horizontal)
-					.padding(.top, 50)
+				if filteredEntries.isEmpty {
+					_emptyState
 				} else {
-					LazyVStack(alignment: .leading, spacing: 5) {
-						ForEach(Array(filteredLines.enumerated()), id: \.offset) { _, line in
-							Text(line)
-								.font(.system(size: 10, design: .monospaced))
-								.textSelection(.enabled)
-								.frame(maxWidth: .infinity, alignment: .leading)
+					LazyVStack(spacing: 8) {
+						ForEach(filteredEntries) { entry in
+							_entryView(entry)
 						}
 					}
 					.padding()
@@ -778,6 +827,75 @@ private struct ZagLogViewerView: View {
 		.onReceive(NotificationCenter.default.publisher(for: ZagLogger.didChangeNotification)) { _ in
 			_reload()
 		}
+	}
+
+	@ViewBuilder
+	private func _entryView(_ entry: Entry) -> some View {
+		VStack(alignment: .leading, spacing: 7) {
+			HStack(spacing: 6) {
+				Image(systemName: entry.levelIcon)
+					.font(.caption)
+					.foregroundStyle(entry.levelColor)
+
+				Text(entry.category)
+					.font(.caption2.weight(.semibold))
+					.padding(.horizontal, 7)
+					.padding(.vertical, 3)
+					.background(Capsule().fill(Color.secondary.opacity(0.13)))
+
+				Spacer()
+
+				Text(entry.shortTimestamp)
+					.font(.caption2.monospacedDigit())
+					.foregroundStyle(.secondary)
+			}
+
+			Text(entry.message)
+				.font(.system(size: 12, design: .monospaced))
+				.textSelection(.enabled)
+				.frame(maxWidth: .infinity, alignment: .leading)
+		}
+		.padding(10)
+		.background(
+			RoundedRectangle(cornerRadius: 12, style: .continuous)
+				.fill(Color.secondary.opacity(0.08))
+		)
+		.overlay(alignment: .leading) {
+			RoundedRectangle(cornerRadius: 2)
+				.fill(entry.levelColor)
+				.frame(width: 3)
+				.padding(.vertical, 8)
+		}
+		.contentShape(Rectangle())
+		.contextMenu {
+			Button {
+				UIPasteboard.general.string = entry.raw
+			} label: {
+				Label("Copy Entry", systemImage: "doc.on.doc")
+			}
+			Button {
+				UIPasteboard.general.string = entry.message
+			} label: {
+				Label("Copy Message", systemImage: "text.quote")
+			}
+		}
+	}
+
+	private var _emptyState: some View {
+		VStack(spacing: 10) {
+			Image(systemName: searchText.isEmpty ? "doc.text" : "magnifyingglass")
+				.font(.system(size: 30))
+				.foregroundStyle(.secondary)
+			Text(searchText.isEmpty ? "No Log Entries" : "No Matches")
+				.font(.headline)
+			Text(searchText.isEmpty ? "No entries match this category." : "Try a different search or category.")
+				.font(.subheadline)
+				.foregroundStyle(.secondary)
+				.multilineTextAlignment(.center)
+		}
+		.frame(maxWidth: .infinity)
+		.padding(.horizontal)
+		.padding(.top, 50)
 	}
 
 	private func _reload() {
