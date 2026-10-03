@@ -1790,7 +1790,7 @@ private struct ZagUpdateDiagnosticsView: View {
 		}
 		.navigationTitle("Update Diagnostics")
 		.zagWallpaperSurface()
-
+	}
 }
 
 private struct ZagUpdateDiagnosticsReportView: View {
