@@ -463,40 +463,61 @@ final class UpdateManager: ObservableObject {
 			for installed in deviceInventory.values {
 				guard !installed.version.isEmpty else { continue }
 
-				let matchingSignedApps = signedApps.filter {
-					$0.identifier == installed.bundleID &&
+				let bundleSignedApps = signedApps.filter {
+					$0.identifier == installed.bundleID
+				}
+				let matchingSignedApps = bundleSignedApps.filter {
 					$0.version == installed.version
 				}
 
 				let signedName: String? = {
-					if matchingSignedApps.count == 1 {
-						return matchingSignedApps[0].name
-					}
-
 					if !installed.build.isEmpty {
 						let buildMatches = matchingSignedApps.filter {
 							_buildVersion(for: $0) == installed.build
 						}
-						if buildMatches.count == 1 {
-							return buildMatches[0].name
+						let buildNames = Set(
+							buildMatches.compactMap { $0.name }.filter { !$0.isEmpty }
+						)
+						if buildNames.count == 1 {
+							return buildNames.first
 						}
 					}
 
-					let distinctNames = Set(
+					let versionNames = Set(
 						matchingSignedApps.compactMap { $0.name }.filter { !$0.isEmpty }
 					)
-					return distinctNames.count == 1 ? distinctNames.first : nil
+					if versionNames.count == 1 {
+						return versionNames.first
+					}
+
+					// If only one signed identity exists for this bundle ID, it is
+					// stronger evidence than repository entries that merely reuse the ID.
+					let bundleNames = Set(
+						bundleSignedApps.compactMap { $0.name }.filter { !$0.isEmpty }
+					)
+					return bundleNames.count == 1 ? bundleNames.first : nil
 				}()
 
 				let repositoryMatches = repositories
 					.flatMap { $0.apps }
 					.filter { $0.id == installed.bundleID }
-				let repositoryName = repositoryMatches.count == 1
-					? repositoryMatches[0].currentName
+				let repositoryNames = Set(
+					repositoryMatches.map { $0.currentName }.filter { !$0.isEmpty }
+				)
+				let repositoryName = repositoryNames.count == 1
+					? repositoryNames.first
 					: nil
 
+				guard let installedName = signedName ?? repositoryName else {
+					print(
+						"[Zag Store Updates] AMBIGUOUS INSTALLED IDENTITY: " +
+						"id=\(installed.bundleID) — skipping cross-variant update matching"
+					)
+					continue
+				}
+
 				_addLocalApp(
-					name: signedName ?? repositoryName ?? installed.bundleID,
+					name: installedName,
 					identifier: installed.bundleID,
 					version: installed.version,
 					build: installed.build.isEmpty ? nil : installed.build,
