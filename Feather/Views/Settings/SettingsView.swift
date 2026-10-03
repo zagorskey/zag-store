@@ -623,7 +623,6 @@ private struct ZagLoggingSettingsView: View {
 	@State private var logSnapshot = ZagLogger.shared.snapshot()
 	@State private var shareURL: URL?
 	@State private var diagnosticReport: String?
-	@State private var showClearConfirmation = false
 	@State private var showCurrentProblems = false
 
 	var body: some View {
@@ -695,7 +694,7 @@ private struct ZagLoggingSettingsView: View {
 					Label("Export Logs", systemImage: "square.and.arrow.up")
 				}
 				Button(role: .destructive) {
-					showClearConfirmation = true
+					_presentClearLogsWarning()
 				} label: {
 					Label("Clear Logs", systemImage: "trash")
 				}
@@ -735,16 +734,75 @@ private struct ZagLoggingSettingsView: View {
 				ZagSettingsShareSheet(items: [shareURL])
 			}
 		}
-		.confirmationDialog(
-			"Clear all Zag Store logs?",
-			isPresented: $showClearConfirmation,
-			titleVisibility: .visible
+	}
+
+
+	private func _presentClearLogsWarning() {
+		let alert = UIAlertController(
+			title: "Clear Logs",
+			message: "This permanently clears all retained Zag Store logs. This action cannot be undone.",
+			preferredStyle: .alert
+		)
+
+		let destructiveRed = UIColor.systemRed
+		let titleFont = UIFont.systemFont(ofSize: 20, weight: .bold)
+		let titleParagraph = NSMutableParagraphStyle()
+		titleParagraph.alignment = .center
+
+		if let symbol = UIImage(
+			systemName: "exclamationmark.triangle.fill",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
 		) {
-			Button("Clear Logs", role: .destructive) {
-				ZagLogger.shared.clear()
+			let renderer = UIGraphicsImageRenderer(size: symbol.size)
+			let renderedSymbol = renderer.image { _ in
+				destructiveRed.setFill()
+				symbol.withRenderingMode(.alwaysTemplate).draw(
+					in: CGRect(origin: .zero, size: symbol.size),
+					blendMode: .normal,
+					alpha: 1
+				)
 			}
-			Button("Cancel", role: .cancel) {}
+			let attachment = NSTextAttachment()
+			attachment.image = renderedSymbol.withRenderingMode(.alwaysOriginal)
+			attachment.bounds = CGRect(x: 0, y: -3, width: 20, height: 20)
+			let title = NSMutableAttributedString(attachment: attachment)
+			title.append(NSAttributedString(
+				string: "  Clear Logs",
+				attributes: [
+					.font: titleFont,
+					.foregroundColor: UIColor.label
+				]
+			))
+			title.addAttribute(
+				.paragraphStyle,
+				value: titleParagraph,
+				range: NSRange(location: 0, length: title.length)
+			)
+			alert.setValue(title, forKey: "attributedTitle")
 		}
+
+		let clear = UIAlertAction(title: "Clear Logs", style: .destructive) { _ in
+			ZagLogger.shared.clear()
+			UINotificationFeedbackGenerator().notificationOccurred(.warning)
+		}
+		clear.setValue(destructiveRed, forKey: "titleTextColor")
+		alert.addAction(clear)
+		alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+		guard
+			let scene = UIApplication.shared.connectedScenes
+				.compactMap({ $0 as? UIWindowScene })
+				.first(where: { $0.activationState == .foregroundActive }),
+			let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+		else {
+			return
+		}
+
+		var presenter = root
+		while let presented = presenter.presentedViewController {
+			presenter = presented
+		}
+		presenter.present(alert, animated: true)
 	}
 
 	private var _currentSessionMetrics: (hasMarker: Bool, entries: Int, warnings: Int, errors: Int, startedAt: String) {
