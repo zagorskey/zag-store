@@ -63,6 +63,15 @@ struct DownloadButtonView: View {
 					} else {
 						_indeterminateRing()
 					}
+				} else if _isPALApp {
+					ZagActionPill(title: "PAL") {
+						_performAction(claim: false) {
+							transactionError = .localized(
+								"This app uses AltStore PAL's Alternative Distribution Package format. Zag Store can read this source, but PAL installation support is still being implemented."
+							)
+						}
+					}
+					.accessibilityLabel(Text("AltStore PAL app \(app.currentName)"))
 				} else if let bundleID = app.id,
 						  installedBundleID == bundleID {
 					ZagActionPill(title: .localized("Open")) {
@@ -154,6 +163,11 @@ struct DownloadButtonView: View {
 			}
 		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
+	}
+
+	private var _isPALApp: Bool {
+		guard let marketplaceID = app.marketplaceID else { return false }
+		return !marketplaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 	}
 
 	private func _performAction(
@@ -510,6 +524,12 @@ struct DownloadButtonView: View {
 	}
 
 	private func _startGetAndInstall() {
+		guard !_isPALApp else {
+			transactionError = .localized(
+				"This app uses AltStore PAL's Alternative Distribution Package format. Zag Store can read this source, but PAL installation support is still being implemented."
+			)
+			return
+		}
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
 		ZagLogger.shared.info("Repository Install", "Download started: \(app.currentName) | id=\(app.id ?? "unknown") | version=\(app.currentVersion ?? "unknown")")
 		zagPhase = .downloading
