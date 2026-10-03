@@ -217,7 +217,7 @@ struct DownloadButtonView: View {
 				let platformText = (manifest.platforms ?? []).joined(separator: ", ")
 				let minimumOS = manifest.minimumSystemVersions?["ios"] ?? "Unknown"
 				let version = manifest.shortVersionString ?? app.currentVersion ?? "Unknown"
-				let build = manifest.bundleVersion ?? app.currentBuildVersion ?? "Unknown"
+				let build = manifest.bundleVersion ?? app.currentAppVersion?.build ?? "Unknown"
 				let marketplaceID = app.marketplaceID ?? manifest.appleItemId ?? "Unknown"
 
 				let message = """
