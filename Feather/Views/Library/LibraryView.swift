@@ -352,6 +352,12 @@ struct LibraryView: View {
 			.listRowSeparator(.hidden)
 			.listRowBackground(Color.clear)
 			.padding(.vertical, 2)
+			.transition(
+				.asymmetric(
+					insertion: .opacity.combined(with: .move(edge: .top)),
+					removal: .opacity.combined(with: .move(edge: .top))
+				)
+			)
 		}
 	}
 
@@ -628,6 +634,10 @@ struct LibraryView: View {
 			.onAppear {
 				_probeSystemDictation()
 			}
+			.animation(
+				.easeInOut(duration: 0.35),
+				value: updateManager.hasVisibleUpdates
+			)
 
 			.compatSearchScopes($_selectedScope) {
 				librarySearchScopes
