@@ -68,6 +68,7 @@ struct SettingsView: View {
 	@AppStorage("ZagStore.settingsSectionOrder") private var _storedSettingsSectionOrder = ""
 	@AppStorage("ZagStore.settingsSectionSortMode") private var _settingsSectionSortMode = "default"
 	@AppStorage("ZagStore.advancedSettingsUnlocked") private var _advancedSettingsUnlocked = false
+	@AppStorage("ZagStore.showInternalMetadata") private var _showInternalMetadata = false
 	@State private var _showAdvancedSettingsWarning = false
 	
 	// MARK: Fetch
@@ -210,9 +211,14 @@ extension SettingsView {
 	@ViewBuilder
 	private var _advancedSettingsSections: some View {
 		Section {
-			EmptyView()
+			Toggle(isOn: $_showInternalMetadata) {
+				Label("Show Internal Metadata", systemImage: "curlybraces")
+			}
+			.tint(.green)
 		} header: {
 			Text("Developer Options")
+		} footer: {
+			Text("Developer controls expose additional Zag Store internals for testing and troubleshooting.")
 		}
 
 		Section {
@@ -221,6 +227,16 @@ extension SettingsView {
 			}
 		} header: {
 			Text("Experimental Features")
+		}
+
+		Section {
+			NavigationLink(destination: ZagLoggingSettingsView()) {
+				Label("Logging", systemImage: "doc.text.magnifyingglass")
+			}
+		} header: {
+			Text("Logging")
+		} footer: {
+			Text("Detailed Zag Store runtime logging and log management will live here.")
 		}
 	}
 
@@ -563,6 +579,23 @@ extension SettingsView {
 
 
 
+
+private struct ZagLoggingSettingsView: View {
+	var body: some View {
+		Form {
+			Section {
+				LabeledContent("Status") {
+					Text("Standard")
+						.foregroundStyle(.secondary)
+				}
+			} footer: {
+				Text("Zag Store currently uses its standard diagnostic output. Verbose runtime logging, log viewing, exporting and clearing will be added here.")
+			}
+		}
+		.navigationTitle("Logging")
+		.zagWallpaperSurface()
+	}
+}
 
 private struct ZagExperimentalSigningView: View {
 	@StateObject private var optionsManager = OptionsManager.shared
