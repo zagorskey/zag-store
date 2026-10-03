@@ -18,6 +18,9 @@ struct AppearanceView: View {
 	@AppStorage(ZagWallpaperStore.blurKey)
 	private var _wallpaperBlurred = false
 
+	@AppStorage(ZagWallpaperStore.blurAmountKey)
+	private var _wallpaperBlurAmount: Double = 16
+
 	@State private var _wallpaperPickerPresenting = false
 	@AppStorage("Feather.userInterfaceStyle")
 	private var _userIntefacerStyle: Int =
@@ -127,6 +130,29 @@ struct AppearanceView: View {
 						.localized("Blur Wallpaper"),
 						isOn: $_wallpaperBlurred
 					)
+
+					if _wallpaperBlurred {
+						VStack(alignment: .leading, spacing: 8) {
+							HStack {
+								Image(systemName: "circle")
+									.font(.system(size: 9))
+									.foregroundStyle(.secondary)
+
+								Slider(
+									value: $_wallpaperBlurAmount,
+									in: 0...30,
+									step: 1
+								)
+
+								Image(systemName: "circle.fill")
+									.font(.system(size: 14))
+									.foregroundStyle(.secondary)
+							}
+							.accessibilityElement(children: .combine)
+							.accessibilityLabel("Wallpaper Blur")
+							.accessibilityValue("\(Int(_wallpaperBlurAmount))")
+						}
+					}
 
 					Button(role: .destructive) {
 						ZagWallpaperStore.clear()
