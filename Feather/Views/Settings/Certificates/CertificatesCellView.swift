@@ -77,8 +77,20 @@ struct CertificatesCellView: View {
 		.frame(height: 80)
 		.contentTransition(.opacity)
 		.onAppear {
-			withAnimation {
-				data = Storage.shared.getProvisionFileDecoded(for: cert)
+			guard let uuid = cert.uuid else { return }
+			let directory = FileManager.default.certificates(uuid)
+			guard let provisionURL = FileManager.default.getPath(
+				in: directory,
+				for: Storage.FileRequest.provision.rawValue
+			) else {
+				return
+			}
+
+			Task.detached(priority: .userInitiated) {
+				let decoded = CertificateReader(provisionURL).decoded
+				await MainActor.run {
+					data = decoded
+				}
 			}
 		}
 	}
