@@ -165,23 +165,6 @@ struct SigningOptionsView: View {
 			)
 		}
 		
-		NBSection(.localized("Experiments")) {
-			_toggle(
-				.localized("Replace Substrate with ElleKit"),
-				systemImage: "pencil",
-				isOn: $options.experiment_replaceSubstrateWithEllekit,
-				temporaryValue: temporaryOptions?.experiment_replaceSubstrateWithEllekit
-			)
-			
-			_toggle(
-				.localized("Enable Liquid Glass"),
-				systemImage: "26.circle",
-				isOn: $options.experiment_supportLiquidGlass,
-				temporaryValue: temporaryOptions?.experiment_supportLiquidGlass
-			)
-		} footer: {
-			Text(.localized("This option force converts apps to try to use the new liquid glass redesign iOS 26 introduced, this may not work for all applications due to differing frameworks."))
-		}
 	}
 	
 	@ViewBuilder
