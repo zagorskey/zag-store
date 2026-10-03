@@ -294,13 +294,13 @@ extension ASRepository {
 				try container.decodeIfPresent([URL].self, forKey: .screenshotURLs)
 			
 			if
-				let marketplaceID = try container.decodeIfPresent(String.self, forKey: .marketplaceID),
-				!marketplaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+				let marketplaceID = try container.decodeIfPresent(String.self, forKey: .marketplaceID)?
+					.trimmingCharacters(in: .whitespacesAndNewlines),
+				!marketplaceID.isEmpty
 			{
-				throw NSError(
-					domain: "FeatherSources",
-					code: 112789, userInfo: [NSLocalizedDescriptionKey: "AltStore PAL repositories aren't supported: \(id ?? "")"]
-				)
+				self.marketplaceID = marketplaceID
+			} else {
+				self.marketplaceID = nil
 			}
 		}
 
