@@ -236,6 +236,7 @@ struct DownloadButtonView: View {
 
 	private var _stageCaption: String {
 		switch zagPhase {
+		case .downloading: return .localized("Downloading…")
 		case .signing: return .localized("Preparing…")
 		case .installing: return .localized("Installing…")
 		default: return ""
