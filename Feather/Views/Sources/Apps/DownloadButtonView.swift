@@ -64,7 +64,8 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if let bundleID = app.id,
-						  pairingCore.isInstalled(bundleID: bundleID) {
+						  pairingCore.isInstalled(bundleID: bundleID),
+						  _matchesTrackedVariant(bundleID: bundleID) {
 					switch _installedReleaseRelationship(bundleID: bundleID) {
 					case .newer:
 						ZagActionPill(title: .localized("Update")) {
@@ -333,6 +334,29 @@ struct DownloadButtonView: View {
 		_installInline(signed)
 	}
 
+	private func _matchesTrackedVariant(bundleID: String) -> Bool {
+		let defaults = UserDefaults.standard
+		let variantOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+
+		if let trackedVariant = variantOrigins[bundleID] {
+			return trackedVariant == UpdateManager.variantIdentity(for: app)
+		}
+
+		let appOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		guard let trackedApp = appOrigins[bundleID] else {
+			// Preserve legacy behavior until the user adopts an ambiguous variant.
+			return true
+		}
+		return trackedApp.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+			.lowercased().filter { $0.isLetter || $0.isNumber } ==
+			app.currentName.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+			.lowercased().filter { $0.isLetter || $0.isNumber }
+	}
+
 	private func _rememberRepositoryOrigin() {
 		guard let bundleID = app.id, !bundleID.isEmpty else { return }
 		var origins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") as? [String: String] ?? [:]
@@ -354,6 +378,15 @@ struct DownloadButtonView: View {
 			appOrigins[bundleID] = appIdentity
 			UserDefaults.standard.set(appOrigins, forKey: "zagStore.repositoryAppOrigins")
 		}
+
+		var variantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		variantOrigins[bundleID] = UpdateManager.variantIdentity(for: app)
+		UserDefaults.standard.set(
+			variantOrigins,
+			forKey: "zagStore.repositoryVariantOrigins"
+		)
 
 		if let iconURL = source?.currentIconURL?.absoluteString {
 			originIcons[bundleID] = iconURL
