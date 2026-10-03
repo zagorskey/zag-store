@@ -29,6 +29,7 @@ struct DownloadButtonView: View {
 	@State private var transactionError: String?
 	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
+	@State private var palInspectionInProgress = false
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -64,14 +65,15 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if _isPALApp {
-					ZagActionPill(title: "PAL") {
-						_performAction(claim: false) {
-							transactionError = .localized(
-								"This app uses AltStore PAL's Alternative Distribution Package format. Zag Store can read this source, but PAL installation support is still being implemented."
-							)
+					if palInspectionInProgress {
+						ProgressView()
+							.frame(width: 88, height: 34, alignment: .center)
+					} else {
+						ZagActionPill(title: "PAL") {
+							_inspectPALPackage()
 						}
+						.accessibilityLabel(Text("Inspect AltStore PAL package for \(app.currentName)"))
 					}
-					.accessibilityLabel(Text("AltStore PAL app \(app.currentName)"))
 				} else if let bundleID = app.id,
 						  installedBundleID == bundleID {
 					ZagActionPill(title: .localized("Open")) {
@@ -163,6 +165,88 @@ struct DownloadButtonView: View {
 			}
 		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
+	}
+
+	private struct PALManifest: Decodable {
+		struct Variant: Decodable {
+			struct InstallTarget: Decodable {
+				let device: String?
+				let os: String?
+			}
+
+			let publicId: String?
+			let assetPath: String?
+			let installTargets: [InstallTarget]?
+		}
+
+		let distributionPackageRevision: Int?
+		let appleItemId: String?
+		let bundleId: String?
+		let shortVersionString: String?
+		let bundleVersion: String?
+		let appleVersionId: String?
+		let platforms: [String]?
+		let minimumSystemVersions: [String: String]?
+		let variants: [Variant]?
+	}
+
+	private func _inspectPALPackage() {
+		guard !palInspectionInProgress else { return }
+		guard let manifestURL = app.currentDownloadUrl else {
+			transactionError = .localized("This PAL app does not provide an Alternative Distribution Package manifest URL.")
+			return
+		}
+
+		palInspectionInProgress = true
+		Task {
+			do {
+				let (data, response) = try await URLSession.shared.data(from: manifestURL)
+				if let http = response as? HTTPURLResponse,
+				   !(200...299).contains(http.statusCode) {
+					throw URLError(.badServerResponse)
+				}
+
+				let manifest = try JSONDecoder().decode(PALManifest.self, from: data)
+				let deviceModel = UIDevice.current.zagPALHardwareIdentifier
+				let variants = manifest.variants ?? []
+				let matchingVariants = variants.filter { variant in
+					guard let targets = variant.installTargets else { return false }
+					return targets.contains { $0.device == deviceModel }
+				}
+
+				let platformText = (manifest.platforms ?? []).joined(separator: ", ")
+				let minimumOS = manifest.minimumSystemVersions?["ios"] ?? "Unknown"
+				let version = manifest.shortVersionString ?? app.currentVersion ?? "Unknown"
+				let build = manifest.bundleVersion ?? app.currentBuildVersion ?? "Unknown"
+				let marketplaceID = app.marketplaceID ?? manifest.appleItemId ?? "Unknown"
+
+				let message = """
+				PAL package inspected successfully.
+
+				App: \(app.currentName)
+				Bundle ID: \(manifest.bundleId ?? app.id ?? "Unknown")
+				Marketplace ID: \(marketplaceID)
+				Version: \(version) (\(build))
+				Platform: \(platformText.isEmpty ? "Unknown" : platformText)
+				Minimum iOS: \(minimumOS)
+				Device: \(deviceModel)
+				Variants: \(variants.count)
+				Matching device variants: \(matchingVariants.count)
+
+				The ADP is valid metadata, but its IPA variants are encrypted and require Apple's MarketplaceKit licensing flow.
+				"""
+
+				await MainActor.run {
+					palInspectionInProgress = false
+					transactionError = message
+				}
+			} catch {
+				await MainActor.run {
+					palInspectionInProgress = false
+					transactionError = "PAL manifest inspection failed: \(error.localizedDescription)"
+				}
+			}
+		}
 	}
 
 	private var _isPALApp: Bool {
@@ -808,3 +892,15 @@ struct DownloadButtonView: View {
 	}
 
 }
+private extension UIDevice {
+	var zagPALHardwareIdentifier: String {
+		var systemInfo = utsname()
+		uname(&systemInfo)
+		return withUnsafePointer(to: &systemInfo.machine) {
+			$0.withMemoryRebound(to: CChar.self, capacity: 1) {
+				String(cString: $0)
+			}
+		}
+	}
+}
+
