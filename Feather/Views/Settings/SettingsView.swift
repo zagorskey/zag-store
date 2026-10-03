@@ -504,9 +504,13 @@ extension SettingsView {
 		)
 
 		let warningAmber = UIColor(Color.orange)
+		let titleFont = UIFont.systemFont(ofSize: 20, weight: .bold)
+		let titleParagraph = NSMutableParagraphStyle()
+		titleParagraph.alignment = .center
+
 		if let symbol = UIImage(
 			systemName: "exclamationmark.triangle.fill",
-			withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
 		) {
 			let renderer = UIGraphicsImageRenderer(size: symbol.size)
 			let renderedSymbol = renderer.image { _ in
@@ -519,9 +523,20 @@ extension SettingsView {
 			}
 			let attachment = NSTextAttachment()
 			attachment.image = renderedSymbol.withRenderingMode(.alwaysOriginal)
-			attachment.bounds = CGRect(x: 0, y: -3, width: 18, height: 18)
+			attachment.bounds = CGRect(x: 0, y: -3, width: 20, height: 20)
 			let title = NSMutableAttributedString(attachment: attachment)
-			title.append(NSAttributedString(string: "  Advanced Settings"))
+			title.append(NSAttributedString(
+				string: "  Advanced Settings",
+				attributes: [
+					.font: titleFont,
+					.foregroundColor: UIColor.label
+				]
+			))
+			title.addAttribute(
+				.paragraphStyle,
+				value: titleParagraph,
+				range: NSRange(location: 0, length: title.length)
+			)
 			alert.setValue(title, forKey: "attributedTitle")
 		}
 
