@@ -937,6 +937,25 @@ final class UpdateManager: ObservableObject {
 
 		var diagnosticLines: [String] = []
 		diagnosticLines.append("=== Zag Store Update Diagnostics ===")
+		diagnosticLines.append("Tracked Variant Lineage:")
+		let recordedVariantOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+		let trackedLineageIDs = Set(recordedOrigins.keys)
+			.union(recordedAppOrigins.keys)
+			.union(recordedVariantOrigins.keys)
+		if trackedLineageIDs.isEmpty {
+			diagnosticLines.append("- <none>")
+		} else {
+			for identifier in trackedLineageIDs.sorted() {
+				diagnosticLines.append(
+					"- id=\(identifier) | appOrigin=\(recordedAppOrigins[identifier] ?? "<none>") | " +
+					"variantOrigin=\(recordedVariantOrigins[identifier] ?? "<none>") | " +
+					"repositoryOrigin=\(recordedOrigins[identifier] ?? "<none>")"
+				)
+			}
+		}
+		diagnosticLines.append("")
 		diagnosticLines.append("Raw device inventory:")
 		for installed in deviceInventory.values.sorted(by: { $0.bundleID < $1.bundleID }) {
 			let origin = recordedOrigins[installed.bundleID] ?? "<none>"
