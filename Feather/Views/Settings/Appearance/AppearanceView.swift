@@ -107,7 +107,13 @@ struct AppearanceView: View {
 				.pickerStyle(.segmented)
 			}
 
-			NBSection(.localized("Theme")) {
+			Section {
+				AppearanceTintColorView()
+					.listRowInsets(EdgeInsets())
+					.listRowBackground(EmptyView())
+			} header: {
+				Text(.localized("Theme"))
+			} 
 				AppearanceTintColorView()
 					.listRowInsets(EdgeInsets())
 					.listRowBackground(EmptyView())
@@ -115,10 +121,11 @@ struct AppearanceView: View {
 
 			Section {
 				ColorPicker(
-					.localized("Custom Theme Color"),
 					selection: _tintColorBinding,
 					supportsOpacity: false
-				)
+				) {
+					Label(.localized("Custom Theme Color"), systemImage: "eyedropper")
+				}
 			}
 
 			Section(.localized("Wallpaper")) {
@@ -193,7 +200,7 @@ struct AppearanceView: View {
 			}
 
 			if #available(iOS 18.0, *) {
-				NBSection(.localized("Library")) {
+				Section {
 					Toggle(
 						.localized("Dynamic Icons"),
 						isOn:
@@ -207,9 +214,11 @@ struct AppearanceView: View {
 						)
 					}
 				}
+			} header: {
+				Text(.localized("App Icons"))
 			}
 
-			NBSection(.localized("Sources")) {
+			Section {
 				Picker(
 					.localized("Store Cell Appearance"),
 					selection: $_storeCellAppearance
@@ -230,6 +239,8 @@ struct AppearanceView: View {
 				}
 				.labelsHidden()
 				.pickerStyle(.inline)
+			} header: {
+				Text(.localized("Sources"))
 			}
 		}
 		.background {
