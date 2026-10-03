@@ -336,12 +336,14 @@ final class UpdateManager: ObservableObject {
 		let bundleID: String
 		let appName: String
 		let repositoryName: String
+		let repositoryKey: String?
 		let version: String?
 		let variantDescription: String?
 
 		var id: String {
 			bundleID + "|" + appName + "|" + repositoryName + "|" +
-			(version ?? "") + "|" + (variantDescription ?? "")
+			(repositoryKey ?? "") + "|" + (version ?? "") + "|" +
+			(variantDescription ?? "")
 		}
 
 		var displayName: String {
@@ -731,10 +733,15 @@ final class UpdateManager: ObservableObject {
 						candidate.currentAppVersion?.localizedDescription ??
 						candidate.versionDescription ??
 						candidate.currentDescription
+					let repositoryKey =
+						repository.id ??
+						repository.website?.absoluteString ??
+						repository.name
 					return LegacyVariantCandidate(
 						bundleID: installed.bundleID,
 						appName: candidate.currentName,
 						repositoryName: repository.name ?? "Unknown Repository",
+						repositoryKey: repositoryKey,
 						version: candidate.currentVersion,
 						variantDescription: releaseDescription?
 							.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1155,6 +1162,21 @@ final class UpdateManager: ObservableObject {
 		) as? [String: String] ?? [:]
 		variantOrigins[candidate.bundleID] = candidate.variantIdentity
 		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
+
+		// Legacy adoption must establish repository provenance too. App name or
+		// bundle ID alone cannot distinguish tweaked variants that deliberately
+		// share the original application's identifier.
+		if let repositoryKey = candidate.repositoryKey, !repositoryKey.isEmpty {
+			var repositoryOrigins = UserDefaults.standard.dictionary(
+				forKey: "zagStore.repositoryOrigins"
+			) as? [String: String] ?? [:]
+			repositoryOrigins[candidate.bundleID] = repositoryKey
+			UserDefaults.standard.set(
+				repositoryOrigins,
+				forKey: "zagStore.repositoryOrigins"
+			)
+		}
+
 		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
 	}
 
@@ -1169,6 +1191,11 @@ final class UpdateManager: ObservableObject {
 		) as? [String: String] ?? [:]
 		variantOrigins.removeValue(forKey: bundleID)
 		UserDefaults.standard.set(variantOrigins, forKey: "zagStore.repositoryVariantOrigins")
+		var repositoryOrigins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
+		repositoryOrigins.removeValue(forKey: bundleID)
+		UserDefaults.standard.set(repositoryOrigins, forKey: "zagStore.repositoryOrigins")
 		refresh(repositories: SourcesViewModel.shared.sources.map { $0.1 })
 	}
 
