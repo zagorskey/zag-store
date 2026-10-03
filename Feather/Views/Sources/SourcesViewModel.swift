@@ -215,18 +215,54 @@ final class SourcesViewModel: ObservableObject {
 			forKey: "zagStore.repositoryOriginIcons"
 		) as? [String: String] ?? [:]
 
-		var repositoriesByBundleID: [String: [(AltSource, ASRepository)]] = [:]
-		for (storedSource, repository) in sources {
-			for app in repository.apps {
-				guard let bundleID = app.id, !bundleID.isEmpty else { continue }
-				repositoriesByBundleID[bundleID, default: []].append(
-					(storedSource, repository)
-				)
-			}
+		// Provenance is only useful for apps Zag Store actually tracks. Older
+		// builds populated these dictionaries for essentially the whole catalog,
+		// which made every refresh build and persist tens of thousands of entries.
+		var trackedBundleIDs = Set(
+			(defaults.dictionary(forKey: "zagStore.repositoryAppOrigins") as? [String: String] ?? [:]).keys
+		)
+		trackedBundleIDs.formUnion(
+			(defaults.dictionary(forKey: "zagStore.repositoryVariantOrigins") as? [String: String] ?? [:]).keys
+		)
+		trackedBundleIDs.formUnion(ZagRPPairingCore.shared.installedApps.keys)
+
+		if let managedData = defaults.data(forKey: "zagStore.managedInstalledBundleIDs"),
+		   let managed = try? JSONDecoder().decode(Set<String>.self, from: managedData) {
+			trackedBundleIDs.formUnion(managed)
 		}
 
-		var changedOrigins = false
-		var changedIcons = false
+		let signedRequest = Signed.fetchRequest()
+		if let signedApps = try? Storage.shared.context.fetch(signedRequest) {
+			trackedBundleIDs.formUnion(
+				signedApps.compactMap { $0.identifier }.filter { !$0.isEmpty }
+			)
+		}
+
+		// One-time cleanup of the old catalog-wide cache. Exact lineage written
+		// after installs remains intact because all tracked IDs are preserved.
+		let prunedOrigins = origins.filter { trackedBundleIDs.contains($0.key) }
+		let prunedIcons = icons.filter { trackedBundleIDs.contains($0.key) }
+		var changedOrigins = prunedOrigins.count != origins.count
+		var changedIcons = prunedIcons.count != icons.count
+		origins = prunedOrigins
+		icons = prunedIcons
+
+		var repositoriesByBundleID: [String: [(AltSource, ASRepository)]] = [:]
+		if !trackedBundleIDs.isEmpty {
+			for (storedSource, repository) in sources {
+				for app in repository.apps {
+					guard
+						let bundleID = app.id,
+						trackedBundleIDs.contains(bundleID)
+					else {
+						continue
+					}
+					repositoriesByBundleID[bundleID, default: []].append(
+						(storedSource, repository)
+					)
+				}
+			}
+		}
 
 		for (bundleID, matches) in repositoriesByBundleID {
 			if origins[bundleID] == nil, matches.count == 1,
