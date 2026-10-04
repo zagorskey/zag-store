@@ -18,6 +18,25 @@ struct ExtendedTabbarView: View {
 	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
 	
 	@State private var _isAddingPresenting = false
+
+	private var selectedTab: Binding<String> {
+		Binding(
+			get: { selectedTabRawValue },
+			set: { newValue in
+				let previousValue = selectedTabRawValue
+				if newValue == TabEnum.sources.rawValue,
+				   previousValue != TabEnum.sources.rawValue {
+					UserDefaults.standard.removeObject(
+						forKey: "zagStore.navigation.sourcesRoute"
+					)
+					UserDefaults.standard.removeObject(
+						forKey: "zagStore.navigation.sourcesAppRoute"
+					)
+				}
+				selectedTabRawValue = newValue
+			}
+		)
+	}
 	
 	@FetchRequest(
 		entity: AltSource.entity(),
@@ -26,7 +45,7 @@ struct ExtendedTabbarView: View {
 	) private var _sources: FetchedResults<AltSource>
 		
 	var body: some View {
-		TabView(selection: $selectedTabRawValue) {
+		TabView(selection: selectedTab) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
 					TabEnum.view(for: tab)
