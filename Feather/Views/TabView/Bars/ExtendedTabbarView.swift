@@ -15,7 +15,8 @@ struct ExtendedTabbarView: View {
 	@AppStorage("Feather.tabCustomization") var customization = TabViewCustomization()
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
-	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
+	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
 	
 	@State private var _isAddingPresenting = false
 
@@ -23,21 +24,17 @@ struct ExtendedTabbarView: View {
 		Binding(
 			get: { selectedTabRawValue },
 			set: { newValue in
-				let previousValue = selectedTabRawValue
-				if newValue == TabEnum.sources.rawValue,
-				   previousValue != TabEnum.sources.rawValue {
-					UserDefaults.standard.removeObject(
-						forKey: "zagStore.navigation.sourcesRoute"
-					)
-					UserDefaults.standard.removeObject(
-						forKey: "zagStore.navigation.sourcesAppRoute"
+				selectedTabRawValue = newValue
+				if rememberLastPage {
+					UserDefaults.standard.set(
+						newValue,
+						forKey: ZagPageStartupPolicy.lastPageKey
 					)
 				}
-				selectedTabRawValue = newValue
 			}
 		)
 	}
-	
+
 	@FetchRequest(
 		entity: AltSource.entity(),
 		sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)],
