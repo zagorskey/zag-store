@@ -166,8 +166,6 @@ struct LibraryCellView: View {
 						.accessibilityLabel(Text(.localized("Removing App")))
 				} else {
 					_buttonActions(for: app)
-						.frame(height: 80, alignment: .top)
-						.padding(.top, 23)
 				}
 			}
 		}
@@ -477,10 +475,7 @@ extension LibraryCellView {
 		for app: AppInfoPresentable
 	) -> some View {
 		if app.isSigned {
-			VStack(
-				alignment: .center,
-				spacing: 3
-			) {
+			ZStack {
 				if isManagedInstalled, let id = app.identifier {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: id)
@@ -501,7 +496,7 @@ extension LibraryCellView {
 						)
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
-						.padding(.top, 1)
+						.offset(y: 24)
 				} else if let certInfo {
 					Text(certInfo.formatted)
 						.font(
@@ -512,9 +507,10 @@ extension LibraryCellView {
 						)
 						.foregroundStyle(certInfo.color)
 						.lineLimit(1)
-						.padding(.top, 1)
+						.offset(y: 24)
 				}
 			}
+			.frame(width: 88, height: 80, alignment: .center)
 		} else {
 			if isSigningImmediately && !allowSigningCustomisation && !askCertificateEveryTime {
 				VStack(spacing: 2) {
