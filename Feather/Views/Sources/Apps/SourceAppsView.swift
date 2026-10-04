@@ -415,6 +415,10 @@ struct SourceAppsView: View {
 	@State private var _dictationStatus = "Dictation unavailable"
 	@FocusState private var _searchFieldFocused: Bool
 
+	private var _requestedSourcesAreAvailable: Bool {
+		!object.isEmpty && object.allSatisfy { viewModel.sources[$0] != nil }
+	}
+
 	private var _navigationTitle: String {
 		if object.count == 1 {
 			object[0].name ?? .localized("Unknown")
@@ -518,10 +522,16 @@ struct SourceAppsView: View {
 		.onAppear {
 			_isVisible = true
 			_probeSystemDictation()
-			if !hasLoadedOnce, viewModel.isFinished {
+
+			// A cold launch may already have a validated repository snapshot from
+			// disk while the network refresh is still running. Do not gate the
+			// repository page on isFinished; load as soon as every requested source
+			// is available in the published cache.
+			if !hasLoadedOnce, _requestedSourcesAreAvailable {
 				_load()
 				hasLoadedOnce = true
 			}
+
 			_sortOption = SortOption(rawValue: _sortOptionRawValue) ?? .default
 			_scheduleAppRouteRestoration()
 		}
@@ -530,6 +540,12 @@ struct SourceAppsView: View {
 		}
 		.onChange(of: viewModel.isFinished) { _ in
 			_load()
+		}
+		.onChange(of: viewModel.sources.count) { _ in
+			if !hasLoadedOnce, _requestedSourcesAreAvailable {
+				_load()
+				hasLoadedOnce = true
+			}
 		}
 		.onChange(of: _sortOption) { newValue in
 			_sortOptionRawValue = newValue.rawValue
