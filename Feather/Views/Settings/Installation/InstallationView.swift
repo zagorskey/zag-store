@@ -69,6 +69,7 @@ private struct RPPairingView: View {
 	@State private var unpairError: String?
 	@State private var pairingExportURL: URL?
 	@State private var pairingExportError: String?
+	@State private var pairingDocumentController: UIDocumentInteractionController?
 
 	var body: some View {
 		Section {
@@ -125,6 +126,12 @@ private struct RPPairingView: View {
 				if let pairingExportURL {
 					ShareLink(item: pairingExportURL) {
 						Label("Export Pairing File", systemImage: "square.and.arrow.up")
+					}
+
+					Button {
+						openPairingFileInAnotherApp(pairingExportURL)
+					} label: {
+						Label("Open Pairing File In…", systemImage: "arrow.up.forward.app")
 					}
 				} else {
 					Button {
@@ -292,6 +299,31 @@ private struct RPPairingView: View {
 			case .failure(let error):
 				print("Gate 4 file importer failed: \(error)")
 			}
+		}
+	}
+
+	private func openPairingFileInAnotherApp(_ url: URL) {
+		let controller = UIDocumentInteractionController(url: url)
+		pairingDocumentController = controller
+
+		guard let scene = UIApplication.shared.connectedScenes
+			.compactMap({ $0 as? UIWindowScene })
+			.first(where: { $0.activationState == .foregroundActive }),
+			let window = scene.windows.first(where: { $0.isKeyWindow }),
+			let rootView = window.rootViewController?.view
+		else {
+			pairingExportError = "Unable to present the app chooser."
+			pairingDocumentController = nil
+			return
+		}
+
+		if !controller.presentOpenInMenu(
+			from: CGRect(x: rootView.bounds.midX, y: rootView.bounds.midY, width: 1, height: 1),
+			in: rootView,
+			animated: true
+		) {
+			pairingExportError = "No compatible app is available to open this pairing file."
+			pairingDocumentController = nil
 		}
 	}
 
