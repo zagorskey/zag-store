@@ -603,6 +603,50 @@ struct SourceAppsView: View {
 		_ = controller.perform(startSelector)
 	}
 	
+	private func _repositoryIdentity(_ repository: ASRepository) -> String {
+		repository.id ??
+			repository.website?.absoluteString ??
+			repository.name ??
+			"repository"
+	}
+
+	private func _persistAppRoute(_ route: SourceAppRoute) {
+		guard !_persistedSourcesRoute.isEmpty else { return }
+		_persistedAppRoute =
+			_repositoryIdentity(route.source) +
+			"|" +
+			route.app.currentUniqueId
+	}
+
+	private func _restoreAppRouteIfPossible() {
+		guard
+			_selectedRoute == nil,
+			!_persistedSourcesRoute.isEmpty,
+			!_persistedAppRoute.isEmpty,
+			let sources = _sources
+		else { return }
+
+		for repository in sources {
+			let prefix = _repositoryIdentity(repository) + "|"
+			guard _persistedAppRoute.hasPrefix(prefix) else { continue }
+
+			let appIdentity = String(
+				_persistedAppRoute.dropFirst(prefix.count)
+			)
+			if let app = repository.apps.first(
+				where: { $0.currentUniqueId == appIdentity }
+			) {
+				_selectedRoute = SourceAppRoute(
+					source: repository,
+					app: app
+				)
+				return
+			}
+		}
+
+		_persistedAppRoute = ""
+	}
+
 	private func _load() {
 		isLoading = true
 		
