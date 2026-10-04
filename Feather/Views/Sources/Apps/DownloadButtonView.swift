@@ -11,6 +11,7 @@ import AltSourceKit
 import NimbleViews
 import CoreData
 import IDeviceSwift
+import CryptoKit
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
@@ -31,6 +32,7 @@ struct DownloadButtonView: View {
 	@State private var actionClaimed = false
 	@State private var palInspectionInProgress = false
 	@State private var palInspectionResult: String?
+	@State private var palAssetInspection: PALAssetInspection?
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -161,6 +163,13 @@ struct DownloadButtonView: View {
 			get: { palInspectionResult != nil },
 			set: { if !$0 { palInspectionResult = nil } }
 		)) {
+			if palAssetInspection != nil {
+				Button("Inspect IPA") {
+					let inspection = palAssetInspection
+					palInspectionResult = nil
+					if let inspection { _inspectPALAsset(inspection) }
+				}
+			}
 			Button(.localized("OK"), role: .cancel) {}
 		} message: {
 			Text(palInspectionResult ?? "")
@@ -174,6 +183,14 @@ struct DownloadButtonView: View {
 			}
 		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
+	}
+
+	private struct PALAssetInspection {
+		let url: URL
+		let publicID: String
+		let compressedSize: Int64?
+		let chunkSize: Int
+		let encryptedDigests: [String]
 	}
 
 	private struct PALManifest: Decodable {
@@ -200,6 +217,109 @@ struct DownloadButtonView: View {
 		let platforms: [String]?
 		let minimumSystemVersions: [String: String]?
 		let variants: [Variant]?
+	}
+
+	private func _inspectPALAsset(_ inspection: PALAssetInspection) {
+		guard !palInspectionInProgress else { return }
+		palInspectionInProgress = true
+		Task {
+			do {
+				let (temporaryURL, response) = try await URLSession.shared.download(from: inspection.url)
+				defer { try? FileManager.default.removeItem(at: temporaryURL) }
+				if let http = response as? HTTPURLResponse,
+				   !(200...299).contains(http.statusCode) {
+					throw URLError(.badServerResponse)
+				}
+				let data = try Data(contentsOf: temporaryURL, options: .mappedIfSafe)
+				let chunkSize = max(inspection.chunkSize, 1)
+				var actualDigests: [String] = []
+				var offset = 0
+				while offset < data.count {
+					let end = min(offset + chunkSize, data.count)
+					let digest = SHA256.hash(data: data[offset..<end])
+					actualDigests.append(digest.map { String(format: "%02x", $0) }.joined())
+					offset = end
+				}
+				let expected = inspection.encryptedDigests.map { $0.lowercased() }
+				let hashesMatch = !expected.isEmpty && expected == actualDigests
+				let entries = _palZIPEntryNames(data)
+				let payloadEntries = entries.filter { $0.hasPrefix("Payload/") }
+				let appRoots = Set(payloadEntries.compactMap { name -> String? in
+					let parts = name.split(separator: "/")
+					guard parts.count >= 2, parts[1].hasSuffix(".app") else { return nil }
+					return String(parts[0]) + "/" + String(parts[1])
+				})
+				let sizeMB = Double(data.count) / 1_048_576.0
+				let expectedSize = inspection.compressedSize.map { $0 == Int64(data.count) } ?? false
+				let result = """
+				PAL IPA inspection complete.
+
+				Public ID: \(inspection.publicID)
+				Downloaded: \(String(format: "%.1f", sizeMB)) MiB
+				Manifest size match: \(inspection.compressedSize == nil ? "Unknown" : (expectedSize ? "Yes" : "NO"))
+				SHA-256 chunks: \(actualDigests.count)
+				Encrypted chunk hashes: \(hashesMatch ? "ALL MATCH" : "DO NOT MATCH")
+				ZIP entries: \(entries.count)
+				Payload entries: \(payloadEntries.count)
+				App roots: \(appRoots.sorted().joined(separator: ", "))
+				ZIP signature: \(data.starts(with: [0x50, 0x4b]) ? "Valid PK" : "Unexpected")
+
+				The IPA was inspected from a temporary download and deleted. It was not imported, signed, decrypted, or installed.
+				"""
+				await MainActor.run {
+					palInspectionInProgress = false
+					palInspectionResult = result
+					palAssetInspection = nil
+				}
+			} catch {
+				await MainActor.run {
+					palInspectionInProgress = false
+					transactionError = "PAL IPA inspection failed: \(error.localizedDescription)"
+				}
+			}
+		}
+	}
+
+	private func _palZIPEntryNames(_ data: Data) -> [String] {
+		guard data.count >= 22 else { return [] }
+		let signature: [UInt8] = [0x50, 0x4b, 0x05, 0x06]
+		let lowerBound = max(0, data.count - 65_557)
+		var eocd: Int?
+		if data.count >= 4 {
+			for index in stride(from: data.count - 4, through: lowerBound, by: -1) {
+				if Array(data[index..<(index + 4)]) == signature {
+					eocd = index
+					break
+				}
+			}
+		}
+		guard let eocd, eocd + 20 <= data.count else { return [] }
+		func u16(_ offset: Int) -> Int {
+			Int(data[offset]) | (Int(data[offset + 1]) << 8)
+		}
+		func u32(_ offset: Int) -> Int {
+			Int(data[offset]) | (Int(data[offset + 1]) << 8) |
+			(Int(data[offset + 2]) << 16) | (Int(data[offset + 3]) << 24)
+		}
+		let entryCount = u16(eocd + 10)
+		var cursor = u32(eocd + 16)
+		var names: [String] = []
+		for _ in 0..<entryCount {
+			guard cursor + 46 <= data.count,
+				  data[cursor] == 0x50, data[cursor + 1] == 0x4b,
+				  data[cursor + 2] == 0x01, data[cursor + 3] == 0x02 else { break }
+			let nameLength = u16(cursor + 28)
+			let extraLength = u16(cursor + 30)
+			let commentLength = u16(cursor + 32)
+			let nameStart = cursor + 46
+			let nameEnd = nameStart + nameLength
+			guard nameEnd <= data.count else { break }
+			if let name = String(data: data[nameStart..<nameEnd], encoding: .utf8) {
+				names.append(name)
+			}
+			cursor = nameEnd + extraLength + commentLength
+		}
+		return names
 	}
 
 	private func _inspectPALPackage() {
@@ -281,17 +401,33 @@ struct DownloadButtonView: View {
 					if !extraKeys.isEmpty {
 						lines.append("Other metadata: \(extraKeys.joined(separator: ", "))")
 					}
-					if let details = raw["variantDetails"] {
-						if JSONSerialization.isValidJSONObject(details),
-						   let detailsData = try? JSONSerialization.data(
-							withJSONObject: details,
-							options: [.prettyPrinted, .sortedKeys]
-						   ),
-						   let detailsText = String(data: detailsData, encoding: .utf8) {
-							lines.append("Variant details:")
-							lines.append(detailsText)
-						} else {
-							lines.append("Variant details: \(String(describing: details))")
+					if let details = raw["variantDetails"] as? [String: Any] {
+						let compressedSize = (details["compressedSize"] as? NSNumber)?.int64Value
+						let hashes = details["hashes"] as? [[String: Any]] ?? []
+						let sha256 = hashes.first { ($0["algorithm"] as? String)?.lowercased() == "sha256" }
+						let chunkSize = (sha256?["chunkSize"] as? NSNumber)?.intValue ?? 0
+						let encrypted = sha256?["encryptedChunkDigests"] as? [String] ?? []
+						let unencrypted = sha256?["unencryptedChunkDigests"] as? [String] ?? []
+						if let compressedSize {
+							lines.append("Encrypted IPA: \(String(format: "%.1f", Double(compressedSize) / 1_048_576.0)) MiB")
+						}
+						if chunkSize > 0 {
+							lines.append("Chunk size: \(String(format: "%.1f", Double(chunkSize) / 1_048_576.0)) MiB")
+						}
+						lines.append("Encrypted hashes: \(encrypted.count)")
+						lines.append("Plaintext hashes: \(unencrypted.count)")
+						let supportsIOS27 = (variant.installTargets ?? []).contains {
+							$0.device == deviceModel && $0.os == "27"
+						}
+						if supportsIOS27, let url = URL(string: resolvedAssetURL), chunkSize > 0, !encrypted.isEmpty {
+							palAssetInspection = PALAssetInspection(
+								url: url,
+								publicID: variant.publicId ?? "Unknown",
+								compressedSize: compressedSize,
+								chunkSize: chunkSize,
+								encryptedDigests: encrypted
+							)
+							lines.append("iOS 27 asset: Ready for safe IPA inspection")
 						}
 					}
 				}
