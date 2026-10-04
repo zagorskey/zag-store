@@ -41,6 +41,13 @@ private func zagInstalledAppsCallback(_ code: Int32, _ message: UnsafePointer<CC
 	}
 }
 
+private func zagHouseArrestCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveHouseArrest(code: code, message: text)
+	}
+}
+
 private func zagRPPairingCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -88,6 +95,10 @@ final class ZagRPPairingCore: ObservableObject {
 	@Published private(set) var installedAppsState: InstalledAppsState = .idle
 	@Published private(set) var installedAppIconURLs: [String: URL] = [:]
 	@Published private(set) var installedAppIconsRefreshing = false
+	@Published private(set) var houseArrestRunning = false
+	@Published private(set) var houseArrestBundleID: String?
+	@Published private(set) var houseArrestDocuments: [String] = []
+	@Published private(set) var houseArrestError: String?
 	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
 
@@ -270,6 +281,53 @@ final class ZagRPPairingCore: ObservableObject {
 			let completion = gate4UninstallCompletion
 			gate4UninstallCompletion = nil
 			completion?(.failure(Gate4UninstallError.uninstallFailed(message)))
+		default:
+			break
+		}
+	}
+
+	func listSharedDocuments(
+		bundleID: String,
+		deviceIP: String = "10.7.0.1"
+	) throws {
+		guard !houseArrestRunning else { return }
+		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+		guard !bundleID.isEmpty else { return }
+
+		houseArrestRunning = true
+		houseArrestBundleID = nil
+		houseArrestDocuments = []
+		houseArrestError = nil
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				bundleID.withCString { bundleID in
+					zag_house_arrest_list_documents(ip, pairingPath, bundleID, zagHouseArrestCallback)
+				}
+			}
+		}
+		if !started {
+			houseArrestRunning = false
+			houseArrestError = "The House Arrest probe could not be started."
+		}
+	}
+
+	fileprivate func receiveHouseArrest(code: Int32, message: String) {
+		switch code {
+		case 601:
+			houseArrestRunning = true
+		case 602:
+			houseArrestBundleID = message
+		case 603, 604:
+			ZagLogger.shared.info("RPPairing", "House Arrest | \(message)")
+		case 605:
+			houseArrestDocuments = message.isEmpty ? [] : message.split(separator: "\t").map(String.init)
+		case 606:
+			houseArrestRunning = false
+			ZagLogger.shared.info("RPPairing", "House Arrest probe complete | \(message)")
+		case -8:
+			houseArrestRunning = false
+			houseArrestError = message
+			ZagLogger.shared.error("RPPairing", "House Arrest probe failed: \(message)")
 		default:
 			break
 		}
