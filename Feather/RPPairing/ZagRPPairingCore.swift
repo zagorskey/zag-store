@@ -317,6 +317,7 @@ final class ZagRPPairingCore: ObservableObject {
 			pendingInstalledApps[bundleID] = info
 		case 404:
 			installedAppsDebugKeys = message
+			ZagLogger.shared.info("RPPairing", "Installed-app metadata keys | \(message)")
 		case 403:
 			ZagLogger.shared.info("RPPairing", "Installed-app inventory loaded | count=\(Int(message) ?? pendingInstalledApps.count)")
 			installedApps = pendingInstalledApps
