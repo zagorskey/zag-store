@@ -42,18 +42,10 @@ extension View {
 	}
 
 	func zagPageBottomSpacer() -> some View {
-		self
-			.frame(height: ZagListLayout.pageBottomSpacing)
-			.listRowInsets(EdgeInsets())
-			.listRowSeparator(.hidden)
-			.listRowBackground(Color.clear)
+		frame(height: ZagListLayout.pageBottomSpacing)
 	}
 
 	func zagSectionSpacer() -> some View {
-		self
-			.frame(height: ZagListLayout.sectionSpacing)
-			.listRowInsets(EdgeInsets())
-			.listRowSeparator(.hidden)
-			.listRowBackground(Color.clear)
+		frame(height: ZagListLayout.sectionSpacing)
 	}
 }
