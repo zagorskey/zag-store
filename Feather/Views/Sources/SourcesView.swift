@@ -894,37 +894,21 @@ struct SourcesView: View {
 					Array(_displayedSources.enumerated()),
 					id: \.element.id
 				) { index, source in
-					SourcesCellView(
-						source: source,
-						showsSeparator: index < _displayedSources.count - 1,
-						repository:
-							viewModel.sources[
-								source
-							],
-						isRefreshing: viewModel.isRefreshing
-					)
+					Button {
+						guard !_isRearrangingRepositories else { return }
+						_persistRepositoryRoute(source)
+						_restoredRepository = source
+					} label: {
+						SourcesCellView(
+							source: source,
+							showsSeparator: index < _displayedSources.count - 1,
+							repository: viewModel.sources[source],
+							isRefreshing: viewModel.isRefreshing
+						)
+					}
+					.buttonStyle(.plain)
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
-					.background {
-						NavigationLink {
-							SourceAppsView(
-								object: [
-									source
-								],
-								viewModel:
-									viewModel
-							)
-							.onAppear {
-								_persistRepositoryRoute(source)
-							}
-							.onAppear {
-								_persistRepositoryRoute(source)
-							}
-						} label: {
-							EmptyView()
-						}
-						.opacity(0)
-					}
 				}
 				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 			}
@@ -974,30 +958,19 @@ struct SourcesView: View {
 					Array(_displayedSources.enumerated()),
 					id: \.element.id
 				) { index, source in
-					SourcesCellView(
-						source: source,
-						showsSeparator: index < _displayedSources.count - 1,
-						repository:
-							viewModel.sources[
-								source
-							],
-						isRefreshing: viewModel.isRefreshing
-					)
-					.listRowSeparator(.hidden)
-					.background {
-						NavigationLink {
-							SourceAppsView(
-								object: [
-									source
-								],
-								viewModel:
-									viewModel
-							)
-						} label: {
-							EmptyView()
-						}
-						.opacity(0)
+					Button {
+						_persistRepositoryRoute(source)
+						_restoredRepository = source
+					} label: {
+						SourcesCellView(
+							source: source,
+							showsSeparator: index < _displayedSources.count - 1,
+							repository: viewModel.sources[source],
+							isRefreshing: viewModel.isRefreshing
+						)
 					}
+					.buttonStyle(.plain)
+					.listRowSeparator(.hidden)
 				}
 			}
 		}
