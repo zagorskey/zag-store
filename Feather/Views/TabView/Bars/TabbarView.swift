@@ -8,25 +8,20 @@
 import SwiftUI
 
 struct TabbarView: View {
-	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
+	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+	@State private var selectedTabValue = ZagPageStartupPolicy.initialTab
 
 	private var selectedTab: Binding<TabEnum> {
 		Binding(
-			get: {
-				TabEnum(rawValue: selectedTabRawValue) ?? .sources
-			},
+			get: { selectedTabValue },
 			set: { tab in
-				let previousValue = selectedTabRawValue
-				if tab == .sources,
-				   previousValue != TabEnum.sources.rawValue {
-					UserDefaults.standard.removeObject(
-						forKey: "zagStore.navigation.sourcesRoute"
-					)
-					UserDefaults.standard.removeObject(
-						forKey: "zagStore.navigation.sourcesAppRoute"
+				selectedTabValue = tab
+				if rememberLastPage {
+					UserDefaults.standard.set(
+						tab.rawValue,
+						forKey: ZagPageStartupPolicy.lastPageKey
 					)
 				}
-				selectedTabRawValue = tab.rawValue
 			}
 		)
 	}
