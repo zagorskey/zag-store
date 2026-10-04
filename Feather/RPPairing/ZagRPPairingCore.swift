@@ -41,6 +41,13 @@ private func zagInstalledAppsCallback(_ code: Int32, _ message: UnsafePointer<CC
 	}
 }
 
+private func zagHouseArrestPairingInstallCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
+	let text = message.map { String(cString: $0) } ?? ""
+	DispatchQueue.main.async {
+		ZagRPPairingCore.shared.receiveHouseArrestPairingInstall(code: code, message: text)
+	}
+}
+
 private func zagHouseArrestCallback(_ code: Int32, _ message: UnsafePointer<CChar>?) {
 	let text = message.map { String(cString: $0) } ?? ""
 	DispatchQueue.main.async {
@@ -99,6 +106,9 @@ final class ZagRPPairingCore: ObservableObject {
 	@Published private(set) var houseArrestBundleID: String?
 	@Published private(set) var houseArrestDocuments: [String] = []
 	@Published private(set) var houseArrestError: String?
+	@Published private(set) var houseArrestPairingInstallRunning = false
+	@Published private(set) var houseArrestPairingInstallStatus: String?
+	@Published private(set) var houseArrestPairingInstallError: String?
 	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
 
@@ -281,6 +291,47 @@ final class ZagRPPairingCore: ObservableObject {
 			let completion = gate4UninstallCompletion
 			gate4UninstallCompletion = nil
 			completion?(.failure(Gate4UninstallError.uninstallFailed(message)))
+		default:
+			break
+		}
+	}
+
+	func installPairingFileInSideStore(
+		bundleID: String = "com.SideStore.SideStore",
+		deviceIP: String = "10.7.0.1"
+	) throws {
+		guard !houseArrestPairingInstallRunning else { return }
+		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+
+		houseArrestPairingInstallRunning = true
+		houseArrestPairingInstallStatus = "Starting…"
+		houseArrestPairingInstallError = nil
+		let started = deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				bundleID.withCString { bundleID in
+					zag_house_arrest_install_pairing_file(ip, pairingPath, bundleID, zagHouseArrestPairingInstallCallback)
+				}
+			}
+		}
+		if !started {
+			houseArrestPairingInstallRunning = false
+			houseArrestPairingInstallError = "The pairing file transfer could not be started."
+		}
+	}
+
+	fileprivate func receiveHouseArrestPairingInstall(code: Int32, message: String) {
+		switch code {
+		case 611, 612, 613, 614, 615:
+			houseArrestPairingInstallRunning = true
+			houseArrestPairingInstallStatus = message
+		case 616:
+			houseArrestPairingInstallRunning = false
+			houseArrestPairingInstallStatus = message
+			ZagLogger.shared.info("RPPairing", "SideStore pairing transfer complete | \(message)")
+		case -9:
+			houseArrestPairingInstallRunning = false
+			houseArrestPairingInstallError = message
+			ZagLogger.shared.error("RPPairing", "SideStore pairing transfer failed: \(message)")
 		default:
 			break
 		}
