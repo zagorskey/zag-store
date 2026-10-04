@@ -645,9 +645,6 @@ struct LibraryView: View {
 
 
 			.toolbar {
-
-
-
 				ToolbarItem(placement: .topBarLeading) {
 					Button {
 						withAnimation {
@@ -664,80 +661,25 @@ struct LibraryView: View {
 					)
 				}
 
-
-
-
-
-
-
-				if _editMode.isEditing {
-
-
-
-					NBToolbarButton(
-
-
-
-						.localized("Delete"),
-
-
-
-						systemImage: "trash",
-
-
-
-						isDisabled: _selectedAppUUIDs.isEmpty
-
-
-
-					) {
-
-
-
-						_bulkDeleteSelectedApps()
-
-
-
+				ToolbarItem(placement: .topBarTrailing) {
+					if _editMode.isEditing {
+						Button {
+							_bulkDeleteSelectedApps()
+						} label: {
+							Image(systemName: "trash")
+						}
+						.disabled(_selectedAppUUIDs.isEmpty)
+						.accessibilityLabel(Text(.localized("Delete")))
+					} else {
+						Menu {
+							_importActions()
+						} label: {
+							Image(systemName: "plus")
+								.font(.system(size: 20, weight: .semibold))
+						}
+						.accessibilityLabel(Text(.localized("Import")))
 					}
-
-
-
-				} else {
-
-
-
-					NBToolbarMenu(
-
-
-
-						systemImage: "plus",
-
-
-
-						style: .icon,
-
-
-
-						placement: .topBarTrailing
-
-
-
-					) {
-
-
-
-						_importActions()
-
-
-
-					}
-
-
-
 				}
-
-
-
 			}
 
 
