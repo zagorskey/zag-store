@@ -121,6 +121,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Zag Store uses Photos access to let you choose images for app and repository artwork.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Zag Store uses the local network to pair securely with this iPhone for direct app installation.</string>
 	<key>NSBonjourServices</key>
