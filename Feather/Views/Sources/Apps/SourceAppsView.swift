@@ -653,6 +653,7 @@ struct SourceAppsView: View {
 		Task {
 			let loadedSources = object.compactMap { viewModel.sources[$0] }
 			_sources = loadedSources
+			_restoreAppRouteIfPossible()
 			withAnimation(.easeIn(duration: 0.2)) {
 				isLoading = false
 			}
