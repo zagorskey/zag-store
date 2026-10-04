@@ -440,7 +440,6 @@ struct SourceAppsView: View {
 					sortAscending: $_sortAscending,
 					onSelect: {self._selectedRoute = $0}
 				)
-				.ignoresSafeArea()
 			} else {
 				ProgressView()
 			}
