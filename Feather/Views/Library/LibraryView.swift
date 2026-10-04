@@ -457,8 +457,8 @@ struct LibraryView: View {
 	) -> some View {
 		LibraryCellView(
 			app: app,
-			showsSeparator: showsSeparator,
 			isManagedInstalled: managedInstalled,
+			showsSeparator: showsSeparator,
 			isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 			onDeleteApp: _deleteStoredApp,
 			onRemoveManagedApp: _requestRemoveManagedApp,
