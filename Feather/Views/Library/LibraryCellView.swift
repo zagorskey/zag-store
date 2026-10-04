@@ -14,6 +14,11 @@ import AltSourceKit
 // MARK: - View
 
 struct LibraryCellView: View {
+	private static let activityDateFormatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.dateFormat = "d MMM yyyy"
+		return formatter
+	}()
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 	@Environment(\.editMode) private var editMode
 	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
@@ -273,10 +278,10 @@ struct LibraryCellView: View {
 			}
 		}
 
-		let matches = sourcesViewModel.sources.filter { _, repository in
-			repository.apps.contains { $0.id == bundleID }
-		}
-		return origin == nil && matches.count == 1 ? matches.first : nil
+		// Repository reconciliation records a unique legacy origin when it is
+		// safe to do so. Do not rescan every app in every repository from each
+		// visible row; that made scrolling cost grow with the entire catalog.
+		return nil
 	}
 
 	private var repositoryIconURL: URL? {
@@ -337,9 +342,7 @@ struct LibraryCellView: View {
 		case 3:
 			dateText = "Three Days Ago"
 		default:
-			let formatter = DateFormatter()
-			formatter.dateFormat = "d MMM yyyy"
-			dateText = formatter.string(from: storedDate)
+			dateText = Self.activityDateFormatter.string(from: storedDate)
 		}
 
 		if let version, !version.isEmpty {
