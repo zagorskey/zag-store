@@ -425,7 +425,7 @@ struct LibraryView: View {
 		   _selectedScope == .all || _selectedScope == .signed {
 			Section {
 				Color.clear
-					.zagSectionSpacer()
+					.frame(height: 20)
 					.listRowInsets(EdgeInsets())
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
@@ -507,7 +507,7 @@ struct LibraryView: View {
 			signedAppsSection
 			importedAppsSection
 			Color.clear
-				.zagPageBottomSpacer()
+				.frame(height: 48)
 				.listRowInsets(EdgeInsets())
 				.listRowSeparator(.hidden)
 				.listRowBackground(Color.clear)
@@ -651,6 +651,9 @@ struct LibraryView: View {
 
 
 			.toolbar {
+
+
+
 				ToolbarItem(placement: .topBarLeading) {
 					Button {
 						withAnimation {
@@ -667,25 +670,80 @@ struct LibraryView: View {
 					)
 				}
 
-				ToolbarItem(placement: .topBarTrailing) {
-					if _editMode.isEditing {
-						Button {
-							_bulkDeleteSelectedApps()
-						} label: {
-							Image(systemName: "trash")
-						}
-						.disabled(_selectedAppUUIDs.isEmpty)
-						.accessibilityLabel(Text(.localized("Delete")))
-					} else {
-						Menu {
-							_importActions()
-						} label: {
-							Image(systemName: "plus")
-								.font(.system(size: 20, weight: .semibold))
-						}
-						.accessibilityLabel(Text(.localized("Import")))
+
+
+
+
+
+
+				if _editMode.isEditing {
+
+
+
+					NBToolbarButton(
+
+
+
+						.localized("Delete"),
+
+
+
+						systemImage: "trash",
+
+
+
+						isDisabled: _selectedAppUUIDs.isEmpty
+
+
+
+					) {
+
+
+
+						_bulkDeleteSelectedApps()
+
+
+
 					}
+
+
+
+				} else {
+
+
+
+					NBToolbarMenu(
+
+
+
+						systemImage: "plus",
+
+
+
+						style: .icon,
+
+
+
+						placement: .topBarTrailing
+
+
+
+					) {
+
+
+
+						_importActions()
+
+
+
+					}
+
+
+
 				}
+
+
+
 			}
 
 
