@@ -433,7 +433,8 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 					}
 				}
 		}
-		.margins(.all, 0)
+		.margins(.vertical, 0)
+		.margins(.horizontal, ZagListLayout.horizontalInset)
 		.background(.clear)
 		return cell
 	}
