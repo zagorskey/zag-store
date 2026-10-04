@@ -573,6 +573,46 @@ struct RPPairingDiagnosticsView: View {
 			}
 
 			Section {
+				Button {
+					do {
+						try pairingCore.listSharedDocuments(bundleID: "com.SideStore.SideStore")
+					} catch {
+						healthMessage = error.localizedDescription
+					}
+				} label: {
+					Label(
+						pairingCore.houseArrestRunning ? "Testing SideStore Documents…" : "Test SideStore Documents",
+						systemImage: "folder.badge.gearshape"
+					)
+				}
+				.disabled(!pairingCore.pairingFileExists || pairingCore.houseArrestRunning)
+
+				if let bundleID = pairingCore.houseArrestBundleID {
+					LabeledContent("Resolved Bundle ID") {
+						Text(bundleID).font(.caption).textSelection(.enabled)
+					}
+				}
+
+				if let error = pairingCore.houseArrestError {
+					Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
+				} else if !pairingCore.houseArrestDocuments.isEmpty {
+					ForEach(pairingCore.houseArrestDocuments, id: \.self) { entry in
+						Label(entry, systemImage: "doc")
+							.font(.caption)
+							.textSelection(.enabled)
+					}
+				} else if pairingCore.houseArrestBundleID != nil && !pairingCore.houseArrestRunning {
+					Text("Documents is accessible and currently empty.")
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+				}
+			} header: {
+				Text("House Arrest Test")
+			} footer: {
+				Text("Read-only diagnostic. Vends SideStore's shared Documents domain through House Arrest and lists its contents without modifying files.")
+			}
+
+			Section {
 				LabeledContent("Status") { Text(gate4StatusText).foregroundStyle(gate4StatusColor) }
 				if case .progress(let percent) = pairingCore.gate4State {
 					ProgressView(value: Double(percent), total: 100) { Text("Installing") } currentValueLabel: { Text("\(percent)%") }
