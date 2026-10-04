@@ -831,17 +831,19 @@ struct SourcesView: View {
 					.listRowBackground(Color.clear)
 
 				ForEach(
-					_displayedSources
-				) { source in
+					Array(_displayedSources.enumerated()),
+					id: \.element.id
+				) { index, source in
 					SourcesCellView(
 						source: source,
-						showsSeparator: source.id != _displayedSources.last?.id,
+						showsSeparator: index < _displayedSources.count - 1,
 						repository:
 							viewModel.sources[
 								source
 							],
 						isRefreshing: viewModel.isRefreshing
 					)
+					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
 					.background {
 						NavigationLink {
@@ -903,17 +905,19 @@ struct SourcesView: View {
 					.listRowBackground(Color.clear)
 
 				ForEach(
-					_displayedSources
-				) { source in
+					Array(_displayedSources.enumerated()),
+					id: \.element.id
+				) { index, source in
 					SourcesCellView(
 						source: source,
-						showsSeparator: source.id != _displayedSources.last?.id,
+						showsSeparator: index < _displayedSources.count - 1,
 						repository:
 							viewModel.sources[
 								source
 							],
 						isRefreshing: viewModel.isRefreshing
 					)
+					.listRowSeparator(.hidden)
 					.background {
 						NavigationLink {
 							SourceAppsView(
