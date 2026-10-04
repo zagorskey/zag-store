@@ -422,18 +422,18 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 
 		cell.backgroundColor = .clear
 		cell.contentConfiguration = UIHostingConfiguration {
-			VStack(spacing: 0) {
-				SourceAppsCellView(source: entry.source, app: entry.app)
-					.frame(height: 84)
-
-				if indexPath.row < tableView.numberOfRows(inSection: indexPath.section) - 1 {
-					Rectangle()
-						.fill(Color(uiColor: .separator))
-						.frame(height: 1.0 / UIScreen.main.scale)
-						.padding(.leading, 72)
+			SourceAppsCellView(source: entry.source, app: entry.app)
+				.frame(height: 84)
+				.overlay(alignment: .bottom) {
+					if indexPath.row < tableView.numberOfRows(inSection: indexPath.section) - 1 {
+						Rectangle()
+							.fill(Color(uiColor: .separator))
+							.frame(height: 1.0 / UIScreen.main.scale)
+							.padding(.leading, 72)
+					}
 				}
-			}
 		}
+		.margins(.all, 0)
 		.background(.clear)
 		return cell
 	}
