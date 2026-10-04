@@ -8,10 +8,21 @@
 import SwiftUI
 
 struct TabbarView: View {
-	@State private var selectedTab: TabEnum = .sources
+	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
+
+	private var selectedTab: Binding<TabEnum> {
+		Binding(
+			get: {
+				TabEnum(rawValue: selectedTabRawValue) ?? .sources
+			},
+			set: { tab in
+				selectedTabRawValue = tab.rawValue
+			}
+		)
+	}
 
 	var body: some View {
-		TabView(selection: $selectedTab) {
+		TabView(selection: selectedTab) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				TabEnum.view(for: tab)
 					.tabItem {
