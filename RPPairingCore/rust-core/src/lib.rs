@@ -13,6 +13,7 @@ use idevice::remote_pairing::{
 use idevice::rsd::RsdHandshake;
 use idevice::services::afc::{opcode::AfcFopenMode, AfcClient};
 use idevice::services::installation_proxy::InstallationProxyClient;
+use idevice::services::house_arrest::HouseArrestClient;
 use idevice::services::lockdown::LockdownClient;
 use idevice::utils::installation::install_package_with_callback_rsd;
 use idevice::RsdService;
