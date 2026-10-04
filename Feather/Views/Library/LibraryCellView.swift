@@ -169,7 +169,7 @@ struct LibraryCellView: View {
 				}
 			}
 		}
-		.frame(height: isRegular ? nil : 78)
+		.frame(height: isRegular ? nil : 80)
 		.padding(isRegular ? 12 : 0)
 		.zagAppStoreRowSeparator()
 		.listRowInsets(
