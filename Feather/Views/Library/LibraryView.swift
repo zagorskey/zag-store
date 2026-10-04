@@ -458,8 +458,8 @@ struct LibraryView: View {
 		LibraryCellView(
 			app: app,
 			isManagedInstalled: managedInstalled,
-			showsSeparator: showsSeparator,
 			isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+			showsSeparator: showsSeparator,
 			onDeleteApp: _deleteStoredApp,
 			onRemoveManagedApp: _requestRemoveManagedApp,
 			onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
