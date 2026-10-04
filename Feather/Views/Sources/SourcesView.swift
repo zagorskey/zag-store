@@ -264,10 +264,16 @@ struct SourcesView: View {
 		_restoredRepository = source
 	}
 
-	private func _clearRepositoryRouteIfNeeded() {
-		guard _restoredRepository == nil, !_showAllRepositories else { return }
-		if _persistedSourcesRoute == "allRepositories" ||
-			_persistedSourcesRoute.hasPrefix("repository|") {
+	private func _clearAllRepositoriesRouteIfNeeded() {
+		guard !_showAllRepositories else { return }
+		if _persistedSourcesRoute == "allRepositories" {
+			_persistedSourcesRoute = ""
+		}
+	}
+
+	private func _clearRestoredRepositoryRouteIfNeeded() {
+		guard _restoredRepository == nil else { return }
+		if _persistedSourcesRoute.hasPrefix("repository|") {
 			_persistedSourcesRoute = ""
 		}
 	}
@@ -377,12 +383,12 @@ struct SourcesView: View {
 		}
 		.onChange(of: _showAllRepositories) { isPresented in
 			if !isPresented {
-				_clearRepositoryRouteIfNeeded()
+				_clearAllRepositoriesRouteIfNeeded()
 			}
 		}
 		.onChange(of: _restoredRepository) { source in
 			if source == nil {
-				_clearRepositoryRouteIfNeeded()
+				_clearRestoredRepositoryRouteIfNeeded()
 			}
 		}
 		.navigationDestinationIfAvailable(item: $_restoredRepository) { source in
@@ -894,21 +900,34 @@ struct SourcesView: View {
 					Array(_displayedSources.enumerated()),
 					id: \.element.id
 				) { index, source in
-					Button {
-						guard !_isRearrangingRepositories else { return }
-						_persistRepositoryRoute(source)
-						_restoredRepository = source
-					} label: {
-						SourcesCellView(
-							source: source,
-							showsSeparator: index < _displayedSources.count - 1,
-							repository: viewModel.sources[source],
-							isRefreshing: viewModel.isRefreshing
-						)
-					}
-					.buttonStyle(.plain)
+					SourcesCellView(
+						source: source,
+						showsSeparator: index < _displayedSources.count - 1,
+						repository:
+							viewModel.sources[
+								source
+							],
+						isRefreshing: viewModel.isRefreshing
+					)
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
+					.background {
+						NavigationLink {
+							SourceAppsView(
+								object: [
+									source
+								],
+								viewModel:
+									viewModel
+							)
+							.onAppear {
+								_persistRepositoryRoute(source)
+							}
+						} label: {
+							EmptyView()
+						}
+						.opacity(0)
+					}
 				}
 				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 			}
@@ -958,19 +977,33 @@ struct SourcesView: View {
 					Array(_displayedSources.enumerated()),
 					id: \.element.id
 				) { index, source in
-					Button {
-						_persistRepositoryRoute(source)
-						_restoredRepository = source
-					} label: {
-						SourcesCellView(
-							source: source,
-							showsSeparator: index < _displayedSources.count - 1,
-							repository: viewModel.sources[source],
-							isRefreshing: viewModel.isRefreshing
-						)
-					}
-					.buttonStyle(.plain)
+					SourcesCellView(
+						source: source,
+						showsSeparator: index < _displayedSources.count - 1,
+						repository:
+							viewModel.sources[
+								source
+							],
+						isRefreshing: viewModel.isRefreshing
+					)
 					.listRowSeparator(.hidden)
+					.background {
+						NavigationLink {
+							SourceAppsView(
+								object: [
+									source
+								],
+								viewModel:
+									viewModel
+							)
+							.onAppear {
+								_persistRepositoryRoute(source)
+							}
+						} label: {
+							EmptyView()
+						}
+						.opacity(0)
+					}
 				}
 			}
 		}
