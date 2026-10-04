@@ -440,7 +440,10 @@ struct SourceAppsView: View {
 					searchText: $_searchText,
 					sortOption: $_sortOption,
 					sortAscending: $_sortAscending,
-					onSelect: {self._selectedRoute = $0}
+					onSelect: { route in
+						_persistAppRoute(route)
+						self._selectedRoute = route
+					}
 				)
 			} else {
 				ProgressView()
