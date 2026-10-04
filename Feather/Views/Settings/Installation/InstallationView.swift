@@ -587,6 +587,38 @@ struct RPPairingDiagnosticsView: View {
 				}
 				.disabled(!pairingCore.pairingFileExists || pairingCore.houseArrestRunning)
 
+				Button {
+					do {
+						try pairingCore.installPairingFileInSideStore()
+					} catch {
+						healthMessage = error.localizedDescription
+					}
+				} label: {
+					Label(
+						pairingCore.houseArrestPairingInstallRunning ? "Installing Pairing File…" : "Install Pairing File in SideStore",
+						systemImage: "doc.badge.arrow.up"
+					)
+				}
+				.disabled(
+					!pairingCore.pairingFileExists ||
+					pairingCore.houseArrestPairingInstallRunning ||
+					pairingCore.houseArrestRunning
+				)
+
+				if let status = pairingCore.houseArrestPairingInstallStatus {
+					Text(status)
+						.font(.footnote)
+						.foregroundStyle(status == "SideStore pairing file installed" ? .green : .secondary)
+						.textSelection(.enabled)
+				}
+
+				if let error = pairingCore.houseArrestPairingInstallError {
+					Text(error)
+						.font(.footnote)
+						.foregroundStyle(.red)
+						.textSelection(.enabled)
+				}
+
 				if let bundleID = pairingCore.houseArrestBundleID {
 					LabeledContent("Resolved Bundle ID") {
 						Text(bundleID).font(.caption).textSelection(.enabled)
