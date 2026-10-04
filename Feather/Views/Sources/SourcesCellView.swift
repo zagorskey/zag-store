@@ -154,6 +154,7 @@ struct SourcesCellView: View {
 			}
 		}
 		.contentShape(Rectangle())
+		.frame(minHeight: isRegular ? nil : 76)
 		.zagAppStoreRowSeparator()
 		.padding(isRegular ? 12 : 0)
 		.background(
