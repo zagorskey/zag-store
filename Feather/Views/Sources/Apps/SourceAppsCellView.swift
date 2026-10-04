@@ -40,7 +40,7 @@ struct SourceAppsCellView: View {
 					.padding(.top, 2)
 			}
 		}
-		.frame(height: 84)
+		.frame(height: ZagListLayout.compactRowHeight)
 	}
 
 	private var appInformation: some View {
