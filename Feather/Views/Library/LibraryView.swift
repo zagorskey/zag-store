@@ -594,6 +594,18 @@ struct LibraryView: View {
 				.easeInOut(duration: 0.35),
 				value: _filteredImportedApps.compactMap(\.uuid)
 			)
+			.animation(
+				.easeInOut(duration: 0.28),
+				value: _installedCollapsed
+			)
+			.animation(
+				.easeInOut(duration: 0.28),
+				value: _signedCollapsed
+			)
+			.animation(
+				.easeInOut(duration: 0.28),
+				value: _importedCollapsed
+			)
 
 			.compatSearchScopes($_selectedScope) {
 				librarySearchScopes
@@ -2851,11 +2863,13 @@ private struct ZagLibraryHeader: View {
 				Spacer(minLength: 8)
 
 				Image(systemName: "chevron.down")
-					.font(.system(size: 14, weight: .semibold))
+					.font(.system(size: 20, weight: .semibold))
 					.foregroundStyle(.secondary)
+					.frame(width: 44, height: 44)
 					.rotationEffect(.degrees(isCollapsed ? -90 : 0))
 					.animation(.easeInOut(duration: 0.28), value: isCollapsed)
 			}
+			.frame(maxWidth: .infinity, alignment: .leading)
 			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
