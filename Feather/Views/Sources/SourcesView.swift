@@ -835,6 +835,7 @@ struct SourcesView: View {
 				) { source in
 					SourcesCellView(
 						source: source,
+						showsSeparator: source.id != _displayedSources.last?.id,
 						repository:
 							viewModel.sources[
 								source
@@ -906,6 +907,7 @@ struct SourcesView: View {
 				) { source in
 					SourcesCellView(
 						source: source,
+						showsSeparator: source.id != _displayedSources.last?.id,
 						repository:
 							viewModel.sources[
 								source
