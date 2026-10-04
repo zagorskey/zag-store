@@ -425,10 +425,7 @@ struct LibraryView: View {
 		   _selectedScope == .all || _selectedScope == .signed {
 			Section {
 				Color.clear
-					.frame(height: 20)
-					.listRowInsets(EdgeInsets())
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
+					.zagSectionSpacer()
 
 				ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
 					.listRowSeparator(.hidden)
@@ -448,10 +445,7 @@ struct LibraryView: View {
 		   _selectedScope == .all || _selectedScope == .imported {
 			Section {
 				Color.clear
-					.frame(height: 20)
-					.listRowInsets(EdgeInsets())
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
+					.zagSectionSpacer()
 
 				ZagLibraryHeader(title: .localized("Imported"), count: _filteredImportedApps.count)
 					.listRowSeparator(.hidden)
@@ -510,10 +504,7 @@ struct LibraryView: View {
 			signedAppsSection
 			importedAppsSection
 			Color.clear
-				.frame(height: 48)
-				.listRowInsets(EdgeInsets())
-				.listRowSeparator(.hidden)
-				.listRowBackground(Color.clear)
+				.zagPageBottomSpacer()
 				}}
 				.listRowBackground(Color.clear)
 			}
@@ -2182,7 +2173,7 @@ private struct ZagUpdateRow: View {
 					}
 				}
 			}
-			.frame(width: 88, height: 34)
+			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 
 			Text(_stageCaption(stage))
 				.font(.system(size: 9, weight: .medium))
