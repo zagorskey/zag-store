@@ -148,7 +148,7 @@ struct SourcesCellView: View {
 
 			Spacer(minLength: 8)
 
-			VStack(alignment: .trailing, spacing: 5) {
+			VStack(alignment: .trailing, spacing: 7) {
 				ZagCountBadge(count: appCount)
 				repositoryKindBadge
 			}
@@ -156,11 +156,6 @@ struct SourcesCellView: View {
 		.frame(height: isRegular ? nil : 76)
 		.contentShape(Rectangle())
 		.zagAppStoreRowSeparator()
-		.listRowInsets(
-			isRegular
-				? EdgeInsets()
-				: EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
-		)
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
