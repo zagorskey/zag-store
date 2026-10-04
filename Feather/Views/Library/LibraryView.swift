@@ -423,6 +423,12 @@ struct LibraryView: View {
 		if !_filteredSignedOnlyApps.isEmpty,
 		   _selectedScope == .all || _selectedScope == .signed {
 			Section {
+				Color.clear
+					.frame(height: 20)
+					.listRowInsets(EdgeInsets())
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
+
 				ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
@@ -439,6 +445,12 @@ struct LibraryView: View {
 		if !_filteredImportedApps.isEmpty,
 		   _selectedScope == .all || _selectedScope == .imported {
 			Section {
+				Color.clear
+					.frame(height: 20)
+					.listRowInsets(EdgeInsets())
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
+
 				ZagLibraryHeader(title: .localized("Imported"), count: _filteredImportedApps.count)
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
@@ -494,11 +506,13 @@ struct LibraryView: View {
 			installedAppsSection
 			signedAppsSection
 			importedAppsSection
+			Color.clear
+				.frame(height: 48)
+				.listRowInsets(EdgeInsets())
+				.listRowSeparator(.hidden)
+				.listRowBackground(Color.clear)
 				}}
 				.listRowBackground(Color.clear)
-			}
-			.safeAreaInset(edge: .bottom) {
-				Color.clear.frame(height: 48)
 			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
