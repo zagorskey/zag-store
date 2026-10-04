@@ -170,20 +170,20 @@ struct LibraryCellView: View {
 				}
 			}
 		}
-		.frame(height: isRegular ? nil : 84)
+		.frame(height: isRegular ? nil : ZagListLayout.compactRowHeight)
 		.padding(isRegular ? 12 : 0)
 		.overlay(alignment: .bottom) {
 			if showsSeparator {
 				Rectangle()
 					.fill(Color(uiColor: .separator))
-					.frame(height: 1.0 / UIScreen.main.scale)
-					.padding(.leading, 72)
+					.frame(height: ZagListLayout.separatorHeight)
+					.padding(.leading, ZagListLayout.separatorLeadingInset)
 			}
 		}
 		.listRowInsets(
 			isRegular
 				? EdgeInsets()
-				: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+				: EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset)
 		)
 		.background(
 			isRegular
@@ -518,12 +518,12 @@ extension LibraryCellView {
 						.offset(y: 26)
 				}
 			}
-			.frame(width: 88, height: 84, alignment: .center)
+			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.compactRowHeight, alignment: .center)
 		} else {
 			if isSigningImmediately && !allowSigningCustomisation && !askCertificateEveryTime {
 				VStack(spacing: 2) {
 					_signingIndeterminateRing()
-						.frame(width: 88, height: 34)
+						.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 
 					Text(.localized("Signing..."))
 						.font(.system(size: 9, weight: .medium))
