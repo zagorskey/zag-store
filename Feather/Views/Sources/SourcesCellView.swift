@@ -16,6 +16,7 @@ struct SourcesCellView: View {
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
 	var source: AltSource
+	var showsSeparator: Bool = true
 	var repository: ASRepository?
 	var isRefreshing: Bool = false
 
@@ -155,7 +156,14 @@ struct SourcesCellView: View {
 		}
 		.frame(height: isRegular ? nil : 84)
 		.contentShape(Rectangle())
-		.zagAppStoreRowSeparator()
+		.overlay(alignment: .bottom) {
+			if showsSeparator {
+				Rectangle()
+					.fill(Color(uiColor: .separator))
+					.frame(height: 1.0 / UIScreen.main.scale)
+					.padding(.leading, 72)
+			}
+		}
 		.listRowInsets(
 			isRegular
 				? EdgeInsets()
