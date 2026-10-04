@@ -404,6 +404,7 @@ struct SourceAppsView: View {
 	
 	@State private var _sortOption: SortOption = .default
 	@State private var _selectedRoute: SourceAppRoute?
+	@State private var _isVisible = false
 	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
 	@AppStorage("zagStore.navigation.sourcesAppRoute") private var _persistedAppRoute = ""
 	
@@ -515,12 +516,17 @@ struct SourceAppsView: View {
 			}
 		}
 		.onAppear {
+			_isVisible = true
 			_probeSystemDictation()
 			if !hasLoadedOnce, viewModel.isFinished {
 				_load()
 				hasLoadedOnce = true
 			}
 			_sortOption = SortOption(rawValue: _sortOptionRawValue) ?? .default
+			_scheduleAppRouteRestoration()
+		}
+		.onDisappear {
+			_isVisible = false
 		}
 		.onChange(of: viewModel.isFinished) { _ in
 			_load()
@@ -529,7 +535,7 @@ struct SourceAppsView: View {
 			_sortOptionRawValue = newValue.rawValue
 		}
 		.onChange(of: _sources?.count) { _ in
-			_restoreAppRouteIfPossible()
+			_scheduleAppRouteRestoration()
 		}
 		.onChange(of: _selectedRoute) { route in
 			if route == nil {
@@ -618,6 +624,23 @@ struct SourceAppsView: View {
 			route.app.currentUniqueId
 	}
 
+	private func _scheduleAppRouteRestoration() {
+		guard
+			_isVisible,
+			_selectedRoute == nil,
+			!_persistedSourcesRoute.isEmpty,
+			!_persistedAppRoute.isEmpty,
+			_sources != nil
+		else { return }
+
+		// Cold restoration reaches this view by restoring the parent repository
+		// NavigationLink. Let that push finish before activating the app detail.
+		DispatchQueue.main.async {
+			guard _isVisible else { return }
+			_restoreAppRouteIfPossible()
+		}
+	}
+
 	private func _restoreAppRouteIfPossible() {
 		guard
 			_selectedRoute == nil,
@@ -653,7 +676,7 @@ struct SourceAppsView: View {
 		Task {
 			let loadedSources = object.compactMap { viewModel.sources[$0] }
 			_sources = loadedSources
-			_restoreAppRouteIfPossible()
+			_scheduleAppRouteRestoration()
 			withAnimation(.easeIn(duration: 0.2)) {
 				isLoading = false
 			}
