@@ -8,6 +8,28 @@
 import SwiftUI
 import NimbleViews
 
+enum ZagPageStartupPolicy {
+	static let rememberLastPageKey = "zagStore.navigation.rememberLastPage"
+	static let defaultStartPageKey = "zagStore.navigation.defaultStartPage"
+	static let lastPageKey = "zagStore.navigation.selectedTab"
+
+	static var remembersLastPage: Bool {
+		let defaults = UserDefaults.standard
+		guard defaults.object(forKey: rememberLastPageKey) != nil else {
+			return true
+		}
+		return defaults.bool(forKey: rememberLastPageKey)
+	}
+
+	static var initialTab: TabEnum {
+		let defaults = UserDefaults.standard
+		let rawValue = remembersLastPage
+			? defaults.string(forKey: lastPageKey)
+			: defaults.string(forKey: defaultStartPageKey)
+		return TabEnum(rawValue: rawValue ?? TabEnum.sources.rawValue) ?? .sources
+	}
+}
+
 enum TabEnum: String, CaseIterable, Hashable {
 	case home
 	case sources
