@@ -15,6 +15,18 @@ struct ExtendedTabbarView: View {
 	@AppStorage("Feather.tabCustomization") var customization = TabViewCustomization()
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
+	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
+
+	private var selectedTab: Binding<TabEnum> {
+		Binding(
+			get: {
+				TabEnum(rawValue: selectedTabRawValue) ?? .sources
+			},
+			set: { tab in
+				selectedTabRawValue = tab.rawValue
+			}
+		)
+	}
 	
 	@State private var _isAddingPresenting = false
 	
@@ -25,9 +37,9 @@ struct ExtendedTabbarView: View {
 	) private var _sources: FetchedResults<AltSource>
 		
 	var body: some View {
-		TabView {
+		TabView(selection: selectedTab) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
-				Tab(tab.title, systemImage: tab.icon) {
+				Tab(tab.title, systemImage: tab.icon, value: tab) {
 					TabEnum.view(for: tab)
 				}
 			}
