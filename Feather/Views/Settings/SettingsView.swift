@@ -10,6 +10,7 @@ import NimbleViews
 import UIKit
 import Darwin
 import IDeviceSwift
+import Photos
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
@@ -70,6 +71,7 @@ struct SettingsView: View {
 	@AppStorage("ZagStore.advancedSettingsUnlocked") private var _advancedSettingsUnlocked = false
 	@AppStorage("ZagStore.showInternalMetadata") private var _showInternalMetadata = false
 	@State private var _showAdvancedSettingsWarning = false
+	@State private var _photoAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -121,6 +123,7 @@ struct SettingsView: View {
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.onAppear {
 				_loadSettingsSectionOrder()
+				_refreshPhotoAuthorizationStatus()
 			}
 			.zagWallpaperSurface()
 			.toolbar {
@@ -303,10 +306,22 @@ extension SettingsView {
 				NavigationLink(destination: ArchiveView()) {
 					Label(.localized("Archive & Compression"), systemImage: "archivebox")
 				}
+
+				Button {
+					_handlePhotosAccess()
+				} label: {
+					HStack {
+						Label("Photos Access", systemImage: "photo.on.rectangle")
+						Spacer()
+						Text(_photoAuthorizationTitle)
+							.foregroundStyle(.secondary)
+					}
+				}
+				.buttonStyle(.plain)
 			} header: {
 				Text(.localized("Features"))
 			} footer: {
-				Text(.localized("Configure the apps way of installing, its zip compression levels, and custom modifications to apps."))
+				Text(.localized("Configure the apps way of installing, its zip compression levels, custom modifications to apps, and Photos library access."))
 			}
 
 		case .diagnostics:
@@ -387,6 +402,37 @@ extension SettingsView {
 			} header: {
 				Text("Reset")
 			}
+		}
+	}
+
+	private var _photoAuthorizationTitle: String {
+		switch _photoAuthorizationStatus {
+		case .authorized: return "Full Access"
+		case .limited: return "Limited Access"
+		case .denied: return "Denied"
+		case .restricted: return "Restricted"
+		case .notDetermined: return "Allow Access"
+		@unknown default: return "Unknown"
+		}
+	}
+
+	private func _refreshPhotoAuthorizationStatus() {
+		_photoAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+	}
+
+	private func _handlePhotosAccess() {
+		switch _photoAuthorizationStatus {
+		case .notDetermined:
+			PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+				DispatchQueue.main.async {
+					_photoAuthorizationStatus = status
+				}
+			}
+		case .authorized, .limited, .denied, .restricted:
+			guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+			UIApplication.shared.open(url)
+		@unknown default:
+			break
 		}
 	}
 
