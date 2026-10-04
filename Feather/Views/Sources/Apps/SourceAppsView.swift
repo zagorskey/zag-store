@@ -542,8 +542,30 @@ struct SourceAppsView: View {
 				_persistedAppRoute = ""
 			}
 		}
-		.navigationDestinationIfAvailable(item: $_selectedRoute) { route in
-			SourceAppsDetailView(source: route.source, app: route.app)
+		.background {
+			NavigationLink(
+				isActive: Binding(
+					get: { _selectedRoute != nil },
+					set: { isActive in
+						if !isActive {
+							_selectedRoute = nil
+						}
+					}
+				)
+			) {
+				if let route = _selectedRoute {
+					SourceAppsDetailView(
+						source: route.source,
+						app: route.app
+					)
+				} else {
+					EmptyView()
+				}
+			} label: {
+				EmptyView()
+			}
+			.frame(width: 0, height: 0)
+			.opacity(0)
 		}
 	}
 
