@@ -166,6 +166,7 @@ struct LibraryCellView: View {
 						.accessibilityLabel(Text(.localized("Removing App")))
 				} else {
 					_buttonActions(for: app)
+						.frame(height: 80, alignment: .center)
 				}
 			}
 		}
