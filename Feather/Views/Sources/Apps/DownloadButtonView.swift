@@ -137,11 +137,9 @@ struct DownloadButtonView: View {
 					.minimumScaleFactor(0.75)
 					.frame(width: 88, height: 11)
 					.padding(.top, 1)
-			} else {
-				Color.clear
-					.frame(width: 88, height: 12)
 			}
 		}
+		.frame(height: 80, alignment: .center)
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
