@@ -14,6 +14,7 @@ import Photos
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
+	case pages
 	case certificates
 	case features
 	case diagnostics
@@ -28,6 +29,7 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	var title: String {
 		switch self {
 		case .display: return "Display"
+		case .pages: return "Pages"
 		case .certificates: return "Certificates"
 		case .features: return "Features"
 		case .diagnostics: return "Diagnostics"
@@ -42,6 +44,7 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 
 private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.display,
+	.pages,
 	.certificates,
 	.features,
 	.misc,
@@ -54,6 +57,8 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 // MARK: - View
 struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
+	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
+	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
@@ -256,6 +261,32 @@ extension SettingsView {
 				}
 			} header: {
 				Text("Display")
+			}
+
+		case .pages:
+			Section {
+				Toggle(isOn: $_rememberLastPage) {
+					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
+				}
+
+				Picker(selection: $_defaultStartPage) {
+					ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
+						Text(tab.title).tag(tab.rawValue)
+					}
+				} label: {
+					Label("Default Start Page", systemImage: "rectangle.portrait.and.arrow.right")
+				}
+				.disabled(_rememberLastPage)
+			}
+			header: {
+				Text("Pages")
+			}
+			footer: {
+				Text(
+					_rememberLastPage
+						? "Zag Store will reopen on the last main page you used."
+						: "Choose which main page Zag Store opens on."
+				)
 			}
 
 		case .certificates:
