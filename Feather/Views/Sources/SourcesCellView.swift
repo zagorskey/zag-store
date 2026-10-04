@@ -25,6 +25,35 @@ struct SourcesCellView: View {
 		repository?.apps.count ?? 0
 	}
 
+	private enum RepositoryKind {
+		case classic
+		case pal
+		case mixed
+
+		var title: String {
+			switch self {
+			case .classic: return "CLASSIC"
+			case .pal: return "PAL"
+			case .mixed: return "MIXED"
+			}
+		}
+	}
+
+	private var repositoryKind: RepositoryKind {
+		guard let apps = repository?.apps, !apps.isEmpty else {
+			return .classic
+		}
+		let palCount = apps.reduce(into: 0) { count, app in
+			if let marketplaceID = app.marketplaceID,
+			   !marketplaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+				count += 1
+			}
+		}
+		if palCount == 0 { return .classic }
+		if palCount == apps.count { return .pal }
+		return .mixed
+	}
+
 	private var lastUpdatedDate: Date? {
 		repository?.apps
 			.compactMap { $0.currentDate?.date }
@@ -119,7 +148,10 @@ struct SourcesCellView: View {
 
 			Spacer(minLength: 8)
 
-			ZagCountBadge(count: appCount)
+			VStack(alignment: .trailing, spacing: 5) {
+				ZagCountBadge(count: appCount)
+				repositoryKindBadge
+			}
 		}
 		.contentShape(Rectangle())
 		.zagAppStoreRowSeparator()
@@ -144,6 +176,24 @@ struct SourcesCellView: View {
 
 			_actions(for: source)
 		}
+	}
+
+	@ViewBuilder
+	private var repositoryKindBadge: some View {
+		Text(repositoryKind.title)
+			.font(.system(size: 9, weight: .bold, design: .rounded))
+			.foregroundStyle(repositoryKind == .pal ? Color.accentColor : Color.secondary)
+			.padding(.horizontal, 7)
+			.frame(height: 17)
+			.background(
+				Capsule(style: .continuous)
+					.fill(
+						repositoryKind == .pal
+							? Color.accentColor.opacity(0.14)
+							: Color.secondary.opacity(0.12)
+					)
+			)
+			.accessibilityLabel(Text("\(repositoryKind.title) repository"))
 	}
 
 	// MARK: Repository Icon
