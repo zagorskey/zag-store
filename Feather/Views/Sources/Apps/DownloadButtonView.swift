@@ -139,7 +139,15 @@ struct DownloadButtonView: View {
 					.padding(.top, 1)
 			}
 		}
-		.frame(height: 80, alignment: .center)
+		.frame(height: 80, alignment: .top)
+		.overlay(alignment: .top) {
+			// App Store geometry: the action pill itself stays on the row's
+			// vertical centreline. Any caption hangs below it without shifting
+			// the pill upward.
+			Color.clear
+				.frame(width: 1, height: 1)
+		}
+		.padding(.top, 23)
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
