@@ -25,66 +25,6 @@ final class SourcesViewModel: ObservableObject {
 	@Published private(set) var isRefreshing = false
 	@Published var sources: [AltSource: ASRepository] = [:]
 
-	private let _repositoryCacheDirectory: URL = {
-		let base = FileManager.default.urls(
-			for: .cachesDirectory,
-			in: .userDomainMask
-		).first!
-		return base.appendingPathComponent(
-			"ZagRepositoryCache",
-			isDirectory: true
-		)
-	}()
-
-	private func _cacheURL(for sourceURL: URL) -> URL {
-		let key = Data(sourceURL.absoluteString.utf8)
-			.base64EncodedString()
-			.replacingOccurrences(of: "/", with: "_")
-			.replacingOccurrences(of: "+", with: "-")
-			.replacingOccurrences(of: "=", with: "")
-		return _repositoryCacheDirectory
-			.appendingPathComponent(key)
-			.appendingPathExtension("json")
-	}
-
-	private func _cachedRepository(for sourceURL: URL) -> ASRepository? {
-		let fileURL = _cacheURL(for: sourceURL)
-		guard
-			let data = try? Data(contentsOf: fileURL),
-			let repository = try? JSONDecoder().decode(
-				ASRepository.self,
-				from: data
-			)
-		else { return nil }
-		return repository
-	}
-
-	private func _cacheRepositorySource(from sourceURL: URL) async {
-		do {
-			let (data, response) = try await URLSession.shared.data(from: sourceURL)
-			if let http = response as? HTTPURLResponse,
-			   !(200...299).contains(http.statusCode) {
-				return
-			}
-
-			// Validate with the same model before replacing a known-good cache.
-			guard (try? JSONDecoder().decode(ASRepository.self, from: data)) != nil else {
-				return
-			}
-
-			try FileManager.default.createDirectory(
-				at: _repositoryCacheDirectory,
-				withIntermediateDirectories: true
-			)
-			try data.write(
-				to: _cacheURL(for: sourceURL),
-				options: .atomic
-			)
-		} catch {
-			// Cache is opportunistic; normal repository refresh remains authoritative.
-		}
-	}
-
 
 	@MainActor
 	func fetchSources(
@@ -136,21 +76,6 @@ final class SourcesViewModel: ObservableObject {
 		let sourceURLs = sourcesArray.compactMap { source -> (AltSource, URL)? in
 			guard let url = source.sourceURL else { return nil }
 			return (source, url)
-		}
-
-		// Hydrate from the last validated source JSON before touching the network.
-		// This lets cold-start navigation resolve repository apps immediately while
-		// the normal refresh continues and later replaces the cached snapshot.
-		if self.sources.isEmpty {
-			var cachedSources: [AltSource: ASRepository] = [:]
-			for (source, url) in sourceURLs {
-				if let repository = _cachedRepository(for: url) {
-					cachedSources[source] = repository
-				}
-			}
-			if !cachedSources.isEmpty {
-				self.sources = cachedSources
-			}
 		}
 
 		// Build the next repository state off-screen. Child tasks traffic only
@@ -216,9 +141,6 @@ final class SourcesViewModel: ObservableObject {
 					continue
 				}
 				refreshedSources[source] = repo
-				Task {
-					await _cacheRepositorySource(from: url)
-				}
 			}
 
 			refreshedSources = refreshedSources.filter { source, _ in
