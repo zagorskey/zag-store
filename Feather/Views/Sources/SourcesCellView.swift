@@ -153,7 +153,7 @@ struct SourcesCellView: View {
 				repositoryKindBadge
 			}
 		}
-		.frame(height: isRegular ? nil : 80)
+		.frame(height: isRegular ? nil : 84)
 		.contentShape(Rectangle())
 		.zagAppStoreRowSeparator()
 		.listRowInsets(
