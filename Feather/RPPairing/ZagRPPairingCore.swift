@@ -493,6 +493,19 @@ final class ZagRPPairingCore: ObservableObject {
 		FileManager.default.fileExists(atPath: Self.pairingFileURL.path)
 	}
 
+	func pairingFileForExport() throws -> URL {
+		guard pairingFileExists else {
+			throw PairingExportError.notPaired
+		}
+
+		let exportURL = FileManager.default.temporaryDirectory
+			.appendingPathComponent("ZagStore.mobiledevicepairing", isDirectory: false)
+
+		try? FileManager.default.removeItem(at: exportURL)
+		try FileManager.default.copyItem(at: Self.pairingFileURL, to: exportURL)
+		return exportURL
+	}
+
 	func start() {
 		guard !isRunning else { return }
 		ZagLogger.shared.info("RPPairing", "Pairing session starting")
@@ -826,5 +839,14 @@ private enum Gate4UninstallError: LocalizedError {
 		case .uninstallFailed(let message):
 			return message
 		}
+	}
+}
+
+
+private enum PairingExportError: LocalizedError {
+	case notPaired
+
+	var errorDescription: String? {
+		"Pair this iPhone before exporting its pairing file."
 	}
 }
