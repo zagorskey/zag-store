@@ -67,6 +67,8 @@ private struct RPPairingView: View {
 	@State private var showGate4Importer = false
 	@State private var showUnpairConfirmation = false
 	@State private var unpairError: String?
+	@State private var pairingExportURL: URL?
+	@State private var pairingExportError: String?
 
 	var body: some View {
 		Section {
@@ -117,6 +119,24 @@ private struct RPPairingView: View {
 				Image(systemName: statusIcon)
 					.foregroundStyle(statusColor)
 				Text(statusText)
+			}
+
+			if pairingCore.pairingFileExists {
+				if let pairingExportURL {
+					ShareLink(item: pairingExportURL) {
+						Label("Export Pairing File", systemImage: "square.and.arrow.up")
+					}
+				} else {
+					Button {
+						do {
+							pairingExportURL = try pairingCore.pairingFileForExport()
+						} catch {
+							pairingExportError = error.localizedDescription
+						}
+					} label: {
+						Label("Prepare Pairing File for Export", systemImage: "square.and.arrow.up")
+					}
+				}
 			}
 
 			if case .pin(let pin) = pairingCore.state {
@@ -234,6 +254,15 @@ private struct RPPairingView: View {
 			Text("Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test.")
 		}
 
+
+		.alert("Unable to Export Pairing File", isPresented: Binding(
+			get: { pairingExportError != nil },
+			set: { if !$0 { pairingExportError = nil } }
+		)) {
+			Button("OK", role: .cancel) { pairingExportError = nil }
+		} message: {
+			Text(pairingExportError ?? "")
+		}
 
 		.alert("Unable to Unpair", isPresented: Binding(
 			get: { unpairError != nil },
