@@ -16,6 +16,16 @@ struct TabbarView: View {
 				TabEnum(rawValue: selectedTabRawValue) ?? .sources
 			},
 			set: { tab in
+				let previousValue = selectedTabRawValue
+				if tab == .sources,
+				   previousValue != TabEnum.sources.rawValue {
+					UserDefaults.standard.removeObject(
+						forKey: "zagStore.navigation.sourcesRoute"
+					)
+					UserDefaults.standard.removeObject(
+						forKey: "zagStore.navigation.sourcesAppRoute"
+					)
+				}
 				selectedTabRawValue = tab.rawValue
 			}
 		)
