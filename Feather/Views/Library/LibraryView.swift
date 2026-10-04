@@ -426,6 +426,9 @@ struct LibraryView: View {
 			Section {
 				Color.clear
 					.zagSectionSpacer()
+					.listRowInsets(EdgeInsets())
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 
 				ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
 					.listRowSeparator(.hidden)
@@ -505,6 +508,9 @@ struct LibraryView: View {
 			importedAppsSection
 			Color.clear
 				.zagPageBottomSpacer()
+				.listRowInsets(EdgeInsets())
+				.listRowSeparator(.hidden)
+				.listRowBackground(Color.clear)
 				}}
 				.listRowBackground(Color.clear)
 			}
