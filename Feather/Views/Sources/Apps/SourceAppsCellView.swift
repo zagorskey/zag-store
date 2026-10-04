@@ -40,8 +40,7 @@ struct SourceAppsCellView: View {
 					.padding(.top, 2)
 			}
 		}
-		.frame(height: 76)
-		.padding(.vertical, 4)
+		.frame(height: 78)
 	}
 
 	private var appInformation: some View {
