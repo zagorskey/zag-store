@@ -16,6 +16,7 @@ struct ExtendedTabbarView: View {
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
 	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
+	@AppStorage("zagStore.navigation.sourcesRoute") private var persistedSourcesRoute = ""
 	
 	@State private var _isAddingPresenting = false
 	
@@ -100,6 +101,38 @@ struct ExtendedTabbarView: View {
 			SourcesAddView()
 				.presentationDetents([.medium])
 		}
+		.onAppear {
+			_restoreNativeSourcesSelection()
+		}
+		.onChange(of: _sources.map { $0.identifier ?? $0.objectID.uriRepresentation().absoluteString }) { _ in
+			_restoreNativeSourcesSelection()
+		}
+	}
+
+	private func _restoreNativeSourcesSelection() {
+		guard selectedTabRawValue == TabEnum.sources.rawValue else { return }
+
+		if persistedSourcesRoute == "allRepositories" {
+			selectedTabRawValue = "sources.allRepositories"
+			return
+		}
+
+		let prefix = "repository|"
+		guard persistedSourcesRoute.hasPrefix(prefix) else { return }
+		let key = String(persistedSourcesRoute.dropFirst(prefix.count))
+
+		guard let source = _sources.first(where: {
+			let sourceKey =
+				$0.identifier ??
+				$0.sourceURL?.absoluteString ??
+				$0.objectID.uriRepresentation().absoluteString
+			return sourceKey == key
+		}) else { return }
+
+		let nativeKey =
+			source.identifier ??
+			source.objectID.uriRepresentation().absoluteString
+		selectedTabRawValue = "sources.repository.\(nativeKey)"
 	}
 	
 	@ViewBuilder
