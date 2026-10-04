@@ -914,14 +914,17 @@ struct SourcesView: View {
 								viewModel:
 									viewModel
 							)
+							.onAppear {
+								_persistRepositoryRoute(source)
+							}
+							.onAppear {
+								_persistRepositoryRoute(source)
+							}
 						} label: {
 							EmptyView()
 						}
 						.opacity(0)
 					}
-					.simultaneousGesture(TapGesture().onEnded {
-						_persistRepositoryRoute(source)
-					})
 				}
 				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 			}
@@ -995,9 +998,6 @@ struct SourcesView: View {
 						}
 						.opacity(0)
 					}
-					.simultaneousGesture(TapGesture().onEnded {
-						_persistRepositoryRoute(source)
-					})
 				}
 			}
 		}
