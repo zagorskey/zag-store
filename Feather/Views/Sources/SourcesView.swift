@@ -246,6 +246,9 @@ struct SourcesView: View {
 				}
 				.listRowBackground(Color.clear)
 			}
+			.safeAreaInset(edge: .bottom) {
+				Color.clear.frame(height: 48)
+			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
