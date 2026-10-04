@@ -563,11 +563,37 @@ async fn run_installed_apps(
                     .and_then(|values| values.get("CFBundleVersion"))
                     .and_then(|value| value.as_string())
                     .unwrap_or("");
+                let name = dictionary
+                    .and_then(|values| values.get("CFBundleDisplayName")
+                        .or_else(|| values.get("CFBundleName")))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
+                let executable = dictionary
+                    .and_then(|values| values.get("CFBundleExecutable"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
+                let minimum_os = dictionary
+                    .and_then(|values| values.get("MinimumOSVersion"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
+                let application_type = dictionary
+                    .and_then(|values| values.get("ApplicationType"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
 
-                // 402 payload: bundleID<TAB>shortVersion<TAB>buildVersion.
-                // Tabs cannot occur in valid bundle identifiers or version strings and
-                // preserve the existing callback ABI while adding inventory metadata.
-                emit(callback, 402, format!("{bundle_id}\t{version}\t{build}"));
+                // 402 payload:
+                // bundleID<TAB>shortVersion<TAB>buildVersion<TAB>name<TAB>
+                // executable<TAB>minimumOS<TAB>applicationType.
+                //
+                // Keep the callback ABI unchanged. The Swift receiver accepts
+                // missing trailing fields so older Rust cores remain harmless.
+                emit(
+                    callback,
+                    402,
+                    format!(
+                        "{bundle_id}\t{version}\t{build}\t{name}\t{executable}\t{minimum_os}\t{application_type}"
+                    ),
+                );
             }
             emit(callback, 403, count.to_string());
             Ok(())
