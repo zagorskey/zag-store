@@ -20,6 +20,13 @@ bool zag_gate2_probe(
     ZagRPPairingCallback callback
 );
 
+bool zag_house_arrest_install_pairing_file(
+    const char *device_ip,
+    const char *pairing_path,
+    const char *bundle_id,
+    ZagRPPairingCallback callback
+);
+
 bool zag_house_arrest_list_documents(
     const char *device_ip,
     const char *pairing_path,
