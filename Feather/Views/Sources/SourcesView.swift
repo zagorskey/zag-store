@@ -95,6 +95,8 @@ struct SourcesView: View {
 	@AppStorage("zagStore.sources.customOrder") private var _customOrderData = ""
 	@State private var _isRearrangingRepositories = false
 	@State private var _showAllRepositories = false
+	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
+	@State private var _restoredRepository: AltSource?
 	@State private var _loadingAppsDotCount = 0
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
@@ -233,6 +235,43 @@ struct SourcesView: View {
 				) == .orderedAscending
 		}
 	}
+	private func _persistRepositoryRoute(_ source: AltSource) {
+		_persistedSourcesRoute = "repository|" + _sourceKey(source)
+	}
+
+	private func _restoreSourcesRouteIfPossible() {
+		guard !_persistedSourcesRoute.isEmpty else { return }
+
+		if _persistedSourcesRoute == "allRepositories" {
+			if !_sources.isEmpty {
+				_showAllRepositories = true
+			}
+			return
+		}
+
+		let prefix = "repository|"
+		guard _persistedSourcesRoute.hasPrefix(prefix) else {
+			_persistedSourcesRoute = ""
+			return
+		}
+
+		let key = String(_persistedSourcesRoute.dropFirst(prefix.count))
+		guard let source = _sources.first(where: { _sourceKey($0) == key }) else {
+			// The source may not have arrived from Core Data yet. Leave the
+			// persisted route intact and retry when the fetched results change.
+			return
+		}
+		_restoredRepository = source
+	}
+
+	private func _clearRepositoryRouteIfNeeded() {
+		guard _restoredRepository == nil, !_showAllRepositories else { return }
+		if _persistedSourcesRoute == "allRepositories" ||
+			_persistedSourcesRoute.hasPrefix("repository|") {
+			_persistedSourcesRoute = ""
+		}
+	}
+
 	// MARK: - Body
 	var body: some View {
 		NBNavigationView(.localized("Sources")) {
@@ -331,6 +370,26 @@ struct SourcesView: View {
 		}
 		.onAppear {
 			_probeSystemDictation()
+			_restoreSourcesRouteIfPossible()
+		}
+		.onChange(of: _sources.map(_sourceKey)) { _ in
+			_restoreSourcesRouteIfPossible()
+		}
+		.onChange(of: _showAllRepositories) { isPresented in
+			if !isPresented {
+				_clearRepositoryRouteIfNeeded()
+			}
+		}
+		.onChange(of: _restoredRepository) { source in
+			if source == nil {
+				_clearRepositoryRouteIfNeeded()
+			}
+		}
+		.navigationDestinationIfAvailable(item: $_restoredRepository) { source in
+			SourceAppsView(
+				object: [source],
+				viewModel: viewModel
+			)
 		}
 		.navigationDestinationIfAvailable(
 			item: $_selectedSearchRoute
@@ -717,6 +776,7 @@ struct SourcesView: View {
 		if !_filteredSources.isEmpty {
 			Section {
 				Button {
+					_persistedSourcesRoute = "allRepositories"
 					_showAllRepositories = true
 				} label: {
 					let isRegular =
@@ -859,6 +919,9 @@ struct SourcesView: View {
 						}
 						.opacity(0)
 					}
+					.simultaneousGesture(TapGesture().onEnded {
+						_persistRepositoryRoute(source)
+					})
 				}
 				.onMove(perform: _isRearrangingRepositories ? _moveRepositories : nil)
 			}
@@ -932,6 +995,9 @@ struct SourcesView: View {
 						}
 						.opacity(0)
 					}
+					.simultaneousGesture(TapGesture().onEnded {
+						_persistRepositoryRoute(source)
+					})
 				}
 			}
 		}
