@@ -153,9 +153,14 @@ struct SourcesCellView: View {
 				repositoryKindBadge
 			}
 		}
-		.frame(height: isRegular ? nil : 76)
+		.frame(height: isRegular ? nil : 78)
 		.contentShape(Rectangle())
 		.zagAppStoreRowSeparator()
+		.listRowInsets(
+			isRegular
+				? EdgeInsets()
+				: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+		)
 		.padding(isRegular ? 12 : 0)
 		.background(
 			isRegular
