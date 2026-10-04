@@ -154,20 +154,20 @@ struct SourcesCellView: View {
 				repositoryKindBadge
 			}
 		}
-		.frame(height: isRegular ? nil : 84)
+		.frame(height: isRegular ? nil : ZagListLayout.compactRowHeight)
 		.contentShape(Rectangle())
 		.overlay(alignment: .bottom) {
 			if showsSeparator {
 				Rectangle()
 					.fill(Color(uiColor: .separator))
-					.frame(height: 1.0 / UIScreen.main.scale)
-					.padding(.leading, 72)
+					.frame(height: ZagListLayout.separatorHeight)
+					.padding(.leading, ZagListLayout.separatorLeadingInset)
 			}
 		}
 		.listRowInsets(
 			isRegular
 				? EdgeInsets()
-				: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+				: EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset)
 		)
 		.padding(isRegular ? 12 : 0)
 		.background(
