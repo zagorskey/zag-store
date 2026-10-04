@@ -240,6 +240,17 @@ struct SourcesView: View {
 		_persistedSourcesRoute = "repository|" + _sourceKey(source)
 	}
 
+	private func _scheduleSourcesRouteRestoration() {
+		guard !_persistedSourcesRoute.isEmpty else { return }
+
+		// The remembered tab and its navigation host are reconstructed in the
+		// same launch pass. Activating a destination synchronously here can be
+		// discarded before the host is attached, so restore on the next run loop.
+		DispatchQueue.main.async {
+			_restoreSourcesRouteIfPossible()
+		}
+	}
+
 	private func _restoreSourcesRouteIfPossible() {
 		guard !_persistedSourcesRoute.isEmpty else {
 			_isRestoringSourcesRoute = false
@@ -385,10 +396,10 @@ struct SourcesView: View {
 		}
 		.onAppear {
 			_probeSystemDictation()
-			_restoreSourcesRouteIfPossible()
+			_scheduleSourcesRouteRestoration()
 		}
 		.onChange(of: _sources.map(_sourceKey)) { _ in
-			_restoreSourcesRouteIfPossible()
+			_scheduleSourcesRouteRestoration()
 		}
 		.onChange(of: _showAllRepositories) { isPresented in
 			if !isPresented {
