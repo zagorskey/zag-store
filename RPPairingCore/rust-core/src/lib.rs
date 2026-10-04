@@ -497,6 +497,92 @@ async fn run_gate2_probe(
     .await
 }
 
+/// Read-only House Arrest diagnostic for an installed app.
+///
+/// Callback codes:
+/// 601 = starting
+/// 602 = installed bundle ID resolved
+/// 603 = House Arrest connected
+/// 604 = VendDocuments succeeded
+/// 605 = Documents listing (TAB-delimited)
+/// 606 = complete
+/// -8  = failure
+#[no_mangle]
+pub unsafe extern "C" fn zag_house_arrest_list_documents(
+    device_ip: *const c_char,
+    pairing_path: *const c_char,
+    bundle_id: *const c_char,
+    callback: Option<ZagRPPairingCallback>,
+) -> bool {
+    let Some(callback) = callback else { return false; };
+    if device_ip.is_null() || pairing_path.is_null() || bundle_id.is_null() { return false; }
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else { return false; };
+    let Ok(pairing_path) = CStr::from_ptr(pairing_path).to_str().map(PathBuf::from) else { return false; };
+    let Ok(bundle_id) = CStr::from_ptr(bundle_id).to_str().map(str::to_owned) else { return false; };
+
+    thread::spawn(move || {
+        emit(callback, 601, format!("Starting House Arrest probe for {bundle_id}"));
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit(callback, -8, format!("House Arrest runtime failed: {error}"));
+                return;
+            }
+        };
+        runtime.block_on(async move {
+            let result = with_zag_device_session(
+                &device_ip,
+                &pairing_path,
+                |_stage, _message| {},
+                |mut adapter, mut handshake| async move {
+                    let mut installation_proxy =
+                        InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+                            .await
+                            .map_err(|error| format!("installation_proxy over RSD failed: {error}"))?;
+                    let apps = installation_proxy
+                        .get_apps(Some("User"), None)
+                        .await
+                        .map_err(|error| format!("installation_proxy user-app lookup failed: {error}"))?;
+                    let resolved = if apps.contains_key(&bundle_id) {
+                        bundle_id.clone()
+                    } else {
+                        apps.keys()
+                            .find(|id| id.starts_with(&(bundle_id.clone() + ".")))
+                            .cloned()
+                            .ok_or_else(|| format!("Installed app not found for {bundle_id}"))?
+                    };
+                    drop(installation_proxy);
+                    emit(callback, 602, &resolved);
+
+                    let house_arrest = HouseArrestClient::connect_rsd(&mut adapter, &mut handshake)
+                        .await
+                        .map_err(|error| format!("House Arrest over RSD failed: {error}"))?;
+                    emit(callback, 603, "House Arrest connected over RSD");
+
+                    let mut afc = house_arrest
+                        .vend_documents(resolved.clone())
+                        .await
+                        .map_err(|error| format!("VendDocuments failed for {resolved}: {error}"))?;
+                    emit(callback, 604, format!("VendDocuments succeeded for {resolved}"));
+
+                    let entries = afc
+                        .list_dir("/Documents")
+                        .await
+                        .map_err(|error| format!("Listing /Documents failed: {error}"))?
+                        .into_iter()
+                        .filter(|entry| entry != "." && entry != "..")
+                        .collect::<Vec<_>>();
+                    emit(callback, 605, entries.join("\t"));
+                    emit(callback, 606, format!("{} entries", entries.len()));
+                    Ok(())
+                },
+            ).await;
+            if let Err(error) = result { emit(callback, -8, error); }
+        });
+    });
+    true
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn zag_installed_apps(
     device_ip: *const c_char,
