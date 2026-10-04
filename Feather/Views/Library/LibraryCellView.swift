@@ -45,6 +45,7 @@ struct LibraryCellView: View {
 	var app: AppInfoPresentable
 	var isManagedInstalled: Bool = false
 	var isRemoving: Bool = false
+	var showsSeparator: Bool = true
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRepositoryBadgeTap: ((AltSource) -> Void)? = nil
@@ -171,7 +172,14 @@ struct LibraryCellView: View {
 		}
 		.frame(height: isRegular ? nil : 84)
 		.padding(isRegular ? 12 : 0)
-		.zagAppStoreRowSeparator()
+		.overlay(alignment: .bottom) {
+			if showsSeparator {
+				Rectangle()
+					.fill(Color(uiColor: .separator))
+					.frame(height: 1.0 / UIScreen.main.scale)
+					.padding(.leading, 72)
+			}
+		}
 		.listRowInsets(
 			isRegular
 				? EdgeInsets()
@@ -501,16 +509,16 @@ extension LibraryCellView {
 					Text(certInfo.formatted)
 						.font(
 							.system(
-								size: 9,
+								size: 8,
 								weight: .regular
 							)
 						)
 						.foregroundStyle(certInfo.color)
 						.lineLimit(1)
-						.offset(y: 24)
+						.offset(y: 26)
 				}
 			}
-			.frame(width: 88, height: 80, alignment: .center)
+			.frame(width: 88, height: 84, alignment: .center)
 		} else {
 			if isSigningImmediately && !allowSigningCustomisation && !askCertificateEveryTime {
 				VStack(spacing: 2) {
