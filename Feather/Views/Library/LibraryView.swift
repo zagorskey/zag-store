@@ -402,93 +402,6 @@ struct LibraryView: View {
 	}
 
 
-	@ViewBuilder
-	private var installedAppsSection: some View {
-		if !_filteredInstalledApps.isEmpty,
-		   _selectedScope == .all || _selectedScope == .installed {
-			Section {
-				ZagLibraryHeader(title: .localized("Installed"), count: _filteredInstalledApps.count)
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
-
-				ForEach(Array(_filteredInstalledApps.enumerated()), id: \.element.uuid) { index, app in
-					libraryRow(app, managedInstalled: true, showsSeparator: index < _filteredInstalledApps.count - 1)
-						.listRowSeparator(.hidden)
-				}
-			}
-		}
-	}
-
-	@ViewBuilder
-	private var signedAppsSection: some View {
-		if !_filteredSignedOnlyApps.isEmpty,
-		   _selectedScope == .all || _selectedScope == .signed {
-			Section {
-				Color.clear
-					.frame(height: 20)
-					.listRowInsets(EdgeInsets())
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
-
-				ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
-
-				ForEach(Array(_filteredSignedOnlyApps.enumerated()), id: \.element.uuid) { index, app in
-					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: index < _filteredSignedOnlyApps.count - 1)
-						.listRowSeparator(.hidden)
-				}
-			}
-		}
-	}
-
-	@ViewBuilder
-	private var importedAppsSection: some View {
-		if !_filteredImportedApps.isEmpty,
-		   _selectedScope == .all || _selectedScope == .imported {
-			Section {
-				Color.clear
-					.zagSectionSpacer()
-
-				ZagLibraryHeader(title: .localized("Imported"), count: _filteredImportedApps.count)
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
-
-				ForEach(Array(_filteredImportedApps.enumerated()), id: \.element.uuid) { index, app in
-					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: index < _filteredImportedApps.count - 1)
-						.listRowSeparator(.hidden)
-				}
-			}
-		}
-	}
-
-	private func libraryRow(
-		_ app: AppInfoPresentable,
-		managedInstalled: Bool,
-		showsSeparator: Bool
-	) -> some View {
-		LibraryCellView(
-			app: app,
-			isManagedInstalled: managedInstalled,
-			isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
-			showsSeparator: showsSeparator,
-			onDeleteApp: _deleteStoredApp,
-			onRemoveManagedApp: _requestRemoveManagedApp,
-			onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
-			selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-			selectedSigningAppPresenting: $_selectedSigningAppPresenting,
-			selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-			selectedAppUUIDs: $_selectedAppUUIDs
-		)
-		.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-		.transition(
-			.asymmetric(
-				insertion: .opacity,
-				removal: .opacity.combined(with: .move(edge: .top))
-			)
-		)
-	}
-
 	var body: some View {
 
 
@@ -499,19 +412,110 @@ struct LibraryView: View {
 
 			NBListAdaptable(transparentBackground: true) {
 				Group {
+					zagUpdatesContent
 
+					if !_filteredInstalledApps.isEmpty,
+					   _selectedScope == .all || _selectedScope == .installed {
+						Section {
+							ZagLibraryHeader(title: .localized("Installed"), count: _filteredInstalledApps.count)
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
 
+							ForEach(Array(_filteredInstalledApps.enumerated()), id: \.element.uuid) { index, app in
+								LibraryCellView(
+									app: app,
+									isManagedInstalled: true,
+									isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+									showsSeparator: index < _filteredInstalledApps.count - 1,
+									onDeleteApp: _deleteStoredApp,
+									onRemoveManagedApp: _requestRemoveManagedApp,
+									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+									selectedAppUUIDs: $_selectedAppUUIDs
+								)
+								.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+								.listRowSeparator(.hidden)
+								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
+							}
+						}
+					}
 
-			zagUpdatesContent
-			installedAppsSection
-			signedAppsSection
-			importedAppsSection
-			Color.clear
-				.frame(height: 48)
-				.listRowInsets(EdgeInsets())
-				.listRowSeparator(.hidden)
-				.listRowBackground(Color.clear)
-				}}
+					if !_filteredSignedOnlyApps.isEmpty,
+					   _selectedScope == .all || _selectedScope == .signed {
+						Section {
+							Color.clear
+								.frame(height: 20)
+								.listRowInsets(EdgeInsets())
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
+
+							ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
+
+							ForEach(Array(_filteredSignedOnlyApps.enumerated()), id: \.element.uuid) { index, app in
+								LibraryCellView(
+									app: app,
+									isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+									isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+									showsSeparator: index < _filteredSignedOnlyApps.count - 1,
+									onDeleteApp: _deleteStoredApp,
+									onRemoveManagedApp: _requestRemoveManagedApp,
+									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+									selectedAppUUIDs: $_selectedAppUUIDs
+								)
+								.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+								.listRowSeparator(.hidden)
+								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
+							}
+						}
+					}
+
+					if !_filteredImportedApps.isEmpty,
+					   _selectedScope == .all || _selectedScope == .imported {
+						Section {
+							Color.clear
+								.frame(height: 20)
+								.listRowInsets(EdgeInsets())
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
+
+							ZagLibraryHeader(title: .localized("Imported"), count: _filteredImportedApps.count)
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
+
+							ForEach(Array(_filteredImportedApps.enumerated()), id: \.element.uuid) { index, app in
+								LibraryCellView(
+									app: app,
+									isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+									isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
+									showsSeparator: index < _filteredImportedApps.count - 1,
+									onDeleteApp: _deleteStoredApp,
+									onRemoveManagedApp: _requestRemoveManagedApp,
+									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
+									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+									selectedAppUUIDs: $_selectedAppUUIDs
+								)
+								.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
+								.listRowSeparator(.hidden)
+								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
+							}
+						}
+					}
+
+					Color.clear
+						.frame(height: 48)
+						.listRowInsets(EdgeInsets())
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
+				}
 				.listRowBackground(Color.clear)
 			}
 			.zagWallpaperSurface()
