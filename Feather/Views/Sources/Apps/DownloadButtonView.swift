@@ -139,7 +139,7 @@ struct DownloadButtonView: View {
 					.offset(y: 24)
 			}
 		}
-		.frame(width: 88, height: 80, alignment: .center)
+		.frame(width: 88, height: 84, alignment: .center)
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
