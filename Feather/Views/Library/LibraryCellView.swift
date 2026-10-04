@@ -169,8 +169,14 @@ struct LibraryCellView: View {
 				}
 			}
 		}
+		.frame(height: isRegular ? nil : 76)
 		.padding(isRegular ? 12 : 0)
 		.zagAppStoreRowSeparator()
+		.listRowInsets(
+			isRegular
+				? EdgeInsets()
+				: EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+		)
 		.background(
 			isRegular
 				? RoundedRectangle(
