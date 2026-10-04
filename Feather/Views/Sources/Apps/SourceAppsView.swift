@@ -404,6 +404,8 @@ struct SourceAppsView: View {
 	
 	@State private var _sortOption: SortOption = .default
 	@State private var _selectedRoute: SourceAppRoute?
+	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
+	@AppStorage("zagStore.navigation.sourcesAppRoute") private var _persistedAppRoute = ""
 	
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
