@@ -405,8 +405,6 @@ struct SourceAppsView: View {
 	@State private var _sortOption: SortOption = .default
 	@State private var _selectedRoute: SourceAppRoute?
 	@State private var _isVisible = false
-	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
-	@AppStorage("zagStore.navigation.sourcesAppRoute") private var _persistedAppRoute = ""
 	
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
@@ -446,7 +444,6 @@ struct SourceAppsView: View {
 					sortOption: $_sortOption,
 					sortAscending: $_sortAscending,
 					onSelect: { route in
-						_persistAppRoute(route)
 						self._selectedRoute = route
 					}
 				)
@@ -533,7 +530,6 @@ struct SourceAppsView: View {
 			}
 
 			_sortOption = SortOption(rawValue: _sortOptionRawValue) ?? .default
-			_scheduleAppRouteRestoration()
 		}
 		.onDisappear {
 			_isVisible = false
@@ -549,14 +545,6 @@ struct SourceAppsView: View {
 		}
 		.onChange(of: _sortOption) { newValue in
 			_sortOptionRawValue = newValue.rawValue
-		}
-		.onChange(of: _sources?.count) { _ in
-			_scheduleAppRouteRestoration()
-		}
-		.onChange(of: _selectedRoute) { route in
-			if route == nil {
-				_persistedAppRoute = ""
-			}
 		}
 		.background {
 			NavigationLink(
@@ -647,77 +635,12 @@ struct SourceAppsView: View {
 		_ = controller.perform(startSelector)
 	}
 	
-	private func _repositoryIdentity(_ repository: ASRepository) -> String {
-		repository.id ??
-			repository.website?.absoluteString ??
-			repository.name ??
-			"repository"
-	}
-
-	private func _persistAppRoute(_ route: SourceAppRoute) {
-		guard !_persistedSourcesRoute.isEmpty else { return }
-		_persistedAppRoute =
-			_repositoryIdentity(route.source) +
-			"|" +
-			route.app.currentUniqueId
-	}
-
-	private func _scheduleAppRouteRestoration() {
-		guard
-			_isVisible,
-			_selectedRoute == nil,
-			!_persistedSourcesRoute.isEmpty,
-			!_persistedAppRoute.isEmpty,
-			_sources != nil
-		else { return }
-
-		// Cold restoration reaches this view by restoring the parent repository
-		// NavigationLink. Let that push finish before activating the app detail.
-		DispatchQueue.main.async {
-			guard _isVisible else { return }
-			_restoreAppRouteIfPossible()
-		}
-	}
-
-	private func _restoreAppRouteIfPossible() {
-		guard
-			_selectedRoute == nil,
-			!_persistedSourcesRoute.isEmpty,
-			!_persistedAppRoute.isEmpty,
-			let sources = _sources
-		else { return }
-
-		for repository in sources {
-			let prefix = _repositoryIdentity(repository) + "|"
-			guard _persistedAppRoute.hasPrefix(prefix) else { continue }
-
-			let appIdentity = String(
-				_persistedAppRoute.dropFirst(prefix.count)
-			)
-			if let app = repository.apps.first(
-				where: { $0.currentUniqueId == appIdentity }
-			) {
-				_selectedRoute = SourceAppRoute(
-					source: repository,
-					app: app
-				)
-				return
-			}
-		}
-
-		// Do not clear a persisted route merely because this repository snapshot
-		// cannot resolve it yet. During cold launch SourcesViewModel can publish
-		// the repository before its app catalogue is fully populated; a later
-		// refresh/load will retry restoration.
-	}
-
 	private func _load() {
 		isLoading = true
 		
 		Task {
 			let loadedSources = object.compactMap { viewModel.sources[$0] }
 			_sources = loadedSources
-			_scheduleAppRouteRestoration()
 			withAnimation(.easeIn(duration: 0.2)) {
 				isLoading = false
 			}
