@@ -214,7 +214,7 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		// Rows draw their own one-physical-pixel separator below.
 		tableView.separatorStyle = .none
-		let footer = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 48))
+		let footer = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: ZagListLayout.pageBottomSpacing))
 		footer.backgroundColor = .clear
 		tableView.tableFooterView = footer
 		
@@ -423,13 +423,13 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		cell.backgroundColor = .clear
 		cell.contentConfiguration = UIHostingConfiguration {
 			SourceAppsCellView(source: entry.source, app: entry.app)
-				.frame(height: 84)
+				.frame(height: ZagListLayout.compactRowHeight)
 				.overlay(alignment: .bottom) {
 					if indexPath.row < tableView.numberOfRows(inSection: indexPath.section) - 1 {
 						Rectangle()
 							.fill(Color(uiColor: .separator))
-							.frame(height: 1.0 / UIScreen.main.scale)
-							.padding(.leading, 72)
+							.frame(height: ZagListLayout.separatorHeight)
+					.padding(.leading, ZagListLayout.separatorLeadingInset)
 					}
 				}
 		}
