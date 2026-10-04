@@ -689,7 +689,10 @@ struct SourceAppsView: View {
 			}
 		}
 
-		_persistedAppRoute = ""
+		// Do not clear a persisted route merely because this repository snapshot
+		// cannot resolve it yet. During cold launch SourcesViewModel can publish
+		// the repository before its app catalogue is fully populated; a later
+		// refresh/load will retry restoration.
 	}
 
 	private func _load() {
