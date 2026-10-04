@@ -97,6 +97,7 @@ struct SourcesView: View {
 	@State private var _showAllRepositories = false
 	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
 	@State private var _restoredRepository: AltSource?
+	@State private var _isRestoringSourcesRoute = false
 	@State private var _loadingAppsDotCount = 0
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
@@ -240,11 +241,17 @@ struct SourcesView: View {
 	}
 
 	private func _restoreSourcesRouteIfPossible() {
-		guard !_persistedSourcesRoute.isEmpty else { return }
+		guard !_persistedSourcesRoute.isEmpty else {
+			_isRestoringSourcesRoute = false
+			return
+		}
+
+		_isRestoringSourcesRoute = true
 
 		if _persistedSourcesRoute == "allRepositories" {
 			if !_sources.isEmpty {
 				_showAllRepositories = true
+				_isRestoringSourcesRoute = false
 			}
 			return
 		}
@@ -252,6 +259,7 @@ struct SourcesView: View {
 		let prefix = "repository|"
 		guard _persistedSourcesRoute.hasPrefix(prefix) else {
 			_persistedSourcesRoute = ""
+			_isRestoringSourcesRoute = false
 			return
 		}
 
@@ -262,6 +270,7 @@ struct SourcesView: View {
 			return
 		}
 		_restoredRepository = source
+		_isRestoringSourcesRoute = false
 	}
 
 	private func _clearAllRepositoriesRouteIfNeeded() {
@@ -272,7 +281,7 @@ struct SourcesView: View {
 	}
 
 	private func _clearRestoredRepositoryRouteIfNeeded() {
-		guard _restoredRepository == nil else { return }
+		guard !_isRestoringSourcesRoute, _restoredRepository == nil else { return }
 		if _persistedSourcesRoute.hasPrefix("repository|") {
 			_persistedSourcesRoute = ""
 		}
