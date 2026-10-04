@@ -95,7 +95,7 @@ struct SourcesView: View {
 	@AppStorage("zagStore.sources.customOrder") private var _customOrderData = ""
 	@State private var _isRearrangingRepositories = false
 	@State private var _showAllRepositories = false
-	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
+	@State private var _persistedSourcesRoute = ""
 	@State private var _loadingAppsDotCount = 0
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
