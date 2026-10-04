@@ -528,6 +528,14 @@ struct SourceAppsView: View {
 		.onChange(of: _sortOption) { newValue in
 			_sortOptionRawValue = newValue.rawValue
 		}
+		.onChange(of: _sources?.count) { _ in
+			_restoreAppRouteIfPossible()
+		}
+		.onChange(of: _selectedRoute) { route in
+			if route == nil {
+				_persistedAppRoute = ""
+			}
+		}
 		.navigationDestinationIfAvailable(item: $_selectedRoute) { route in
 			SourceAppsDetailView(source: route.source, app: route.app)
 		}
