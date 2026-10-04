@@ -44,9 +44,18 @@ final class ZsignHandler {
 			throw SigningFileHandlerError.missingCertifcate
 		}
 
+		let provisionURL = Storage.shared.getFile(.provision, from: cert)
+
+		// Zsign embeds the provisioning profile in the main app, but some
+		// applications expect every bundled app extension to contain one too.
+		// Reuse the selected profile for each .appex before recursively signing.
+		if let provisionURL {
+			try _embedProvisioningProfileInAppExtensions(provisionURL)
+		}
+
 		let _ = Zsign.sign(
 			appPath: _appUrl.relativePath,
-			provisionPath: Storage.shared.getFile(.provision, from: cert)?.path ?? "",
+			provisionPath: provisionURL?.path ?? "",
 			p12Path: Storage.shared.getFile(.certificate, from: cert)?.path ?? "",
 			p12Password: cert.password ?? "",
 			entitlementsPath: _options.appEntitlementsFile?.path ?? "",
@@ -57,6 +66,32 @@ final class ZsignHandler {
 		)
 	}
 	
+	private func _embedProvisioningProfileInAppExtensions(_ provisionURL: URL) throws {
+		guard let enumerator = FileManager.default.enumerator(
+			at: _appUrl,
+			includingPropertiesForKeys: nil,
+			options: [.skipsHiddenFiles]
+		) else {
+			return
+		}
+
+		for case let bundleURL as URL in enumerator
+		where bundleURL.pathExtension == "appex" {
+			let destinationURL = bundleURL.appendingPathComponent(
+				"embedded.mobileprovision"
+			)
+
+			try? FileManager.default.removeItem(at: destinationURL)
+			try FileManager.default.copyItem(
+				at: provisionURL,
+				to: destinationURL
+			)
+
+			// App extensions cannot contain nested app extensions.
+			enumerator.skipDescendants()
+		}
+	}
+
 	func adhocSign() async throws {
 		let _ = Zsign.sign(
 			appPath: _appUrl.relativePath,
