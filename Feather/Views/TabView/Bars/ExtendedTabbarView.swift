@@ -16,17 +16,6 @@ struct ExtendedTabbarView: View {
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
 	@AppStorage("zagStore.navigation.selectedTab") private var selectedTabRawValue = TabEnum.sources.rawValue
-
-	private var selectedTab: Binding<TabEnum> {
-		Binding(
-			get: {
-				TabEnum(rawValue: selectedTabRawValue) ?? .sources
-			},
-			set: { tab in
-				selectedTabRawValue = tab.rawValue
-			}
-		)
-	}
 	
 	@State private var _isAddingPresenting = false
 	
@@ -37,15 +26,15 @@ struct ExtendedTabbarView: View {
 	) private var _sources: FetchedResults<AltSource>
 		
 	var body: some View {
-		TabView(selection: selectedTab) {
+		TabView(selection: $selectedTabRawValue) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
-				Tab(tab.title, systemImage: tab.icon, value: tab) {
+				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
 					TabEnum.view(for: tab)
 				}
 			}
 			
 			ForEach(TabEnum.customizableTabs, id: \.hashValue) { tab in
-				Tab(tab.title, systemImage: tab.icon) {
+				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
 					TabEnum.view(for: tab)
 				}
 				.customizationID("tab.\(tab.rawValue)")
@@ -55,14 +44,14 @@ struct ExtendedTabbarView: View {
 			}
 			
 			TabSection("Sources") {
-				Tab(.localized("All Repositories"), systemImage: "globe") {
+				Tab(.localized("All Repositories"), systemImage: "globe", value: "sources.allRepositories") {
 					NavigationStack {
 						SourceAppsView(object: Array(_sources), viewModel: viewModel)
 					}
 				}
 				
 				ForEach(_sources, id: \.identifier) { source in
-					Tab {
+					Tab(value: "sources.repository.\(source.identifier ?? source.objectID.uriRepresentation().absoluteString)") {
 						NavigationStack {
 							SourceAppsView(object: [source], viewModel: viewModel)
 						}
