@@ -242,29 +242,52 @@ struct DownloadButtonView: View {
 				}
 				let expected = inspection.encryptedDigests.map { $0.lowercased() }
 				let hashesMatch = !expected.isEmpty && expected == actualDigests
-				let entries = _palZIPEntryNames(data)
-				let payloadEntries = entries.filter { $0.hasPrefix("Payload/") }
-				let appRoots = Set(payloadEntries.compactMap { name -> String? in
-					let parts = name.split(separator: "/")
-					guard parts.count >= 2, parts[1].hasSuffix(".app") else { return nil }
-					return String(parts[0]) + "/" + String(parts[1])
-				})
 				let sizeMB = Double(data.count) / 1_048_576.0
 				let expectedSize = inspection.compressedSize.map { $0 == Int64(data.count) } ?? false
+				let header = data.prefix(32)
+				let headerHex = header.map { String(format: "%02x", $0) }.joined(separator: " ")
+				let headerASCII = header.map { byte -> Character in
+					guard byte >= 0x20, byte <= 0x7e else { return "." }
+					return Character(UnicodeScalar(byte))
+				}
+				let entropy = _palEntropy(data)
+				let markers: [(String, [UInt8])] = [
+					("PK local header", [0x50, 0x4b, 0x03, 0x04]),
+					("PK central dir", [0x50, 0x4b, 0x01, 0x02]),
+					("Payload/", Array("Payload/".utf8)),
+					("Info.plist", Array("Info.plist".utf8)),
+					(".app/", Array(".app/".utf8)),
+					("Mach-O 64 LE", [0xcf, 0xfa, 0xed, 0xfe]),
+					("Mach-O 64 BE", [0xfe, 0xed, 0xfa, 0xcf]),
+					("FAT Mach-O", [0xca, 0xfe, 0xba, 0xbe])
+				]
+				var markerLines: [String] = []
+				for (name, bytes) in markers {
+					let offsets = _palOffsets(of: bytes, in: data, limit: 5)
+					let suffix = offsets.isEmpty
+						? "none"
+						: offsets.map(String.init).joined(separator: ", ")
+					markerLines.append("\(name): \(offsets.count >= 5 ? "5+ hits" : "\(offsets.count) hit(s)") | first offsets: \(suffix)")
+				}
+
 				let result = """
-				PAL IPA inspection complete.
+				PAL encrypted-asset probe complete.
 
 				Public ID: \(inspection.publicID)
 				Downloaded: \(String(format: "%.1f", sizeMB)) MiB
 				Manifest size match: \(inspection.compressedSize == nil ? "Unknown" : (expectedSize ? "Yes" : "NO"))
 				SHA-256 chunks: \(actualDigests.count)
 				Encrypted chunk hashes: \(hashesMatch ? "ALL MATCH" : "DO NOT MATCH")
-				ZIP entries: \(entries.count)
-				Payload entries: \(payloadEntries.count)
-				App roots: \(appRoots.sorted().joined(separator: ", "))
-				ZIP signature: \(data.starts(with: [0x50, 0x4b]) ? "Valid PK" : "Unexpected")
+				Entropy: \(String(format: "%.4f", entropy)) bits/byte
 
-				The IPA was inspected from a temporary download and deleted. It was not imported, signed, decrypted, or installed.
+				First 32 bytes:
+				\(headerHex)
+				ASCII: \(String(headerASCII))
+
+				Recognizable plaintext markers:
+				\(markerLines.joined(separator: "\n"))
+
+				The asset was inspected from a temporary authenticated download and deleted. It was not imported, signed, decrypted, extracted, or installed.
 				"""
 				await MainActor.run {
 					palInspectionInProgress = false
@@ -280,46 +303,39 @@ struct DownloadButtonView: View {
 		}
 	}
 
-	private func _palZIPEntryNames(_ data: Data) -> [String] {
-		guard data.count >= 22 else { return [] }
-		let signature: [UInt8] = [0x50, 0x4b, 0x05, 0x06]
-		let lowerBound = max(0, data.count - 65_557)
-		var eocd: Int?
-		if data.count >= 4 {
-			for index in stride(from: data.count - 4, through: lowerBound, by: -1) {
-				if Array(data[index..<(index + 4)]) == signature {
-					eocd = index
+	private func _palOffsets(of needle: [UInt8], in data: Data, limit: Int) -> [Int] {
+		guard !needle.isEmpty, data.count >= needle.count, limit > 0 else { return [] }
+		return data.withUnsafeBytes { rawBuffer in
+			let bytes = rawBuffer.bindMemory(to: UInt8.self)
+			var results: [Int] = []
+			var index = 0
+			while index <= bytes.count - needle.count && results.count < limit {
+				var matches = true
+				for needleIndex in needle.indices where bytes[index + needleIndex] != needle[needleIndex] {
+					matches = false
 					break
 				}
+				if matches {
+					results.append(index)
+					index += needle.count
+				} else {
+					index += 1
+				}
 			}
+			return results
 		}
-		guard let eocd, eocd + 20 <= data.count else { return [] }
-		func u16(_ offset: Int) -> Int {
-			Int(data[offset]) | (Int(data[offset + 1]) << 8)
+	}
+
+	private func _palEntropy(_ data: Data) -> Double {
+		guard !data.isEmpty else { return 0 }
+		var counts = [Int](repeating: 0, count: 256)
+		for byte in data { counts[Int(byte)] += 1 }
+		let total = Double(data.count)
+		return counts.reduce(0.0) { entropy, count in
+			guard count > 0 else { return entropy }
+			let probability = Double(count) / total
+			return entropy - probability * log2(probability)
 		}
-		func u32(_ offset: Int) -> Int {
-			Int(data[offset]) | (Int(data[offset + 1]) << 8) |
-			(Int(data[offset + 2]) << 16) | (Int(data[offset + 3]) << 24)
-		}
-		let entryCount = u16(eocd + 10)
-		var cursor = u32(eocd + 16)
-		var names: [String] = []
-		for _ in 0..<entryCount {
-			guard cursor + 46 <= data.count,
-				  data[cursor] == 0x50, data[cursor + 1] == 0x4b,
-				  data[cursor + 2] == 0x01, data[cursor + 3] == 0x02 else { break }
-			let nameLength = u16(cursor + 28)
-			let extraLength = u16(cursor + 30)
-			let commentLength = u16(cursor + 32)
-			let nameStart = cursor + 46
-			let nameEnd = nameStart + nameLength
-			guard nameEnd <= data.count else { break }
-			if let name = String(data: data[nameStart..<nameEnd], encoding: .utf8) {
-				names.append(name)
-			}
-			cursor = nameEnd + extraLength + commentLength
-		}
-		return names
 	}
 
 	private func _inspectPALPackage() {
