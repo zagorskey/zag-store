@@ -96,8 +96,6 @@ struct SourcesView: View {
 	@State private var _isRearrangingRepositories = false
 	@State private var _showAllRepositories = false
 	@AppStorage("zagStore.navigation.sourcesRoute") private var _persistedSourcesRoute = ""
-	@State private var _restoredRepository: AltSource?
-	@State private var _isRestoringSourcesRoute = false
 	@State private var _loadingAppsDotCount = 0
 	@State private var _selectedSearchRoute:
 		SourceAppsView.SourceAppRoute?
@@ -240,60 +238,9 @@ struct SourcesView: View {
 		_persistedSourcesRoute = "repository|" + _sourceKey(source)
 	}
 
-	private func _scheduleSourcesRouteRestoration() {
-		guard !_persistedSourcesRoute.isEmpty else { return }
-
-		// The remembered tab and its navigation host are reconstructed in the
-		// same launch pass. Activating a destination synchronously here can be
-		// discarded before the host is attached, so restore on the next run loop.
-		DispatchQueue.main.async {
-			_restoreSourcesRouteIfPossible()
-		}
-	}
-
-	private func _restoreSourcesRouteIfPossible() {
-		guard !_persistedSourcesRoute.isEmpty else {
-			_isRestoringSourcesRoute = false
-			return
-		}
-
-		_isRestoringSourcesRoute = true
-
-		if _persistedSourcesRoute == "allRepositories" {
-			if !_sources.isEmpty {
-				_showAllRepositories = true
-				_isRestoringSourcesRoute = false
-			}
-			return
-		}
-
-		let prefix = "repository|"
-		guard _persistedSourcesRoute.hasPrefix(prefix) else {
-			_persistedSourcesRoute = ""
-			_isRestoringSourcesRoute = false
-			return
-		}
-
-		let key = String(_persistedSourcesRoute.dropFirst(prefix.count))
-		guard let source = _sources.first(where: { _sourceKey($0) == key }) else {
-			// The source may not have arrived from Core Data yet. Leave the
-			// persisted route intact and retry when the fetched results change.
-			return
-		}
-		_restoredRepository = source
-		_isRestoringSourcesRoute = false
-	}
-
 	private func _clearAllRepositoriesRouteIfNeeded() {
 		guard !_showAllRepositories else { return }
 		if _persistedSourcesRoute == "allRepositories" {
-			_persistedSourcesRoute = ""
-		}
-	}
-
-	private func _clearRestoredRepositoryRouteIfNeeded() {
-		guard !_isRestoringSourcesRoute, _restoredRepository == nil else { return }
-		if _persistedSourcesRoute.hasPrefix("repository|") {
 			_persistedSourcesRoute = ""
 		}
 	}
@@ -396,45 +343,11 @@ struct SourcesView: View {
 		}
 		.onAppear {
 			_probeSystemDictation()
-			_scheduleSourcesRouteRestoration()
-		}
-		.onChange(of: _sources.map(_sourceKey)) { _ in
-			_scheduleSourcesRouteRestoration()
 		}
 		.onChange(of: _showAllRepositories) { isPresented in
 			if !isPresented {
 				_clearAllRepositoriesRouteIfNeeded()
 			}
-		}
-		.onChange(of: _restoredRepository) { source in
-			if source == nil {
-				_clearRestoredRepositoryRouteIfNeeded()
-			}
-		}
-		.background {
-			NavigationLink(
-				isActive: Binding(
-					get: { _restoredRepository != nil },
-					set: { isActive in
-						if !isActive {
-							_restoredRepository = nil
-						}
-					}
-				)
-			) {
-				if let source = _restoredRepository {
-					SourceAppsView(
-						object: [source],
-						viewModel: viewModel
-					)
-				} else {
-					EmptyView()
-				}
-			} label: {
-				EmptyView()
-			}
-			.frame(width: 0, height: 0)
-			.opacity(0)
 		}
 		.navigationDestinationIfAvailable(
 			item: $_selectedSearchRoute
@@ -951,7 +864,24 @@ struct SourcesView: View {
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
 					.background {
-						NavigationLink {
+						NavigationLink(
+							isActive: Binding(
+								get: {
+									_persistedSourcesRoute ==
+										"repository|" + _sourceKey(source)
+								},
+								set: { isActive in
+									if isActive {
+										_persistRepositoryRoute(source)
+									} else if
+										_persistedSourcesRoute ==
+											"repository|" + _sourceKey(source)
+									{
+										_persistedSourcesRoute = ""
+									}
+								}
+							)
+						) {
 							SourceAppsView(
 								object: [
 									source
@@ -959,9 +889,6 @@ struct SourcesView: View {
 								viewModel:
 									viewModel
 							)
-							.onAppear {
-								_persistRepositoryRoute(source)
-							}
 						} label: {
 							EmptyView()
 						}
@@ -1027,7 +954,24 @@ struct SourcesView: View {
 					)
 					.listRowSeparator(.hidden)
 					.background {
-						NavigationLink {
+						NavigationLink(
+							isActive: Binding(
+								get: {
+									_persistedSourcesRoute ==
+										"repository|" + _sourceKey(source)
+								},
+								set: { isActive in
+									if isActive {
+										_persistRepositoryRoute(source)
+									} else if
+										_persistedSourcesRoute ==
+											"repository|" + _sourceKey(source)
+									{
+										_persistedSourcesRoute = ""
+									}
+								}
+							)
+						) {
 							SourceAppsView(
 								object: [
 									source
@@ -1035,9 +979,6 @@ struct SourcesView: View {
 								viewModel:
 									viewModel
 							)
-							.onAppear {
-								_persistRepositoryRoute(source)
-							}
 						} label: {
 							EmptyView()
 						}
