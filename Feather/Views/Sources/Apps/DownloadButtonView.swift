@@ -281,6 +281,19 @@ struct DownloadButtonView: View {
 					if !extraKeys.isEmpty {
 						lines.append("Other metadata: \(extraKeys.joined(separator: ", "))")
 					}
+					if let details = raw["variantDetails"] {
+						if JSONSerialization.isValidJSONObject(details),
+						   let detailsData = try? JSONSerialization.data(
+							withJSONObject: details,
+							options: [.prettyPrinted, .sortedKeys]
+						   ),
+						   let detailsText = String(data: detailsData, encoding: .utf8) {
+							lines.append("Variant details:")
+							lines.append(detailsText)
+						} else {
+							lines.append("Variant details: \(String(describing: details))")
+						}
+					}
 				}
 
 				lines.append("")
