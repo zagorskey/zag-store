@@ -79,6 +79,7 @@ final class ZagRPPairingCore: ObservableObject {
 		let executable: String
 		let minimumOSVersion: String
 		let applicationType: String
+		let signerIdentity: String
 	}
 
 	@Published private(set) var installedBundleIDs: Set<String> = []
@@ -312,7 +313,8 @@ final class ZagRPPairingCore: ObservableObject {
 				name: fields.indices.contains(3) ? fields[3] : "",
 				executable: fields.indices.contains(4) ? fields[4] : "",
 				minimumOSVersion: fields.indices.contains(5) ? fields[5] : "",
-				applicationType: fields.indices.contains(6) ? fields[6] : ""
+				applicationType: fields.indices.contains(6) ? fields[6] : "",
+				signerIdentity: fields.indices.contains(7) ? fields[7] : ""
 			)
 			pendingInstalledApps[bundleID] = info
 		case 404:

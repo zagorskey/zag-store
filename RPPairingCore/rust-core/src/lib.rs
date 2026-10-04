@@ -580,10 +580,14 @@ async fn run_installed_apps(
                     .and_then(|values| values.get("ApplicationType"))
                     .and_then(|value| value.as_string())
                     .unwrap_or("");
+                let signer_identity = dictionary
+                    .and_then(|values| values.get("SignerIdentity"))
+                    .and_then(|value| value.as_string())
+                    .unwrap_or("");
 
                 // 402 payload:
                 // bundleID<TAB>shortVersion<TAB>buildVersion<TAB>name<TAB>
-                // executable<TAB>minimumOS<TAB>applicationType.
+                // executable<TAB>minimumOS<TAB>applicationType<TAB>signerIdentity.
                 //
                 // Keep the callback ABI unchanged. The Swift receiver accepts
                 // missing trailing fields so older Rust cores remain harmless.
@@ -591,7 +595,7 @@ async fn run_installed_apps(
                     callback,
                     402,
                     format!(
-                        "{bundle_id}\t{version}\t{build}\t{name}\t{executable}\t{minimum_os}\t{application_type}"
+                        "{bundle_id}\t{version}\t{build}\t{name}\t{executable}\t{minimum_os}\t{application_type}\t{signer_identity}"
                     ),
                 );
             }
