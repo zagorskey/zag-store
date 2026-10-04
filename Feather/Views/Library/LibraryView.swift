@@ -628,7 +628,6 @@ struct LibraryView: View {
 				}
 				.listRowBackground(Color.clear)
 			}
-			.modifier(ZagNativeLibrarySectionSpacing())
 			.safeAreaInset(edge: .bottom) {
 				Color.clear.frame(height: 48)
 			}
@@ -3419,14 +3418,4 @@ private enum ZagUpdateTransactionError: LocalizedError {
 	}
 }
 
-private struct ZagNativeLibrarySectionSpacing: ViewModifier {
-	@ViewBuilder
-	func body(content: Content) -> some View {
-		if #available(iOS 17.0, *) {
-			content.listSectionSpacing(.default)
-		} else {
-			content
-		}
-	}
-}
 
