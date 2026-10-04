@@ -214,8 +214,9 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		// Rows draw their own one-physical-pixel separator below.
 		tableView.separatorStyle = .none
-		tableView.contentInset.bottom = 48
-		tableView.scrollIndicatorInsets.bottom = 48
+		let footer = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 48))
+		footer.backgroundColor = .clear
+		tableView.tableFooterView = footer
 		
 		if #available(iOS 17, *) {
 			tableView.allowsSelection = true
