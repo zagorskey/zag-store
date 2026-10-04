@@ -11,7 +11,6 @@ import AltSourceKit
 import NimbleViews
 import CoreData
 import IDeviceSwift
-import CryptoKit
 
 struct DownloadButtonView: View {
 	let app: ASRepository.App
@@ -30,9 +29,7 @@ struct DownloadButtonView: View {
 	@State private var transactionError: String?
 	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
-	@State private var palInspectionInProgress = false
-	@State private var palInspectionResult: String?
-	@State private var palAssetInspection: PALAssetInspection?
+	@State private var isPALInfoPresented = false
 
 	private var pillBackground: Color {
 		colorScheme == .dark
@@ -68,15 +65,11 @@ struct DownloadButtonView: View {
 						_indeterminateRing()
 					}
 				} else if _isPALApp {
-					if palInspectionInProgress {
-						ProgressView()
-							.frame(width: 88, height: 34, alignment: .center)
-					} else {
-						ZagActionPill(title: "PAL") {
-							_inspectPALPackage()
-						}
-						.accessibilityLabel(Text("Inspect AltStore PAL package for \(app.currentName)"))
+					ZagActionPill(title: "PAL") {
+						UIImpactFeedbackGenerator(style: .light).impactOccurred()
+						isPALInfoPresented = true
 					}
+					.accessibilityLabel(Text("About AltStore PAL distribution for \(app.currentName)"))
 				} else if let bundleID = app.id,
 						  installedBundleID == bundleID {
 					ZagActionPill(title: .localized("Open")) {
@@ -159,20 +152,10 @@ struct DownloadButtonView: View {
 		} message: {
 			Text(transactionError ?? "")
 		}
-		.alert("PAL Package", isPresented: Binding(
-			get: { palInspectionResult != nil },
-			set: { if !$0 { palInspectionResult = nil } }
-		)) {
-			if palAssetInspection != nil {
-				Button("Inspect IPA") {
-					let inspection = palAssetInspection
-					palInspectionResult = nil
-					if let inspection { _inspectPALAsset(inspection) }
-				}
-			}
+		.alert("AltStore PAL App", isPresented: $isPALInfoPresented) {
 			Button(.localized("OK"), role: .cancel) {}
 		} message: {
-			Text(palInspectionResult ?? "")
+			Text("This app uses Apple's alternative marketplace distribution system and can't be installed directly by Zag Store. You can install it through its supported PAL marketplace, if available in your region.")
 		}
 		.onChange(of: downloadManager.downloads.description) { _ in
 			setupObserver()
@@ -183,285 +166,6 @@ struct DownloadButtonView: View {
 			}
 		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
-	}
-
-	private struct PALAssetInspection {
-		let url: URL
-		let publicID: String
-		let compressedSize: Int64?
-		let chunkSize: Int
-		let encryptedDigests: [String]
-	}
-
-	private struct PALManifest: Decodable {
-		struct Variant: Decodable {
-			struct InstallTarget: Decodable {
-				let device: String?
-				let os: String?
-			}
-
-			let publicId: String?
-			let assetPath: String?
-			let installTargets: [InstallTarget]?
-			let alternativeDistributionKeyBlob: String?
-			let sha256: String?
-			let size: Int64?
-		}
-
-		let distributionPackageRevision: Int?
-		let appleItemId: String?
-		let bundleId: String?
-		let shortVersionString: String?
-		let bundleVersion: String?
-		let appleVersionId: String?
-		let platforms: [String]?
-		let minimumSystemVersions: [String: String]?
-		let variants: [Variant]?
-	}
-
-	private func _inspectPALAsset(_ inspection: PALAssetInspection) {
-		guard !palInspectionInProgress else { return }
-		palInspectionInProgress = true
-		Task {
-			do {
-				let (temporaryURL, response) = try await URLSession.shared.download(from: inspection.url)
-				defer { try? FileManager.default.removeItem(at: temporaryURL) }
-				if let http = response as? HTTPURLResponse,
-				   !(200...299).contains(http.statusCode) {
-					throw URLError(.badServerResponse)
-				}
-				let data = try Data(contentsOf: temporaryURL, options: .mappedIfSafe)
-				let chunkSize = max(inspection.chunkSize, 1)
-				var actualDigests: [String] = []
-				var offset = 0
-				while offset < data.count {
-					let end = min(offset + chunkSize, data.count)
-					let digest = SHA256.hash(data: data[offset..<end])
-					actualDigests.append(digest.map { String(format: "%02x", $0) }.joined())
-					offset = end
-				}
-				let expected = inspection.encryptedDigests.map { $0.lowercased() }
-				let hashesMatch = !expected.isEmpty && expected == actualDigests
-				let sizeMB = Double(data.count) / 1_048_576.0
-				let expectedSize = inspection.compressedSize.map { $0 == Int64(data.count) } ?? false
-				let header = data.prefix(32)
-				let headerHex = header.map { String(format: "%02x", $0) }.joined(separator: " ")
-				let headerASCII = header.map { byte -> Character in
-					guard byte >= 0x20, byte <= 0x7e else { return "." }
-					return Character(UnicodeScalar(byte))
-				}
-				let entropy = _palEntropy(data)
-				let markers: [(String, [UInt8])] = [
-					("PK local header", [0x50, 0x4b, 0x03, 0x04]),
-					("PK central dir", [0x50, 0x4b, 0x01, 0x02]),
-					("Payload/", Array("Payload/".utf8)),
-					("Info.plist", Array("Info.plist".utf8)),
-					(".app/", Array(".app/".utf8)),
-					("Mach-O 64 LE", [0xcf, 0xfa, 0xed, 0xfe]),
-					("Mach-O 64 BE", [0xfe, 0xed, 0xfa, 0xcf]),
-					("FAT Mach-O", [0xca, 0xfe, 0xba, 0xbe])
-				]
-				var markerLines: [String] = []
-				for (name, bytes) in markers {
-					let offsets = _palOffsets(of: bytes, in: data, limit: 5)
-					let suffix = offsets.isEmpty
-						? "none"
-						: offsets.map(String.init).joined(separator: ", ")
-					markerLines.append("\(name): \(offsets.count >= 5 ? "5+ hits" : "\(offsets.count) hit(s)") | first offsets: \(suffix)")
-				}
-
-				let result = """
-				PAL encrypted-asset probe complete.
-
-				Public ID: \(inspection.publicID)
-				Downloaded: \(String(format: "%.1f", sizeMB)) MiB
-				Manifest size match: \(inspection.compressedSize == nil ? "Unknown" : (expectedSize ? "Yes" : "NO"))
-				SHA-256 chunks: \(actualDigests.count)
-				Encrypted chunk hashes: \(hashesMatch ? "ALL MATCH" : "DO NOT MATCH")
-				Entropy: \(String(format: "%.4f", entropy)) bits/byte
-
-				First 32 bytes:
-				\(headerHex)
-				ASCII: \(String(headerASCII))
-
-				Recognizable plaintext markers:
-				\(markerLines.joined(separator: "\n"))
-
-				The asset was inspected from a temporary authenticated download and deleted. It was not imported, signed, decrypted, extracted, or installed.
-				"""
-				await MainActor.run {
-					palInspectionInProgress = false
-					palInspectionResult = result
-					palAssetInspection = nil
-				}
-			} catch {
-				await MainActor.run {
-					palInspectionInProgress = false
-					transactionError = "PAL IPA inspection failed: \(error.localizedDescription)"
-				}
-			}
-		}
-	}
-
-	private func _palOffsets(of needle: [UInt8], in data: Data, limit: Int) -> [Int] {
-		guard !needle.isEmpty, data.count >= needle.count, limit > 0 else { return [] }
-		return data.withUnsafeBytes { rawBuffer in
-			let bytes = rawBuffer.bindMemory(to: UInt8.self)
-			var results: [Int] = []
-			var index = 0
-			while index <= bytes.count - needle.count && results.count < limit {
-				var matches = true
-				for needleIndex in needle.indices where bytes[index + needleIndex] != needle[needleIndex] {
-					matches = false
-					break
-				}
-				if matches {
-					results.append(index)
-					index += needle.count
-				} else {
-					index += 1
-				}
-			}
-			return results
-		}
-	}
-
-	private func _palEntropy(_ data: Data) -> Double {
-		guard !data.isEmpty else { return 0 }
-		var counts = [Int](repeating: 0, count: 256)
-		for byte in data { counts[Int(byte)] += 1 }
-		let total = Double(data.count)
-		return counts.reduce(0.0) { entropy, count in
-			guard count > 0 else { return entropy }
-			let probability = Double(count) / total
-			return entropy - probability * log2(probability)
-		}
-	}
-
-	private func _inspectPALPackage() {
-		guard !palInspectionInProgress else { return }
-		guard let manifestURL = app.currentDownloadUrl else {
-			transactionError = .localized("This PAL app does not provide an Alternative Distribution Package manifest URL.")
-			return
-		}
-
-		palInspectionInProgress = true
-		Task {
-			do {
-				let (data, response) = try await URLSession.shared.data(from: manifestURL)
-				if let http = response as? HTTPURLResponse,
-				   !(200...299).contains(http.statusCode) {
-					throw URLError(.badServerResponse)
-				}
-
-				let manifest = try JSONDecoder().decode(PALManifest.self, from: data)
-				let rawObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-				let rawVariants = rawObject?["variants"] as? [[String: Any]] ?? []
-				let deviceModel = UIDevice.current.zagPALHardwareIdentifier
-				let variants = manifest.variants ?? []
-				let matchingIndices = variants.indices.filter { index in
-					guard let targets = variants[index].installTargets else { return false }
-					return targets.contains { $0.device == deviceModel }
-				}
-
-				let platformText = (manifest.platforms ?? []).joined(separator: ", ")
-				let minimumOS = manifest.minimumSystemVersions?["ios"] ?? "Unknown"
-				let version = manifest.shortVersionString ?? app.currentVersion ?? "Unknown"
-				let build = manifest.bundleVersion ?? app.currentAppVersion?.build ?? "Unknown"
-				let marketplaceID = app.marketplaceID ?? manifest.appleItemId ?? "Unknown"
-
-				var lines = [
-					"App: \(app.currentName)",
-					"Bundle ID: \(manifest.bundleId ?? app.id ?? "Unknown")",
-					"Marketplace ID: \(marketplaceID)",
-					"Version: \(version) (\(build))",
-					"Platform: \(platformText.isEmpty ? "Unknown" : platformText)",
-					"Minimum iOS: \(minimumOS)",
-					"Device: \(deviceModel)",
-					"Variants: \(variants.count)",
-					"Matching device variants: \(matchingIndices.count)"
-				]
-
-				for (position, index) in matchingIndices.enumerated() {
-					let variant = variants[index]
-					let raw = rawVariants.indices.contains(index) ? rawVariants[index] : [:]
-					let assetPath = variant.assetPath ?? (raw["assetPath"] as? String) ?? "Unknown"
-					let resolvedAssetURL = assetPath == "Unknown"
-						? "Unknown"
-						: (URL(string: assetPath, relativeTo: manifestURL)?.absoluteURL.absoluteString ?? assetPath)
-					let targets = (variant.installTargets ?? []).map {
-						[$0.device, $0.os].compactMap { $0 }.joined(separator: " / ")
-					}.joined(separator: ", ")
-					let keyBlobPresent =
-						variant.alternativeDistributionKeyBlob != nil ||
-						raw["alternativeDistributionKeyBlob"] != nil
-					let hash =
-						variant.sha256 ??
-						(raw["sha256"] as? String) ??
-						(raw["hash"] as? String)
-					let size =
-						variant.size.map(String.init) ??
-						(raw["size"] as? NSNumber)?.stringValue
-
-					lines.append("")
-					lines.append("Matching Variant \(position + 1)")
-					lines.append("Public ID: \(variant.publicId ?? (raw["publicId"] as? String) ?? "Unknown")")
-					lines.append("Asset path: \(assetPath)")
-					lines.append("Asset URL: \(resolvedAssetURL)")
-					lines.append("Targets: \(targets.isEmpty ? "Unknown" : targets)")
-					lines.append("Key blob: \(keyBlobPresent ? "Present" : "Not exposed")")
-					if let hash { lines.append("Hash: \(hash)") }
-					if let size { lines.append("Size: \(size) bytes") }
-					let knownKeys = Set(["publicId", "assetPath", "installTargets", "alternativeDistributionKeyBlob", "sha256", "hash", "size"])
-					let extraKeys = raw.keys.filter { !knownKeys.contains($0) }.sorted()
-					if !extraKeys.isEmpty {
-						lines.append("Other metadata: \(extraKeys.joined(separator: ", "))")
-					}
-					if let details = raw["variantDetails"] as? [String: Any] {
-						let compressedSize = (details["compressedSize"] as? NSNumber)?.int64Value
-						let hashes = details["hashes"] as? [[String: Any]] ?? []
-						let sha256 = hashes.first { ($0["algorithm"] as? String)?.lowercased() == "sha256" }
-						let chunkSize = (sha256?["chunkSize"] as? NSNumber)?.intValue ?? 0
-						let encrypted = sha256?["encryptedChunkDigests"] as? [String] ?? []
-						let unencrypted = sha256?["unencryptedChunkDigests"] as? [String] ?? []
-						if let compressedSize {
-							lines.append("Encrypted IPA: \(String(format: "%.1f", Double(compressedSize) / 1_048_576.0)) MiB")
-						}
-						if chunkSize > 0 {
-							lines.append("Chunk size: \(String(format: "%.1f", Double(chunkSize) / 1_048_576.0)) MiB")
-						}
-						lines.append("Encrypted hashes: \(encrypted.count)")
-						lines.append("Plaintext hashes: \(unencrypted.count)")
-						let supportsIOS27 = (variant.installTargets ?? []).contains {
-							$0.device == deviceModel && $0.os == "27"
-						}
-						if supportsIOS27, let url = URL(string: resolvedAssetURL), chunkSize > 0, !encrypted.isEmpty {
-							palAssetInspection = PALAssetInspection(
-								url: url,
-								publicID: variant.publicId ?? "Unknown",
-								compressedSize: compressedSize,
-								chunkSize: chunkSize,
-								encryptedDigests: encrypted
-							)
-							lines.append("iOS 27 asset: Ready for safe IPA inspection")
-						}
-					}
-				}
-
-				lines.append("")
-				lines.append("Inspection only — no PAL asset was installed or passed to Zag Store's IPA signing path.")
-
-				await MainActor.run {
-					palInspectionInProgress = false
-					palInspectionResult = lines.joined(separator: "\n")
-				}
-			} catch {
-				await MainActor.run {
-					palInspectionInProgress = false
-					transactionError = "PAL manifest inspection failed: \(error.localizedDescription)"
-				}
-			}
-		}
 	}
 
 	private var _isPALApp: Bool {
@@ -824,9 +528,7 @@ struct DownloadButtonView: View {
 
 	private func _startGetAndInstall() {
 		guard !_isPALApp else {
-			transactionError = .localized(
-				"This app uses AltStore PAL's Alternative Distribution Package format. Zag Store can read this source, but PAL installation support is still being implemented."
-			)
+			isPALInfoPresented = true
 			return
 		}
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
