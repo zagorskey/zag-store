@@ -565,13 +565,43 @@ pub unsafe extern "C" fn zag_house_arrest_list_documents(
                         .map_err(|error| format!("VendDocuments failed for {resolved}: {error}"))?;
                     emit(callback, 604, format!("VendDocuments succeeded for {resolved}"));
 
-                    let entries = afc
-                        .list_dir("/Documents")
-                        .await
-                        .map_err(|error| format!("Listing /Documents failed: {error}"))?
-                        .into_iter()
-                        .filter(|entry| entry != "." && entry != "..")
-                        .collect::<Vec<_>>();
+                    let mut pending = vec![("/Documents".to_string(), String::new(), 0usize)];
+                    let mut entries = Vec::new();
+                    const MAX_DEPTH: usize = 6;
+                    const MAX_ENTRIES: usize = 500;
+
+                    while let Some((directory, relative_prefix, depth)) = pending.pop() {
+                        let children = afc
+                            .list_dir(directory.clone())
+                            .await
+                            .map_err(|error| format!("Listing {directory} failed: {error}"))?;
+
+                        for child in children.into_iter().filter(|entry| entry != "." && entry != "..") {
+                            if entries.len() >= MAX_ENTRIES { break; }
+                            let full_path = format!("{directory}/{child}");
+                            let relative_path = if relative_prefix.is_empty() {
+                                child.clone()
+                            } else {
+                                format!("{relative_prefix}/{child}")
+                            };
+                            let info = afc
+                                .get_file_info(full_path.clone())
+                                .await
+                                .map_err(|error| format!("Reading metadata for {full_path} failed: {error}"))?;
+                            let is_directory = info.st_ifmt == "S_IFDIR";
+                            entries.push(if is_directory {
+                                format!("{relative_path}/")
+                            } else {
+                                relative_path.clone()
+                            });
+                            if is_directory && depth < MAX_DEPTH {
+                                pending.push((full_path, relative_path, depth + 1));
+                            }
+                        }
+                        if entries.len() >= MAX_ENTRIES { break; }
+                    }
+
+                    entries.sort();
                     emit(callback, 605, entries.join("\t"));
                     emit(callback, 606, format!("{} entries", entries.len()));
                     Ok(())
