@@ -751,6 +751,27 @@ private struct ZagLoggingSettingsView: View {
 			}
 
 			Section {
+				if let keys = pairingCore.installedAppsDebugKeys, !keys.isEmpty {
+					Text(keys)
+						.font(.system(.caption, design: .monospaced))
+						.textSelection(.enabled)
+
+					Button {
+						UIPasteboard.general.string = keys
+					} label: {
+						Label("Copy Metadata Keys", systemImage: "doc.on.doc")
+					}
+				} else {
+					Text("Refresh the Installed apps inventory first.")
+						.foregroundStyle(.secondary)
+				}
+			} header: {
+				Text("Installed App Metadata Keys")
+			} footer: {
+				Text("Temporary diagnostic showing the InstallationProxy metadata keys returned by iOS.")
+			}
+
+			Section {
 				Button {
 					_generateDiagnosticReport()
 				} label: {
