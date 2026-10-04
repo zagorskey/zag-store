@@ -214,6 +214,8 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		// Rows draw their own one-physical-pixel separator below.
 		tableView.separatorStyle = .none
+		tableView.contentInset.bottom = 48
+		tableView.scrollIndicatorInsets.bottom = 48
 		
 		if #available(iOS 17, *) {
 			tableView.allowsSelection = true
@@ -421,12 +423,14 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		cell.contentConfiguration = UIHostingConfiguration {
 			VStack(spacing: 0) {
 				SourceAppsCellView(source: entry.source, app: entry.app)
-					.frame(minHeight: 86)
+					.frame(height: 84)
 
-				Rectangle()
-					.fill(Color(uiColor: .separator))
-					.frame(height: 1.0 / UIScreen.main.scale)
-					.padding(.leading, 72)
+				if indexPath.row < tableView.numberOfRows(inSection: indexPath.section) - 1 {
+					Rectangle()
+						.fill(Color(uiColor: .separator))
+						.frame(height: 1.0 / UIScreen.main.scale)
+						.padding(.leading, 72)
+				}
 			}
 		}
 		.background(.clear)
