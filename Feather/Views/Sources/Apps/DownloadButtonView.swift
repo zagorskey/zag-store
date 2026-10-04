@@ -45,7 +45,7 @@ struct DownloadButtonView: View {
 	}
 
 	var body: some View {
-		VStack(spacing: 3) {
+		ZStack {
 			ZStack {
 				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
 					_progressRing(progress: downloadProgress, showsStop: downloadProgress < 0.75)
@@ -136,18 +136,10 @@ struct DownloadButtonView: View {
 					.lineLimit(1)
 					.minimumScaleFactor(0.75)
 					.frame(width: 88, height: 11)
-					.padding(.top, 1)
+					.offset(y: 24)
 			}
 		}
-		.frame(height: 80, alignment: .top)
-		.overlay(alignment: .top) {
-			// App Store geometry: the action pill itself stays on the row's
-			// vertical centreline. Any caption hangs below it without shifting
-			// the pill upward.
-			Color.clear
-				.frame(width: 1, height: 1)
-		}
-		.padding(.top, 23)
+		.frame(width: 88, height: 80, alignment: .center)
 		.onAppear(perform: setupObserver)
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
