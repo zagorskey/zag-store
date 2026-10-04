@@ -400,11 +400,30 @@ struct SourcesView: View {
 				_clearRestoredRepositoryRouteIfNeeded()
 			}
 		}
-		.navigationDestinationIfAvailable(item: $_restoredRepository) { source in
-			SourceAppsView(
-				object: [source],
-				viewModel: viewModel
-			)
+		.background {
+			NavigationLink(
+				isActive: Binding(
+					get: { _restoredRepository != nil },
+					set: { isActive in
+						if !isActive {
+							_restoredRepository = nil
+						}
+					}
+				)
+			) {
+				if let source = _restoredRepository {
+					SourceAppsView(
+						object: [source],
+						viewModel: viewModel
+					)
+				} else {
+					EmptyView()
+				}
+			} label: {
+				EmptyView()
+			}
+			.frame(width: 0, height: 0)
+			.opacity(0)
 		}
 		.navigationDestinationIfAvailable(
 			item: $_selectedSearchRoute
