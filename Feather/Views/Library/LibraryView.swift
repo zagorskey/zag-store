@@ -411,8 +411,9 @@ struct LibraryView: View {
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 
-				ForEach(_filteredInstalledApps, id: \.uuid) { app in
-					libraryRow(app, managedInstalled: true, showsSeparator: app.uuid != _filteredInstalledApps.last?.uuid)
+				ForEach(Array(_filteredInstalledApps.enumerated()), id: \.element.uuid) { index, app in
+					libraryRow(app, managedInstalled: true, showsSeparator: index < _filteredInstalledApps.count - 1)
+						.listRowSeparator(.hidden)
 				}
 			}
 		}
@@ -433,8 +434,9 @@ struct LibraryView: View {
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 
-				ForEach(_filteredSignedOnlyApps, id: \.uuid) { app in
-					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: app.uuid != _filteredSignedOnlyApps.last?.uuid)
+				ForEach(Array(_filteredSignedOnlyApps.enumerated()), id: \.element.uuid) { index, app in
+					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: index < _filteredSignedOnlyApps.count - 1)
+						.listRowSeparator(.hidden)
 				}
 			}
 		}
@@ -455,8 +457,9 @@ struct LibraryView: View {
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 
-				ForEach(_filteredImportedApps, id: \.uuid) { app in
-					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: app.uuid != _filteredImportedApps.last?.uuid)
+				ForEach(Array(_filteredImportedApps.enumerated()), id: \.element.uuid) { index, app in
+					libraryRow(app, managedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""), showsSeparator: index < _filteredImportedApps.count - 1)
+						.listRowSeparator(.hidden)
 				}
 			}
 		}
