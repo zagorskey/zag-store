@@ -431,6 +431,7 @@ struct LibraryView: View {
 						ForEach(_filteredInstalledApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
+								showsSeparator: app.uuid != _filteredInstalledApps.last?.uuid,
 								isManagedInstalled: true,
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
@@ -478,6 +479,7 @@ struct LibraryView: View {
 
 
 								app: app,
+								showsSeparator: app.uuid != _filteredSignedOnlyApps.last?.uuid,
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
@@ -570,6 +572,7 @@ struct LibraryView: View {
 
 
 								app: app,
+								showsSeparator: app.uuid != _filteredImportedApps.last?.uuid,
 								isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
 								isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 								onDeleteApp: _deleteStoredApp,
@@ -624,6 +627,9 @@ struct LibraryView: View {
 
 				}
 				.listRowBackground(Color.clear)
+			}
+			.safeAreaInset(edge: .bottom) {
+				Color.clear.frame(height: 48)
 			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
