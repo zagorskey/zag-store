@@ -404,7 +404,6 @@ struct SourceAppsView: View {
 	
 	@State private var _sortOption: SortOption = .default
 	@State private var _selectedRoute: SourceAppRoute?
-	@State private var _isVisible = false
 	
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
@@ -517,22 +516,14 @@ struct SourceAppsView: View {
 			}
 		}
 		.onAppear {
-			_isVisible = true
 			_probeSystemDictation()
 
-			// A cold launch may already have a validated repository snapshot from
-			// disk while the network refresh is still running. Do not gate the
-			// repository page on isFinished; load as soon as every requested source
-			// is available in the published cache.
 			if !hasLoadedOnce, _requestedSourcesAreAvailable {
 				_load()
 				hasLoadedOnce = true
 			}
 
 			_sortOption = SortOption(rawValue: _sortOptionRawValue) ?? .default
-		}
-		.onDisappear {
-			_isVisible = false
 		}
 		.onChange(of: viewModel.isFinished) { _ in
 			_load()
