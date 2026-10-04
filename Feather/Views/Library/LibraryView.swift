@@ -102,6 +102,9 @@ struct LibraryView: View {
 	@State private var _pendingRemoveApp: AnyApp?
 	@AppStorage("zagStore.managedInstalledBundleIDs")
 	private var _managedInstalledBundleIDsData: Data = Data()
+	@AppStorage("zagStore.apps.installedCollapsed") private var _installedCollapsed = false
+	@AppStorage("zagStore.apps.signedCollapsed") private var _signedCollapsed = false
+	@AppStorage("zagStore.apps.importedCollapsed") private var _importedCollapsed = false
 
 
 
@@ -417,10 +420,19 @@ struct LibraryView: View {
 					if !_filteredInstalledApps.isEmpty,
 					   _selectedScope == .all || _selectedScope == .installed {
 						Section {
-							ZagLibraryHeader(title: .localized("Installed"), count: _filteredInstalledApps.count)
+							ZagLibraryHeader(
+								title: .localized("Installed"),
+								count: _filteredInstalledApps.count,
+								isCollapsed: _installedCollapsed
+							) {
+								withAnimation(.easeInOut(duration: 0.28)) {
+									_installedCollapsed.toggle()
+								}
+							}
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
 
+							if !_installedCollapsed {
 							ForEach(Array(_filteredInstalledApps.enumerated()), id: \.element.uuid) { index, app in
 								LibraryCellView(
 									app: app,
@@ -439,6 +451,7 @@ struct LibraryView: View {
 								.listRowSeparator(.hidden)
 								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
 							}
+							}
 						}
 					}
 
@@ -451,10 +464,19 @@ struct LibraryView: View {
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
 
-							ZagLibraryHeader(title: .localized("Signed"), count: _filteredSignedOnlyApps.count)
+							ZagLibraryHeader(
+								title: .localized("Signed"),
+								count: _filteredSignedOnlyApps.count,
+								isCollapsed: _signedCollapsed
+							) {
+								withAnimation(.easeInOut(duration: 0.28)) {
+									_signedCollapsed.toggle()
+								}
+							}
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
 
+							if !_signedCollapsed {
 							ForEach(Array(_filteredSignedOnlyApps.enumerated()), id: \.element.uuid) { index, app in
 								LibraryCellView(
 									app: app,
@@ -473,6 +495,7 @@ struct LibraryView: View {
 								.listRowSeparator(.hidden)
 								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
 							}
+							}
 						}
 					}
 
@@ -485,10 +508,19 @@ struct LibraryView: View {
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
 
-							ZagLibraryHeader(title: .localized("Imported"), count: _filteredImportedApps.count)
+							ZagLibraryHeader(
+								title: .localized("Imported"),
+								count: _filteredImportedApps.count,
+								isCollapsed: _importedCollapsed
+							) {
+								withAnimation(.easeInOut(duration: 0.28)) {
+									_importedCollapsed.toggle()
+								}
+							}
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
 
+							if !_importedCollapsed {
 							ForEach(Array(_filteredImportedApps.enumerated()), id: \.element.uuid) { index, app in
 								LibraryCellView(
 									app: app,
@@ -506,6 +538,7 @@ struct LibraryView: View {
 								.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
 								.listRowSeparator(.hidden)
 								.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
+							}
 							}
 						}
 					}
@@ -2802,50 +2835,35 @@ private struct ZagCachedUpdateRow: View {
 
 
 private struct ZagLibraryHeader: View {
-
-
-
 	let title: String
-
-
-
 	let count: Int
-
-
-
-
-
-
+	let isCollapsed: Bool
+	let onToggle: () -> Void
 
 	var body: some View {
+		Button(action: onToggle) {
+			HStack(spacing: 8) {
+				ZagSectionHeader(
+					title: title,
+					count: count
+				)
 
+				Spacer(minLength: 8)
 
-
-		ZagSectionHeader(
-
-
-
-			title: title,
-
-
-
-			count: count
-
-
-
-		)
-
-
-
+				Image(systemName: "chevron.down")
+					.font(.system(size: 14, weight: .semibold))
+					.foregroundStyle(.secondary)
+					.rotationEffect(.degrees(isCollapsed ? -90 : 0))
+					.animation(.easeInOut(duration: 0.28), value: isCollapsed)
+			}
+			.contentShape(Rectangle())
+		}
+		.buttonStyle(.plain)
+		.accessibilityLabel(Text(title))
+		.accessibilityValue(Text(isCollapsed ? "Collapsed" : "Expanded"))
+		.accessibilityHint(Text(isCollapsed ? "Expand section" : "Collapse section"))
 	}
-
-
-
 }
-
-
-
-
 
 
 
