@@ -965,22 +965,24 @@ struct LibraryView: View {
 
 
 
-			.environment(\.editMode, $_editMode)
-			.onChange(of: scenePhase) { phase in
-				guard phase == .active else { return }
-				_refreshInstalledAppsFromDevice()
-			}
-			.onAppear {
-				guard !Self.didPerformInitialDeviceInventory else { return }
-				Self.didPerformInitialDeviceInventory = true
+			.modifier(
+				ZagLibraryLifecycleModifier(
+					editMode: $_editMode,
+					scenePhase: scenePhase,
+					onRefreshInstalledApps: _refreshInstalledAppsFromDevice,
+					onInitialAppear: {
+						guard !Self.didPerformInitialDeviceInventory else { return }
+						Self.didPerformInitialDeviceInventory = true
 
-				// Let the Apps list commit its first frame before starting device
-				// inventory and repository reconciliation. The refresh remains
-				// automatic, but no longer competes with the initial tab transition.
-				DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-					_refreshInstalledAppsFromDevice()
-				}
-			}
+						// Let the Apps list commit its first frame before starting device
+						// inventory and repository reconciliation. The refresh remains
+						// automatic, but no longer competes with the initial tab transition.
+						DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+							_refreshInstalledAppsFromDevice()
+						}
+					}
+				)
+			)
 
 			.navigationDestination(
 				isPresented: _repositorySourceIsPresented
@@ -1053,6 +1055,25 @@ struct LibraryView: View {
 
 
 
+}
+
+private struct ZagLibraryLifecycleModifier: ViewModifier {
+	@Binding var editMode: EditMode
+	let scenePhase: ScenePhase
+	let onRefreshInstalledApps: () -> Void
+	let onInitialAppear: () -> Void
+
+	func body(content: Content) -> some View {
+		content
+			.environment(\.editMode, $editMode)
+			.onChange(of: scenePhase) { phase in
+				guard phase == .active else { return }
+				onRefreshInstalledApps()
+			}
+			.onAppear {
+				onInitialAppear()
+			}
+	}
 }
 
 private struct ZagLibraryTailEventsModifier: ViewModifier {
