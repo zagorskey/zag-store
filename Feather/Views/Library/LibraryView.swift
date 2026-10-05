@@ -100,6 +100,7 @@ struct LibraryView: View {
 	@State private var _isUpdatesPresenting = false
 	@State private var _removingBundleIDs: Set<String> = []
 	@State private var _pendingRemoveApp: AnyApp?
+	@State private var _transactionSignedUUIDs: Set<String> = []
 	@AppStorage("zagStore.managedInstalledBundleIDs")
 	private var _managedInstalledBundleIDsData: Data = Data()
 	@AppStorage("zagStore.apps.installedCollapsed") private var _installedCollapsed = false
@@ -206,6 +207,10 @@ struct LibraryView: View {
 
 	private var _filteredSignedOnlyApps: [Signed] {
 		_filteredSignedApps.filter { app in
+			if let uuid = app.uuid, _transactionSignedUUIDs.contains(uuid) {
+				return false
+			}
+
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return true
 			}
@@ -442,17 +447,9 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
-									onInstallCompleted: { installed in
-										_markManagedAppInstalled(installed)
-
-										// Installation succeeded. The device is now authoritative,
-										// so the Signed staging copy must leave the Signed section.
-										Storage.shared.deleteApp(for: installed)
-
-										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-											_refreshInstalledAppsFromDevice()
-										}
-									},
+									onSignedForInstall: _beginInstallTransaction,
+									onInstallCompleted: _confirmInstalledApp,
+									onInstallFailedAfterSigning: _failInstallTransaction,
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -497,17 +494,9 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
-									onInstallCompleted: { installed in
-										_markManagedAppInstalled(installed)
-
-										// Installation succeeded. The device is now authoritative,
-										// so the Signed staging copy must leave the Signed section.
-										Storage.shared.deleteApp(for: installed)
-
-										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-											_refreshInstalledAppsFromDevice()
-										}
-									},
+									onSignedForInstall: _beginInstallTransaction,
+									onInstallCompleted: _confirmInstalledApp,
+									onInstallFailedAfterSigning: _failInstallTransaction,
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -552,17 +541,9 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
-									onInstallCompleted: { installed in
-										_markManagedAppInstalled(installed)
-
-										// Installation succeeded. The device is now authoritative,
-										// so the Signed staging copy must leave the Signed section.
-										Storage.shared.deleteApp(for: installed)
-
-										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-											_refreshInstalledAppsFromDevice()
-										}
-									},
+									onSignedForInstall: _beginInstallTransaction,
+									onInstallCompleted: _confirmInstalledApp,
+									onInstallFailedAfterSigning: _failInstallTransaction,
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -1230,6 +1211,60 @@ extension LibraryView {
 		for copy in copies where copy.uuid != installedUUID {
 			Storage.shared.deleteApp(for: copy)
 		}
+	}
+
+	private func _beginInstallTransaction(_ signedUUID: String) {
+		_transactionSignedUUIDs.insert(signedUUID)
+	}
+
+	private func _failInstallTransaction(_ signedUUID: String) {
+		withAnimation(.easeInOut(duration: 0.35)) {
+			_transactionSignedUUIDs.remove(signedUUID)
+		}
+	}
+
+	private func _confirmInstalledApp(
+		_ app: AppInfoPresentable
+	) async -> Bool {
+		guard let identifier = app.identifier, !identifier.isEmpty else { return false }
+		guard rppairingCore.pairingFileExists else { return false }
+
+		let installedBundleIDs: Set<String>
+		do {
+			installedBundleIDs = try await withCheckedThrowingContinuation {
+				(continuation: CheckedContinuation<Set<String>, Error>) in
+				do {
+					try rppairingCore.refreshInstalledApps { result in
+						continuation.resume(with: result)
+					}
+				} catch {
+					continuation.resume(throwing: error)
+				}
+			}
+		} catch {
+			print("[Zag Store Inventory] Post-install confirmation failed: " + error.localizedDescription)
+			if let uuid = app.uuid {
+				withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
+			}
+			return false
+		}
+
+		guard installedBundleIDs.contains(identifier) else {
+			if let uuid = app.uuid {
+				withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
+			}
+			return false
+		}
+
+		if let encoded = try? JSONEncoder().encode(installedBundleIDs) {
+			_managedInstalledBundleIDsData = encoded
+		}
+		_updateRepositoryUpdates()
+
+		if let uuid = app.uuid {
+			withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
+		}
+		return true
 	}
 
 	private func _refreshInstalledAppsFromDevice() {
