@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreData
 import NimbleExtensions
 import NimbleViews
 import NukeUI
@@ -54,6 +55,7 @@ struct LibraryCellView: View {
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRepositoryBadgeTap: ((AltSource) -> Void)? = nil
+	var onInstallCompleted: ((AppInfoPresentable) -> Void)? = nil
 
 	@State private var isDeleteConfirmationPresented = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey)
@@ -62,6 +64,8 @@ struct LibraryCellView: View {
 	private var askCertificateEveryTime = false
 	@State private var isSigningImmediately = false
 	@State private var signingRingRotation: Double = 0
+	@State private var isInstallingImmediately = false
+	@State private var installingRingRotation: Double = 0
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -433,7 +437,7 @@ extension LibraryCellView {
 					.localized("Install"),
 					systemImage: "square.and.arrow.down"
 				) {
-					selectedInstallAppPresenting = AnyApp(base: app)
+					_installImmediately(app)
 				}
 			}
 
@@ -442,7 +446,7 @@ extension LibraryCellView {
 					.localized("Re-install"),
 					systemImage: "square.and.arrow.down"
 				) {
-					selectedInstallAppPresenting = AnyApp(base: app)
+					_installImmediately(app)
 				}
 			}
 
@@ -491,13 +495,28 @@ extension LibraryCellView {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: id)
 					}
+				} else if isInstallingImmediately {
+					VStack(spacing: 2) {
+						_installingIndeterminateRing()
+							.frame(
+								width: ZagListLayout.actionWidth,
+								height: ZagListLayout.actionHeight
+							)
+
+						Text(.localized("Installing..."))
+							.font(.system(size: 9, weight: .medium))
+							.foregroundStyle(.secondary)
+							.lineLimit(1)
+							.frame(width: 88, height: 11)
+					}
+					.transition(.opacity)
 				} else {
 					ZagActionPill(title: .localized("Install")) {
-						selectedInstallAppPresenting = AnyApp(base: app)
+						_installImmediately(app)
 					}
 				}
 
-				if certRevoked {
+				if !isInstallingImmediately && certRevoked {
 					Text(.localized("Revoked"))
 						.font(
 							.system(
@@ -508,7 +527,7 @@ extension LibraryCellView {
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
 						.offset(y: 24)
-				} else if let certInfo {
+				} else if !isInstallingImmediately, let certInfo {
 					Text(certInfo.formatted)
 						.font(
 							.system(
@@ -522,29 +541,41 @@ extension LibraryCellView {
 				}
 			}
 			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.compactRowHeight, alignment: .center)
-		} else {
-			if isSigningImmediately && !allowSigningCustomisation && !askCertificateEveryTime {
-				VStack(spacing: 2) {
-					_signingIndeterminateRing()
-						.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
-
-					Text(.localized("Signing..."))
-						.font(.system(size: 9, weight: .medium))
-						.foregroundStyle(.secondary)
-						.lineLimit(1)
-						.frame(width: 88, height: 11)
-				}
-				.transition(.opacity)
 			} else {
-				ZagActionPill(title: .localized("Sign")) {
-					if allowSigningCustomisation {
-						selectedSigningAppPresenting = AnyApp(base: app)
-					} else {
-						_signImmediately(app)
+				if isSigningImmediately {
+					VStack(spacing: 2) {
+						_signingIndeterminateRing()
+							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+
+						Text(.localized("Signing..."))
+							.font(.system(size: 9, weight: .medium))
+							.foregroundStyle(.secondary)
+							.lineLimit(1)
+							.frame(width: 88, height: 11)
+					}
+					.transition(.opacity)
+				} else if isInstallingImmediately {
+					VStack(spacing: 2) {
+						_installingIndeterminateRing()
+							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+
+						Text(.localized("Installing..."))
+							.font(.system(size: 9, weight: .medium))
+							.foregroundStyle(.secondary)
+							.lineLimit(1)
+							.frame(width: 88, height: 11)
+					}
+					.transition(.opacity)
+				} else {
+					ZagActionPill(title: .localized("Sign")) {
+						if askCertificateEveryTime {
+							selectedSigningAppPresenting = AnyApp(base: app)
+						} else {
+							_signImmediately(app)
+						}
 					}
 				}
 			}
-		}
 	}
 
 	private func _signingIndeterminateRing() -> some View {
@@ -571,11 +602,111 @@ extension LibraryCellView {
 		}
 	}
 
-	private func _signImmediately(_ app: AppInfoPresentable) {
-		if !allowSigningCustomisation && !askCertificateEveryTime {
-			withAnimation(.easeInOut(duration: 0.25)) {
-				isSigningImmediately = true
+	private func _installingIndeterminateRing() -> some View {
+		ZStack {
+			Circle()
+				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
+			Circle()
+				.trim(from: 0.08, to: 0.72)
+				.stroke(
+					Color.accentColor,
+					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
+				)
+				.rotationEffect(.degrees(installingRingRotation - 90))
+		}
+		.frame(width: 31, height: 31)
+		.onAppear {
+			installingRingRotation = 0
+			withAnimation(
+				.linear(duration: 0.85)
+					.repeatForever(autoreverses: false)
+			) {
+				installingRingRotation = 360
 			}
+		}
+	}
+
+	private func _installImmediately(
+		_ app: AppInfoPresentable,
+		importedAfterSigning: AppInfoPresentable? = nil
+	) {
+		// In a Sign -> Install transaction the signing stage has already
+		// switched this row into its Installing... state.
+		if importedAfterSigning == nil {
+			guard !isInstallingImmediately else { return }
+
+			withAnimation(.easeInOut(duration: 0.25)) {
+				isInstallingImmediately = true
+			}
+		}
+
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+		Task { @MainActor in
+			do {
+				let archiveHandler = ArchiveHandler(app: app)
+				try await archiveHandler.move()
+				let packageURL = try await archiveHandler.archive()
+
+				defer {
+					try? FileManager.default.removeItem(
+						at: packageURL.deletingLastPathComponent()
+					)
+				}
+
+				try await withCheckedThrowingContinuation {
+					(continuation: CheckedContinuation<Void, Error>) in
+
+					do {
+						try ZagRPPairingCore.shared.installGate4IPA(
+							at: packageURL,
+							deviceIP: "10.7.0.1",
+							completion: { result in
+								continuation.resume(with: result)
+							}
+						)
+					} catch {
+						continuation.resume(throwing: error)
+					}
+				}
+
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isInstallingImmediately = false
+				}
+
+				// Installation is the terminal state of a chained
+				// Imported -> Signed -> Installed transaction.
+				if let importedAfterSigning {
+					Storage.shared.deleteApp(for: importedAfterSigning)
+				}
+
+				onInstallCompleted?(app)
+			} catch {
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isInstallingImmediately = false
+				}
+
+				// Signing succeeded but installation did not. Remove the
+				// Imported staging row and leave the Signed result available
+				// so installation can be retried from Signed.
+				if let importedAfterSigning {
+					Storage.shared.deleteApp(for: importedAfterSigning)
+				}
+
+				UIAlertController.showAlertWithOk(
+					title: .localized("Installation Failed"),
+					message: error.localizedDescription,
+					isCancel: true
+				)
+			}
+		}
+	}
+
+	private func _signImmediately(_ app: AppInfoPresentable) {
+		guard !isSigningImmediately, !isInstallingImmediately else { return }
+
+		withAnimation(.easeInOut(duration: 0.25)) {
+			isSigningImmediately = true
 		}
 
 		Task { @MainActor in
@@ -616,30 +747,82 @@ extension LibraryCellView {
 			}
 
 			UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+			var signedUUID: String?
+
 			FR.signPackageFile(
 				app,
 				using: options,
 				icon: nil,
-				certificate: certificate
+				certificate: certificate,
+				signedUUID: { signedUUID = $0 }
 			) { error in
-				withAnimation(.easeInOut(duration: 0.25)) {
-					isSigningImmediately = false
-				}
-
 				if let error {
+					withAnimation(.easeInOut(duration: 0.25)) {
+						isSigningImmediately = false
+					}
+
 					UIAlertController.showAlertWithOk(
 						title: .localized("Error"),
 						message: error.localizedDescription,
 						isCancel: true
 					)
-				} else if !app.isSigned {
-					// Seamless Sign is a move from Imported -> Signed.
-					// FR has already persisted the Signed record at this point;
-					// only now is it safe to remove the original Imported copy.
-					Storage.shared.deleteApp(for: app)
+					return
+				}
+
+				guard !app.isSigned else {
+					withAnimation(.easeInOut(duration: 0.25)) {
+						isSigningImmediately = false
+					}
+					return
+				}
+
+				if options.post_installAppAfterSigned {
+					guard
+						let signedUUID,
+						let signed = _signedApp(uuid: signedUUID)
+					else {
+						withAnimation(.easeInOut(duration: 0.25)) {
+							isSigningImmediately = false
+						}
+
+						UIAlertController.showAlertWithOk(
+							title: .localized("Installation Failed"),
+							message: .localized("Signing completed, but Zag Store could not locate the signed app."),
+							isCancel: true
+						)
+						return
+					}
+
+					// Keep the Imported row in place. Only its operational
+					// state changes from Signing... to Installing...
+					withAnimation(.easeInOut(duration: 0.25)) {
+						isSigningImmediately = false
+						isInstallingImmediately = true
+					}
+
+					_installImmediately(
+						signed,
+						importedAfterSigning: app
+					)
+				} else {
+					withAnimation(.easeInOut(duration: 0.25)) {
+						isSigningImmediately = false
+					}
+
+					if options.post_deleteAppAfterSigned {
+						Storage.shared.deleteApp(for: app)
+					}
 				}
 			}
 		}
+	}
+
+	private func _signedApp(uuid: String) -> Signed? {
+		let request = NSFetchRequest<Signed>(entityName: "Signed")
+		request.fetchLimit = 1
+		request.predicate = NSPredicate(format: "uuid == %@", uuid)
+		return try? Storage.shared.context.fetch(request).first
 	}
 
 }

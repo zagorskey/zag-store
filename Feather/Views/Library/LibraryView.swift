@@ -442,6 +442,17 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									onInstallCompleted: { installed in
+										_markManagedAppInstalled(installed)
+
+										// Installation succeeded. The device is now authoritative,
+										// so the Signed staging copy must leave the Signed section.
+										Storage.shared.deleteApp(for: installed)
+
+										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+											_refreshInstalledAppsFromDevice()
+										}
+									},
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -486,6 +497,17 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									onInstallCompleted: { installed in
+										_markManagedAppInstalled(installed)
+
+										// Installation succeeded. The device is now authoritative,
+										// so the Signed staging copy must leave the Signed section.
+										Storage.shared.deleteApp(for: installed)
+
+										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+											_refreshInstalledAppsFromDevice()
+										}
+									},
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
@@ -530,6 +552,17 @@ struct LibraryView: View {
 									onDeleteApp: _deleteStoredApp,
 									onRemoveManagedApp: _requestRemoveManagedApp,
 									onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
+									onInstallCompleted: { installed in
+										_markManagedAppInstalled(installed)
+
+										// Installation succeeded. The device is now authoritative,
+										// so the Signed staging copy must leave the Signed section.
+										Storage.shared.deleteApp(for: installed)
+
+										DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+											_refreshInstalledAppsFromDevice()
+										}
+									},
 									selectedInfoAppPresenting: $_selectedInfoAppPresenting,
 									selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 									selectedInstallAppPresenting: $_selectedInstallAppPresenting,
