@@ -479,6 +479,33 @@ struct LibraryView: View {
 		.presentationDragIndicator(.visible)
 	}
 
+	@ViewBuilder
+	private func _signingCoverContent(_ app: AnyApp) -> some View {
+		SigningView(app: app.base)
+			.compatNavigationTransition(id: app.base.uuid ?? "", ns: _namespace)
+	}
+
+	@ViewBuilder
+	private var _importSheetContent: some View {
+		FileImporterRepresentableView(
+			allowedContentTypes: [.ipa, .tipa],
+			allowsMultipleSelection: true,
+			onDocumentsPicked: _handleImportedDocuments
+		)
+		.ignoresSafeArea()
+	}
+
+	private func _handleImportedDocuments(_ urls: [URL]) {
+		guard !urls.isEmpty else { return }
+
+		for url in urls {
+			let downloadUUID = UUID().uuidString
+			let id = "FeatherManualDownload_" + downloadUUID
+			let dl = downloadManager.startArchive(from: url, id: id)
+			try? downloadManager.handlePachageFile(url: url, dl: dl)
+		}
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -950,85 +977,12 @@ struct LibraryView: View {
 			}
 
 			.fullScreenCover(item: $_selectedSigningAppPresenting) { app in
-
-
-
-				SigningView(app: app.base)
-
-
-
-					.compatNavigationTransition(id: app.base.uuid ?? "", ns: _namespace)
-
-
-
+				_signingCoverContent(app)
 			}
-
-
 
 			.sheet(isPresented: $_isImportingPresenting) {
-
-
-
-				FileImporterRepresentableView(
-
-
-
-					allowedContentTypes: [.ipa, .tipa],
-
-
-
-					allowsMultipleSelection: true,
-
-
-
-					onDocumentsPicked: { urls in
-
-
-
-						guard !urls.isEmpty else { return }
-
-
-
-
-
-
-
-						for url in urls {
-
-
-
-							let downloadUUID = UUID().uuidString
-						let id = "FeatherManualDownload_" + downloadUUID
-
-
-
-							let dl = downloadManager.startArchive(from: url, id: id)
-
-
-
-							try? downloadManager.handlePachageFile(url: url, dl: dl)
-
-
-
-						}
-
-
-
-					}
-
-
-
-				)
-
-
-
-				.ignoresSafeArea()
-
-
-
+				_importSheetContent
 			}
-
-
 
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 
