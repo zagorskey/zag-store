@@ -15,12 +15,69 @@ use idevice::services::afc::{opcode::AfcFopenMode, AfcClient};
 use idevice::services::installation_proxy::InstallationProxyClient;
 use idevice::services::house_arrest::HouseArrestClient;
 use idevice::services::lockdown::LockdownClient;
-use idevice::utils::installation::install_package_with_callback_rsd;
+use idevice::utils::installation::{
+    install_package_with_callback_rsd,
+    upgrade_package_with_callback_rsd,
+};
+use async_zip::base::read::seek::ZipFileReader;
+use futures::AsyncReadExt as _;
+use tokio::fs::File;
+use tokio::io::{AsyncBufRead, AsyncSeek, BufReader};
 use idevice::RsdService;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{timeout, Duration};
 
 pub type ZagRPPairingCallback = extern "C" fn(i32, *const c_char);
+
+async fn zag_ipa_bundle_id<T>(file: &mut T) -> Result<String, String>
+where
+    T: AsyncBufRead + AsyncSeek + Unpin,
+{
+    let mut zip_file = ZipFileReader::with_tokio(file)
+        .await
+        .map_err(|error| format!("Unable to read IPA archive: {error}"))?;
+
+    for index in 0..zip_file.file().entries().len() {
+        let mut entry_reader = zip_file
+            .reader_with_entry(index)
+            .await
+            .map_err(|error| format!("Unable to read IPA entry: {error}"))?;
+
+        let entry = entry_reader.entry();
+
+        let inner_path = entry
+            .filename()
+            .as_str()
+            .map_err(|_| "IPA contains an invalid UTF-8 path".to_string())?
+            .trim_end_matches('/');
+
+        // Root app Info.plist:
+        // Payload/<AppName>.app/Info.plist
+        if inner_path.ends_with("Info.plist")
+            && inner_path.split('/').count() == 3
+        {
+            let mut bytes = Vec::new();
+
+            entry_reader
+                .read_to_end(&mut bytes)
+                .await
+                .map_err(|error| format!("Unable to read app Info.plist: {error}"))?;
+
+            let plist = plist::Value::from_reader(std::io::Cursor::new(bytes))
+                .map_err(|error| format!("Unable to decode app Info.plist: {error}"))?;
+
+            if let Some(bundle_id) = plist
+                .as_dictionary()
+                .and_then(|dict| dict.get("CFBundleIdentifier"))
+                .and_then(|value| value.as_string())
+            {
+                return Ok(bundle_id.to_string());
+            }
+        }
+    }
+
+    Err("IPA bundle identifier not found".to_string())
+}
 
 fn emit(callback: ZagRPPairingCallback, code: i32, message: impl AsRef<str>) {
     let sanitized = message.as_ref().replace('\0', " ");
@@ -560,56 +617,591 @@ pub unsafe extern "C" fn zag_house_arrest_list_documents(
                     emit(callback, 603, "House Arrest connected over RSD");
 
                     let mut afc = house_arrest
-                        .vend_documents(resolved.clone())
+                        .vend_container(resolved.clone())
                         .await
-                        .map_err(|error| format!("VendDocuments failed for {resolved}: {error}"))?;
-                    emit(callback, 604, format!("VendDocuments succeeded for {resolved}"));
+                        .map_err(|error| format!("VendContainer failed for {resolved}: {error}"))?;
+                    emit(callback, 604, format!("VendContainer succeeded for {resolved}"));
 
-                    let mut pending = vec![("/Documents".to_string(), String::new(), 0usize)];
-                    let mut entries = Vec::new();
-                    const MAX_DEPTH: usize = 6;
-                    const MAX_ENTRIES: usize = 500;
+                    let preferences_path =
+                        "/Library/Preferences/com.SideStore.SideStore.plist";
 
-                    while let Some((directory, relative_prefix, depth)) = pending.pop() {
-                        let children = afc
-                            .list_dir(directory.clone())
+                    let preferences_bytes = {
+                        let mut file = afc
+                            .open(preferences_path, AfcFopenMode::RdOnly)
                             .await
-                            .map_err(|error| format!("Listing {directory} failed: {error}"))?;
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore preferences failed: {error}"
+                                )
+                            })?;
 
-                        for child in children.into_iter().filter(|entry| entry != "." && entry != "..") {
-                            if entries.len() >= MAX_ENTRIES { break; }
-                            let full_path = format!("{directory}/{child}");
-                            let relative_path = if relative_prefix.is_empty() {
-                                child.clone()
-                            } else {
-                                format!("{relative_prefix}/{child}")
-                            };
-                            let info = afc
-                                .get_file_info(full_path.clone())
-                                .await
-                                .map_err(|error| format!("Reading metadata for {full_path} failed: {error}"))?;
-                            let is_directory = info.st_ifmt == "S_IFDIR";
-                            entries.push(if is_directory {
-                                format!("{relative_path}/")
-                            } else {
-                                relative_path.clone()
-                            });
-                            if is_directory && depth < MAX_DEPTH {
-                                pending.push((full_path, relative_path, depth + 1));
+                        let bytes = file
+                            .read_entire()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Reading SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        bytes
+                    };
+
+                    if preferences_bytes.starts_with(b"bplist") {
+                        let value = plist::Value::from_reader(
+                            std::io::Cursor::new(&preferences_bytes)
+                        )
+                        .map_err(|error| {
+                            format!(
+                                "Decoding SideStore binary plist failed: {error}"
+                            )
+                        })?;
+
+                        let dictionary = value
+                            .as_dictionary()
+                            .ok_or_else(|| {
+                                "SideStore preferences plist root is not a dictionary".to_string()
+                            })?;
+
+                        let active = match dictionary.get("activePairingProtocol") {
+                            Some(plist::Value::String(value)) => value.clone(),
+                            Some(value) => format!("<unexpected: {value:?}>"),
+                            None => "<missing>".to_string(),
+                        };
+
+                        let reset = match dictionary.get("isPairingReset") {
+                            Some(plist::Value::Boolean(value)) => value.to_string(),
+                            Some(value) => format!("<unexpected: {value:?}>"),
+                            None => "<missing>".to_string(),
+                        };
+
+                        let preferred = match dictionary.get("preferredPairingProtocol") {
+                            Some(plist::Value::String(value)) => value.clone(),
+                            Some(value) => format!("<unexpected: {value:?}>"),
+                            None => "<missing>".to_string(),
+                        };
+
+                        let pairing_path =
+                            "/Documents/PairingFile_RemoteRP.plist";
+
+                        let pairing_status = match afc
+                            .open(pairing_path, AfcFopenMode::RdOnly)
+                            .await
+                        {
+                            Ok(mut file) => {
+                                match file.read_entire().await {
+                                    Ok(bytes) => {
+                                        let close_result = file.close().await;
+
+                                        match close_result {
+                                            Ok(()) => format!(
+                                                "PRESENT — {} bytes",
+                                                bytes.len()
+                                            ),
+                                            Err(error) => format!(
+                                                "PRESENT — {} bytes — close failed: {error}",
+                                                bytes.len()
+                                            ),
+                                        }
+                                    }
+                                    Err(error) => {
+                                        let _ = file.close().await;
+                                        format!("PRESENT but read failed: {error}")
+                                    }
+                                }
                             }
-                        }
-                        if entries.len() >= MAX_ENTRIES { break; }
-                    }
+                            Err(error) => format!("MISSING/UNREADABLE: {error}"),
+                        };
 
-                    entries.sort();
-                    emit(callback, 605, entries.join("\t"));
-                    emit(callback, 606, format!("{} entries", entries.len()));
+                        let mut keys: Vec<String> =
+                            dictionary.keys().cloned().collect();
+                        keys.sort();
+
+                        emit(
+                            callback,
+                            605,
+                            format!(
+                                "SideStore pairing state\n\nactivePairingProtocol = {active}\nisPairingReset = {reset}\npreferredPairingProtocol = {preferred}\nPairingFile_RemoteRP.plist = {pairing_status}\n\nPreferences: {} keys\n{}",
+                                keys.len(),
+                                keys.join("\n")
+                            ),
+                        );
+                    } else {
+                        emit(
+                            callback,
+                            605,
+                            format!(
+                                "Unexpected non-binary plist — {} bytes",
+                                preferences_bytes.len()
+                            ),
+                        );
+                    }
                     Ok(())
                 },
             ).await;
             if let Err(error) = result { emit(callback, -8, error); }
         });
     });
+    true
+}
+
+
+/// Copies Zag Store's saved pairing record into SideStore's shared Documents folder.
+///
+/// Destination is intentionally fixed:
+/// /Documents/PairingFile_RemoteRP.plist
+///
+/// Callback codes:
+/// 611 = starting
+/// 612 = installed bundle ID resolved
+/// 613 = VendDocuments succeeded
+/// 614 = pairing file written
+/// 615 = byte-for-byte verification succeeded
+/// 616 = complete
+/// -9  = failure
+#[no_mangle]
+pub unsafe extern "C" fn zag_house_arrest_install_pairing_file(
+    device_ip: *const c_char,
+    pairing_path: *const c_char,
+    bundle_id: *const c_char,
+    callback: Option<ZagRPPairingCallback>,
+) -> bool {
+    let Some(callback) = callback else { return false; };
+
+    if device_ip.is_null() || pairing_path.is_null() || bundle_id.is_null() {
+        return false;
+    }
+
+    let Ok(device_ip) = CStr::from_ptr(device_ip).to_str().map(str::to_owned) else {
+        return false;
+    };
+
+    let Ok(pairing_path) =
+        CStr::from_ptr(pairing_path).to_str().map(PathBuf::from)
+    else {
+        return false;
+    };
+
+    let Ok(bundle_id) = CStr::from_ptr(bundle_id).to_str().map(str::to_owned) else {
+        return false;
+    };
+
+    thread::spawn(move || {
+        emit(
+            callback,
+            611,
+            format!("Preparing pairing file transfer for {bundle_id}"),
+        );
+
+        let pairing_bytes = match std::fs::read(&pairing_path) {
+            Ok(bytes) if !bytes.is_empty() => bytes,
+            Ok(_) => {
+                emit(callback, -9, "Saved pairing file is empty");
+                return;
+            }
+            Err(error) => {
+                emit(
+                    callback,
+                    -9,
+                    format!("Reading saved pairing file failed: {error}"),
+                );
+                return;
+            }
+        };
+
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                emit(
+                    callback,
+                    -9,
+                    format!("House Arrest runtime failed: {error}"),
+                );
+                return;
+            }
+        };
+
+        runtime.block_on(async move {
+            let result = with_zag_device_session(
+                &device_ip,
+                &pairing_path,
+                |_stage, _message| {},
+                |mut adapter, mut handshake| async move {
+                    let mut installation_proxy =
+                        InstallationProxyClient::connect_rsd(
+                            &mut adapter,
+                            &mut handshake,
+                        )
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "installation_proxy over RSD failed: {error}"
+                            )
+                        })?;
+
+                    let apps = installation_proxy
+                        .get_apps(Some("User"), None)
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "installation_proxy user-app lookup failed: {error}"
+                            )
+                        })?;
+
+                    let resolved = if apps.contains_key(&bundle_id) {
+                        bundle_id.clone()
+                    } else {
+                        apps.keys()
+                            .find(|id| {
+                                id.starts_with(
+                                    &(bundle_id.clone() + ".")
+                                )
+                            })
+                            .cloned()
+                            .ok_or_else(|| {
+                                format!(
+                                    "Installed app not found for {bundle_id}"
+                                )
+                            })?
+                    };
+
+                    drop(installation_proxy);
+
+                    emit(callback, 612, &resolved);
+
+                    let house_arrest =
+                        HouseArrestClient::connect_rsd(
+                            &mut adapter,
+                            &mut handshake,
+                        )
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "House Arrest over RSD failed: {error}"
+                            )
+                        })?;
+
+                    let mut afc = house_arrest
+                        .vend_documents(resolved.clone())
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "VendDocuments failed for {resolved}: {error}"
+                            )
+                        })?;
+
+                    emit(
+                        callback,
+                        613,
+                        format!(
+                            "VendDocuments succeeded for {resolved}"
+                        ),
+                    );
+
+                    let destination =
+                        "/Documents/PairingFile_RemoteRP.plist";
+
+                    {
+                        let mut file = afc
+                            .open(destination, AfcFopenMode::Wr)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore pairing file for write failed: {error}"
+                                )
+                            })?;
+
+                        file.write_entire(&pairing_bytes)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Writing SideStore pairing file failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing SideStore pairing file failed: {error}"
+                                )
+                            })?;
+                    }
+
+                    emit(
+                        callback,
+                        614,
+                        format!(
+                            "Wrote {} bytes to {destination}",
+                            pairing_bytes.len()
+                        ),
+                    );
+
+                    let read_back = {
+                        let mut file = afc
+                            .open(destination, AfcFopenMode::RdOnly)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore pairing file for verification failed: {error}"
+                                )
+                            })?;
+
+                        let bytes = file
+                            .read_entire()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Reading SideStore pairing file for verification failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing verified SideStore pairing file failed: {error}"
+                                )
+                            })?;
+
+                        bytes
+                    };
+
+                    if read_back != pairing_bytes {
+                        return Err(format!(
+                            "Pairing file verification mismatch: wrote {} bytes, read {} bytes",
+                            pairing_bytes.len(),
+                            read_back.len()
+                        ));
+                    }
+
+                    emit(
+                        callback,
+                        615,
+                        format!(
+                            "Verified {} bytes byte-for-byte",
+                            read_back.len()
+                        ),
+                    );
+
+                    // Configure SideStore exactly as its normal RPPairing
+                    // import path does: make RPPairing active and clear the
+                    // pairing-reset flag. Preserve every unrelated preference.
+                    drop(afc);
+
+                    let house_arrest =
+                        HouseArrestClient::connect_rsd(
+                            &mut adapter,
+                            &mut handshake,
+                        )
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "House Arrest reconnect for SideStore preferences failed: {error}"
+                            )
+                        })?;
+
+                    let mut container_afc = house_arrest
+                        .vend_container(resolved.clone())
+                        .await
+                        .map_err(|error| {
+                            format!(
+                                "VendContainer failed for {resolved}: {error}"
+                            )
+                        })?;
+
+                    let preferences_path =
+                        "/Library/Preferences/com.SideStore.SideStore.plist";
+
+                    let original_preferences = {
+                        let mut file = container_afc
+                            .open(preferences_path, AfcFopenMode::RdOnly)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        let bytes = file
+                            .read_entire()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Reading SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        bytes
+                    };
+
+                    let mut preferences = plist::Value::from_reader(
+                        std::io::Cursor::new(&original_preferences)
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "Decoding SideStore preferences failed: {error}"
+                        )
+                    })?;
+
+                    {
+                        let dictionary = preferences
+                            .as_dictionary_mut()
+                            .ok_or_else(|| {
+                                "SideStore preferences plist root is not a dictionary".to_string()
+                            })?;
+
+                        dictionary.insert(
+                            "activePairingProtocol".to_string(),
+                            plist::Value::String("rppairing".to_string()),
+                        );
+
+                        dictionary.insert(
+                            "isPairingReset".to_string(),
+                            plist::Value::Boolean(false),
+                        );
+                    }
+
+                    let mut updated_preferences = Vec::new();
+
+                    preferences
+                        .to_writer_binary(&mut updated_preferences)
+                        .map_err(|error| {
+                            format!(
+                                "Encoding SideStore preferences failed: {error}"
+                            )
+                        })?;
+
+                    {
+                        let mut file = container_afc
+                            .open(preferences_path, AfcFopenMode::Wr)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore preferences for write failed: {error}"
+                                )
+                            })?;
+
+                        file.write_entire(&updated_preferences)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Writing SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing updated SideStore preferences failed: {error}"
+                                )
+                            })?;
+                    }
+
+                    let verified_preferences = {
+                        let mut file = container_afc
+                            .open(preferences_path, AfcFopenMode::RdOnly)
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Opening SideStore preferences for verification failed: {error}"
+                                )
+                            })?;
+
+                        let bytes = file
+                            .read_entire()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Reading SideStore preferences for verification failed: {error}"
+                                )
+                            })?;
+
+                        file.close()
+                            .await
+                            .map_err(|error| {
+                                format!(
+                                    "Closing verified SideStore preferences failed: {error}"
+                                )
+                            })?;
+
+                        bytes
+                    };
+
+                    let verified = plist::Value::from_reader(
+                        std::io::Cursor::new(&verified_preferences)
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "Decoding verified SideStore preferences failed: {error}"
+                        )
+                    })?;
+
+                    let verified_dictionary = verified
+                        .as_dictionary()
+                        .ok_or_else(|| {
+                            "Verified SideStore preferences root is not a dictionary".to_string()
+                        })?;
+
+                    match verified_dictionary.get("activePairingProtocol") {
+                        Some(plist::Value::String(value))
+                            if value == "rppairing" => {}
+                        other => {
+                            return Err(format!(
+                                "SideStore activePairingProtocol verification failed: {other:?}"
+                            ));
+                        }
+                    }
+
+                    match verified_dictionary.get("isPairingReset") {
+                        Some(plist::Value::Boolean(false)) => {}
+                        other => {
+                            return Err(format!(
+                                "SideStore isPairingReset verification failed: {other:?}"
+                            ));
+                        }
+                    }
+
+                    emit(
+                        callback,
+                        616,
+                        format!(
+                            "SideStore configured: pairing file verified; activePairingProtocol=rppairing; isPairingReset=false; preserved {} preference bytes",
+                            original_preferences.len()
+                        ),
+                    );
+
+                    Ok(())
+                },
+            )
+            .await;
+
+            if let Err(error) = result {
+                emit(callback, -9, error);
+            }
+        });
+    });
+
     true
 }
 
@@ -921,30 +1513,70 @@ async fn run_gate4_install(
             emit(callback, code, message);
         },
         |mut adapter, mut handshake| async move {
+            // Read the incoming IPA's real bundle identifier so we can
+            // distinguish a fresh install from replacement of an existing app.
+            let ipa_file = File::open(&ipa_path)
+                .await
+                .map_err(|error| format!("Unable to open selected IPA: {error}"))?;
+            let mut ipa_reader = BufReader::new(ipa_file);
+            let bundle_id = zag_ipa_bundle_id(&mut ipa_reader).await?;
+
+            // Ask installation_proxy whether that exact bundle ID already
+            // exists on the device.
+            let mut installation_proxy =
+                InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+                    .await
+                    .map_err(|error| {
+                        format!("installation_proxy over RSD failed: {error}")
+                    })?;
+
+            let apps = installation_proxy
+                .get_apps(Some("User"), None)
+                .await
+                .map_err(|error| {
+                    format!("installation_proxy user-app lookup failed: {error}")
+                })?;
+
+            let is_upgrade = apps.contains_key(&bundle_id);
+            drop(installation_proxy);
+
             emit(
                 callback,
                 205,
                 format!(
-                    "Installing {}",
-                    ipa_path
-                        .file_name()
-                        .and_then(|x| x.to_str())
-                        .unwrap_or("selected IPA")
+                    "{} {}",
+                    if is_upgrade { "Upgrading" } else { "Installing" },
+                    bundle_id
                 ),
             );
 
-            install_package_with_callback_rsd(
-                &mut adapter,
-                &mut handshake,
-                &ipa_path,
-                None,
-                |(percent, callback)| async move {
-                    emit(callback, 206, percent.to_string());
-                },
-                callback,
-            )
-            .await
-            .map_err(|error| format!("Direct installation failed: {error}"))?;
+            if is_upgrade {
+                upgrade_package_with_callback_rsd(
+                    &mut adapter,
+                    &mut handshake,
+                    &ipa_path,
+                    None,
+                    |(percent, callback)| async move {
+                        emit(callback, 206, percent.to_string());
+                    },
+                    callback,
+                )
+                .await
+                .map_err(|error| format!("Direct upgrade failed: {error}"))?;
+            } else {
+                install_package_with_callback_rsd(
+                    &mut adapter,
+                    &mut handshake,
+                    &ipa_path,
+                    None,
+                    |(percent, callback)| async move {
+                        emit(callback, 206, percent.to_string());
+                    },
+                    callback,
+                )
+                .await
+                .map_err(|error| format!("Direct installation failed: {error}"))?;
+            }
 
             emit(callback, 207, "Installation complete");
             Ok(())

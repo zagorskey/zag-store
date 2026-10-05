@@ -11,3 +11,6 @@ idevice = { git = "https://github.com/zagorskey/IDeviceKit-Zag", rev = "191f36ca
 mdns-sd = "0.19"
 tokio = { version = "1.43", features = ["rt-multi-thread", "net", "time"] }
 uuid = { version = "1", features = ["v4"] }
+plist = "1.10.1"
+async_zip = { version = "0.0.18", features = ["tokio"] }
+futures = "0.3"

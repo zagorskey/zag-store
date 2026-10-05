@@ -13,17 +13,23 @@
     " apps from sources" : {
 
     },
-    "%@ → %@" : {
+    "%@ %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ → %2$@"
+            "value" : "%1$@ %2$@"
           }
         }
       }
     },
+    "%@ repository" : {
+
+    },
     "%lld" : {
+
+    },
+    "%lld apps" : {
 
     },
     "%lld Apps" : {
@@ -384,6 +390,9 @@
           }
         }
       }
+    },
+    "%lld percent" : {
+
     },
     "%lld required system dylibs not shown." : {
       "comment" : "Number of macho load paths not listed for safety",
@@ -1815,6 +1824,12 @@
     "Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions." : {
 
     },
+    "Backup & Restore" : {
+
+    },
+    "Backup Settings" : {
+
+    },
     "Bad Password" : {
       "comment" : "Bad certificate password",
       "extractionState" : "manual",
@@ -2035,6 +2050,15 @@
         }
       }
     },
+    "Blur" : {
+
+    },
+    "Brightness" : {
+
+    },
+    "Browse" : {
+
+    },
     "Bug Report" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2081,6 +2105,9 @@
           }
         }
       }
+    },
+    "Build: %@" : {
+
     },
     "Bundle" : {
       "extractionState" : "manual",
@@ -2796,6 +2823,9 @@
         }
       }
     },
+    "Choose Signed App" : {
+
+    },
     "Clear Search" : {
 
     },
@@ -3043,6 +3073,9 @@
 
     },
     "Connect to LocalDevVPN" : {
+
+    },
+    "Copies the original certificate name" : {
 
     },
     "Copy" : {
@@ -3919,6 +3952,9 @@
         }
       }
     },
+    "Developer Options" : {
+
+    },
     "Device" : {
 
     },
@@ -4304,6 +4340,9 @@
           }
         }
       }
+    },
+    "Done" : {
+
     },
     "Done Reordering" : {
 
@@ -5190,6 +5229,9 @@
         }
       }
     },
+    "Experimental Features" : {
+
+    },
     "Experiments" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5451,6 +5493,9 @@
         }
       }
     },
+    "Export All Settings" : {
+
+    },
     "Export Certificate" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5499,6 +5544,9 @@
       }
     },
     "Export File" : {
+
+    },
+    "Exports all Zag Store settings. Certificates, private keys, pairing data, installed apps and caches are not included." : {
 
     },
     "Failed to download, check your internet connection and try again." : {
@@ -6752,6 +6800,12 @@
     "Headers" : {
 
     },
+    "Health" : {
+
+    },
+    "Health Check" : {
+
+    },
     "Health Checks" : {
 
     },
@@ -7387,6 +7441,9 @@
           }
         }
       }
+    },
+    "Import All Settings" : {
+
     },
     "Import Certificate File" : {
       "extractionState" : "manual",
@@ -8125,6 +8182,9 @@
         }
       }
     },
+    "Install %@" : {
+
+    },
     "Install After Signing" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8292,6 +8352,15 @@
           }
         }
       }
+    },
+    "Installed App Inventory" : {
+
+    },
+    "Installed Apps" : {
+
+    },
+    "Installed Apps Lookup" : {
+
     },
     "Installing" : {
       "extractionState" : "manual",
@@ -8539,6 +8608,9 @@
           }
         }
       }
+    },
+    "Last Inventory" : {
+
     },
     "Last Updated" : {
 
@@ -8810,6 +8882,9 @@
       }
     },
     "Live Preview" : {
+
+    },
+    "Lock Advanced Settings" : {
 
     },
     "Minimum Requirement" : {
@@ -10195,6 +10270,9 @@
         }
       }
     },
+    "Open %@" : {
+
+    },
     "Open an [issue](https://github.com/khcrysalis/Feather/issues) on GitHub if you want your source to be featured." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10525,6 +10603,9 @@
           }
         }
       }
+    },
+    "Opens this app's source repository" : {
+
     },
     "Other" : {
       "extractionState" : "manual",
@@ -11710,6 +11791,9 @@
         }
       }
     },
+    "Reads the actual user-app inventory from installation_proxy and shows the bundle identifier, installed version and build reported by this iPhone." : {
+
+    },
     "Ready" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11767,6 +11851,9 @@
 
     },
     "Refreshing Apps" : {
+
+    },
+    "Refreshing Installed Apps…" : {
 
     },
     "Refreshing Repositories" : {
@@ -12222,6 +12309,9 @@
       }
     },
     "Reorder" : {
+
+    },
+    "Reorder Sections" : {
 
     },
     "Replace Substrate with ElleKit" : {
@@ -13165,6 +13255,18 @@
         }
       }
     },
+    "Restore Settings" : {
+
+    },
+    "Restores all settings contained in a Zag Store settings backup." : {
+
+    },
+    "Returned Metadata Keys" : {
+
+    },
+    "Revert %@" : {
+
+    },
     "Revoked" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13228,9 +13330,6 @@
 
     },
     "Running Health Check…" : {
-
-    },
-    "Runs the complete direct-install path with a signed disposable IPA. Do not select Zag Store itself." : {
 
     },
     "Save" : {
@@ -13550,6 +13649,9 @@
           }
         }
       }
+    },
+    "Select an app already signed by Zag Store. Diagnostics creates a temporary IPA and runs it through the complete RPPairing direct-install path." : {
+
     },
     "Select entitlements file" : {
       "comment" : "Select custom entitlements for the app",
@@ -14092,6 +14194,15 @@
           }
         }
       }
+    },
+    "Settings Backup" : {
+
+    },
+    "Settings Options" : {
+
+    },
+    "Settings Restore" : {
+
     },
     "Setup" : {
 
@@ -14772,6 +14883,9 @@
           }
         }
       }
+    },
+    "Source: %@" : {
+
     },
     "Sources" : {
       "comment" : "Sources tab",
@@ -16131,6 +16245,9 @@
         }
       }
     },
+    "This removes Zag Store's saved RPPairing credentials. You will need to pair again before direct installation can be used." : {
+
+    },
     "This will delete your imported application after signing, to save on using unneeded space." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16418,6 +16535,9 @@
         }
       }
     },
+    "Unable to Unpair" : {
+
+    },
     "Unknown" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16501,7 +16621,19 @@
         }
       }
     },
+    "Unlock Advanced Settings" : {
+
+    },
+    "Unpair This iPhone" : {
+
+    },
+    "Unpair This iPhone?" : {
+
+    },
     "Update" : {
+
+    },
+    "Update %@" : {
 
     },
     "Update Badge" : {
@@ -16888,6 +17020,9 @@
         }
       }
     },
+    "Version: %@" : {
+
+    },
     "View Entitlements" : {
       "comment" : "Certificate listed entitlements",
       "extractionState" : "manual",
@@ -16953,6 +17088,9 @@
           }
         }
       }
+    },
+    "View Installed App Versions" : {
+
     },
     "Visit Patreon" : {
       "comment" : "Repository listed patreon",
@@ -17087,6 +17225,12 @@
       }
     },
     "Waiting for This iPhone…" : {
+
+    },
+    "Wallpaper Blur" : {
+
+    },
+    "Wallpaper Brightness" : {
 
     },
     "What's New" : {
