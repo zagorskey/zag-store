@@ -369,6 +369,13 @@ struct LibraryView: View {
 		}
 	}
 
+	private var _repositorySourceIsPresented: Binding<Bool> {
+		Binding(
+			get: { _selectedRepositorySource != nil },
+			set: { if !$0 { _selectedRepositorySource = nil } }
+		)
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -818,10 +825,7 @@ struct LibraryView: View {
 			}
 
 			.navigationDestination(
-				isPresented: Binding(
-					get: { _selectedRepositorySource != nil },
-					set: { if !$0 { _selectedRepositorySource = nil } }
-				)
+				isPresented: _repositorySourceIsPresented
 			) {
 				if let source = _selectedRepositorySource {
 					SourceAppsView(
