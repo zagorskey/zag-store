@@ -376,6 +376,16 @@ struct LibraryView: View {
 		)
 	}
 
+	@ViewBuilder
+	private var _repositoryDestination: some View {
+		if let source = _selectedRepositorySource {
+			SourceAppsView(
+				object: [source],
+				viewModel: sourcesViewModel
+			)
+		}
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -827,12 +837,7 @@ struct LibraryView: View {
 			.navigationDestination(
 				isPresented: _repositorySourceIsPresented
 			) {
-				if let source = _selectedRepositorySource {
-					SourceAppsView(
-						object: [source],
-						viewModel: sourcesViewModel
-					)
-				}
+				_repositoryDestination
 			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
