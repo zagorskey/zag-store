@@ -25,6 +25,16 @@ class OptionsManager: ObservableObject {
 			self.options = Options.defaultOptions
 			self.saveOptions()
 		}
+
+		// Zag Store previously used a custom entitlement file while testing
+		// SideStore signing. Clear that persisted selection once so unrelated
+		// apps are signed from their own/profile-derived entitlements again.
+		let cleanupKey = "zag.didClearLegacySideStoreEntitlements"
+		if !UserDefaults.standard.bool(forKey: cleanupKey) {
+			options.appEntitlementsFile = nil
+			saveOptions()
+			UserDefaults.standard.set(true, forKey: cleanupKey)
+		}
 	}
 	
 	/// Saves options
