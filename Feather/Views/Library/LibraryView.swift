@@ -467,7 +467,7 @@ struct LibraryView: View {
 					   _selectedScope == .all || _selectedScope == .signed {
 						Section {
 							Color.clear
-								.frame(height: 20)
+								.frame(height: 6)
 								.listRowInsets(EdgeInsets())
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
@@ -514,7 +514,7 @@ struct LibraryView: View {
 					   _selectedScope == .all || _selectedScope == .imported {
 						Section {
 							Color.clear
-								.frame(height: 20)
+								.frame(height: 6)
 								.listRowInsets(EdgeInsets())
 								.listRowSeparator(.hidden)
 								.listRowBackground(Color.clear)
