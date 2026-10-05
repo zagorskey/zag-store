@@ -386,6 +386,72 @@ struct LibraryView: View {
 		}
 	}
 
+	@ViewBuilder
+	private var _updatesSheetContent: some View {
+		ZagUpdatesPopup(updates: updateManager.updates)
+	}
+
+	@ViewBuilder
+	private func _removeAppSheetContent(_ app: AnyApp) -> some View {
+		VStack(spacing: 10) {
+			Text(
+				String(
+					format: .localized("Remove “%@”?"),
+					app.base.name ?? .localized("this app")
+				)
+			)
+			.font(.system(size: 22, weight: .semibold))
+			.multilineTextAlignment(.center)
+
+			Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
+				.font(.system(size: 17))
+				.foregroundStyle(.secondary)
+				.multilineTextAlignment(.center)
+				.fixedSize(horizontal: false, vertical: true)
+
+			Spacer().frame(height: 10)
+
+			Button {
+				let target = app.base
+				_pendingRemoveApp = nil
+				DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+					_removeManagedApp(target)
+				}
+			} label: {
+				Text(.localized("Delete App"))
+					.font(.system(size: 20, weight: .semibold))
+					.foregroundStyle(.red)
+					.frame(maxWidth: .infinity)
+					.frame(height: 52)
+					.background(
+						Color(uiColor: .tertiarySystemFill),
+						in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+					)
+			}
+			.buttonStyle(.plain)
+
+			Button {
+				_pendingRemoveApp = nil
+			} label: {
+				Text(.localized("Cancel"))
+					.font(.system(size: 20, weight: .semibold))
+					.foregroundStyle(.primary)
+					.frame(maxWidth: .infinity)
+					.frame(height: 52)
+					.background(
+						Color(uiColor: .tertiarySystemFill),
+						in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+					)
+			}
+			.buttonStyle(.plain)
+		}
+		.padding(.horizontal, 20)
+		.padding(.top, 24)
+		.padding(.bottom, 8)
+		.presentationDetents([.height(302)])
+		.presentationDragIndicator(.visible)
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -841,70 +907,11 @@ struct LibraryView: View {
 			}
 
 			.sheet(isPresented: $_isUpdatesPresenting) {
-				ZagUpdatesPopup(
-					updates: updateManager.updates
-				)
+				_updatesSheetContent
 			}
 
 			.sheet(item: $_pendingRemoveApp) { app in
-				VStack(spacing: 10) {
-					Text(
-						String(
-							format: .localized("Remove “%@”?"),
-							app.base.name ?? .localized("this app")
-						)
-					)
-					.font(.system(size: 22, weight: .semibold))
-					.multilineTextAlignment(.center)
-
-					Text(.localized("This will uninstall the app from your iPhone. Its stored copy will remain in Zag Store so you can install it again later."))
-						.font(.system(size: 17))
-						.foregroundStyle(.secondary)
-						.multilineTextAlignment(.center)
-						.fixedSize(horizontal: false, vertical: true)
-
-					Spacer()
-						.frame(height: 10)
-
-					Button {
-						let target = app.base
-						_pendingRemoveApp = nil
-						DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-							_removeManagedApp(target)
-						}
-					} label: {
-						Text(.localized("Delete App"))
-							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(.red)
-							.frame(maxWidth: .infinity)
-							.frame(height: 52)
-							.background(
-								Color(uiColor: .tertiarySystemFill),
-								in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-							)
-					}
-					.buttonStyle(.plain)
-
-					Button {
-						_pendingRemoveApp = nil
-					} label: {
-						Text(.localized("Cancel"))
-							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(.primary)
-							.frame(maxWidth: .infinity)
-							.frame(height: 52)
-							.background(
-								Color(uiColor: .tertiarySystemFill),
-								in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-							)
-					}
-					.buttonStyle(.plain)
-				}
-				.padding(.horizontal, 20)
-				.padding(.top, 24)
-				.padding(.bottom, 8)
-				.presentationDetents([.height(302)])
-				.presentationDragIndicator(.visible)
+				_removeAppSheetContent(app)
 			}
 
 			.sheet(item: $_selectedInfoAppPresenting) { app in
