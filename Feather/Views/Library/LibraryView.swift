@@ -506,6 +506,28 @@ struct LibraryView: View {
 		}
 	}
 
+	@ViewBuilder
+	private var _downloadAlertActions: some View {
+		TextField(.localized("URL"), text: $_alertDownloadString)
+			.textInputAutocapitalization(.never)
+
+		Button(.localized("Cancel"), role: .cancel) {
+			_alertDownloadString = ""
+		}
+
+		Button(.localized("OK")) {
+			_startAlertDownload()
+		}
+	}
+
+	private func _startAlertDownload() {
+		guard let url = URL(string: _alertDownloadString) else { return }
+		_ = downloadManager.startDownload(
+			from: url,
+			id: "FeatherManualDownload_\(UUID().uuidString)"
+		)
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -985,52 +1007,8 @@ struct LibraryView: View {
 			}
 
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
-
-
-
-				TextField(.localized("URL"), text: $_alertDownloadString)
-
-
-
-					.textInputAutocapitalization(.never)
-
-
-
-				Button(.localized("Cancel"), role: .cancel) {
-
-
-
-					_alertDownloadString = ""
-
-
-
-				}
-
-
-
-				Button(.localized("OK")) {
-
-
-
-					if let url = URL(string: _alertDownloadString) {
-
-
-
-						_ = downloadManager.startDownload(from: url, id: "FeatherManualDownload_\(UUID().uuidString)")
-
-
-
-					}
-
-
-
-				}
-
-
-
+				_downloadAlertActions
 			}
-
-
 
 			.modifier(
 				ZagLibraryTailEventsModifier(
