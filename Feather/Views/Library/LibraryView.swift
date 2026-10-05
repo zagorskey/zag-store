@@ -466,12 +466,6 @@ struct LibraryView: View {
 					if !_filteredSignedOnlyApps.isEmpty,
 					   _selectedScope == .all || _selectedScope == .signed {
 						Section {
-							Color.clear
-								.frame(height: 6)
-								.listRowInsets(EdgeInsets())
-								.listRowSeparator(.hidden)
-								.listRowBackground(Color.clear)
-
 							ZagLibraryHeader(
 								title: .localized("Signed"),
 								count: _filteredSignedOnlyApps.count,
@@ -513,12 +507,6 @@ struct LibraryView: View {
 					if !_filteredImportedApps.isEmpty,
 					   _selectedScope == .all || _selectedScope == .imported {
 						Section {
-							Color.clear
-								.frame(height: 6)
-								.listRowInsets(EdgeInsets())
-								.listRowSeparator(.hidden)
-								.listRowBackground(Color.clear)
-
 							ZagLibraryHeader(
 								title: .localized("Imported"),
 								count: _filteredImportedApps.count,
@@ -565,6 +553,7 @@ struct LibraryView: View {
 				}
 				.listRowBackground(Color.clear)
 			}
+			.listSectionSpacing(12)
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
