@@ -452,6 +452,33 @@ struct LibraryView: View {
 		.presentationDragIndicator(.visible)
 	}
 
+	@ViewBuilder
+	private func _infoSheetContent(_ app: AnyApp) -> some View {
+		LibraryInfoView(app: app.base)
+	}
+
+	@ViewBuilder
+	private func _installSheetContent(_ app: AnyApp) -> some View {
+		InstallPreviewView(
+			app: app.base,
+			isSharing: app.archive,
+			onInstallCompleted: {
+				_markManagedAppInstalled(app.base)
+				_removeSupersededInstalledSignedCopies(keeping: app.base)
+				DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+					_refreshInstalledAppsFromDevice()
+				}
+
+				guard let signedUUID = app.base.uuid else { return }
+				ZagUpdateTransactionManager.shared.completeInstallation(
+					signedUUID: signedUUID
+				)
+			}
+		)
+		.presentationDetents([.height(200)])
+		.presentationDragIndicator(.visible)
+	}
+
 	private func handlePreparedUpdate(_ signedUUID: String) {
 		guard let signed = ZagUpdateTransactionManager.shared.signedApp(
 			uuid: signedUUID
@@ -915,53 +942,12 @@ struct LibraryView: View {
 			}
 
 			.sheet(item: $_selectedInfoAppPresenting) { app in
-
-
-
-				LibraryInfoView(app: app.base)
-
-
-
+				_infoSheetContent(app)
 			}
-
-
 
 			.sheet(item: $_selectedInstallAppPresenting) { app in
-
-
-
-				InstallPreviewView(
-					app: app.base,
-					isSharing: app.archive,
-					onInstallCompleted: {
-						// Preserve the immediate UI response for every installer, then
-						// let device inventory confirm the authoritative state.
-						_markManagedAppInstalled(app.base)
-						_removeSupersededInstalledSignedCopies(keeping: app.base)
-						DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-							_refreshInstalledAppsFromDevice()
-						}
-
-						guard let signedUUID = app.base.uuid else { return }
-						ZagUpdateTransactionManager.shared.completeInstallation(
-							signedUUID: signedUUID
-						)
-					}
-				)
-
-
-
-					.presentationDetents([.height(200)])
-
-
-
-					.presentationDragIndicator(.visible)
-
-
-
+				_installSheetContent(app)
 			}
-
-
 
 			.fullScreenCover(item: $_selectedSigningAppPresenting) { app in
 
