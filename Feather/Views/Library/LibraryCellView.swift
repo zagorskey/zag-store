@@ -55,7 +55,9 @@ struct LibraryCellView: View {
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRemoveManagedApp: ((AppInfoPresentable) -> Void)? = nil
 	var onRepositoryBadgeTap: ((AltSource) -> Void)? = nil
-	var onInstallCompleted: ((AppInfoPresentable) -> Void)? = nil
+	var onSignedForInstall: ((String) -> Void)? = nil
+	var onInstallCompleted: ((AppInfoPresentable) async -> Bool)? = nil
+	var onInstallFailedAfterSigning: ((String) -> Void)? = nil
 
 	@State private var isDeleteConfirmationPresented = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey)
@@ -670,17 +672,27 @@ extension LibraryCellView {
 					}
 				}
 
-				withAnimation(.easeInOut(duration: 0.25)) {
-					isInstallingImmediately = false
-				}
+				let confirmed = await onInstallCompleted?(app) ?? false
 
-				// Installation is the terminal state of a chained
-				// Imported -> Signed -> Installed transaction.
-				if let importedAfterSigning {
-					Storage.shared.deleteApp(for: importedAfterSigning)
-				}
+				if confirmed {
+					try? await Task.sleep(nanoseconds: 550_000_000)
 
-				onInstallCompleted?(app)
+					withAnimation(.easeInOut(duration: 0.35)) {
+						isInstallingImmediately = false
+
+						if let importedAfterSigning {
+							Storage.shared.deleteApp(for: importedAfterSigning)
+						}
+					}
+				} else {
+					withAnimation(.easeInOut(duration: 0.25)) {
+						isInstallingImmediately = false
+					}
+
+					if let importedAfterSigning {
+						Storage.shared.deleteApp(for: importedAfterSigning)
+					}
+				}
 			} catch {
 				withAnimation(.easeInOut(duration: 0.25)) {
 					isInstallingImmediately = false
@@ -690,6 +702,9 @@ extension LibraryCellView {
 				// Imported staging row and leave the Signed result available
 				// so installation can be retried from Signed.
 				if let importedAfterSigning {
+					if let signedUUID = app.uuid {
+						onInstallFailedAfterSigning?(signedUUID)
+					}
 					Storage.shared.deleteApp(for: importedAfterSigning)
 				}
 
@@ -793,6 +808,8 @@ extension LibraryCellView {
 						)
 						return
 					}
+
+					onSignedForInstall?(signedUUID)
 
 					// Keep the Imported row in place. Only its operational
 					// state changes from Signing... to Installing...
