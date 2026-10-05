@@ -53,19 +53,75 @@ final class ZsignHandler {
 			try _embedProvisioningProfileInAppExtensions(provisionURL)
 		}
 
-		let _ = Zsign.sign(
+		let generatedEntitlementsURL = try _generatedEntitlementsURLIfNeeded(for: cert)
+		defer {
+			if let generatedEntitlementsURL {
+				try? FileManager.default.removeItem(at: generatedEntitlementsURL)
+			}
+		}
+
+		let entitlementsURL = _options.appEntitlementsFile ?? generatedEntitlementsURL
+		let succeeded = Zsign.sign(
 			appPath: _appUrl.relativePath,
 			provisionPath: provisionURL?.path ?? "",
 			p12Path: Storage.shared.getFile(.certificate, from: cert)?.path ?? "",
 			p12Password: cert.password ?? "",
-			entitlementsPath: _options.appEntitlementsFile?.path ?? "",
+			entitlementsPath: entitlementsURL?.path ?? "",
 			removeProvision: !_options.removeProvisioning,
 			completion: { _, error in
 				self.hadError = error
 			}
 		)
+
+		if !succeeded && hadError == nil {
+			hadError = NSError(
+				domain: "ZagStore.Zsign",
+				code: 1,
+				userInfo: [NSLocalizedDescriptionKey: "Zsign failed without returning an error."]
+			)
+		}
 	}
 	
+
+	private func _generatedEntitlementsURLIfNeeded(for cert: CertificatePair) throws -> URL? {
+		guard _options.appEntitlementsFile == nil,
+			let profile = Storage.shared.getProvisionFileDecoded(for: cert),
+			let profileEntitlements = profile.Entitlements,
+			let teamID = profile.TeamIdentifier.first,
+			let bundleIdentifier = Bundle(url: _appUrl)?.bundleIdentifier
+		else {
+			return nil
+		}
+
+		var entitlements = profileEntitlements.mapValues { $0.value }
+		let wildcardGroup = "\(teamID).*"
+		let appKeychainGroup = "\(teamID).\(bundleIdentifier)"
+
+		if let groups = entitlements["keychain-access-groups"] as? [String],
+			groups.contains(wildcardGroup) {
+			entitlements["keychain-access-groups"] = groups.map {
+				$0 == wildcardGroup ? appKeychainGroup : $0
+			}
+		}
+
+		guard PropertyListSerialization.propertyList(
+			entitlements,
+			isValidFor: .xml
+		) else {
+			return nil
+		}
+
+		let data = try PropertyListSerialization.data(
+			fromPropertyList: entitlements,
+			format: .xml,
+			options: 0
+		)
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("zag-entitlements-\(UUID().uuidString).plist")
+		try data.write(to: url, options: .atomic)
+		return url
+	}
+
 	private func _embedProvisioningProfileInAppExtensions(_ provisionURL: URL) throws {
 		guard let enumerator = FileManager.default.enumerator(
 			at: _appUrl,
