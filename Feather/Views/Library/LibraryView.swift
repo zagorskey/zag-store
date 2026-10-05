@@ -718,7 +718,7 @@ struct LibraryView: View {
 			NBListAdaptable(transparentBackground: true) {
 				libraryListContent
 			}
-			.listSectionSpacing(12)
+			.modifier(ZagLibrarySectionSpacingModifier())
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
 			.searchable(
@@ -1055,6 +1055,17 @@ struct LibraryView: View {
 
 
 
+}
+
+private struct ZagLibrarySectionSpacingModifier: ViewModifier {
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if #available(iOS 17.0, *) {
+			content.listSectionSpacing(12)
+		} else {
+			content
+		}
+	}
 }
 
 private struct ZagLibraryLifecycleModifier: ViewModifier {
