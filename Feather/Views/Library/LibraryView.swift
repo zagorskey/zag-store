@@ -1076,55 +1076,23 @@ struct LibraryView: View {
 
 
 
-		.onChange(of: _signedApps.map { $0.uuid }) { _ in
-
-
-
-			_updateRepositoryUpdates()
-
-
-
-		}
-
-
-
-		.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { _ in
-
-
-
-				if let latest = _signedApps.first {
-
-
-
-					_selectedInstallAppPresenting = AnyApp(base: latest)
-
-
-
-				}
-
-
-
-				}
-
-
-
-			.onChange(of: _editMode) { mode in
-
-
-
-				if mode == .inactive {
-
-
-
-					_selectedAppUUIDs.removeAll()
-
-
-
-				}
-
-
-
-			}
+			.modifier(
+				ZagLibraryTailEventsModifier(
+					signedAppUUIDs: _signedApps.map { $0.uuid },
+					editMode: _editMode,
+					onSignedAppsChange: _updateRepositoryUpdates,
+					onInstallApp: {
+						if let latest = _signedApps.first {
+							_selectedInstallAppPresenting = AnyApp(base: latest)
+						}
+					},
+					onEditModeChange: { mode in
+						if mode == .inactive {
+							_selectedAppUUIDs.removeAll()
+						}
+					}
+				)
+			)
 
 
 
@@ -1145,6 +1113,27 @@ struct LibraryView: View {
 
 
 
+}
+
+private struct ZagLibraryTailEventsModifier: ViewModifier {
+	let signedAppUUIDs: [String?]
+	let editMode: EditMode
+	let onSignedAppsChange: () -> Void
+	let onInstallApp: () -> Void
+	let onEditModeChange: (EditMode) -> Void
+
+	func body(content: Content) -> some View {
+		content
+			.onChange(of: signedAppUUIDs) { _ in
+				onSignedAppsChange()
+			}
+			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { _ in
+				onInstallApp()
+			}
+			.onChange(of: editMode) { mode in
+				onEditModeChange(mode)
+			}
+	}
 }
 
 // MARK: - Extension: View
