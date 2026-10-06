@@ -1210,6 +1210,7 @@ extension LibraryView {
 			_managedInstalledBundleIDsData = encoded
 		}
 		_updateRepositoryUpdates()
+		_removeSupersededInstalledSignedCopies(keeping: app)
 
 		if let uuid = app.uuid {
 			withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
