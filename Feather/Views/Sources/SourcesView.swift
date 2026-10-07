@@ -343,6 +343,19 @@ struct SourcesView: View {
 		}
 		.onAppear {
 			_probeSystemDictation()
+			if ZagStoreRouter.pendingRoute == .yourSources {
+				_persistedSourcesRoute = "allRepositories"
+				_showAllRepositories = true
+				ZagStoreRouter.consume(.yourSources)
+			}
+		}
+		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
+			guard let route = note.object as? ZagStoreRoute, route == .yourSources else {
+				return
+			}
+			_persistedSourcesRoute = "allRepositories"
+			_showAllRepositories = true
+			ZagStoreRouter.consume(.yourSources)
 		}
 		.onChange(of: _showAllRepositories) { isPresented in
 			if !isPresented {
