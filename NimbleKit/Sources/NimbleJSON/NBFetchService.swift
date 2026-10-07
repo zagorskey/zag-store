@@ -63,7 +63,28 @@ public class NBFetchService {
 		}
 	}
 
+	private let decodedCacheQueue = DispatchQueue(
+		label: "NBFetchService.decoded-cache",
+		attributes: .concurrent
+	)
+	private var decodedCache: [String: Any] = [:]
+
 	public init() {}
+
+	private func cachedDecodedValue<T>(
+		for url: URL,
+		as type: T.Type
+	) -> T? {
+		decodedCacheQueue.sync {
+			decodedCache[url.absoluteString] as? T
+		}
+	}
+
+	private func storeDecodedValue<T>(_ value: T, for url: URL) {
+		decodedCacheQueue.async(flags: .barrier) {
+			self.decodedCache[url.absoluteString] = value
+		}
+	}
 
 	private static let cacheDirectory: URL? = {
 		guard let root = FileManager.default.urls(
@@ -169,10 +190,34 @@ extension NBFetchService {
 					return
 				}
 
+				if http?.statusCode == 304,
+				   let decoded: T = self.cachedDecodedValue(for: url, as: T.self) {
+					NBRepositoryFetchDiagnostics.record(
+						NBRepositoryFetchMetric(
+							url: url.absoluteString,
+							status: "decoded-cache/304",
+							byteCount: responseData.count,
+							networkSeconds: networkElapsed,
+							decodeSeconds: 0,
+							recordedAt: Date()
+						)
+					)
+					print(
+						"[Zag Store Sources] " +
+							"\(url.host ?? url.absoluteString) — decoded-cache/304 — " +
+							"\(ByteCountFormatter.string(fromByteCount: Int64(responseData.count), countStyle: .file)) — " +
+							"network " + String(format: "%.3fs", networkElapsed) +
+							" — decode 0.000s"
+					)
+					completion(.success(decoded))
+					return
+				}
+
 				let decodeStartedAt = CFAbsoluteTimeGetCurrent()
 				do {
 					let decodedData = try JSONDecoder().decode(T.self, from: responseData)
 					let decodeElapsed = CFAbsoluteTimeGetCurrent() - decodeStartedAt
+					self.storeDecodedValue(decodedData, for: url)
 
 					if http?.statusCode != 304, let payloadURL {
 						do {
