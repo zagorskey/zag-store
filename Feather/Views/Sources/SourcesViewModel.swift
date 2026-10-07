@@ -104,13 +104,29 @@ final class SourcesViewModel: ObservableObject {
 			) { group in
 				for url in batchURLs {
 					group.addTask {
-						await withCheckedContinuation { continuation in
+						let startedAt = CFAbsoluteTimeGetCurrent()
+						let host = url.host ?? url.absoluteString
+						print("[Zag Store Sources] Fetch started: \(host)")
+
+						return await withCheckedContinuation { continuation in
 							self._dataService.fetch(from: url) {
 								(result: RepositoryDataHandler) in
+								let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
 								switch result {
 								case .success(let repo):
+									print(
+										"[Zag Store Sources] Fetch+decode finished: " +
+										"\(host) — \(repo.apps.count) apps — " +
+										String(format: "%.3fs", elapsed)
+									)
 									continuation.resume(returning: (url, repo))
-								case .failure:
+								case .failure(let error):
+									print(
+										"[Zag Store Sources] Fetch failed: " +
+										"\(host) — " +
+										String(format: "%.3fs", elapsed) +
+										" — \(error.localizedDescription)"
+									)
 									continuation.resume(returning: (url, nil))
 								}
 							}
@@ -153,14 +169,34 @@ final class SourcesViewModel: ObservableObject {
 
 		let completedSources = refreshedSources
 		let completedRepositories = Array(completedSources.values)
+		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
 
 		// Publish the repository snapshot and its derived update state as
 		// one completed refresh. Until this point the previous Updates
 		// pill/count and app-icon badge remain untouched.
 		self.sources = completedSources
+
+		let originsStartedAt = CFAbsoluteTimeGetCurrent()
 		reconcileRepositoryOrigins()
+		let originsElapsed = CFAbsoluteTimeGetCurrent() - originsStartedAt
+		print(
+			"[Zag Store Sources] Origin reconciliation — " +
+			String(format: "%.3fs", originsElapsed)
+		)
+
+		let updatesStartedAt = CFAbsoluteTimeGetCurrent()
 		await _refreshUpdatesUsingInstalledInventory(
 			repositories: completedRepositories
+		)
+		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
+		let finalizationElapsed = CFAbsoluteTimeGetCurrent() - reconciliationStartedAt
+		print(
+			"[Zag Store Sources] Inventory + update reconciliation — " +
+			String(format: "%.3fs", updatesElapsed)
+		)
+		print(
+			"[Zag Store Sources] Refresh finalization — " +
+			String(format: "%.3fs", finalizationElapsed)
 		)
 	}
 
