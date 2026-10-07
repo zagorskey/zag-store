@@ -2388,7 +2388,7 @@ private struct ZagUpdateRow: View {
 }
 
 
-private struct ZagUpdatesPopup: View {
+struct ZagUpdatesPopup: View {
 	let updates: [UpdateManager.AvailableUpdate]
 
 	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
