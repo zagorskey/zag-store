@@ -103,13 +103,20 @@ final class SourcesViewModel: ObservableObject {
 				returning: [URL: ASRepository].self
 			) { group in
 				for url in batchURLs {
+					let cachedRepository = self.sources.first {
+						$0.key.sourceURL?.absoluteString == url.absoluteString
+					}?.value
+
 					group.addTask {
 						let startedAt = CFAbsoluteTimeGetCurrent()
 						let host = url.host ?? url.absoluteString
 						print("[Zag Store Sources] Fetch started: \(host)")
 
 						return await withCheckedContinuation { continuation in
-							self._dataService.fetch(from: url) {
+							self._dataService.fetch(
+								from: url,
+								cachedValue: cachedRepository
+							) {
 								(result: RepositoryDataHandler) in
 								let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
 								switch result {
