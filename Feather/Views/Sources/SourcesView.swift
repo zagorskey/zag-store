@@ -299,6 +299,9 @@ struct SourcesView: View {
 					addRepositoryButton
 					repositoryTransferMenu
 				}
+				ToolbarItem(placement: .topBarTrailing) {
+					ZagProfileToolbarButton()
+				}
 			}
 			.refreshable {
 				await viewModel.fetchSources(
