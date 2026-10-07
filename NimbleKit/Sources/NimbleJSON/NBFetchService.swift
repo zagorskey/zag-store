@@ -63,11 +63,20 @@ public class NBFetchService {
 		}
 	}
 
+	private struct DecodedCacheEntry {
+		let value: Any
+		let byteCost: Int
+		var lastAccess: UInt64
+	}
+
 	private let decodedCacheQueue = DispatchQueue(
-		label: "NBFetchService.decoded-cache",
-		attributes: .concurrent
+		label: "NBFetchService.decoded-cache"
 	)
-	private var decodedCache: [String: Any] = [:]
+	private var decodedCache: [String: DecodedCacheEntry] = [:]
+	private var decodedCacheByteCost = 0
+	private var decodedCacheClock: UInt64 = 0
+	private let decodedCacheByteLimit = 64 * 1024 * 1024
+	private let slowDecodeThreshold: TimeInterval = 0.5
 
 	public init() {}
 
@@ -76,13 +85,72 @@ public class NBFetchService {
 		as type: T.Type
 	) -> T? {
 		decodedCacheQueue.sync {
-			decodedCache[url.absoluteString] as? T
+			let key = url.absoluteString
+			guard var entry = decodedCache[key],
+			      let value = entry.value as? T else {
+				return nil
+			}
+			decodedCacheClock &+= 1
+			entry.lastAccess = decodedCacheClock
+			decodedCache[key] = entry
+			return value
 		}
 	}
 
-	private func storeDecodedValue<T>(_ value: T, for url: URL) {
-		decodedCacheQueue.async(flags: .barrier) {
-			self.decodedCache[url.absoluteString] = value
+	private func storeDecodedValue<T>(
+		_ value: T,
+		for url: URL,
+		byteCost: Int
+	) {
+		decodedCacheQueue.sync {
+			let key = url.absoluteString
+			if let previous = decodedCache.removeValue(forKey: key) {
+				decodedCacheByteCost -= previous.byteCost
+			}
+
+			decodedCacheClock &+= 1
+			decodedCache[key] = DecodedCacheEntry(
+				value: value,
+				byteCost: byteCost,
+				lastAccess: decodedCacheClock
+			)
+			decodedCacheByteCost += byteCost
+
+			while decodedCacheByteCost > decodedCacheByteLimit,
+			      decodedCache.count > 1,
+			      let victim = decodedCache.min(by: {
+				      $0.value.lastAccess < $1.value.lastAccess
+			      }) {
+				decodedCache.removeValue(forKey: victim.key)
+				decodedCacheByteCost -= victim.value.byteCost
+			}
+		}
+	}
+
+	public func removeCachedRepository(for url: URL) {
+		decodedCacheQueue.sync {
+			if let removed = decodedCache.removeValue(forKey: url.absoluteString) {
+				decodedCacheByteCost -= removed.byteCost
+			}
+		}
+
+		if let payloadURL = payloadURL(for: url) {
+			try? FileManager.default.removeItem(at: payloadURL)
+		}
+
+		let defaults = UserDefaults.standard
+		defaults.removeObject(forKey: validatorKey("etag", url: url))
+		defaults.removeObject(forKey: validatorKey("modified", url: url))
+	}
+
+	public func retainCachedRepositories(for urls: Set<URL>) {
+		let retainedKeys = Set(urls.map(\.absoluteString))
+		decodedCacheQueue.sync {
+			for key in decodedCache.keys where !retainedKeys.contains(key) {
+				if let removed = decodedCache.removeValue(forKey: key) {
+					decodedCacheByteCost -= removed.byteCost
+				}
+			}
 		}
 	}
 
@@ -217,7 +285,24 @@ extension NBFetchService {
 				do {
 					let decodedData = try JSONDecoder().decode(T.self, from: responseData)
 					let decodeElapsed = CFAbsoluteTimeGetCurrent() - decodeStartedAt
-					self.storeDecodedValue(decodedData, for: url)
+					self.storeDecodedValue(
+						decodedData,
+						for: url,
+						byteCost: responseData.count
+					)
+
+					if decodeElapsed >= self.slowDecodeThreshold {
+						print(
+							"[Zag Store Sources] Slow decode — " +
+							"\(url.host ?? url.absoluteString) — " +
+							String(format: "%.3fs", decodeElapsed) +
+							" — " +
+							ByteCountFormatter.string(
+								fromByteCount: Int64(responseData.count),
+								countStyle: .file
+							)
+						)
+					}
 
 					if http?.statusCode != 304, let payloadURL {
 						do {
