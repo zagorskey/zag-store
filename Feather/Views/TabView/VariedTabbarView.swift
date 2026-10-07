@@ -83,31 +83,39 @@ struct ZagProfileToolbarButton: View {
 	@State private var isAccountPresenting = false
 	@State private var avatarRevision = UUID()
 
-	private var visibleBadge: String? {
-		guard !isAccountPresenting, updateManager.updateCount > 0 else { return nil }
-		return updateManager.updateCount.description
-	}
-
 	var body: some View {
 		Button {
-			withAnimation(.easeOut(duration: 0.18)) {
+			withAnimation(.easeOut(duration: 0.16)) {
 				isAccountPresenting = true
 			}
 		} label: {
-			ZagGlobalProfileAvatar(revision: avatarRevision)
-				.frame(width: 40, height: 40)
+			ZStack(alignment: .topTrailing) {
+				ZagGlobalProfileAvatar(revision: avatarRevision)
+					.frame(width: 42, height: 42)
+					.padding(.top, 3)
+					.padding(.trailing, 3)
+
+				if updateManager.updateCount > 0 {
+					Text(updateManager.updateCount.description)
+						.font(.system(size: 13, weight: .semibold, design: .rounded))
+						.monospacedDigit()
+						.foregroundStyle(.white)
+						.padding(.horizontal, 6)
+						.frame(minWidth: 24, minHeight: 24)
+						.background(Color(red: 1.0, green: 0.05, blue: 0.20), in: Capsule())
+						.opacity(isAccountPresenting ? 0 : 1)
+						.scaleEffect(isAccountPresenting ? 0.82 : 1)
+						.animation(.easeInOut(duration: 0.16), value: isAccountPresenting)
+				}
+			}
+			.frame(width: 49, height: 49, alignment: .bottomLeading)
 		}
 		.buttonStyle(.plain)
-		.badge(visibleBadge)
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
 		}
-		.sheet(isPresented: $isAccountPresenting, onDismiss: {
-			withAnimation(.easeIn(duration: 0.18)) {
-				isAccountPresenting = false
-			}
-		}) {
+		.sheet(isPresented: $isAccountPresenting) {
 			ZagAccountPopup()
 		}
 	}
