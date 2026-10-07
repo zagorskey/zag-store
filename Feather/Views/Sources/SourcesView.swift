@@ -800,8 +800,7 @@ struct SourcesView: View {
 								}
 								.font(.system(size: 15, weight: .regular))
 								.lineLimit(1)
-								.contentTransition(.numericText(value: Double(totalApps)))
-								.animation(.snappy(duration: 0.35), value: totalApps)
+								.modifier(ZagAppCountTransition(value: totalApps))
 							}
 						}
 						.frame(
@@ -1439,5 +1438,22 @@ private struct ZagRepositoriesHeader:
 			),
 			count: count
 		)
+	}
+}
+
+
+private struct ZagAppCountTransition: ViewModifier {
+	let value: Int
+
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if #available(iOS 17.0, *) {
+			content
+				.contentTransition(.numericText(value: Double(value)))
+				.animation(.snappy(duration: 0.35), value: value)
+		} else {
+			content
+				.animation(.easeInOut(duration: 0.2), value: value)
+		}
 	}
 }
