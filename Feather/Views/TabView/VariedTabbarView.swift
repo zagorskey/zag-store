@@ -97,16 +97,25 @@ struct ZagProfileToolbarButton: View {
 
 	var body: some View {
 		Button {
-			withAnimation(.easeInOut(duration: 0.22)) {
+			withAnimation(.easeInOut(duration: 0.24)) {
 				isAccountPresenting = true
 			}
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
+				.contentShape(Circle())
 		}
 		.buttonStyle(ZagProfilePressStyle())
-		// The badge belongs outside the pressed button's image effects.
-		// Its fill stays opaque until the account presentation fade begins.
+		// Explicit circular glass, independent of the photo and its border.
+		// Do not enlarge the toolbar layout footprint.
+		.background {
+			if #available(iOS 26.0, *) {
+				Circle().glassEffect(.regular, in: Circle())
+			} else {
+				Circle().fill(.ultraThinMaterial)
+			}
+		}
+		.clipShape(Circle())
 		.overlay(alignment: .topTrailing) {
 			if updateManager.updateCount > 0 {
 				Text(updateManager.updateCount.description)
@@ -118,7 +127,7 @@ struct ZagProfileToolbarButton: View {
 					.background(Color(red: 1, green: 0.145, blue: 0.20), in: Capsule())
 					.offset(x: 6, y: -5)
 					.opacity(isAccountPresenting ? 0 : 1)
-					.animation(.easeInOut(duration: 0.22), value: isAccountPresenting)
+					.animation(.easeInOut(duration: 0.24), value: isAccountPresenting)
 					.allowsHitTesting(false)
 			}
 		}
