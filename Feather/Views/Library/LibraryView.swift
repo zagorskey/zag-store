@@ -959,6 +959,10 @@ struct LibraryView: View {
 
 				}
 
+				ToolbarItem(placement: .topBarTrailing) {
+					ZagProfileToolbarButton()
+				}
+
 
 
 			}
