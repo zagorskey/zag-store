@@ -20,9 +20,8 @@ struct SourcesCellView: View {
 	var repository: ASRepository?
 	var isRefreshing: Bool = false
 
-	@State private var refreshDotCount = 0
-
-	private var appCount: Int {
+ 
+ 	private var appCount: Int {
 		repository?.apps.count ?? 0
 	}
 
@@ -126,25 +125,11 @@ struct SourcesCellView: View {
 				.zagContentTitleStyle()
 				.lineLimit(1)
 
-				if isRefreshing {
-					Text("Updated: Refreshing" + String(repeating: ".", count: refreshDotCount))
-						.font(.system(size: 15, weight: .regular))
-						.foregroundStyle(Color(uiColor: .secondaryLabel))
-						.lineLimit(1)
-						.task(id: isRefreshing) {
-							refreshDotCount = 0
-							while !Task.isCancelled && isRefreshing {
-								try? await Task.sleep(for: .milliseconds(380))
-								guard !Task.isCancelled && isRefreshing else { break }
-								refreshDotCount = (refreshDotCount + 1) % 4
-							}
-						}
-				} else {
-					Text(lastUpdatedText)
-						.font(.system(size: 15, weight: .regular))
-						.foregroundStyle(Color(uiColor: .secondaryLabel))
-						.lineLimit(1)
-				}
+				Text(lastUpdatedText)
+					.font(.system(size: 15, weight: .regular))
+					.foregroundStyle(Color(uiColor: .secondaryLabel))
+					.lineLimit(1)
+					.contentTransition(.opacity)
 			}
 
 			Spacer(minLength: 8)
