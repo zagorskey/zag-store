@@ -10,6 +10,7 @@ import NimbleViews
 import UIKit
 import Darwin
 import IDeviceSwift
+import NimbleJSON
 import Photos
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
