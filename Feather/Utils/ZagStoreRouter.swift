@@ -7,6 +7,7 @@ extension Notification.Name {
 enum ZagStoreRoute: String, CaseIterable {
 	case home
 	case sources
+	case yourSources
 	case apps
 	case settings
 	case installation
@@ -17,7 +18,7 @@ enum ZagStoreRoute: String, CaseIterable {
 	var tab: String {
 		switch self {
 		case .home: return "home"
-		case .sources: return "sources"
+		case .sources, .yourSources: return "sources"
 		case .apps: return "library"
 		default: return "settings"
 		}
@@ -29,6 +30,8 @@ enum ZagStoreRoute: String, CaseIterable {
 			return URL(string: "zagstore://home")!
 		case .sources:
 			return URL(string: "zagstore://sources")!
+		case .yourSources:
+			return URL(string: "zagstore://sources/your-sources")!
 		case .apps:
 			return URL(string: "zagstore://apps")!
 		case .settings:
@@ -53,6 +56,7 @@ enum ZagStoreRoute: String, CaseIterable {
 		switch parts {
 		case ["home"]: return .home
 		case ["sources"]: return .sources
+		case ["sources", "your-sources"]: return .yourSources
 		case ["apps"]: return .apps
 		case ["settings"]: return .settings
 		case ["settings", "installation"]: return .installation
@@ -67,6 +71,7 @@ enum ZagStoreRoute: String, CaseIterable {
 enum ZagStoreURL {
 	static let home = ZagStoreRoute.home.url
 	static let sources = ZagStoreRoute.sources.url
+	static let yourSources = ZagStoreRoute.yourSources.url
 	static let apps = ZagStoreRoute.apps.url
 	static let settings = ZagStoreRoute.settings.url
 	static let installation = ZagStoreRoute.installation.url
