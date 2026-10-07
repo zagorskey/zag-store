@@ -82,32 +82,58 @@ struct ZagProfileToolbarButton: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@State private var isAccountPresenting = false
 	@State private var avatarRevision = UUID()
-
-	private var visibleBadge: String? {
-		guard !isAccountPresenting, updateManager.updateCount > 0 else { return nil }
-		return updateManager.updateCount.description
-	}
+	@GestureState private var isPressing = false
 
 	var body: some View {
 		Button {
-			withAnimation(.easeOut(duration: 0.18)) {
-				isAccountPresenting = true
-			}
+			isAccountPresenting = true
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
+				.scaleEffect(isPressing ? 1.09 : 1)
+				.brightness(isPressing ? 0.10 : 0)
+				.shadow(
+					color: .white.opacity(isPressing ? 0.24 : 0),
+					radius: isPressing ? 7 : 0
+				)
+				.animation(
+					.interpolatingSpring(stiffness: 420, damping: 22),
+					value: isPressing
+				)
 		}
 		.buttonStyle(.plain)
-		.badge(visibleBadge)
+		.overlay(alignment: .topTrailing) {
+			if updateManager.updateCount > 0 {
+				Text(updateManager.updateCount.description)
+					.font(.system(size: 13, weight: .regular))
+					.foregroundStyle(.white)
+					.padding(.horizontal, 6)
+					.frame(minWidth: 24, minHeight: 24)
+					.background(
+						Color(red: 1.0, green: 0.145, blue: 0.20),
+						in: Capsule()
+					)
+					.offset(x: 7, y: -6)
+					.opacity(isAccountPresenting ? 0 : 1)
+					.scaleEffect(isAccountPresenting ? 0.72 : 1)
+					.animation(
+						.interpolatingSpring(stiffness: 300, damping: 27),
+						value: isAccountPresenting
+					)
+					.allowsHitTesting(false)
+			}
+		}
+		.simultaneousGesture(
+			DragGesture(minimumDistance: 0)
+				.updating($isPressing) { _, state, _ in
+					state = true
+				}
+		)
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
 		}
-		.sheet(isPresented: $isAccountPresenting, onDismiss: {
-			withAnimation(.easeIn(duration: 0.18)) {
-				isAccountPresenting = false
-			}
-		}) {
+		.sheet(isPresented: $isAccountPresenting) {
 			ZagAccountPopup()
 		}
 	}
