@@ -103,24 +103,25 @@ struct ZagProfileToolbarButton: View {
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.overlay(alignment: .topTrailing) {
-					if updateManager.updateCount > 0 {
-						Text(updateManager.updateCount.description)
-							.font(.system(size: 13, weight: .regular))
-								.monospacedDigit()
-							.foregroundStyle(.white)
-							.padding(.horizontal, 6)
-							.frame(minWidth: 24, minHeight: 24)
-							.background(Color(red: 1, green: 0.145, blue: 0.20), in: Capsule())
-							// Keep the opaque badge within the toolbar surface so
-							// the native pressed glass cannot clip its outer edge.
-							.offset(x: 0, y: 0)
-							.opacity(isAccountPresenting ? 0 : 1)
-							.animation(.easeInOut(duration: 0.22), value: isAccountPresenting)
-							}
-				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
+		// The badge belongs outside the pressed button's image effects.
+		// Its fill stays opaque until the account presentation fade begins.
+		.overlay(alignment: .topTrailing) {
+			if updateManager.updateCount > 0 {
+				Text(updateManager.updateCount.description)
+					.font(.system(size: 12, weight: .regular))
+					.monospacedDigit()
+					.foregroundStyle(.white)
+					.padding(.horizontal, 5)
+					.frame(minWidth: 20, minHeight: 20)
+					.background(Color(red: 1, green: 0.145, blue: 0.20), in: Capsule())
+					.offset(x: 6, y: -5)
+					.opacity(isAccountPresenting ? 0 : 1)
+					.animation(.easeInOut(duration: 0.22), value: isAccountPresenting)
+					.allowsHitTesting(false)
+			}
+		}
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
