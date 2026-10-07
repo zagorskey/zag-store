@@ -202,13 +202,16 @@ struct SettingsView: View {
 					}
 				}
 
-				ToolbarItem(placement: .topBarTrailing) {
+				ToolbarItemGroup(placement: .topBarTrailing) {
 					Button {
 						UIApplication.open("https://github.com/zagorskey/zag-store")
 					} label: {
 						Image(systemName: "chevron.left.forwardslash.chevron.right")
 					}
 					.accessibilityLabel("GitHub Repository")
+				}
+				ToolbarItem(placement: .topBarTrailing) {
+					ZagProfileToolbarButton()
 				}
 			}
 		}
