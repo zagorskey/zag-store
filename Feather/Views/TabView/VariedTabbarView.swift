@@ -106,16 +106,6 @@ struct ZagProfileToolbarButton: View {
 				.contentShape(Circle())
 		}
 		.buttonStyle(ZagProfilePressStyle())
-		// Explicit circular glass, independent of the photo and its border.
-		// Do not enlarge the toolbar layout footprint.
-		.background {
-			if #available(iOS 26.0, *) {
-				Circle().glassEffect(.regular, in: Circle())
-			} else {
-				Circle().fill(.ultraThinMaterial)
-			}
-		}
-		.clipShape(Circle())
 		.overlay(alignment: .topTrailing) {
 			if updateManager.updateCount > 0 {
 				Text(updateManager.updateCount.description)
