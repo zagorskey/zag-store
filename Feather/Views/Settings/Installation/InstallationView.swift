@@ -25,7 +25,7 @@ struct InstallationView: View {
 		NBList(.localized("Installation")) {
 			Section {
 				Picker("Select Method", systemImage: "arrow.down.app", selection: $_installationMethod) {
-					ForEach(_installationMethods.indices, id: \.description) { index in
+					ForEach([2, 1, 0], id: \.self) { index in
 						Text(_installationMethods[index]).tag(index)
 					}
 				}
@@ -42,6 +42,9 @@ struct InstallationView: View {
 			} else if _installationMethod == 2 {
 				RPPairingView()
 			}
+		}
+		.safeAreaInset(edge: .bottom) {
+			Color.clear.frame(height: 48)
 		}
 		.onChange(of: _installationMethod) { newValue in
 			guard newValue == 1 else { return }
@@ -86,42 +89,39 @@ private struct RPPairingView: View {
 
 	var body: some View {
 		Section {
-			VStack(spacing: 0) {
-				directStatusRow(
-					"Pairing",
-					titleSystemImage: "link",
-					value: pairingCore.pairingFileExists ? "Paired" : "Setup Required",
-					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle",
-					color: pairingCore.pairingFileExists ? .green : .orange
-				)
-				Divider()
-				Button {
-					guard !tunnelVerified else { return }
-					if isLocalDevVpnAvailable {
-						UIApplication.open("localdevvpn://enable?scheme=feather")
-					} else {
-						UIApplication.open("https://apps.apple.com/us/app/localdevvpn/id6755608044")
-					}
-				} label: {
-					directStatusRow(
-						"LocalDevVPN",
-						titleSystemImage: "network",
-						value: tunnelVerified ? "Connected" : (isLocalDevVpnAvailable ? "Connect" : "Download"),
-						systemImage: tunnelVerified ? "checkmark.circle.fill" : "link",
-						color: tunnelVerified ? .green : .accentColor
-					)
+			directStatusRow(
+				"Pairing",
+				titleSystemImage: "link",
+				value: pairingCore.pairingFileExists ? "Paired" : "Setup Required",
+				systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle",
+				color: pairingCore.pairingFileExists ? .green : .orange
+			)
+
+			Button {
+				guard !tunnelVerified else { return }
+				if isLocalDevVpnAvailable {
+					UIApplication.open("localdevvpn://enable?scheme=feather")
+				} else {
+					UIApplication.open("https://apps.apple.com/us/app/localdevvpn/id6755608044")
 				}
-				.buttonStyle(.plain)
-				Divider()
+			} label: {
 				directStatusRow(
-					"Installation",
-					titleSystemImage: "arrow.down.app",
-					value: directInstallStatusText,
-					systemImage: directInstallStatusIcon,
-					color: directInstallStatusColor
+					"LocalDevVPN",
+					titleSystemImage: "network",
+					value: tunnelVerified ? "Connected" : (isLocalDevVpnAvailable ? "Connect" : "Download"),
+					systemImage: tunnelVerified ? "checkmark.circle.fill" : "link",
+					color: tunnelVerified ? .green : .accentColor
 				)
 			}
-			.listRowInsets(EdgeInsets())
+			.buttonStyle(.plain)
+
+			directStatusRow(
+				"Installation",
+				titleSystemImage: "arrow.down.app",
+				value: directInstallStatusText,
+				systemImage: directInstallStatusIcon,
+				color: directInstallStatusColor
+			)
 		} header: {
 			Text("Status")
 		} footer: {
@@ -335,7 +335,7 @@ private struct RPPairingView: View {
 		systemImage: String,
 		color: Color
 	) -> some View {
-		HStack(spacing: 12) {
+		HStack {
 			Label(title, systemImage: titleSystemImage)
 			Spacer()
 			Text(value)
@@ -344,8 +344,6 @@ private struct RPPairingView: View {
 				.foregroundStyle(color)
 				.frame(width: 22, alignment: .center)
 		}
-		.padding(.horizontal, 16)
-		.frame(minHeight: 50)
 	}
 
 	private var statusText: String {
