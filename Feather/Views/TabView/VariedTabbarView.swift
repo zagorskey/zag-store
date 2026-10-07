@@ -78,57 +78,49 @@ struct VariedTabbarView: View {
 	}
 }
 
+private struct ZagProfilePressStyle: ButtonStyle {
+	func makeBody(configuration: Configuration) -> some View {
+		configuration.label
+			.scaleEffect(configuration.isPressed ? 1.075 : 1)
+			.brightness(configuration.isPressed ? 0.12 : 0)
+			.shadow(color: .white.opacity(configuration.isPressed ? 0.32 : 0),
+			        radius: configuration.isPressed ? 6 : 0)
+			.animation(.spring(response: 0.32, dampingFraction: 0.53),
+			           value: configuration.isPressed)
+	}
+}
+
 struct ZagProfileToolbarButton: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@State private var isAccountPresenting = false
 	@State private var avatarRevision = UUID()
-	@GestureState private var isPressing = false
 
 	var body: some View {
 		Button {
-			isAccountPresenting = true
+			withAnimation(.easeInOut(duration: 0.22)) {
+				isAccountPresenting = true
+			}
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.scaleEffect(isPressing ? 1.09 : 1)
-				.brightness(isPressing ? 0.10 : 0)
-				.shadow(
-					color: .white.opacity(isPressing ? 0.24 : 0),
-					radius: isPressing ? 7 : 0
-				)
-				.animation(
-					.interpolatingSpring(stiffness: 420, damping: 22),
-					value: isPressing
-				)
-		}
-		.buttonStyle(.plain)
-		.overlay(alignment: .topTrailing) {
-			if updateManager.updateCount > 0 {
-				Text(updateManager.updateCount.description)
-					.font(.system(size: 13, weight: .regular))
-					.foregroundStyle(.white)
-					.padding(.horizontal, 6)
-					.frame(minWidth: 24, minHeight: 24)
-					.background(
-						Color(red: 1.0, green: 0.145, blue: 0.20),
-						in: Capsule()
-					)
-					.offset(x: 7, y: -6)
-					.opacity(isAccountPresenting ? 0 : 1)
-					.scaleEffect(isAccountPresenting ? 0.72 : 1)
-					.animation(
-						.interpolatingSpring(stiffness: 300, damping: 27),
-						value: isAccountPresenting
-					)
-					.allowsHitTesting(false)
-			}
-		}
-		.simultaneousGesture(
-			DragGesture(minimumDistance: 0)
-				.updating($isPressing) { _, state, _ in
-					state = true
+				.overlay(alignment: .topTrailing) {
+					if updateManager.updateCount > 0 {
+						Text(updateManager.updateCount.description)
+							.font(.system(size: 13, weight: .regular))
+								.monospacedDigit()
+							.foregroundStyle(.white)
+							.padding(.horizontal, 6)
+							.frame(minWidth: 24, minHeight: 24)
+							.background(Color(red: 1, green: 0.145, blue: 0.20), in: Capsule())
+							// Keep the opaque badge within the toolbar surface so
+							// the native pressed glass cannot clip its outer edge.
+							.offset(x: 0, y: 0)
+							.opacity(isAccountPresenting ? 0 : 1)
+							.animation(.easeInOut(duration: 0.22), value: isAccountPresenting)
+							}
 				}
-		)
+		}
+		.buttonStyle(ZagProfilePressStyle())
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
