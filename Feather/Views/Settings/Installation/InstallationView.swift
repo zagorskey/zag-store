@@ -344,6 +344,7 @@ private struct RPPairingView: View {
 				.foregroundStyle(color)
 				.frame(width: 22, alignment: .center)
 		}
+		.padding(.horizontal, 16)
 		.frame(minHeight: 50)
 	}
 
