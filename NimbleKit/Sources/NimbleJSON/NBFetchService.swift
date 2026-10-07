@@ -7,6 +7,43 @@
 
 import Foundation
 
+// MARK: - Repository diagnostics
+
+public struct NBRepositoryFetchMetric: Codable, Identifiable, Sendable {
+	public let url: String
+	public let status: String
+	public let byteCount: Int
+	public let networkSeconds: Double
+	public let decodeSeconds: Double
+	public let recordedAt: Date
+
+	public var id: String { url }
+}
+
+public enum NBRepositoryFetchDiagnostics {
+	private static let key = "ZagStore.RepositoryFetchMetrics"
+
+	public static var metrics: [NBRepositoryFetchMetric] {
+		guard
+			let data = UserDefaults.standard.data(forKey: key),
+			let decoded = try? JSONDecoder().decode([NBRepositoryFetchMetric].self, from: data)
+		else { return [] }
+		return decoded.sorted { $0.recordedAt > $1.recordedAt }
+	}
+
+	public static func record(_ metric: NBRepositoryFetchMetric) {
+		var current = metrics.filter { $0.url != metric.url }
+		current.append(metric)
+		if let data = try? JSONEncoder().encode(current) {
+			UserDefaults.standard.set(data, forKey: key)
+		}
+	}
+
+	public static func clear() {
+		UserDefaults.standard.removeObject(forKey: key)
+	}
+}
+
 // MARK: - Class
 public class NBFetchService {
 
@@ -162,6 +199,16 @@ extension NBFetchService {
 						}
 					}
 
+					NBRepositoryFetchDiagnostics.record(
+						NBRepositoryFetchMetric(
+							url: url.absoluteString,
+							status: sourceLabel,
+							byteCount: responseData.count,
+							networkSeconds: networkElapsed,
+							decodeSeconds: decodeElapsed,
+							recordedAt: Date()
+						)
+					)
 					print(
 						"[Zag Store Sources] " +
 						"\(url.host ?? url.absoluteString) — \(sourceLabel) — " +
