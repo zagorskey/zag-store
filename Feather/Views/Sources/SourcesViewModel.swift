@@ -40,6 +40,9 @@ final class SourcesViewModel: ObservableObject {
 				$0.sourceURL?.absoluteString
 			}
 		)
+		_dataService.retainCachedRepositories(
+			for: Set(sources.compactMap { $0.sourceURL })
+		)
 
 		self.sources = self.sources.filter { source, _ in
 			guard let sourceURL = source.sourceURL?.absoluteString else {
@@ -364,7 +367,12 @@ final class SourcesViewModel: ObservableObject {
 
 	@MainActor
 	func removeSource(_ source: AltSource) {
-		let removedURL = source.sourceURL?.absoluteString
+		let sourceURL = source.sourceURL
+		let removedURL = sourceURL?.absoluteString
+
+		if let sourceURL {
+			_dataService.removeCachedRepository(for: sourceURL)
+		}
 
 		sources = sources.filter { cachedSource, _ in
 			if let removedURL {
