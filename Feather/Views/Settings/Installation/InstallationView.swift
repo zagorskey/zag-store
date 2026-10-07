@@ -89,6 +89,7 @@ private struct RPPairingView: View {
 			VStack(spacing: 0) {
 				directStatusRow(
 					"Pairing",
+					titleSystemImage: "link",
 					value: pairingCore.pairingFileExists ? "Paired" : "Setup Required",
 					systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle",
 					color: pairingCore.pairingFileExists ? .green : .orange
@@ -104,6 +105,7 @@ private struct RPPairingView: View {
 				} label: {
 					directStatusRow(
 						"LocalDevVPN",
+						titleSystemImage: "network",
 						value: tunnelVerified ? "Connected" : (isLocalDevVpnAvailable ? "Connect" : "Download"),
 						systemImage: tunnelVerified ? "checkmark.circle.fill" : "link",
 						color: tunnelVerified ? .green : .accentColor
@@ -113,6 +115,7 @@ private struct RPPairingView: View {
 				Divider()
 				directStatusRow(
 					"Installation",
+					titleSystemImage: "arrow.down.app",
 					value: directInstallStatusText,
 					systemImage: directInstallStatusIcon,
 					color: directInstallStatusColor
@@ -126,18 +129,24 @@ private struct RPPairingView: View {
 		}
 
 		Section {
-			LabeledContent {
+			HStack {
+				Label("This iPhone", systemImage: "iphone")
+				Spacer()
 				Text(pairingCore.pairingFileExists ? "Paired" : "Not Paired")
 					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
-			} label: {
-				Label("This iPhone", systemImage: "iphone")
+				Image(systemName: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "circle")
+					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
+					.frame(width: 22, alignment: .center)
 			}
 
-			LabeledContent {
+			HStack {
+				Label("Pairing File", systemImage: "doc.badge.gearshape")
+				Spacer()
 				Text(pairingCore.pairingFileExists ? "Saved" : "Not Saved")
 					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
-			} label: {
-				Label("Pairing File", systemImage: "doc.badge.gearshape")
+				Image(systemName: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "circle")
+					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
+					.frame(width: 22, alignment: .center)
 			}
 
 			if pairingCore.pairingFileExists {
@@ -329,12 +338,21 @@ private struct RPPairingView: View {
 	}
 
 	@ViewBuilder
-	private func directStatusRow(_ title: String, value: String, systemImage: String, color: Color) -> some View {
+	private func directStatusRow(
+		_ title: String,
+		titleSystemImage: String,
+		value: String,
+		systemImage: String,
+		color: Color
+	) -> some View {
 		HStack(spacing: 12) {
-			Text(title)
+			Label(title, systemImage: titleSystemImage)
 			Spacer()
-			Label(value, systemImage: systemImage)
+			Text(value)
 				.foregroundStyle(color)
+			Image(systemName: systemImage)
+				.foregroundStyle(color)
+				.frame(width: 22, alignment: .center)
 		}
 		.padding(.horizontal, 16)
 		.frame(minHeight: 50)
