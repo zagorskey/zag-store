@@ -170,12 +170,34 @@ final class SourcesViewModel: ObservableObject {
 	) async {
 		let pairingCore = ZagRPPairingCore.shared
 
-		// If a valid inventory is already loaded, use it immediately. A full
-		// source refresh still requests a fresh inventory below when possible.
+		// Repository refresh and the Apps tab can request device inventory at
+		// nearly the same time. Previously we abandoned update reconciliation
+		// whenever another inventory refresh was already running, which could
+		// leave the Updates popup on its previous snapshot even though repository
+		// rows already showed fresh Update buttons. Wait briefly for the in-flight
+		// authoritative inventory instead, then reconcile against the completed
+		// repository snapshot.
 		if case .refreshing = pairingCore.installedAppsState {
-			print("[Zag Store Updates] Installed-app inventory already refreshing; keeping previous update snapshot")
-			ZagLogger.shared.warning("Updates", "Installed-app inventory already refreshing; keeping previous update snapshot")
-			return
+			print("[Zag Store Updates] Installed-app inventory already refreshing; waiting for authoritative snapshot")
+
+			for _ in 0..<50 {
+				try? await Task.sleep(nanoseconds: 100_000_000)
+				if case .refreshing = pairingCore.installedAppsState {
+					continue
+				}
+				break
+			}
+
+			if case .refreshing = pairingCore.installedAppsState {
+				print("[Zag Store Updates] Installed-app inventory refresh timed out; keeping previous update snapshot")
+				ZagLogger.shared.warning("Updates", "Installed-app inventory refresh timed out; keeping previous update snapshot")
+				return
+			}
+
+			if case .loaded = pairingCore.installedAppsState {
+				UpdateManager.shared.refresh(repositories: repositories)
+				return
+			}
 		}
 
 		do {
