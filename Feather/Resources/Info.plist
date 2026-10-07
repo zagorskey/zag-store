@@ -118,6 +118,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>feather</string>
+				<string>zagstore</string>
 			</array>
 		</dict>
 	</array>
