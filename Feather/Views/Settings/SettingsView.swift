@@ -77,6 +77,10 @@ struct SettingsView: View {
 	@AppStorage("ZagStore.showInternalMetadata") private var _showInternalMetadata = false
 	@State private var _showAdvancedSettingsWarning = false
 	@State private var _photoAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+	@State private var _routeInstallation = false
+	@State private var _routeInstallationDiagnostics = false
+	@State private var _routeRPPairingDiagnostics = false
+	@State private var _routeUpdateDiagnostics = false
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -126,9 +130,28 @@ struct SettingsView: View {
 				Color.clear.frame(height: 48)
 			}
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
+			.navigationDestination(isPresented: $_routeInstallation) {
+				InstallationView()
+			}
+			.navigationDestination(isPresented: $_routeInstallationDiagnostics) {
+				ZagInstallationDiagnosticsView()
+			}
+			.navigationDestination(isPresented: $_routeRPPairingDiagnostics) {
+				RPPairingDiagnosticsView()
+			}
+			.navigationDestination(isPresented: $_routeUpdateDiagnostics) {
+				ZagUpdateDiagnosticsView()
+			}
+			.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
+				guard let route = note.object as? ZagStoreRoute else { return }
+				_handleZagStoreRoute(route)
+			}
 			.onAppear {
 				_loadSettingsSectionOrder()
 				_refreshPhotoAuthorizationStatus()
+				if let route = ZagStoreRouter.pendingRoute {
+					_handleZagStoreRoute(route)
+				}
 			}
 			.zagWallpaperSurface()
 			.toolbar {
@@ -216,6 +239,32 @@ struct SettingsView: View {
 
 // MARK: - View extension
 extension SettingsView {
+	private func _handleZagStoreRoute(_ route: ZagStoreRoute) {
+		guard route.tab == TabEnum.settings.rawValue else { return }
+
+		_routeInstallation = false
+		_routeInstallationDiagnostics = false
+		_routeRPPairingDiagnostics = false
+		_routeUpdateDiagnostics = false
+
+		switch route {
+		case .installation:
+			_routeInstallation = true
+		case .installationDiagnostics:
+			_routeInstallationDiagnostics = true
+		case .rppairingDiagnostics:
+			_routeRPPairingDiagnostics = true
+		case .updateDiagnostics:
+			_routeUpdateDiagnostics = true
+		case .settings:
+			break
+		default:
+			return
+		}
+
+		ZagStoreRouter.consume(route)
+	}
+
 	@ViewBuilder
 	private var _advancedSettingsSections: some View {
 		Section {
