@@ -7,11 +7,41 @@
 
 import SwiftUI
 import CoreData
+import UIKit
+
+extension Notification.Name {
+	static let zagProfileAvatarDidChange = Notification.Name("ZagStore.profileAvatarDidChange")
+}
+
+enum ZagProfileAvatarStore {
+	private static let fileName = "zag-profile-avatar.jpg"
+	static var customURL: URL {
+		FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+			.appendingPathComponent(fileName)
+	}
+	static func customImage() -> UIImage? { UIImage(contentsOfFile: customURL.path) }
+	static func save(_ data: Data) throws {
+		let directory = customURL.deletingLastPathComponent()
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		guard let image = UIImage(data: data),
+		      let encoded = image.jpegData(compressionQuality: 0.9) else {
+			throw CocoaError(.fileReadCorruptFile)
+		}
+		try encoded.write(to: customURL, options: .atomic)
+		NotificationCenter.default.post(name: .zagProfileAvatarDidChange, object: nil)
+	}
+	static func removeCustomImage() {
+		try? FileManager.default.removeItem(at: customURL)
+		NotificationCenter.default.post(name: .zagProfileAvatarDidChange, object: nil)
+	}
+}
 
 struct VariedTabbarView: View {
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
+	@State private var isAccountPresenting = false
+	@State private var avatarRevision = UUID()
 
 	@FetchRequest(
 		entity: AltSource.entity(),
@@ -28,7 +58,8 @@ struct VariedTabbarView: View {
 	init() {}
 
 	var body: some View {
-		Group {
+		ZStack(alignment: .topTrailing) {
+			Group {
 			if #available(iOS 18, *) {
 				ExtendedTabbarView()
 			} else {
@@ -48,12 +79,109 @@ struct VariedTabbarView: View {
 				refresh: true
 			)
 		}
-		.onReceive(sourcesViewModel.$sources) { _ in
-			// SourcesViewModel commits the repository snapshot and its
-			// derived update state together after a refresh completes.
-			// Do not recalculate here: @Published sends before assignment,
-			// which would momentarily evaluate the previous/empty snapshot
-			// and erase the last known Updates state while refreshing.
+			.onReceive(sourcesViewModel.$sources) { _ in
+				// SourcesViewModel commits repository and update state together.
+			}
+
+			Button {
+				isAccountPresenting = true
+			} label: {
+				ZagGlobalProfileAvatar(revision: avatarRevision)
+					.frame(width: 46, height: 46)
+					.overlay(alignment: .topTrailing) {
+						if updateManager.updateCount > 0 {
+							Text(updateManager.updateCount.description)
+								.font(.system(size: 11, weight: .bold))
+								.foregroundStyle(.white)
+								.padding(.horizontal, 5)
+								.frame(minWidth: 20, minHeight: 20)
+								.background(Color.red, in: Capsule())
+								.offset(x: 6, y: -5)
+						}
+			}
+			.buttonStyle(.plain)
+			.padding(.top, 8)
+			.padding(.trailing, 18)
+			.accessibilityLabel("Account and App Updates")
+		}
+		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
+			avatarRevision = UUID()
+		}
+		.sheet(isPresented: $isAccountPresenting) {
+			ZagAccountPopup()
+		}
+	}
+}
+
+private struct ZagGlobalProfileAvatar: View {
+	let revision: UUID
+	@Environment(\.colorScheme) private var colorScheme
+	var body: some View {
+		Group {
+			if let image = ZagProfileAvatarStore.customImage() {
+				Image(uiImage: image).resizable().scaledToFill()
+			} else {
+				Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
+					.resizable().scaledToFill()
+			}
+		}
+		.id(revision)
+		.clipShape(Circle())
+		.background(.ultraThinMaterial, in: Circle())
+		.overlay(Circle().stroke(.white.opacity(0.16), lineWidth: 0.5))
+		.shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+	}
+}
+
+private struct ZagAccountPopup: View {
+	@ObservedObject private var updateManager = UpdateManager.shared
+	@Environment(\.dismiss) private var dismiss
+	@State private var avatarRevision = UUID()
+
+	var body: some View {
+		NavigationStack {
+			Form {
+				Section {
+					HStack(spacing: 14) {
+						ZagGlobalProfileAvatar(revision: avatarRevision)
+							.frame(width: 62, height: 62)
+						VStack(alignment: .leading, spacing: 3) {
+							Text("Zag Store").font(.title3.weight(.semibold))
+							Text("Profile").foregroundStyle(.secondary)
+						}
+					}
+					.padding(.vertical, 6)
+				}
+				Section {
+					NavigationLink {
+						ZagUpdatesPopup(updates: updateManager.updates)
+					} label: {
+						HStack {
+							Label("App Updates", systemImage: "arrow.down.app")
+							Spacer()
+							if updateManager.updateCount > 0 {
+								Text(updateManager.updateCount.description)
+									.font(.caption.weight(.bold))
+									.foregroundStyle(.white)
+									.padding(.horizontal, 7)
+									.frame(minHeight: 24)
+									.background(Color.red, in: Capsule())
+							}
+						}
+					}
+				}
+			}
+			.navigationTitle("Account")
+			.navigationBarTitleDisplayMode(.inline)
+			.toolbar {
+				ToolbarItem(placement: .topBarTrailing) {
+					Button { dismiss() } label: { Image(systemName: "xmark") }
+						.accessibilityLabel("Close")
+				}
+			}
+		}
+		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
+			avatarRevision = UUID()
 		}
 	}
 }
