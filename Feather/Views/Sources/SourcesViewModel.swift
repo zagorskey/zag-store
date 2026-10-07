@@ -81,9 +81,9 @@ final class SourcesViewModel: ObservableObject {
 		// Build the next repository state off-screen. Child tasks traffic only
 		// in URLs and repository values; NSManagedObject instances never cross
 		// a task boundary.
-		var refreshedSources: [AltSource: ASRepository] = refresh
-			? [:]
-			: self.sources
+		// Keep the last known-good snapshot visible while refreshing. Each
+		// repository replaces its own snapshot as soon as it finishes.
+		var refreshedSources: [AltSource: ASRepository] = self.sources
 
 		for startIndex in stride(
 			from: 0,
@@ -98,25 +98,15 @@ final class SourcesViewModel: ObservableObject {
 			let batch = sourceURLs[startIndex..<endIndex]
 			let batchURLs = batch.map { $0.1 }
 
-			let batchResults = await withTaskGroup(
-				of: (URL, ASRepository?).self,
-				returning: [URL: ASRepository].self
-			) { group in
+			await withTaskGroup(of: (URL, ASRepository?).self) { group in
 				for url in batchURLs {
-					let cachedRepository = self.sources.first {
-						$0.key.sourceURL?.absoluteString == url.absoluteString
-					}?.value
-
 					group.addTask {
 						let startedAt = CFAbsoluteTimeGetCurrent()
 						let host = url.host ?? url.absoluteString
 						print("[Zag Store Sources] Fetch started: \(host)")
 
 						return await withCheckedContinuation { continuation in
-							self._dataService.fetch(
-								from: url,
-								cachedValue: cachedRepository
-							) {
+							self._dataService.fetch(from: url) {
 								(result: RepositoryDataHandler) in
 								let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
 								switch result {
@@ -141,13 +131,22 @@ final class SourcesViewModel: ObservableObject {
 					}
 				}
 
-				var results = [URL: ASRepository]()
 				for await (url, repo) in group {
-					if let repo {
-						results[url] = repo
+					guard
+						let repo,
+						let source = batch.first(where: {
+							$0.1.absoluteString == url.absoluteString
+						})?.0,
+						Storage.shared.getSources().contains(where: {
+							$0.sourceURL?.absoluteString == url.absoluteString
+						})
+					else {
+						continue
 					}
+
+					refreshedSources[source] = repo
+					self.sources = refreshedSources
 				}
-				return results
 			}
 
 			let savedSourceURLs = Set(
@@ -155,16 +154,6 @@ final class SourcesViewModel: ObservableObject {
 					$0.sourceURL?.absoluteString
 				}
 			)
-
-			for (source, url) in batch {
-				guard
-					savedSourceURLs.contains(url.absoluteString),
-					let repo = batchResults[url]
-				else {
-					continue
-				}
-				refreshedSources[source] = repo
-			}
 
 			refreshedSources = refreshedSources.filter { source, _ in
 				guard let url = source.sourceURL?.absoluteString else {
