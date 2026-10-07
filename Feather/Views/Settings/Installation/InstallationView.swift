@@ -123,22 +123,12 @@ private struct RPPairingView: View {
 			}
 			.listRowInsets(EdgeInsets())
 		} header: {
-			Text("Direct Install")
+			Text("Status")
 		} footer: {
 			Text("RPPairing requires pairing and a LocalDevVPN connection for direct installation.")
 		}
 
 		Section {
-			HStack {
-				Label("This iPhone", systemImage: "iphone")
-				Spacer()
-				Text(pairingCore.pairingFileExists ? "Paired" : "Not Paired")
-					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
-				Image(systemName: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "circle")
-					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
-					.frame(width: 22, alignment: .center)
-			}
-
 			HStack {
 				Label("Pairing File", systemImage: "doc.badge.gearshape")
 				Spacer()
@@ -219,7 +209,7 @@ private struct RPPairingView: View {
 				.presentationCompactAdaptation(.popover)
 			}
 		} header: {
-			Text("RPPairing")
+			Text("Control")
 		} footer: {
 			Text("Pairing credentials are stored locally and reused for direct installation.")
 		}
@@ -354,7 +344,6 @@ private struct RPPairingView: View {
 				.foregroundStyle(color)
 				.frame(width: 22, alignment: .center)
 		}
-		.padding(.horizontal, 16)
 		.frame(minHeight: 50)
 	}
 
