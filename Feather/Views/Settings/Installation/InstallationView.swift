@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 
 // MARK: - View
 struct InstallationView: View {
-	@AppStorage("Feather.installationMethod") private var _installationMethod: Int = 0
+	@AppStorage("Feather.installationMethod") private var _installationMethod: Int = 2
 	@State private var _showMethodChangedAlert = false
 
 	private let _installationMethods: [String] = [
@@ -24,13 +24,15 @@ struct InstallationView: View {
 	var body: some View {
 		NBList(.localized("Installation")) {
 			Section {
-				Picker(.localized("Installation Type"), systemImage: "arrow.down.app", selection: $_installationMethod) {
+				Picker("Select Method", systemImage: "arrow.down.app", selection: $_installationMethod) {
 					ForEach(_installationMethods.indices, id: \.description) { index in
 						Text(_installationMethods[index]).tag(index)
 					}
 				}
+			} header: {
+				Text("Method")
 			} footer: {
-				Text(.localized("Server (Recommended):\nUses a locally hosted server and itms-services:// to install applications.\n\nIDevice (advanced):\nUses a VPN and a pairing file. Writes to AFC and manually calls installd, while monitoring install progress by using a callback\nAdvantage: It is very reliable, does not need SSL certificates or a externally hosted server. Rather, works similarly to a computer.\n\nRPPairing (Experimental):\nPairs directly on-device using Apple's Remote Pairing protocol. No computer-generated pairing file is required. LocalDevVPN is still required for the direct device-services connection."))
+				Text(_installationMethodDescription)
 			}
 			
 			if _installationMethod == 0 {
@@ -56,6 +58,17 @@ struct InstallationView: View {
 
 
 		.animation(.default, value: _installationMethod)
+	}
+
+	private var _installationMethodDescription: String {
+		switch _installationMethod {
+		case 0:
+			return "Uses a locally hosted server and itms-services:// to install applications."
+		case 1:
+			return "Uses a VPN and a pairing file. Writes to AFC and manually calls installd while monitoring install progress through a callback. It is reliable, requires no SSL certificates or externally hosted server, and works similarly to a computer."
+		default:
+			return "Pairs directly on-device using Apple's Remote Pairing protocol. No computer-generated pairing file is required. LocalDevVPN is still required for the direct device-services connection."
+		}
 	}
 }
 
