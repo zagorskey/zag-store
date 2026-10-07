@@ -632,6 +632,39 @@ public struct DateParsed: Codable, Equatable, Hashable, Comparable, Sendable {
 		// string formats
 		let dateString = try container.decode(String.self).trimmingCharacters(in: .whitespacesAndNewlines)
 		self.rawDate = .string(dateString)
+
+		// Large repositories can contain tens of thousands of date-only values.
+		// Sending every "yyyy-MM-dd" string through multiple ISO8601Formatter /
+		// DateFormatter attempts dominates cold repository decoding. Parse that
+		// fixed-width form directly before touching any formatter.
+		if dateString.utf8.count == 10 {
+			let bytes = Array(dateString.utf8)
+			if bytes.count == 10,
+			   bytes[4] == 45,
+			   bytes[7] == 45,
+			   let year = Int(String(decoding: bytes[0..<4], as: UTF8.self)),
+			   let month = Int(String(decoding: bytes[5..<7], as: UTF8.self)),
+			   let day = Int(String(decoding: bytes[8..<10], as: UTF8.self)) {
+				var components = DateComponents()
+				components.calendar = Calendar(identifier: .gregorian)
+				components.timeZone = TimeZone(secondsFromGMT: 0)
+				components.year = year
+				components.month = month
+				components.day = day
+				if let date = components.date {
+					self.date = date
+					return
+				}
+			}
+		}
+
+		// Numeric timestamp strings are also cheap to recognize and should not
+		// fall through the formatter chain.
+		if let timestamp = Double(dateString),
+		   dateString.allSatisfy({ $0.isNumber || $0 == "." }) {
+			self.date = Date(timeIntervalSince1970: timestamp)
+			return
+		}
 		
 		// ISO8601 formatters
 		for formatter in Self.isoFormatters {
@@ -647,12 +680,6 @@ public struct DateParsed: Codable, Equatable, Hashable, Comparable, Sendable {
 				self.date = date
 				return
 			}
-		}
-		
-		// numeric timestamp string
-		if let timestamp = Double(dateString) {
-			self.date = Date(timeIntervalSince1970: timestamp)
-			return
 		}
 		
 		throw DecodingError.dataCorruptedError(
