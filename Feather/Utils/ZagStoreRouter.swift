@@ -42,9 +42,18 @@ enum ZagStoreRoute: String {
 }
 
 enum ZagStoreRouter {
+	private(set) static var pendingRoute: ZagStoreRoute?
+
 	static func open(_ url: URL) -> Bool {
 		guard let route = ZagStoreRoute.parse(url) else { return false }
+		pendingRoute = route
 		NotificationCenter.default.post(name: .zagStoreRouteRequested, object: route)
 		return true
+	}
+
+	static func consume(_ route: ZagStoreRoute) {
+		if pendingRoute == route {
+			pendingRoute = nil
+		}
 	}
 }
