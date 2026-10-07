@@ -112,6 +112,10 @@ struct ExtendedTabbarView: View {
 			}
 		}
 		.tabViewCustomization($customization)
+		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
+			guard let route = note.object as? ZagStoreRoute else { return }
+			selectedTab.wrappedValue = route.tab
+		}
 		.sheet(isPresented: $_isAddingPresenting) {
 			SourcesAddView()
 				.presentationDetents([.medium])
