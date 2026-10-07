@@ -12,6 +12,7 @@ import Darwin
 import IDeviceSwift
 import NimbleJSON
 import Photos
+import PhotosUI
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
@@ -78,6 +79,8 @@ struct SettingsView: View {
 	@AppStorage("ZagStore.showInternalMetadata") private var _showInternalMetadata = false
 	@State private var _showAdvancedSettingsWarning = false
 	@State private var _photoAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+	@State private var _profileAvatarSelection: PhotosPickerItem?
+	@State private var _profileAvatarRevision = UUID()
 	@State private var _routeInstallation = false
 	@State private var _routeInstallationDiagnostics = false
 	@State private var _routeRPPairingDiagnostics = false
@@ -303,6 +306,34 @@ extension SettingsView {
 		switch section {
 		case .display:
 			Section {
+				PhotosPicker(selection: $_profileAvatarSelection, matching: .images) {
+					HStack {
+						Label("Profile Avatar", systemImage: "person.crop.circle")
+						Spacer()
+						ZagSettingsProfileAvatar(revision: _profileAvatarRevision)
+							.frame(width: 34, height: 34)
+					}
+				}
+				.onChange(of: _profileAvatarSelection) { item in
+					guard let item else { return }
+					Task {
+						if let data = try? await item.loadTransferable(type: Data.self) {
+							try? ZagProfileAvatarStore.save(data)
+							await MainActor.run {
+								_profileAvatarRevision = UUID()
+								_profileAvatarSelection = nil
+							}
+						}
+					}
+				}
+				if ZagProfileAvatarStore.customImage() != nil {
+					Button(role: .destructive) {
+						ZagProfileAvatarStore.removeCustomImage()
+						_profileAvatarRevision = UUID()
+					} label: {
+						Label("Use Default Avatar", systemImage: "arrow.counterclockwise")
+					}
+				}
 				NavigationLink(destination: AppearanceView()) {
 					Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
 				}
@@ -2085,5 +2116,23 @@ private struct ZagInstallationDiagnosticsView: View {
 		.safeAreaInset(edge: .bottom) {
 			Color.clear.frame(height: 48)
 		}
+	}
+}
+
+
+private struct ZagSettingsProfileAvatar: View {
+	let revision: UUID
+	@Environment(\.colorScheme) private var colorScheme
+	var body: some View {
+		Group {
+			if let image = ZagProfileAvatarStore.customImage() {
+				Image(uiImage: image).resizable().scaledToFill()
+			} else {
+				Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
+					.resizable().scaledToFill()
+			}
+		}
+		.id(revision)
+		.clipShape(Circle())
 	}
 }
