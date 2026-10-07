@@ -33,6 +33,13 @@ enum ZagStoreRoute: String {
 		case ["apps"]: return .apps
 		case ["settings"]: return .settings
 		case ["settings", "installation"]: return .installation
+
+		// Canonical diagnostics hierarchy.
+		case ["settings", "diagnostics", "installation"]: return .installationDiagnostics
+		case ["settings", "diagnostics", "installation", "rppairing"]: return .rppairingDiagnostics
+		case ["settings", "diagnostics", "updates"]: return .updateDiagnostics
+
+		// Legacy aliases kept so existing shortcuts/links continue to work.
 		case ["settings", "installation", "diagnostics"]: return .installationDiagnostics
 		case ["settings", "installation", "diagnostics", "rppairing"]: return .rppairingDiagnostics
 		case ["settings", "updates", "diagnostics"]: return .updateDiagnostics
