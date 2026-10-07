@@ -636,16 +636,8 @@ final class UpdateManager: ObservableObject {
 				let repositoryMatches = repositoryAppsByIdentifier[installed.bundleID] ?? []
 				guard !repositoryMatches.isEmpty else { continue }
 
-				// Device inventory tells us what is installed, not who installed it.
-				// Only Zag Store signing history or persisted lineage makes an app
-				// eligible for repository update matching. This keeps ordinary App
-				// Store installations out of the sideload update resolver.
-				let hasZagLineage =
-					!bundleSignedApps.isEmpty ||
-					managedInstalledBundleIDs.contains(installed.bundleID) ||
-					persistedAppOrigins[installed.bundleID] != nil ||
-					persistedRepositoryOrigins[installed.bundleID] != nil
-				guard hasZagLineage else { continue }
+				// RPPairing inventory is authoritative for installed state. An app does
+				// not need to have been installed by Zag Store to be update-eligible.
 				let repositoryNames = Set(
 					repositoryMatches.map { $0.1.currentName }.filter { !$0.isEmpty }
 				)
@@ -653,17 +645,11 @@ final class UpdateManager: ObservableObject {
 					? repositoryNames.first
 					: nil
 
-				guard let installedName = persistedAppOrigins[installed.bundleID] ?? signedName ?? repositoryName else {
-					print(
-						"[Zag Store Updates] AMBIGUOUS INSTALLED IDENTITY: " +
-						"id=\(installed.bundleID) — skipping cross-variant update matching"
-					)
-					ZagLogger.shared.warning(
-						"Updates",
-						"Ambiguous installed identity; skipped cross-variant matching | id=\(installed.bundleID)"
-					)
-					continue
-				}
+				let installedName =
+					persistedAppOrigins[installed.bundleID] ??
+					signedName ??
+					repositoryName ??
+					installed.bundleID
 
 				_addLocalApp(
 					name: installedName,
@@ -762,28 +748,9 @@ final class UpdateManager: ObservableObject {
 					continue
 				}
 
-				// A shared bundle identifier is not enough to establish update
-				// lineage. Tweaked variants (for example Regram/RyukGram) can
-				// deliberately retain the original App Store bundle identifier.
-				// When Zag Store knows which repository supplied the installed
-				// package, only that repository may offer its updates.
-				guard _repositoryMatchesRecordedOrigin(
-					identifier: identifier,
-					repository: repository,
-					origins: recordedOrigins,
-					repositoryOriginAliases: repositoryOriginAliases
-				) else {
-					print(
-						"[Zag Store Updates] IGNORED SOURCE COLLISION: " +
-						"id=\(identifier) | repo=\(repository.name ?? "unknown")"
-					)
-					ZagLogger.shared.debug(
-						"Updates",
-						"Ignored source collision | id=\(identifier) | repo=\(repository.name ?? "unknown")"
-					)
-					continue
-				}
-
+				// Mirror the repository Update pill: installed bundle identity comes
+				// from RPPairing. Explicit app/variant lineage below disambiguates
+				// variants when Zag Store has previously recorded it.
 				guard let candidates = localAppsByIdentifier[identifier],
 					!candidates.isEmpty else {
 					continue
@@ -819,17 +786,6 @@ final class UpdateManager: ObservableObject {
 
 				if let effectiveAppOrigin,
 				   _normalizedAppName(effectiveAppOrigin) != _normalizedAppName(app.currentName) {
-					continue
-				}
-
-				if effectiveAppOrigin == nil &&
-				   !managedInstalledBundleIDs.contains(identifier) {
-					if warnedAmbiguousVariantIDs.insert(identifier).inserted {
-						ZagLogger.shared.warning(
-							"Updates",
-							"Untracked ambiguous variant; exact lineage required | id=\(identifier)"
-						)
-					}
 					continue
 				}
 
