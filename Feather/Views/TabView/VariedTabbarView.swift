@@ -98,6 +98,7 @@ struct VariedTabbarView: View {
 								.background(Color.red, in: Capsule())
 								.offset(x: 6, y: -5)
 						}
+					}
 			}
 			.buttonStyle(.plain)
 			.padding(.top, 8)
