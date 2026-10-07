@@ -561,6 +561,20 @@ final class UpdateManager: ObservableObject {
 		let persistedRepositoryOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOrigins"
 		) as? [String: String] ?? [:]
+		let managedInstalledBundleIDs: Set<String> = {
+			guard
+				let data = UserDefaults.standard.data(
+					forKey: "zagStore.managedInstalledBundleIDs"
+				),
+				let identifiers = try? JSONDecoder().decode(
+					Set<String>.self,
+					from: data
+				)
+			else {
+				return []
+			}
+			return identifiers
+		}()
 
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
@@ -628,6 +642,7 @@ final class UpdateManager: ObservableObject {
 				// Store installations out of the sideload update resolver.
 				let hasZagLineage =
 					!bundleSignedApps.isEmpty ||
+					managedInstalledBundleIDs.contains(installed.bundleID) ||
 					persistedAppOrigins[installed.bundleID] != nil ||
 					persistedRepositoryOrigins[installed.bundleID] != nil
 				guard hasZagLineage else { continue }
