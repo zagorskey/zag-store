@@ -860,7 +860,9 @@ struct SourcesView: View {
 							viewModel.sources[
 								source
 							],
-						isRefreshing: viewModel.isRefreshing
+						isRefreshing: source.sourceURL.map {
+							viewModel.refreshingSourceURLs.contains($0.absoluteString)
+						} ?? false
 					)
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
