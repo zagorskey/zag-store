@@ -23,6 +23,7 @@ final class SourcesViewModel: ObservableObject {
 
 	var isFinished = true
 	@Published private(set) var isRefreshing = false
+	@Published private(set) var refreshingSourceURLs: Set<String> = []
 	@Published var sources: [AltSource: ASRepository] = [:]
 
 
@@ -63,12 +64,14 @@ final class SourcesViewModel: ObservableObject {
 		isFinished = false
 
 		self.isRefreshing = true
+		self.refreshingSourceURLs = Set(sourceURLs.map { $0.1.absoluteString })
 		UpdateManager.shared.beginRepositoryRefresh()
 
 		defer {
 			isFinished = true
 
 			self.isRefreshing = false
+			self.refreshingSourceURLs.removeAll()
 			UpdateManager.shared.endRepositoryRefresh()
 		}
 
@@ -132,6 +135,8 @@ final class SourcesViewModel: ObservableObject {
 				}
 
 				for await (url, repo) in group {
+					refreshingSourceURLs.remove(url.absoluteString)
+
 					guard
 						let repo,
 						let source = batch.first(where: {
