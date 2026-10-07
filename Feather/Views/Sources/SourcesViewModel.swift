@@ -61,6 +61,12 @@ final class SourcesViewModel: ObservableObject {
 			return
 		}
 
+		let sourcesArray = Array(sources)
+		let sourceURLs = sourcesArray.compactMap { source -> (AltSource, URL)? in
+			guard let url = source.sourceURL else { return nil }
+			return (source, url)
+		}
+
 		isFinished = false
 
 		self.isRefreshing = true
@@ -73,12 +79,6 @@ final class SourcesViewModel: ObservableObject {
 			self.isRefreshing = false
 			self.refreshingSourceURLs.removeAll()
 			UpdateManager.shared.endRepositoryRefresh()
-		}
-
-		let sourcesArray = Array(sources)
-		let sourceURLs = sourcesArray.compactMap { source -> (AltSource, URL)? in
-			guard let url = source.sourceURL else { return nil }
-			return (source, url)
 		}
 
 		// Build the next repository state off-screen. Child tasks traffic only
