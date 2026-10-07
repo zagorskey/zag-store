@@ -1,0 +1,50 @@
+import Foundation
+
+extension Notification.Name {
+	static let zagStoreRouteRequested = Notification.Name("ZagStore.routeRequested")
+}
+
+enum ZagStoreRoute: String {
+	case home
+	case sources
+	case apps
+	case settings
+	case installation
+	case installationDiagnostics
+	case rppairingDiagnostics
+	case updateDiagnostics
+
+	var tab: String {
+		switch self {
+		case .home: return "home"
+		case .sources: return "sources"
+		case .apps: return "library"
+		default: return "settings"
+		}
+	}
+
+	static func parse(_ url: URL) -> ZagStoreRoute? {
+		guard url.scheme?.lowercased() == "zagstore" else { return nil }
+		let parts = ([url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" })
+			.map { $0.lowercased() }
+		switch parts {
+		case ["home"]: return .home
+		case ["sources"]: return .sources
+		case ["apps"]: return .apps
+		case ["settings"]: return .settings
+		case ["settings", "installation"]: return .installation
+		case ["settings", "installation", "diagnostics"]: return .installationDiagnostics
+		case ["settings", "installation", "diagnostics", "rppairing"]: return .rppairingDiagnostics
+		case ["settings", "updates", "diagnostics"]: return .updateDiagnostics
+		default: return nil
+		}
+	}
+}
+
+enum ZagStoreRouter {
+	static func open(_ url: URL) -> Bool {
+		guard let route = ZagStoreRoute.parse(url) else { return false }
+		NotificationCenter.default.post(name: .zagStoreRouteRequested, object: route)
+		return true
+	}
+}
