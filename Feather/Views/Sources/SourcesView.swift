@@ -749,7 +749,7 @@ struct SourcesView: View {
 						) {
 							Text(
 								.localized(
-									"Your Repositories"
+									"Your Sources"
 								)
 							)
 							.font(
@@ -763,20 +763,7 @@ struct SourcesView: View {
 							let totalApps = viewModel.sources.values.reduce(0) {
 								$0 + $1.apps.count
 							}
-							if viewModel.isRefreshing {
-								Text("Loading apps" + String(repeating: ".", count: _loadingAppsDotCount))
-									.font(.system(size: 15, weight: .regular))
-									.foregroundColor(Color(uiColor: .secondaryLabel))
-									.lineLimit(1)
-									.task(id: viewModel.isRefreshing) {
-										_loadingAppsDotCount = 0
-										while !Task.isCancelled && viewModel.isRefreshing {
-											try? await Task.sleep(for: .milliseconds(380))
-											guard !Task.isCancelled && viewModel.isRefreshing else { break }
-											_loadingAppsDotCount = (_loadingAppsDotCount + 1) % 4
-										}
-									}
-							} else if totalApps == 0 {
+							if totalApps == 0 {
 								HStack(spacing: 0) {
 									Text("You have ")
 										.foregroundColor(Color(uiColor: .secondaryLabel))
@@ -800,6 +787,8 @@ struct SourcesView: View {
 								}
 								.font(.system(size: 15, weight: .regular))
 								.lineLimit(1)
+								.contentTransition(.numericText(value: Double(totalApps)))
+								.animation(.snappy(duration: 0.35), value: totalApps)
 							}
 						}
 						.frame(
