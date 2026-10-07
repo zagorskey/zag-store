@@ -817,21 +817,19 @@ final class UpdateManager: ObservableObject {
 					return nil
 				}()
 
-				guard let effectiveAppOrigin else {
+				if let effectiveAppOrigin,
+				   _normalizedAppName(effectiveAppOrigin) != _normalizedAppName(app.currentName) {
+					continue
+				}
+
+				if effectiveAppOrigin == nil &&
+				   !managedInstalledBundleIDs.contains(identifier) {
 					if warnedAmbiguousVariantIDs.insert(identifier).inserted {
-						print(
-							"[Zag Store Updates] UNTRACKED AMBIGUOUS VARIANT: " +
-							"id=\(identifier) — exact app lineage required"
-						)
 						ZagLogger.shared.warning(
 							"Updates",
 							"Untracked ambiguous variant; exact lineage required | id=\(identifier)"
 						)
 					}
-					continue
-				}
-
-				if _normalizedAppName(effectiveAppOrigin) != _normalizedAppName(app.currentName) {
 					continue
 				}
 
@@ -852,20 +850,6 @@ final class UpdateManager: ObservableObject {
 				}
 
 				for localApp in candidates {
-					let identityMatches =
-						_normalizedAppName(effectiveAppOrigin) == _normalizedAppName(app.currentName)
-					guard identityMatches else {
-						print(
-							"[Zag Store Updates] " +
-								"IGNORED COLLISION: " +
-								"installed=\(localApp.name) | " +
-								"candidate=\(app.currentName) | " +
-								"id=\(identifier) | " +
-								"repo=\(repository.name ?? "unknown")"
-						)
-						continue
-					}
-
 					let availableBuild = app.currentAppVersion?.build
 					guard _isRepositoryReleaseNewer(
 						availableVersion: availableVersion,
