@@ -357,6 +357,9 @@ extension SettingsView {
 
 		case .diagnostics:
 			Section {
+				NavigationLink(destination: ZagInstallationDiagnosticsView()) {
+					Label("Installation Diagnostics", systemImage: "arrow.down.app")
+				}
 				NavigationLink(destination: ZagUpdateDiagnosticsView()) {
 					Label("Update Diagnostics", systemImage: "waveform.path.ecg.rectangle")
 				}
@@ -1922,3 +1925,21 @@ private struct ZagUpdateDiagnosticsReportView: View {
 	}
 }
 
+
+
+private struct ZagInstallationDiagnosticsView: View {
+	var body: some View {
+		NBList("Installation Diagnostics") {
+			Section {
+				NavigationLink(destination: RPPairingDiagnosticsView()) {
+					Label("RPPairing Diagnostics", systemImage: "stethoscope")
+				}
+			} header: {
+				Text("RPPairing")
+			}
+		}
+		.safeAreaInset(edge: .bottom) {
+			Color.clear.frame(height: 48)
+		}
+	}
+}
