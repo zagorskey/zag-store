@@ -58,6 +58,9 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
+		if ZagStoreRouter.open(url) {
+			return
+		}
 		if url.scheme == "feather" {
 			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>
 			if url.host == "import-certificate" {
