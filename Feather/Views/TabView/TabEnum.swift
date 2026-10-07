@@ -64,6 +64,11 @@ enum TabEnum: String, CaseIterable, Hashable {
 			Color.clear
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
 				.zagWallpaperSurface()
+				.toolbar {
+					ToolbarItem(placement: .topBarTrailing) {
+						ZagProfileToolbarButton()
+					}
+				}
 		}
 		case .sources: SourcesView()
 		case .library: LibraryView()
