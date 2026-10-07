@@ -412,6 +412,9 @@ extension SettingsView {
 				NavigationLink(destination: ZagUpdateDiagnosticsView()) {
 					Label("Update Diagnostics", systemImage: "waveform.path.ecg.rectangle")
 				}
+				NavigationLink(destination: ZagRepositoryPerformanceView()) {
+					Label("Repository Performance", systemImage: "speedometer")
+				}
 			} header: {
 				Text("Diagnostics")
 			}
@@ -1974,6 +1977,97 @@ private struct ZagUpdateDiagnosticsReportView: View {
 	}
 }
 
+
+
+private struct ZagRepositoryPerformanceView: View {
+	@State private var metrics: [NBRepositoryFetchMetric] = []
+	@State private var copied = false
+
+	private func reload() {
+		metrics = NBRepositoryFetchDiagnostics.metrics
+	}
+
+	private func seconds(_ value: Double) -> String {
+		String(format: "%.3f s", value)
+	}
+
+	private var report: String {
+		if metrics.isEmpty {
+			return "No repository performance measurements yet."
+		}
+		return metrics.map { metric in
+			[
+				metric.url,
+				"Status: \(metric.status)",
+				"Size: \(ByteCountFormatter.string(fromByteCount: Int64(metric.byteCount), countStyle: .file))",
+				"Network: \(seconds(metric.networkSeconds))",
+				"Decode: \(seconds(metric.decodeSeconds))",
+				"Total: \(seconds(metric.networkSeconds + metric.decodeSeconds))"
+			].joined(separator: "\n")
+		}.joined(separator: "\n\n")
+	}
+
+	var body: some View {
+		Form {
+			if metrics.isEmpty {
+				Section {
+					Text("No measurements yet. Refresh Sources once, then return here.")
+						.foregroundStyle(.secondary)
+				}
+			} else {
+				ForEach(metrics) { metric in
+					Section {
+						LabeledContent("Status", value: metric.status)
+						LabeledContent(
+							"Size",
+							value: ByteCountFormatter.string(
+								fromByteCount: Int64(metric.byteCount),
+								countStyle: .file
+							)
+						)
+						LabeledContent("Network", value: seconds(metric.networkSeconds))
+						LabeledContent("Decode", value: seconds(metric.decodeSeconds))
+						LabeledContent(
+							"Total",
+							value: seconds(metric.networkSeconds + metric.decodeSeconds)
+						)
+					} header: {
+						Text(URL(string: metric.url)?.host ?? metric.url)
+					} footer: {
+						Text(metric.url)
+							.textSelection(.enabled)
+					}
+				}
+			}
+
+			Section {
+				Button {
+					UIPasteboard.general.string = report
+					copied = true
+					UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				} label: {
+					Label(copied ? "Copied" : "Copy Performance Report", systemImage: copied ? "checkmark" : "doc.on.doc")
+				}
+
+				Button(role: .destructive) {
+					NBRepositoryFetchDiagnostics.clear()
+					reload()
+				} label: {
+					Label("Clear Measurements", systemImage: "trash")
+				}
+			}
+		}
+		.navigationTitle("Repository Performance")
+		.navigationBarTitleDisplayMode(.inline)
+		.zagWallpaperSurface()
+		.onAppear {
+			reload()
+		}
+		.safeAreaInset(edge: .bottom) {
+			Color.clear.frame(height: 48)
+		}
+	}
+}
 
 
 private struct ZagInstallationDiagnosticsView: View {
