@@ -91,7 +91,7 @@ private struct RPPairingView: View {
 		Section {
 			directStatusRow(
 				"Pairing",
-				titleSystemImage: "link",
+				titleSystemImage: "iphone.radiowaves.left.and.right",
 				value: pairingCore.pairingFileExists ? "Paired" : "Setup Required",
 				systemImage: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "exclamationmark.circle",
 				color: pairingCore.pairingFileExists ? .green : .orange
@@ -188,7 +188,7 @@ private struct RPPairingView: View {
 					pairingCore.pairingFileExists
 						? "Unpair This iPhone"
 						: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone"),
-					systemImage: pairingCore.pairingFileExists ? "link.badge.minus" : "link.badge.plus"
+					systemImage: pairingCore.pairingFileExists ? "iphone.badge.minus" : "iphone.radiowaves.left.and.right"
 				)
 				.frame(maxWidth: .infinity, alignment: .leading)
 				.contentShape(Rectangle())
@@ -218,7 +218,7 @@ private struct RPPairingView: View {
 			NavigationLink {
 				RPPairingDiagnosticsView()
 			} label: {
-				Label("Diagnostics & Health Checks", systemImage: "stethoscope")
+				Label("RPPairing Diagnostics", systemImage: "stethoscope")
 			}
 		} header: {
 			Text("Diagnostics")
@@ -245,6 +245,14 @@ private struct RPPairingView: View {
 			Text(unpairError ?? "")
 		}
 
+
+		.onAppear {
+			if pairingCore.pairingFileExists &&
+			   !pairingCore.isGate2Running &&
+			   pairingCore.gate2State == .idle {
+				pairingCore.startGate2Probe()
+			}
+		}
 
 		.fileImporter(
 			isPresented: $showGate4Importer,
@@ -464,7 +472,7 @@ struct RPPairingDiagnosticsView: View {
 	@State private var healthMessage: String?
 
 	var body: some View {
-		NBList("Diagnostics") {
+		NBList("RPPairing Diagnostics") {
 			Section {
 				gate2Row("Pairing Credentials", complete: pairingCore.pairingFileExists)
 				gate2Row("LocalDevVPN / RPPairing", stage: .lockdown)
