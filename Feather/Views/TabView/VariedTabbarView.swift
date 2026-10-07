@@ -168,7 +168,7 @@ struct ZagProfileToolbarButton: View {
 				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
-		.buttonBorderShape(.circle)
+		.contentShape(Circle())
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
