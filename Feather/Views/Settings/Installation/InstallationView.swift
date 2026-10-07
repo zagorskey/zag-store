@@ -94,15 +94,25 @@ private struct RPPairingView: View {
 					color: pairingCore.pairingFileExists ? .green : .orange
 				)
 				Divider()
-				directStatusRow(
-					"Local Tunnel",
-					value: tunnelStatusText,
-					systemImage: tunnelStatusIcon,
-					color: tunnelStatusColor
-				)
+				Button {
+					guard !tunnelVerified else { return }
+					if isLocalDevVpnAvailable {
+						UIApplication.open("localdevvpn://enable?scheme=feather")
+					} else {
+						UIApplication.open("https://apps.apple.com/us/app/localdevvpn/id6755608044")
+					}
+				} label: {
+					directStatusRow(
+						"LocalDevVPN",
+						value: tunnelVerified ? "Connected" : (isLocalDevVpnAvailable ? "Connect" : "Download"),
+						systemImage: tunnelVerified ? "checkmark.circle.fill" : "link",
+						color: tunnelVerified ? .green : .accentColor
+					)
+				}
+				.buttonStyle(.plain)
 				Divider()
 				directStatusRow(
-					"Direct Install",
+					"Installation",
 					value: directInstallStatusText,
 					systemImage: directInstallStatusIcon,
 					color: directInstallStatusColor
@@ -110,41 +120,30 @@ private struct RPPairingView: View {
 			}
 			.listRowInsets(EdgeInsets())
 		} header: {
-			Text("Direct Install Status")
+			Text("Direct Install")
 		} footer: {
-			Text("RPPairing installs directly through this iPhone's device services. Run Health Check to verify the LocalDevVPN tunnel and complete direct-install path.")
+			Text("RPPairing requires pairing and a LocalDevVPN connection for direct installation.")
 		}
 
 		Section {
 			LabeledContent {
-				Text(pairingCore.pairingFileExists ? "Ready" : "Setup Required")
-					.foregroundStyle(pairingCore.pairingFileExists ? .green : .orange)
-			} label: {
-				Label("RPPairing", systemImage: "iphone.radiowaves.left.and.right")
-			}
-
-			HStack(spacing: 10) {
-				Image(systemName: pairingCore.pairingFileExists ? "checkmark.circle.fill" : "circle")
+				Text(pairingCore.pairingFileExists ? "Paired" : "Not Paired")
 					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
-				Text(pairingCore.pairingFileExists ? "Pairing credentials saved" : "No computer-generated pairing file")
+			} label: {
+				Label("This iPhone", systemImage: "iphone")
 			}
 
-			HStack(spacing: 10) {
-				Image(systemName: statusIcon)
-					.foregroundStyle(statusColor)
-				Text(statusText)
+			LabeledContent {
+				Text(pairingCore.pairingFileExists ? "Saved" : "Not Saved")
+					.foregroundStyle(pairingCore.pairingFileExists ? .green : .secondary)
+			} label: {
+				Label("Pairing File", systemImage: "doc.badge.gearshape")
 			}
 
 			if pairingCore.pairingFileExists {
 				if let pairingExportURL {
 					ShareLink(item: pairingExportURL) {
 						Label("Export Pairing File", systemImage: "square.and.arrow.up")
-					}
-
-					Button {
-						openPairingFileInAnotherApp(pairingExportURL)
-					} label: {
-						Label("Open Pairing File In…", systemImage: "arrow.up.forward.app")
 					}
 				} else {
 					Button {
@@ -154,7 +153,7 @@ private struct RPPairingView: View {
 							pairingExportError = error.localizedDescription
 						}
 					} label: {
-						Label("Prepare Pairing File for Export", systemImage: "square.and.arrow.up")
+						Label("Export Pairing File", systemImage: "square.and.arrow.up")
 					}
 				}
 			}
@@ -179,19 +178,6 @@ private struct RPPairingView: View {
 					.textSelection(.enabled)
 			}
 
-			if case .paired(let name, let model, _) = pairingCore.state {
-				LabeledContent("Paired Device") {
-					VStack(alignment: .trailing, spacing: 2) {
-						Text(name)
-						if !model.isEmpty {
-							Text(model)
-								.font(.caption)
-								.foregroundStyle(.secondary)
-						}
-					}
-				}
-			}
-
 			Button(role: pairingCore.pairingFileExists ? .destructive : nil) {
 				if pairingCore.pairingFileExists {
 					showUnpairConfirmation = true
@@ -199,38 +185,17 @@ private struct RPPairingView: View {
 					pairingCore.start()
 				}
 			} label: {
-				HStack(spacing: 10) {
-					ZStack {
-						Image(systemName: "link")
-						if pairingCore.pairingFileExists {
-							Image(systemName: "minus.circle.fill")
-								.font(.system(size: 9, weight: .bold))
-								.background(Circle().fill(Color(.systemBackground)).padding(-1))
-								.offset(x: 8, y: 7)
-						} else if pairingCore.isRunning {
-							Image(systemName: "antenna.radiowaves.left.and.right")
-						} else {
-							Image(systemName: "plus.circle.fill")
-								.font(.system(size: 9, weight: .bold))
-								.background(Circle().fill(Color(.systemBackground)).padding(-1))
-								.offset(x: 8, y: 7)
-						}
-					}
-					.frame(width: 22)
-					Text(
-						pairingCore.pairingFileExists
-							? "Unpair This iPhone"
-							: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone")
-					)
-					Spacer(minLength: 0)
-				}
-				.contentShape(Rectangle())
+				Label(
+					pairingCore.pairingFileExists
+						? "Unpair This iPhone"
+						: (pairingCore.isRunning ? "Waiting for This iPhone…" : "Pair This iPhone"),
+					systemImage: pairingCore.pairingFileExists ? "link.badge.minus" : "link.badge.plus"
+				)
 				.frame(maxWidth: .infinity, alignment: .leading)
+				.contentShape(Rectangle())
 			}
 			.buttonStyle(.plain)
 			.foregroundStyle(pairingCore.pairingFileExists ? Color.red : Color.accentColor)
-			.frame(maxWidth: .infinity, alignment: .leading)
-			.contentShape(Rectangle())
 			.disabled(pairingCore.isRunning)
 			.popover(isPresented: $showUnpairConfirmation, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
 				ZagUnpairConfirmationBubble(
@@ -244,22 +209,10 @@ private struct RPPairingView: View {
 				.frame(width: 340)
 				.presentationCompactAdaptation(.popover)
 			}
+		} header: {
+			Text("RPPairing")
 		} footer: {
-			Text("Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally.")
-		}
-
-		Section("Setup") {
-			if isLocalDevVpnAvailable {
-				Button("Connect to LocalDevVPN", systemImage: "link") {
-					UIApplication.open("localdevvpn://enable?scheme=feather")
-				}
-			} else {
-				Button("Download LocalDevVPN", systemImage: "arrow.down.app") {
-					UIApplication.open("https://apps.apple.com/us/app/localdevvpn/id6755608044")
-				}
-			}
-	
-
+			Text("Pairing credentials are stored locally and reused for direct installation.")
 		}
 
 		Section {
