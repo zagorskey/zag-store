@@ -40,8 +40,6 @@ struct VariedTabbarView: View {
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
-	@State private var isAccountPresenting = false
-	@State private var avatarRevision = UUID()
 
 	@FetchRequest(
 		entity: AltSource.entity(),
@@ -58,8 +56,7 @@ struct VariedTabbarView: View {
 	init() {}
 
 	var body: some View {
-		ZStack(alignment: .topTrailing) {
-			Group {
+		Group {
 			if #available(iOS 18, *) {
 				ExtendedTabbarView()
 			} else {
@@ -73,38 +70,39 @@ struct VariedTabbarView: View {
 		}
 		.task {
 			await updateManager.requestBadgePermission()
-
-			await sourcesViewModel.fetchSources(
-				sources,
-				refresh: true
-			)
+			await sourcesViewModel.fetchSources(sources, refresh: true)
 		}
-			.onReceive(sourcesViewModel.$sources) { _ in
-				// SourcesViewModel commits repository and update state together.
-			}
+		.onReceive(sourcesViewModel.$sources) { _ in
+			// SourcesViewModel commits repository and update state together.
+		}
+	}
+}
 
-			Button {
-				isAccountPresenting = true
-			} label: {
-				ZagGlobalProfileAvatar(revision: avatarRevision)
-					.frame(width: 46, height: 46)
-					.overlay(alignment: .topTrailing) {
-						if updateManager.updateCount > 0 {
-							Text(updateManager.updateCount.description)
-								.font(.system(size: 11, weight: .bold))
-								.foregroundStyle(.white)
-								.padding(.horizontal, 5)
-								.frame(minWidth: 20, minHeight: 20)
-								.background(Color.red, in: Capsule())
-								.offset(x: 6, y: -5)
-						}
+struct ZagProfileToolbarButton: View {
+	@StateObject private var updateManager = UpdateManager.shared
+	@State private var isAccountPresenting = false
+	@State private var avatarRevision = UUID()
+
+	var body: some View {
+		Button {
+			isAccountPresenting = true
+		} label: {
+			ZagGlobalProfileAvatar(revision: avatarRevision)
+				.frame(width: 34, height: 34)
+				.overlay(alignment: .topTrailing) {
+					if updateManager.updateCount > 0 {
+						Text(updateManager.updateCount.description)
+							.font(.system(size: 10, weight: .bold))
+							.foregroundStyle(.white)
+							.padding(.horizontal, 4)
+							.frame(minWidth: 18, minHeight: 18)
+							.background(Color.red, in: Capsule())
+							.offset(x: 6, y: -5)
 					}
-			}
-			.buttonStyle(.plain)
-			.padding(.top, 8)
-			.padding(.trailing, 18)
-			.accessibilityLabel("Account and App Updates")
+				}
 		}
+		.buttonStyle(.plain)
+		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
 		}
@@ -114,7 +112,7 @@ struct VariedTabbarView: View {
 	}
 }
 
-private struct ZagGlobalProfileAvatar: View {
+struct ZagGlobalProfileAvatar: View {
 	let revision: UUID
 	@Environment(\.colorScheme) private var colorScheme
 	var body: some View {
@@ -134,7 +132,7 @@ private struct ZagGlobalProfileAvatar: View {
 	}
 }
 
-private struct ZagAccountPopup: View {
+struct ZagAccountPopup: View {
 	@ObservedObject private var updateManager = UpdateManager.shared
 	@Environment(\.dismiss) private var dismiss
 	@State private var avatarRevision = UUID()
