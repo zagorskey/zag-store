@@ -90,44 +90,90 @@ private struct ZagProfilePressStyle: ButtonStyle {
 	}
 }
 
+private struct ZagBadgeAnchor: UIViewRepresentable {
+	let count: Int
+	let hidden: Bool
+	func makeUIView(context: Context) -> ZagBadgeAnchorView { ZagBadgeAnchorView() }
+	func updateUIView(_ view: ZagBadgeAnchorView, context: Context) {
+		view.update(count: count, hidden: hidden)
+	}
+}
+
+private final class ZagBadgeAnchorView: UIView {
+	private let badge = UILabel()
+	private var count = 0
+	private var badgeHidden = false
+	private weak var hostWindow: UIWindow?
+	override init(frame: CGRect) {
+		super.init(frame: frame)
+		isUserInteractionEnabled = false
+		backgroundColor = .clear
+		badge.textAlignment = .center
+		badge.textColor = .white
+		badge.font = .systemFont(ofSize: 12, weight: .regular)
+		badge.backgroundColor = UIColor(red: 1, green: 0.145, blue: 0.20, alpha: 1)
+		badge.layer.cornerRadius = 10
+		badge.layer.masksToBounds = true
+		badge.isUserInteractionEnabled = false
+	}
+	required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+	func update(count: Int, hidden: Bool) {
+		self.count = count
+		badgeHidden = hidden
+		badge.text = String(count)
+		badge.isHidden = count == 0
+		UIView.animate(withDuration: 0.24) {
+			self.badge.alpha = hidden ? 0 : 1
+		}
+		setNeedsLayout()
+		positionBadge()
+	}
+	override func didMoveToWindow() {
+		super.didMoveToWindow()
+		if hostWindow !== window {
+			badge.removeFromSuperview()
+			hostWindow = window
+			window?.addSubview(badge)
+		}
+		positionBadge()
+	}
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		positionBadge()
+	}
+	private func positionBadge() {
+		guard let window, bounds.width > 0 else { return }
+		let rect = convert(bounds, to: window)
+		let width = max(20, CGFloat(String(count).count) * 8 + 10)
+		badge.frame = CGRect(x: rect.maxX - width + 5,
+		                     y: rect.minY - 5, width: width, height: 20)
+		window.bringSubviewToFront(badge)
+	}
+	deinit { badge.removeFromSuperview() }
+}
+
 struct ZagProfileToolbarButton: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@State private var isAccountPresenting = false
 	@State private var avatarRevision = UUID()
-
 	var body: some View {
 		Button {
-			withAnimation(.easeInOut(duration: 0.24)) {
-				isAccountPresenting = true
-			}
+			withAnimation(.easeInOut(duration: 0.24)) { isAccountPresenting = true }
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.contentShape(Circle())
+				.background {
+					ZagBadgeAnchor(count: updateManager.updateCount,
+					               hidden: isAccountPresenting)
+				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
-		.overlay(alignment: .topTrailing) {
-			if updateManager.updateCount > 0 {
-				Text(updateManager.updateCount.description)
-					.font(.system(size: 12, weight: .regular))
-					.monospacedDigit()
-					.foregroundStyle(.white)
-					.padding(.horizontal, 5)
-					.frame(minWidth: 20, minHeight: 20)
-					.background(Color(red: 1, green: 0.145, blue: 0.20), in: Capsule())
-					.offset(x: 6, y: -5)
-					.opacity(isAccountPresenting ? 0 : 1)
-					.animation(.easeInOut(duration: 0.24), value: isAccountPresenting)
-					.allowsHitTesting(false)
-			}
-		}
+		.buttonBorderShape(.circle)
 		.accessibilityLabel("Account and App Updates")
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
 		}
-		.sheet(isPresented: $isAccountPresenting) {
-			ZagAccountPopup()
-		}
+		.sheet(isPresented: $isAccountPresenting) { ZagAccountPopup() }
 	}
 }
 
