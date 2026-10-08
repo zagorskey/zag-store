@@ -126,6 +126,8 @@ struct LibraryView: View {
 
 
 	@State private var _editMode: EditMode = .inactive
+    @AppStorage("zagStore.apps.sortOrder") private var _sortOrder = 0
+    @State private var _showAppDiagnostics = false
 
 
 
@@ -165,34 +167,23 @@ struct LibraryView: View {
 
 
 	private func filteredAndSortedApps<T>(from apps: FetchedResults<T>) -> [T] where T: NSManagedObject {
+        let filtered = apps.filter {
+            _searchText.isEmpty ||
+            (($0.value(forKey: "name") as? String)?.localizedCaseInsensitiveContains(_searchText) ?? false)
+        }
+        switch _sortOrder {
+        case 1, 2:
+            return filtered.sorted {
+                let lhs = ($0.value(forKey: "name") as? String) ?? ""
+                let rhs = ($1.value(forKey: "name") as? String) ?? ""
+                let order = lhs.localizedStandardCompare(rhs)
+                return _sortOrder == 1 ? order == .orderedAscending : order == .orderedDescending
+            }
+        default: return filtered
+        }
+    }
 
-
-
-		apps.filter {
-
-
-
-			_searchText.isEmpty ||
-
-
-
-				(($0.value(forKey: "name") as? String)?.localizedCaseInsensitiveContains(_searchText) ?? false)
-
-
-
-		}
-
-
-
-	}
-
-
-
-
-
-
-
-	private var _filteredSignedApps: [Signed] {
+    private var _filteredSignedApps: [Signed] {
 		filteredAndSortedApps(from: _signedApps)
 	}
 
@@ -899,7 +890,33 @@ struct LibraryView: View {
 
 
 
-				if _editMode.isEditing {
+				ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            withAnimation { _editMode = .active }
+                        } label: {
+                            Label("Select Apps", systemImage: "checkmark.circle")
+                        }
+                        Divider()
+                        Picker("Sort Apps", selection: $_sortOrder) {
+                            Text("Recently Added").tag(0)
+                            Text("Name A–Z").tag(1)
+                            Text("Name Z–A").tag(2)
+                        }
+                        Divider()
+                        Button {
+                            _showAppDiagnostics = true
+                        } label: {
+                            Label("RPPairing Diagnostics", systemImage: "stethoscope")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20, weight: .semibold))
+                    }
+                    .accessibilityLabel("App Management")
+                }
+
+                if _editMode.isEditing {
                     NBToolbarButton(
                         .localized("Delete"),
                         systemImage: "trash",
@@ -951,7 +968,10 @@ struct LibraryView: View {
 				_repositoryDestination
 			}
 
-			.sheet(isPresented: $_isUpdatesPresenting) {
+			.sheet(isPresented: $_showAppDiagnostics) {
+                NavigationStack { RPPairingDiagnosticsView() }
+            }
+            .sheet(isPresented: $_isUpdatesPresenting) {
 				_updatesSheetContent
 			}
 
