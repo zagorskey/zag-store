@@ -100,7 +100,7 @@ struct ExtendedTabbarView: View {
 					let contentWidth = proxy.size.width - (tabContentInset * 2)
 					let itemWidth = contentWidth / CGFloat(TabEnum.defaultTabs.count)
 					Circle()
-						.fill(Color(hex: "#EA3336"))
+						.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
 						.frame(width: 7, height: 7)
 						.position(
 							x: tabContentInset + itemWidth * 2.5 + 12,
