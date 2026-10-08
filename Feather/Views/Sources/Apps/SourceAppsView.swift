@@ -14,8 +14,8 @@ import ObjectiveC.runtime
 
 // Keep this toolbar in a small modifier to avoid inflating the large
 // repository view's SwiftUI type-checking expression.
-private struct ZagRepositoryActionsToolbar: ViewModifier {
-    let sortActions: () -> AnyView
+private struct ZagRepositoryActionsToolbar<SortContent: View>: ViewModifier {
+    let sortActions: () -> SortContent
 
     func body(content: Content) -> some View {
         content.toolbar {
@@ -524,15 +524,11 @@ struct SourceAppsView: View {
 			}
 		}
 		.modifier(ZagRepositoryActionsToolbar(sortActions: {
-            AnyView(
-                NBToolbarMenu(
-                    systemImage: "line.3.horizontal.decrease",
-                    style: .icon,
-                    placement: .topBarTrailing
-                ) {
-                    _sortActions()
-                }
-            )
+            Menu {
+                _sortActions()
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease")
+            }
         }))
 		.onAppear {
 			_probeSystemDictation()
