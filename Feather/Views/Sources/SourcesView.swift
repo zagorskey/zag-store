@@ -12,60 +12,50 @@ import UIKit
 import UniformTypeIdentifiers
 import Speech
 import AVFoundation
-// MARK: - Zag Sources Atom Icon
-
+// MARK: - Animated Zag Store Z (same geometry as the dock icon)
 struct ZagSourcesAtomIcon: View {
-	@AppStorage("Feather.userTintColor")
-	private var themeColorHex: String = "#3F8EF7"
+    @AppStorage("Feather.userTintColor")
+    private var themeColorHex: String = "#3F8EF7"
 
-	var animated: Bool = false
-	@State private var drawOut = false
+    var animated: Bool = false
+    @State private var strokeProgress: CGFloat = 1
 
-	var body: some View {
-		ZStack {
-			RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
-				.fill(ZagWideGamutTint.color(hex: themeColorHex))
-				.overlay {
-					RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
-						.stroke(Color.primary.opacity(0.16), lineWidth: 1)
-				}
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
+                .fill(ZagWideGamutTint.color(hex: themeColorHex))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
+                        .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+                }
 
-			if #available(iOS 26.0, *) {
-				Image(systemName: "atom")
-					.font(.system(size: 39, weight: .regular))
-					.foregroundStyle(.white)
-					.symbolEffect(
-						.drawOff.wholeSymbol,
-						options: .nonRepeating,
-						isActive: drawOut
-					)
-					.task(id: animated) {
-						guard animated else {
-							drawOut = false
-							return
-						}
-
-						// Keep the symbol visible for the first rendered frame,
-						// then immediately begin by drawing it out.
-						drawOut = false
-						await Task.yield()
-						guard !Task.isCancelled && animated else { return }
-						drawOut = true
-
-						while !Task.isCancelled && animated {
-							try? await Task.sleep(for: .seconds(1.15))
-							guard !Task.isCancelled && animated else { break }
-							drawOut.toggle()
-						}
-					}
-			} else {
-				Image(systemName: "atom")
-					.font(.system(size: 39, weight: .regular))
-					.foregroundStyle(.white)
-			}
-		}
-		.frame(width: 62, height: 62)
-	}
+            // Identical coordinates and proportions to ZagSourcesTabIcon.image.
+            Path { path in
+                path.move(to: CGPoint(x: 5.1, y: 6.6))
+                path.addLine(to: CGPoint(x: 24.7, y: 6.6))
+                path.addLine(to: CGPoint(x: 5.1, y: 23.4))
+                path.addLine(to: CGPoint(x: 24.7, y: 23.4))
+            }
+            .trim(from: 0, to: strokeProgress)
+            .stroke(.white, style: StrokeStyle(lineWidth: 5.8, lineCap: .round, lineJoin: .round))
+            .frame(width: 30, height: 30)
+        }
+        .frame(width: 62, height: 62)
+        .task(id: animated) {
+            guard animated else {
+                withAnimation(.easeInOut(duration: 0.35)) { strokeProgress = 1 }
+                return
+            }
+            strokeProgress = 1
+            while !Task.isCancelled {
+                withAnimation(.easeInOut(duration: 0.75)) { strokeProgress = 0 }
+                try? await Task.sleep(for: .seconds(0.85))
+                guard !Task.isCancelled else { break }
+                withAnimation(.easeInOut(duration: 0.75)) { strokeProgress = 1 }
+                try? await Task.sleep(for: .seconds(0.85))
+            }
+        }
+    }
 }
 
 // MARK: - View
