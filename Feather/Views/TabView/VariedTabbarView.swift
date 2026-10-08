@@ -111,7 +111,7 @@ private final class ZagBadgeAnchorView: UIView {
 		badge.textAlignment = .center
 		badge.textColor = .white
 		badge.font = .systemFont(ofSize: 12, weight: .regular)
-		badge.backgroundColor = UIColor(red: 1, green: 0.145, blue: 0.20, alpha: 1)
+		badge.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
 		badge.layer.cornerRadius = 10
 		badge.layer.masksToBounds = true
 		badge.isUserInteractionEnabled = false
@@ -146,7 +146,7 @@ private final class ZagBadgeAnchorView: UIView {
 		let rect = convert(bounds, to: window)
 		let width = max(20, CGFloat(String(count).count) * 8 + 10)
 		badge.frame = CGRect(x: rect.maxX - width + 5,
-		                     y: rect.minY - 5, width: width, height: 20)
+		                     y: rect.minY - 8, width: width, height: 20)
 		window.bringSubviewToFront(badge)
 	}
 	deinit { badge.removeFromSuperview() }
