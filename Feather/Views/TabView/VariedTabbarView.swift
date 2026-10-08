@@ -63,6 +63,7 @@ struct VariedTabbarView: View {
 				TabbarView()
 			}
 		}
+		.tint(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)))
 		.background {
 			if wallpaperEnabled {
 				Color.clear
