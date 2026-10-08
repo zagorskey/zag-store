@@ -292,18 +292,21 @@ struct SourcesView: View {
 				) {
 					repositorySortMenu
 					refreshButton
+					.tint(.primary)
 				}
 				ToolbarItemGroup(
 					placement: .topBarTrailing
 				) {
 					addRepositoryButton
 					repositoryTransferMenu
+					.tint(.primary)
 				}
 				if #available(iOS 26.0, *) {
 					ToolbarSpacer(.fixed, placement: .topBarTrailing)
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
+					.tint(.primary)
 				}
 			}
 			.refreshable {
