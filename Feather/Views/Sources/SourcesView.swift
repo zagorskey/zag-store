@@ -85,6 +85,7 @@ struct SourcesView: View {
 	@StateObject var viewModel =
 		SourcesViewModel.shared
 	@State private var _isAddingPresenting = false
+	@State private var _showRepositoryHealth = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
 	@State private var _dictationAvailable = false
@@ -295,6 +296,14 @@ struct SourcesView: View {
 				) {
 					repositorySortMenu
 						.foregroundStyle(.primary)
+					Button {
+						_showRepositoryHealth = true
+					} label: {
+						Image(systemName: "checkmark.shield")
+								.font(.system(size: 19, weight: .regular))
+						}
+						.accessibilityLabel("Repository Health")
+						.foregroundStyle(.primary)
 					refreshButton
 						.foregroundStyle(.primary)
 				}
@@ -316,6 +325,45 @@ struct SourcesView: View {
 					_sources,
 					refresh: true
 				)
+			}
+			.sheet(isPresented: $_showRepositoryHealth) {
+				NavigationStack {
+					List {
+						Section("Overview") {
+							LabeledContent("Configured repositories", value: "\(_sources.count)")
+							LabeledContent("Loaded repositories", value: "\(_sources.filter { viewModel.sources[$0] != nil }.count)")
+							LabeledContent("Not loaded", value: "\(_sources.filter { viewModel.sources[$0] == nil }.count)")
+							if viewModel.isRefreshing {
+								Label("Refreshing repositories…", systemImage: "arrow.clockwise")
+							}
+						}
+						Section("Repositories") {
+							ForEach(Array(_sources), id: \.objectID) { source in
+								HStack {
+									Image(systemName: viewModel.sources[source] == nil ? "questionmark.circle" : "checkmark.circle.fill")
+										.foregroundStyle(viewModel.sources[source] == nil ? .secondary : .green)
+									VStack(alignment: .leading, spacing: 3) {
+										Text(source.name ?? "Unnamed Repository")
+										if viewModel.sources[source] == nil {
+											Text("Not loaded in this session")
+												.font(.caption).foregroundStyle(.secondary)
+										} else {
+											Text("Repository data available")
+												.font(.caption).foregroundStyle(.secondary)
+										}
+									}
+								}
+							}
+						}
+					}
+				.navigationTitle("Repository Health")
+				.navigationBarTitleDisplayMode(.inline)
+				.toolbar {
+					ToolbarItem(placement: .topBarTrailing) {
+						Button("Done") { _showRepositoryHealth = false }
+					}
+				}
+			}
 			}
 			.sheet(
 				isPresented: $_isAddingPresenting,
