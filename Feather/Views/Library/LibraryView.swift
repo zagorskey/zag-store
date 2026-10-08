@@ -333,6 +333,9 @@ struct LibraryView: View {
 					.frame(height: 46)
 					.background(zagUpdatesPillBackground)
 					.clipShape(Capsule())
+					// Reduce only the leading transfer-line gap; leave the
+					// trailing gap and animation's drawing coordinates unchanged.
+					.padding(.trailing, -8)
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
