@@ -44,9 +44,21 @@ struct ExtendedTabbarView: View {
 	var body: some View {
 		TabView(selection: selectedTab) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
-				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
-					TabEnum.view(for: tab)
-				}
+				if tab == .sources {
+                    Tab(value: tab.rawValue) {
+                        TabEnum.view(for: tab)
+                    } label: {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            ZagSourcesTabIcon.label
+                        }
+                    }
+                } else {
+                    Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
+                        TabEnum.view(for: tab)
+                    }
+                }
 			}
 			
 			ForEach(TabEnum.customizableTabs, id: \.hashValue) { tab in
