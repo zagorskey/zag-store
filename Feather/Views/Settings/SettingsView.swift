@@ -20,8 +20,7 @@ import PhotosUI
 private struct ZagSettingsDestinationAvatar: ViewModifier {
     func body(content: Content) -> some View {
         content.toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Spacer(minLength: 0)
+            ToolbarItem(placement: .primaryAction) {
                 ZagProfileToolbarButton()
                     .tint(.primary)
                     .padding(.trailing, -2)
