@@ -1526,7 +1526,7 @@ private struct ZagRepositoryHealthView: View {
                 }
                 Section("Performance") {
                     NavigationLink {
-                        ZagRepositoryPerformanceView()
+                        ZagRepositoryPerformanceView(showsLargeTitle: false)
                     } label: {
                         Label("Repository Performance", systemImage: "speedometer")
                     }
