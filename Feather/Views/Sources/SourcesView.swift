@@ -75,7 +75,8 @@ struct SourcesView: View {
 	@State private var _showRepositoryHealth = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
-	@State private var _dictationAvailable = false
+	@StateObject private var _searchSpeech = ZagSpeechRecognizer()
+	@State private var _dictationAvailable = true
 	@FocusState private var _searchFieldFocused: Bool
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
@@ -356,7 +357,7 @@ struct SourcesView: View {
 			}
 		}
 		.onAppear {
-			_probeSystemDictation()
+			_dictationAvailable = true
 			if ZagStoreRouter.pendingRoute == .yourSources {
 				_persistedSourcesRoute = "allRepositories"
 				_showAllRepositories = true
@@ -421,35 +422,15 @@ struct SourcesView: View {
 		}
 		#endif
 	}
-	private func _probeSystemDictation() {
-		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
-			  cls.responds(to: NSSelectorFromString("sharedInstance")),
-			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
-		else {
-			_dictationAvailable = false
-			return
-		}
-		_dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
-	}
-
 	private func _startDictationFromSearchMic() {
-		_searchFieldFocused = true
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-			_startSystemDictation()
-		}
-	}
-
-	private func _startSystemDictation() {
-		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
-			  cls.responds(to: NSSelectorFromString("sharedInstance")),
-			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
-		else { return }
-
-		let preheat = NSSelectorFromString("preheatIfNecessary")
-		if controller.responds(to: preheat) { _ = controller.perform(preheat) }
-		let start = NSSelectorFromString("startDictation")
-		if controller.responds(to: start) { _ = controller.perform(start) }
-	}
+        if _searchSpeech.isListening {
+            _searchSpeech.stop()
+        } else {
+            _searchSpeech.start { transcript in
+                _searchText = transcript
+            }
+        }
+    }
 
 	// MARK: - Toolbar
 	private var refreshButton: some View {
