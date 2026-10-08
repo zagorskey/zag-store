@@ -75,8 +75,7 @@ struct SourcesView: View {
 	@State private var _showRepositoryHealth = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
-	@StateObject private var _searchSpeech = ZagSpeechRecognizer()
-	@State private var _dictationAvailable = true
+	@State private var _dictationAvailable = false
 	@FocusState private var _searchFieldFocused: Bool
 	@State private var _isImportingRepositories = false
 	@State private var _isImportingRepositoryFile = false
@@ -357,7 +356,7 @@ struct SourcesView: View {
 			}
 		}
 		.onAppear {
-			_dictationAvailable = true
+			_probeSystemDictation()
 			if ZagStoreRouter.pendingRoute == .yourSources {
 				_persistedSourcesRoute = "allRepositories"
 				_showAllRepositories = true
@@ -422,14 +421,42 @@ struct SourcesView: View {
 		}
 		#endif
 	}
-	private func _startDictationFromSearchMic() {
-        if _searchSpeech.isListening {
-            _searchSpeech.stop()
-        } else {
-            _searchSpeech.start { transcript in
-                _searchText = transcript
-            }
+	private func _probeSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            _dictationAvailable = false
+            return
         }
+        _dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func _startDictationFromSearchMic() {
+        // Match the repository detail search: activate the native search
+        // text field before asking UIKit to start keyboard dictation.
+        _searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            _startSystemDictation()
+        }
+    }
+
+    private func _startSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            _probeSystemDictation()
+            return
+        }
+        let preheat = NSSelectorFromString("preheatIfNecessary")
+        if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+        let start = NSSelectorFromString("startDictation")
+        guard controller.responds(to: start) else {
+            _probeSystemDictation()
+            return
+        }
+        _ = controller.perform(start)
     }
 
 	// MARK: - Toolbar
