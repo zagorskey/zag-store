@@ -2041,7 +2041,7 @@ private struct ZagUpdateDiagnosticsReportView: View {
 
 
 
-private struct ZagRepositoryPerformanceView: View {
+struct ZagRepositoryPerformanceView: View {
 	@State private var metrics: [NBRepositoryFetchMetric] = []
 	@State private var copied = false
 
