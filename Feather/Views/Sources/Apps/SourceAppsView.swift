@@ -507,12 +507,17 @@ struct SourceAppsView: View {
 			}
 		}
 		.toolbar {
-			NBToolbarMenu(
-				systemImage: "line.3.horizontal.decrease",
-				style: .icon,
-				placement: .topBarTrailing
-			) {
-				_sortActions()
+			ToolbarItemGroup(placement: .topBarTrailing) {
+				NBToolbarMenu(
+					systemImage: "line.3.horizontal.decrease",
+					style: .icon,
+					placement: .topBarTrailing
+				) {
+					_sortActions()
+				}
+				ZagProfileToolbarButton()
+					.tint(.primary)
+					.padding(.trailing, -2)
 			}
 		}
 		.onAppear {
