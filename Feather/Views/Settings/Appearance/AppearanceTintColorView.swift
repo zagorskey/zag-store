@@ -12,8 +12,8 @@ struct AppearanceTintColorView: View {
 	@AppStorage("Feather.userTintColor") private var _selectedColorHex: String = "#3F8EF7"
 	private let _tintOptions: [(name: String, hex: String)] = [
 		("Native", 		"#3F8EF7"),
-		("V2", 				"#B496DC"),
-		("Berry",   		"#ff7a83"),
+		("Violet", 			"#B496DC"),
+		("Matrix",   		"#008F11"),
 		("Cool Blue", 		"#4161F1"),
 		("Fuchsia", 		"#FF00FF"),
 		("Protokolle", 		"#4CD964"),
@@ -28,7 +28,7 @@ struct AppearanceTintColorView: View {
 		ScrollView(.horizontal, showsIndicators: false) {
 			LazyHGrid(rows: [GridItem(.fixed(100))], spacing: 12) {
 				ForEach(_tintOptions, id: \.hex) { option in
-					let color = Color(hex: option.hex)
+					let color = ZagWideGamutTint.color(hex: option.hex)
 					let cornerRadius = {
 						if #available(iOS 26.0, *) {
 							28.0
@@ -61,6 +61,12 @@ struct AppearanceTintColorView: View {
 					}
 					.accessibilityLabel(Text(option.name))
 				}
+			}
+		}
+		.onAppear {
+			// Migrate the former Berry selection to Matrix once.
+			if _selectedColorHex.lowercased() == "#ff7a83" {
+				_selectedColorHex = "#008F11"
 			}
 		}
 		.onChange(of: _selectedColorHex) { value in
