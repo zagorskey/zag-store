@@ -256,14 +256,12 @@ struct SourcesView: View {
 				placement: .platform(),
 				prompt: Text("Repos, Apps, Games and More")
 			)
-			.modifier(ZagNativeInlineSearchDictationModifier())
 			.modifier(
 				ZagRepositorySearchFocusModifier(
 					isFocused: $_searchFieldFocused
 				)
 			)
 			.background {
-                if #unavailable(iOS 27.0) {
 				ZagNativeSearchMicInstaller(
 					isAvailable: _dictationAvailable,
 					action: _startDictationFromSearchMic,
@@ -271,7 +269,6 @@ struct SourcesView: View {
 					activePrompt: "Repos, Apps and More"
 				)
 				.frame(width: 0, height: 0)
-                }
 			}
 			.overlay {
 				emptyState
