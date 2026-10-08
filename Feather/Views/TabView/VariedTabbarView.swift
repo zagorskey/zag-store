@@ -78,6 +78,8 @@ struct VariedTabbarView: View {
 				TabbarView()
 			}
 		}
+		.onAppear { updateDockTint() }
+		.onChange(of: themeColorHex) { _ in updateDockTint() }
 		.background {
 			if wallpaperEnabled {
 				Color.clear
@@ -89,6 +91,27 @@ struct VariedTabbarView: View {
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
 			// SourcesViewModel commits repository and update state together.
+		}
+	}
+	private func updateDockTint() {
+		// Apply the selected P3 theme to tab items without tinting child pages.
+		let color = UIColor(ZagWideGamutTint.color(hex: themeColorHex))
+		UITabBar.appearance().tintColor = color
+		for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+			for window in scene.windows {
+				updateTabBars(in: window.rootViewController, color: color)
+			}
+		}
+	}
+
+	private func updateTabBars(in controller: UIViewController?, color: UIColor) {
+		guard let controller else { return }
+		if let tabs = controller as? UITabBarController {
+			tabs.tabBar.tintColor = color
+		}
+		for child in controller.children { updateTabBars(in: child, color: color) }
+		if let presented = controller.presentedViewController {
+			updateTabBars(in: presented, color: color)
 		}
 	}
 }
