@@ -334,11 +334,8 @@ struct LibraryView: View {
 						.frame(maxWidth: .infinity)
 
 					ZStack {
-						ZagUpdatesPillSurface(
-							baseColorHex: zagUpdatesColorScheme == .dark
-								? "#1C1C1E"
-								: "#EEEEEF"
-						)
+						Circle()
+							.fill(zagUpdatesColorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#EEEEEF"))
 
 						Text(updateManager.updateCount.description)
 							.font(.system(size: 14, weight: .regular))
@@ -346,10 +343,10 @@ struct LibraryView: View {
 							.frame(width: 24, height: 24)
 							.background(
 								Circle()
-									.fill(Color(hex: "#E93323"))
+									.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
 							)
 					}
-					.frame(width: 54, height: 46)
+					.frame(width: 46, height: 46)
 				}
 				.frame(maxWidth: .infinity, alignment: .leading)
 				// Native search scopes consume additional vertical space while

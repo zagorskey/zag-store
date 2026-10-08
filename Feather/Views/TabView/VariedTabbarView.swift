@@ -81,11 +81,6 @@ struct VariedTabbarView: View {
 private struct ZagProfilePressStyle: ButtonStyle {
 	func makeBody(configuration: Configuration) -> some View {
 		configuration.label
-			.background {
-				if #available(iOS 26.0, *) {
-					Circle().fill(.clear).glassEffect(.regular, in: Circle())
-				}
-			}
 			.scaleEffect(configuration.isPressed ? 1.075 : 1)
 			.brightness(configuration.isPressed ? 0.12 : 0)
 			.shadow(color: .white.opacity(configuration.isPressed ? 0.32 : 0),
