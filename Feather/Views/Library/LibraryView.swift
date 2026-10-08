@@ -332,7 +332,9 @@ struct LibraryView: View {
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
-                        .padding(.horizontal, 6)
+						// The animation has an intrinsic left-side inset; compensate
+						// only there while preserving the original right-side gap.
+						.padding(.leading, -14)
 
 					ZStack {
 						ZagUpdatesPillSurface(
