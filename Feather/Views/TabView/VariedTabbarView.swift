@@ -351,6 +351,13 @@ struct ZagAccountPopup: View {
                     }
 				}
 				Section {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
+				Section {
 					NavigationLink {
 						ZagUpdatesPopup(updates: updateManager.updates)
 					} label: {
