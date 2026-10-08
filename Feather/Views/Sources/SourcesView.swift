@@ -304,6 +304,7 @@ struct SourcesView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
+						.padding(.leading, -8)
 				}
 			}
 			.refreshable {
