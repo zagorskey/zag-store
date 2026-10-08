@@ -306,7 +306,7 @@ struct LibraryView: View {
 	}
 
 	private var zagUpdatesTitleColor: Color {
-		Color(hex: zagUpdatesThemeHex)
+		Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1))
 	}
 
 	@ViewBuilder
