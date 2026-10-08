@@ -2044,7 +2044,7 @@ private struct ZagUpdateDiagnosticsReportView: View {
 struct ZagRepositoryPerformanceView: View {
     @FetchRequest(
         entity: AltSource.entity(),
-        sortDescriptors: [NSSortDescriptor(keyPath: \.name, ascending: true)]
+        sortDescriptors: [NSSortDescriptor(key: "name", ascending: true)]
     ) private var repositories: FetchedResults<AltSource>
 
     private func repositoryName(for metricURL: String) -> String {
