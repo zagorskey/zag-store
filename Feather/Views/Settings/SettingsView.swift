@@ -20,6 +20,9 @@ import PhotosUI
 private struct ZagSettingsDestinationAvatar: ViewModifier {
     func body(content: Content) -> some View {
         content.toolbar {
+            ToolbarItem(placement: .principal) {
+                Color.clear.frame(width: 0, height: 0)
+            }
             ToolbarItem(placement: .primaryAction) {
                 ZagProfileToolbarButton()
                     .tint(.primary)
@@ -180,6 +183,9 @@ struct SettingsView: View {
 			}
 			.zagWallpaperSurface()
 			.toolbar {
+				ToolbarItem(placement: .principal) {
+					Color.clear.frame(width: 0, height: 0)
+				}
 				ToolbarItemGroup(placement: .topBarLeading) {
 					if _isReorderingSettings {
 						Button {
