@@ -155,26 +155,113 @@ private struct ZagProfilePressStyle: ButtonStyle {
 	}
 }
 
-// The badge belongs to the avatar, not the UIWindow. This keeps its
-// lifetime and geometry tied to the active navigation toolbar.
-private struct ZagProfileBadge: View {
-    let count: Int
-    var body: some View {
-        if count > 0 {
-            Text(count.description)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .frame(minWidth: 20, minHeight: 20)
-                .background(
-                    Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)),
-                    in: Capsule()
-                )
-                .fixedSize()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+// A separate window-level badge layer avoids Liquid Glass clipping. The
+// coordinator owns one badge per window and follows the frontmost visible
+// avatar anchor, rather than leaving independent UILabels behind on pushes.
+private final class ZagProfileBadgeCoordinator {
+    static let shared = ZagProfileBadgeCoordinator()
+    private struct Entry {
+        weak var anchor: UIView?
+        var count: Int
+        var hidden: Bool
+    }
+    private var entries: [ObjectIdentifier: Entry] = [:]
+    private var labels: [ObjectIdentifier: UILabel] = [:]
+
+    func update(_ anchor: UIView, count: Int, hidden: Bool) {
+        entries[ObjectIdentifier(anchor)] = Entry(anchor: anchor, count: count, hidden: hidden)
+        refresh()
+    }
+    func remove(_ anchor: UIView) {
+        entries.removeValue(forKey: ObjectIdentifier(anchor))
+        refresh()
+    }
+    func refresh() {
+        entries = entries.filter { $0.value.anchor != nil }
+        let windows = Set(entries.values.compactMap { $0.anchor?.window }.map { ObjectIdentifier($0) })
+        for (key, label) in labels where !windows.contains(key) {
+            label.removeFromSuperview()
+            labels.removeValue(forKey: key)
+        }
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            for window in scene.windows {
+                let key = ObjectIdentifier(window)
+                let candidates = entries.values.compactMap { entry -> (UIView, Entry, CGRect)? in
+                    guard let anchor = entry.anchor, anchor.window === window,
+                          !anchor.isHidden, anchor.alpha > 0.01,
+                          anchor.bounds.width > 0, anchor.bounds.height > 0 else { return nil }
+                    let rect = anchor.convert(anchor.bounds, to: window)
+                    guard rect.intersects(window.bounds) else { return nil }
+                    return (anchor, entry, rect)
+                }
+                // Pushed navigation pages can coexist briefly with the source.
+                // The rightmost visible anchor wins, and only one badge is drawn.
+                guard let chosen = candidates.max(by: { a, b in
+                    if abs(a.2.maxX - b.2.maxX) > 1 { return a.2.maxX < b.2.maxX }
+                    return a.2.minY > b.2.minY
+                }) else {
+                    labels[key]?.isHidden = true
+                    continue
+                }
+                let label: UILabel
+                if let existing = labels[key] {
+                    label = existing
+                } else {
+                    label = UILabel()
+                    label.textAlignment = .center
+                    label.textColor = .white
+                    label.font = .systemFont(ofSize: 12, weight: .regular)
+                    label.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
+                    label.layer.cornerRadius = 10
+                    label.layer.masksToBounds = true
+                    label.isUserInteractionEnabled = false
+                    window.addSubview(label)
+                    labels[key] = label
+                }
+                let count = chosen.1.count
+                label.text = count.description
+                label.isHidden = count == 0 || chosen.1.hidden
+                let width = max(20, CGFloat(count.description.count * 8 + 10))
+                label.frame = CGRect(x: chosen.2.maxX - width + 7,
+                                     y: chosen.2.minY - 10, width: width, height: 20)
+                window.bringSubviewToFront(label)
+            }
         }
     }
+}
+
+private struct ZagProfileBadgeAnchor: UIViewRepresentable {
+    let count: Int
+    let hidden: Bool
+    func makeUIView(context: Context) -> ZagProfileBadgeAnchorView {
+        ZagProfileBadgeAnchorView()
+    }
+    func updateUIView(_ view: ZagProfileBadgeAnchorView, context: Context) {
+        view.count = count
+        view.hiddenBadge = hidden
+        ZagProfileBadgeCoordinator.shared.update(view, count: count, hidden: hidden)
+    }
+}
+
+private final class ZagProfileBadgeAnchorView: UIView {
+    var count = 0
+    var hiddenBadge = false
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { ZagProfileBadgeCoordinator.shared.remove(self) }
+        else { ZagProfileBadgeCoordinator.shared.update(self, count: count, hidden: hiddenBadge) }
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        ZagProfileBadgeCoordinator.shared.refresh()
+    }
+    deinit { ZagProfileBadgeCoordinator.shared.remove(self) }
 }
 
 private struct ZagCircularToolbarBorder: ViewModifier {
@@ -198,11 +285,9 @@ struct ZagProfileToolbarButton: View {
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.overlay(alignment: .topTrailing) {
-                    ZagProfileBadge(count: updateManager.updateCount)
-                        // Stay within the 40pt toolbar item: Liquid Glass clips overflow after navigation.
-                        .opacity(isAccountPresenting ? 0 : 1)
-                        .animation(.easeInOut(duration: 0.24), value: isAccountPresenting)
+				.background {
+                    ZagProfileBadgeAnchor(count: updateManager.updateCount,
+                                          hidden: isAccountPresenting)
                 }
 		}
 		.buttonStyle(ZagProfilePressStyle())
