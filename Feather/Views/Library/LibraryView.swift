@@ -874,7 +874,7 @@ struct LibraryView: View {
 
 			.toolbar {
 				ToolbarItem(placement: .principal) {
-					Color.clear.frame(width: 0, height: 0)
+					ZagLocalVPNToolbarStatus()
 				}
 
 				ToolbarItem(placement: .topBarLeading) {
