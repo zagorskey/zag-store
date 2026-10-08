@@ -36,7 +36,22 @@ enum ZagProfileAvatarStore {
 	}
 }
 
+enum ZagWideGamutTint {
+	static func color(hex: String) -> Color {
+		let source = UIColor(Color(hex: hex))
+		var red: CGFloat = 0
+		var green: CGFloat = 0
+		var blue: CGFloat = 0
+		var alpha: CGFloat = 0
+		guard source.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+			return Color(hex: hex)
+		}
+		return Color(uiColor: UIColor(displayP3Red: red, green: green, blue: blue, alpha: alpha))
+	}
+}
+
 struct VariedTabbarView: View {
+	@AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
@@ -63,7 +78,7 @@ struct VariedTabbarView: View {
 				TabbarView()
 			}
 		}
-		.tint(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)))
+		.tint(ZagWideGamutTint.color(hex: themeColorHex))
 		.background {
 			if wallpaperEnabled {
 				Color.clear

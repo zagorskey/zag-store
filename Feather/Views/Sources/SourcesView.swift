@@ -24,7 +24,7 @@ struct ZagSourcesAtomIcon: View {
 	var body: some View {
 		ZStack {
 			RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
-				.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)))
+				.fill(ZagWideGamutTint.color(hex: themeColorHex))
 				.overlay {
 					RoundedRectangle(cornerRadius: 62 * 0.2677, style: .continuous)
 						.stroke(Color.primary.opacity(0.16), lineWidth: 1)
@@ -291,15 +291,17 @@ struct SourcesView: View {
 					placement: .topBarLeading
 				) {
 					repositorySortMenu
+						.foregroundStyle(.primary)
 					refreshButton
-					.tint(.primary)
+						.foregroundStyle(.primary)
 				}
 				ToolbarItemGroup(
 					placement: .topBarTrailing
 				) {
 					addRepositoryButton
+						.foregroundStyle(.primary)
 					repositoryTransferMenu
-					.tint(.primary)
+						.foregroundStyle(.primary)
 				}
 				if #available(iOS 26.0, *) {
 					ToolbarSpacer(.fixed, placement: .topBarTrailing)
