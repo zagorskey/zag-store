@@ -38,15 +38,17 @@ enum ZagProfileAvatarStore {
 
 enum ZagWideGamutTint {
 	static func color(hex: String) -> Color {
-		let source = UIColor(Color(hex: hex))
-		var red: CGFloat = 0
-		var green: CGFloat = 0
-		var blue: CGFloat = 0
-		var alpha: CGFloat = 0
-		guard source.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+		// Treat the theme's RGB hex values as native Display P3 components.
+		// Converting through UIColor(Color(hex:)) would first interpret them as sRGB.
+		let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+			.replacingOccurrences(of: "#", with: "")
+		guard digits.count == 6, let value = UInt32(digits, radix: 16) else {
 			return Color(hex: hex)
 		}
-		return Color(uiColor: UIColor(displayP3Red: red, green: green, blue: blue, alpha: alpha))
+		let red = CGFloat((value >> 16) & 0xFF) / 255
+		let green = CGFloat((value >> 8) & 0xFF) / 255
+		let blue = CGFloat(value & 0xFF) / 255
+		return Color(uiColor: UIColor(displayP3Red: red, green: green, blue: blue, alpha: 1))
 	}
 }
 
