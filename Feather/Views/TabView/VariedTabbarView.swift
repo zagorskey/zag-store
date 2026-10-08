@@ -101,26 +101,46 @@ struct VariedTabbarView: View {
 		}
 	}
 	private func updateDockTint() {
-		// Apply the selected P3 theme to tab items without tinting child pages.
 		let color = UIColor(ZagWideGamutTint.color(hex: themeColorHex))
+		// SwiftUI's native tab bar may override tintColor. Set the selected
+		// image AND title appearance explicitly, without tinting page content.
+		let appearance = UITabBarAppearance()
+		appearance.configureWithDefaultBackground()
+		for items in [appearance.stackedLayoutAppearance,
+		              appearance.inlineLayoutAppearance,
+		              appearance.compactInlineLayoutAppearance] {
+			items.selected.iconColor = color
+			items.selected.titleTextAttributes = [.foregroundColor: color]
+		}
 		UITabBar.appearance().tintColor = color
+		UITabBar.appearance().standardAppearance = appearance
+		if #available(iOS 15.0, *) {
+			UITabBar.appearance().scrollEdgeAppearance = appearance
+		}
 		for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
 			for window in scene.windows {
-				updateTabBars(in: window.rootViewController, color: color)
+				updateTabBars(in: window.rootViewController, color: color, appearance: appearance)
 			}
 		}
 	}
 
-	private func updateTabBars(in controller: UIViewController?, color: UIColor) {
+	private func updateTabBars(in controller: UIViewController?, color: UIColor, appearance: UITabBarAppearance) {
 		guard let controller else { return }
 		if let tabs = controller as? UITabBarController {
 			tabs.tabBar.tintColor = color
+			tabs.tabBar.standardAppearance = appearance
+			if #available(iOS 15.0, *) {
+				tabs.tabBar.scrollEdgeAppearance = appearance
+			}
 		}
-		for child in controller.children { updateTabBars(in: child, color: color) }
+		for child in controller.children {
+			updateTabBars(in: child, color: color, appearance: appearance)
+		}
 		if let presented = controller.presentedViewController {
-			updateTabBars(in: presented, color: color)
+			updateTabBars(in: presented, color: color, appearance: appearance)
 		}
 	}
+
 }
 
 private struct ZagProfilePressStyle: ButtonStyle {
