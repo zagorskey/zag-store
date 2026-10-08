@@ -78,7 +78,6 @@ struct VariedTabbarView: View {
 				TabbarView()
 			}
 		}
-		.tint(ZagWideGamutTint.color(hex: themeColorHex))
 		.background {
 			if wallpaperEnabled {
 				Color.clear
