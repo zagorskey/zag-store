@@ -242,27 +242,17 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		@objc private func dictationEnded() {
-			guard let field = installedField else { return }
-			yieldingToNativeClearButton = true
-			field.removeTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
-			field.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
-
-			UIView.animate(
-				withDuration: 0.16,
-				delay: 0,
-				options: [.beginFromCurrentState, .curveEaseInOut],
-				animations: {
-					self.button?.alpha = 0
-					self.button?.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
-				},
-				completion: { _ in
-					if field.rightView === self.button {
-						field.rightView = nil
-					}
-					self.button = nil
-				}
-			)
-		}
+            guard let field = installedField else { return }
+            // Return the trailing control to its normal state after native
+            // dictation. The old implementation removed it permanently until
+            // editingChanged fired, which may never happen.
+            yieldingToNativeClearButton = false
+            if field.rightView !== button || button == nil {
+                installMic(in: field)
+            } else {
+                setMicVisible(true, animated: true)
+            }
+        }
 
 		@objc private func searchTextChanged(_ field: UISearchTextField) {
 			guard yieldingToNativeClearButton, (field.text ?? "").isEmpty else { return }
