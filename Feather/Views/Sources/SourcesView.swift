@@ -303,6 +303,9 @@ struct SourcesView: View {
 					repositoryTransferMenu
 						.foregroundStyle(.primary)
 				}
+				if #available(iOS 26.0, *) {
+					ToolbarSpacer(.fixed, placement: .topBarTrailing)
+				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
 					.tint(.primary)
