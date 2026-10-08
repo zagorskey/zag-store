@@ -2042,6 +2042,33 @@ private struct ZagUpdateDiagnosticsReportView: View {
 
 
 struct ZagRepositoryPerformanceView: View {
+    @FetchRequest(
+        entity: AltSource.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \.name, ascending: true)]
+    ) private var repositories: FetchedResults<AltSource>
+
+    private func repositoryName(for metricURL: String) -> String {
+        let normalized = metricURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+        if let source = repositories.first(where: {
+            $0.sourceURL?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == normalized
+        }), let name = source.name, !name.isEmpty {
+            return name
+        }
+        // A single configured source on an exact host can be identified
+        // safely; shared hosts (GitHub, raw.githubusercontent.com, etc.)
+        // cannot be attributed to one repository without an exact URL.
+        if let host = URL(string: metricURL)?.host?.lowercased() {
+            let candidates = repositories.filter {
+                $0.sourceURL?.host?.lowercased() == host
+            }
+            if candidates.count == 1,
+               let name = candidates.first?.name, !name.isEmpty {
+                return name
+            }
+        }
+        return URL(string: metricURL)?.host ?? metricURL
+    }
+
 	@State private var metrics: [NBRepositoryFetchMetric] = []
 	@State private var copied = false
 
@@ -2094,7 +2121,7 @@ struct ZagRepositoryPerformanceView: View {
 							value: seconds(metric.networkSeconds + metric.decodeSeconds)
 						)
 					} header: {
-						Text(URL(string: metric.url)?.host ?? metric.url)
+						Text(repositoryName(for: metric.url))
 					} footer: {
 						Text(metric.url)
 							.textSelection(.enabled)
