@@ -455,7 +455,7 @@ private final class ZagLocalVPNReachability: ObservableObject {
         let queue = DispatchQueue(label: "zag.localvpn.reachability")
         let lock = NSLock()
         var finished = false
-        func complete(_ success: Bool) {
+        @Sendable nonisolated func complete(_ success: Bool) {
             lock.lock()
             let shouldFinish = !finished
             if shouldFinish { finished = true }
