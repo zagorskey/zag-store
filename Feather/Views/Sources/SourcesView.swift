@@ -304,8 +304,8 @@ struct SourcesView: View {
 						.foregroundStyle(.primary)
 					ZagProfileToolbarButton()
 						.tint(.primary)
-						// Trim the trailing space inside the shared toolbar capsule.
-						.padding(.trailing, -4)
+						// Fine-tune the trailing inset inside the shared toolbar capsule.
+						.padding(.trailing, -2)
 				}
 			}
 			.refreshable {
