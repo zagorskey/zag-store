@@ -422,68 +422,34 @@ struct SourcesView: View {
 		#endif
 	}
 	private func _probeSystemDictation() {
-        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
-              cls.responds(to: NSSelectorFromString("sharedInstance")),
-              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
-        else {
-            _dictationAvailable = false
-            return
-        }
-        _dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
-    }
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else {
+			_dictationAvailable = false
+			return
+		}
+		_dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+	}
 
-    private func _startDictationFromSearchMic() {
-        _searchFieldFocused = true
-        // UIKit's native search activation is asynchronous. Wait until the
-        // actual search field owns keyboard focus before starting dictation.
-        _startDictationWhenSearchIsReady(attempt: 0)
-    }
+	private func _startDictationFromSearchMic() {
+		_searchFieldFocused = true
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+			_startSystemDictation()
+		}
+	}
 
-    private func _startDictationWhenSearchIsReady(attempt: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            guard let window = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .flatMap({ $0.windows })
-                .first(where: { $0.isKeyWindow }),
-                  let field = Self._findSearchTextField(in: window)
-            else {
-                if attempt < 12 { _startDictationWhenSearchIsReady(attempt: attempt + 1) }
-                return
-            }
-            guard field.isFirstResponder else {
-                field.becomeFirstResponder()
-                if attempt < 12 { _startDictationWhenSearchIsReady(attempt: attempt + 1) }
-                return
-            }
-            _startSystemDictation()
-        }
-    }
+	private func _startSystemDictation() {
+		guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+			  cls.responds(to: NSSelectorFromString("sharedInstance")),
+			  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+		else { return }
 
-    private static func _findSearchTextField(in view: UIView) -> UISearchTextField? {
-        if let field = view as? UISearchTextField { return field }
-        for subview in view.subviews {
-            if let field = _findSearchTextField(in: subview) { return field }
-        }
-        return nil
-    }
-
-    private func _startSystemDictation() {
-        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
-              cls.responds(to: NSSelectorFromString("sharedInstance")),
-              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
-        else {
-            _probeSystemDictation()
-            return
-        }
-        let preheat = NSSelectorFromString("preheatIfNecessary")
-        if controller.responds(to: preheat) { _ = controller.perform(preheat) }
-        let start = NSSelectorFromString("startDictation")
-        guard controller.responds(to: start) else {
-            _probeSystemDictation()
-            return
-        }
-        _ = controller.perform(start)
-    }
+		let preheat = NSSelectorFromString("preheatIfNecessary")
+		if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+		let start = NSSelectorFromString("startDictation")
+		if controller.responds(to: start) { _ = controller.perform(start) }
+	}
 
 	// MARK: - Toolbar
 	private var refreshButton: some View {
