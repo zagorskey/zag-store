@@ -1499,9 +1499,21 @@ private struct ZagRepositoryHealthView: View {
         NavigationStack {
             List {
                 Section("Overview") {
-                    LabeledContent("Configured repositories", value: String(sources.count))
-                    LabeledContent("Loaded repositories", value: String(loadedIDs.count))
-                    LabeledContent("Not loaded", value: String(sources.count - loadedIDs.count))
+                    LabeledContent {
+                        Text(String(sources.count))
+                    } label: {
+                        Label("Configured repositories", systemImage: "square.stack.3d.up")
+                    }
+                    LabeledContent {
+                        Text(String(loadedIDs.count))
+                    } label: {
+                        Label("Loaded repositories", systemImage: "checkmark.circle")
+                    }
+                    LabeledContent {
+                        Text(String(sources.count - loadedIDs.count))
+                    } label: {
+                        Label("Not loaded", systemImage: "questionmark.circle")
+                    }
                     if isRefreshing {
                         Label("Refreshing repositories…", systemImage: "arrow.clockwise")
                     }
@@ -1509,6 +1521,13 @@ private struct ZagRepositoryHealthView: View {
                 Section("Repositories") {
                     ForEach(sources, id: \.objectID) { source in
                         repositoryRow(source)
+                    }
+                }
+                Section("Performance") {
+                    NavigationLink {
+                        ZagRepositoryPerformanceView()
+                    } label: {
+                        Label("Repository Performance", systemImage: "speedometer")
                     }
                 }
             }
