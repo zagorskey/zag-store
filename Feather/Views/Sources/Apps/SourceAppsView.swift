@@ -382,20 +382,6 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 	}
 }
 
-// MARK: - Public Native Search Dictation
-// On iOS 27, let SwiftUI own the inline microphone and dictation lifecycle.
-// Earlier systems retain the existing custom search microphone bridge.
-struct ZagNativeInlineSearchDictationModifier: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 27.0, *) {
-            content.searchDictationBehavior(.inline(activation: .onSelect))
-        } else {
-            content
-        }
-    }
-}
-
 // MARK: - Native Search Focus Compatibility
 
 struct ZagRepositorySearchFocusModifier: ViewModifier {
