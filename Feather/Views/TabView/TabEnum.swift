@@ -26,7 +26,9 @@ enum ZagPageStartupPolicy {
 		let rawValue = remembersLastPage
 			? defaults.string(forKey: lastPageKey)
 			: defaults.string(forKey: defaultStartPageKey)
-		return TabEnum(rawValue: rawValue == "home" ? TabEnum.discover.rawValue : (rawValue ?? TabEnum.sources.rawValue)) ?? .sources
+		let migrated = rawValue == "home" ? TabEnum.discover.rawValue : rawValue
+        let tab = TabEnum(rawValue: migrated ?? TabEnum.sources.rawValue) ?? .sources
+        return TabEnum.defaultTabs.contains(tab) ? tab : .sources
 	}
 }
 
@@ -71,7 +73,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch self {
 		case .discover:		return "safari.fill"
 		case .activity:		return "clock.arrow.circlepath"
-		case .devices:		return "iphone.gen3.radiowaves.left.and.right"
+		case .devices:		return "iphone.radiowaves.left.and.right"
 		case .sources: 		return "atom"
 		case .library: 		return "square.stack.3d.up.fill"
 		case .settings: 	return "gearshape.fill"
