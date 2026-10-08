@@ -334,8 +334,9 @@ struct LibraryView: View {
 						.frame(maxWidth: .infinity)
 
 					ZStack {
-						Circle()
-							.fill(zagUpdatesColorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#EEEEEF"))
+						ZagUpdatesPillSurface(
+							baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
+						)
 
 						Text(updateManager.updateCount.description)
 							.font(.system(size: 14, weight: .regular))
@@ -1789,7 +1790,7 @@ private struct ZagUpdatesPillSurface: View {
 			let progress = time.truncatingRemainder(dividingBy: 7.4) / 7.4
 			let charge = exp(-pow((cycle - 0.82) / 0.28, 2))
 
-			Capsule()
+			Circle()
 				.fill(Color(hex: baseColorHex))
 				.overlay {
 					ZStack {
@@ -1797,7 +1798,7 @@ private struct ZagUpdatesPillSurface: View {
 							progress: progress,
 							offset: -0.085,
 							length: 0.27,
-							color: Color(hex: themeColorHex),
+							color: Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)),
 							opacity: 0.20,
 							lineWidth: 3.8
 						)
@@ -1807,7 +1808,7 @@ private struct ZagUpdatesPillSurface: View {
 							progress: progress,
 							offset: -0.038,
 							length: 0.15,
-							color: Color(hex: themeColorHex),
+							color: Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)),
 							opacity: 0.40,
 							lineWidth: 1.3
 						)
@@ -1822,15 +1823,15 @@ private struct ZagUpdatesPillSurface: View {
 						)
 
 						// Synchronized charge at the left side of the counter.
-						Capsule()
+						Circle()
 							.trim(from: 0.43, to: 0.57)
 							.stroke(
-								Color(hex: themeColorHex).opacity(0.30 + charge * 0.55),
+								Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)).opacity(0.30 + charge * 0.55),
 								style: StrokeStyle(lineWidth: 1.5 + charge * 0.9, lineCap: .round)
 							)
 							.blur(radius: charge * 1.6)
 
-						Capsule()
+						Circle()
 							.trim(from: 0.485, to: 0.515)
 							.stroke(
 								Color.white.opacity(charge * 0.92),
@@ -1838,7 +1839,7 @@ private struct ZagUpdatesPillSurface: View {
 							)
 					}
 					.mask {
-						Capsule()
+						Circle()
 							.stroke(
 								AngularGradient(
 									colors: [
@@ -1855,7 +1856,7 @@ private struct ZagUpdatesPillSurface: View {
 								lineWidth: 7
 							)
 					}
-					.clipShape(Capsule())
+					.clipShape(Circle())
 				}
 		}
 	}
