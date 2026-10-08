@@ -212,6 +212,7 @@ struct SettingsView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
+						.padding(.trailing, -2)
 				}
 			}
 		}

@@ -960,6 +960,7 @@ struct LibraryView: View {
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
 					.tint(.primary)
+					.padding(.trailing, -2)
 				}
 
 
