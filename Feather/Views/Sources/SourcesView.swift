@@ -327,43 +327,11 @@ struct SourcesView: View {
 				)
 			}
 			.sheet(isPresented: $_showRepositoryHealth) {
-				NavigationStack {
-					List {
-						Section("Overview") {
-							LabeledContent("Configured repositories", value: "\(_sources.count)")
-							LabeledContent("Loaded repositories", value: "\(_sources.filter { viewModel.sources[$0] != nil }.count)")
-							LabeledContent("Not loaded", value: "\(_sources.filter { viewModel.sources[$0] == nil }.count)")
-							if viewModel.isRefreshing {
-								Label("Refreshing repositories…", systemImage: "arrow.clockwise")
-							}
-						}
-						Section("Repositories") {
-							ForEach(Array(_sources), id: \.objectID) { source in
-								HStack {
-									Image(systemName: viewModel.sources[source] == nil ? "questionmark.circle" : "checkmark.circle.fill")
-										.foregroundStyle(viewModel.sources[source] == nil ? .secondary : .green)
-									VStack(alignment: .leading, spacing: 3) {
-										Text(source.name ?? "Unnamed Repository")
-										if viewModel.sources[source] == nil {
-											Text("Not loaded in this session")
-												.font(.caption).foregroundStyle(.secondary)
-										} else {
-											Text("Repository data available")
-												.font(.caption).foregroundStyle(.secondary)
-										}
-									}
-								}
-							}
-						}
-					}
-				.navigationTitle("Repository Health")
-				.navigationBarTitleDisplayMode(.inline)
-				.toolbar {
-					ToolbarItem(placement: .topBarTrailing) {
-						Button("Done") { _showRepositoryHealth = false }
-					}
-				}
-			}
+				ZagRepositoryHealthView(
+					sources: Array(_sources),
+					loadedIDs: Set(_sources.filter { viewModel.sources[$0] != nil }.map(\.objectID)),
+					isRefreshing: viewModel.isRefreshing
+				)
 			}
 			.sheet(
 				isPresented: $_isAddingPresenting,
@@ -1517,4 +1485,54 @@ private struct ZagAppCountTransition: ViewModifier {
 				.animation(.easeInOut(duration: 0.2), value: value)
 		}
 	}
+}
+
+
+// MARK: - Repository Health
+private struct ZagRepositoryHealthView: View {
+    @Environment(\.dismiss) private var dismiss
+    let sources: [AltSource]
+    let loadedIDs: Set<NSManagedObjectID>
+    let isRefreshing: Bool
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Overview") {
+                    LabeledContent("Configured repositories", value: String(sources.count))
+                    LabeledContent("Loaded repositories", value: String(loadedIDs.count))
+                    LabeledContent("Not loaded", value: String(sources.count - loadedIDs.count))
+                    if isRefreshing {
+                        Label("Refreshing repositories…", systemImage: "arrow.clockwise")
+                    }
+                }
+                Section("Repositories") {
+                    ForEach(sources, id: \.objectID) { source in
+                        repositoryRow(source)
+                    }
+                }
+            }
+            .navigationTitle("Repository Health")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func repositoryRow(_ source: AltSource) -> some View {
+        let loaded = loadedIDs.contains(source.objectID)
+        return HStack(spacing: 12) {
+            Image(systemName: loaded ? "checkmark.circle.fill" : "questionmark.circle")
+                .foregroundStyle(loaded ? Color.green : Color.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(source.name ?? "Unnamed Repository")
+                Text(loaded ? "Repository data available" : "Not loaded in this session")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
 }
