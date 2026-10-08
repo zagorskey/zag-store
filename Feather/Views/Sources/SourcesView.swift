@@ -1516,7 +1516,10 @@ private struct ZagRepositoryHealthView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
                 }
             }
         }
@@ -1526,6 +1529,8 @@ private struct ZagRepositoryHealthView: View {
         let loaded = loadedIDs.contains(source.objectID)
         return HStack(spacing: 12) {
             Image(systemName: loaded ? "checkmark.circle.fill" : "questionmark.circle")
+                .font(.system(size: 20, weight: .regular))
+                .frame(width: 28, height: 28)
                 .foregroundStyle(loaded ? Color.green : Color.secondary)
             VStack(alignment: .leading, spacing: 3) {
                 Text(source.name ?? "Unnamed Repository")
