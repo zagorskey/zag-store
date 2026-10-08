@@ -12,18 +12,21 @@ import UIKit
 import ObjectiveC.runtime
 
 
-// Keep the profile toolbar separate from the repository view’s large
-// search/title/menu expression to avoid SwiftUI type-checker blowups.
-private struct ZagRepositoryProfileToolbar: ViewModifier {
-	func body(content: Content) -> some View {
-		content.toolbar {
-			ToolbarItem(placement: .topBarTrailing) {
-				ZagProfileToolbarButton()
-					.tint(.primary)
-					.padding(.trailing, -2)
-			}
-		}
-	}
+// Keep this toolbar in a small modifier to avoid inflating the large
+// repository view's SwiftUI type-checking expression.
+private struct ZagRepositoryActionsToolbar: ViewModifier {
+    let sortActions: () -> AnyView
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                sortActions()
+                ZagProfileToolbarButton()
+                    .tint(.primary)
+                    .padding(.trailing, -2)
+            }
+        }
+    }
 }
 
 // MARK: - System Dictation Lifecycle Bridge
@@ -520,16 +523,17 @@ struct SourceAppsView: View {
 				)
 			}
 		}
-		.toolbar {
-			NBToolbarMenu(
-				systemImage: "line.3.horizontal.decrease",
-				style: .icon,
-				placement: .topBarTrailing
-			) {
-				_sortActions()
-			}
-		}
-		.modifier(ZagRepositoryProfileToolbar())
+		.modifier(ZagRepositoryActionsToolbar(sortActions: {
+            AnyView(
+                NBToolbarMenu(
+                    systemImage: "line.3.horizontal.decrease",
+                    style: .icon,
+                    placement: .topBarTrailing
+                ) {
+                    _sortActions()
+                }
+            )
+        }))
 		.onAppear {
 			_probeSystemDictation()
 
