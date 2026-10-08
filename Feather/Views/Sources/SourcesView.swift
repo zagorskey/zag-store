@@ -308,6 +308,9 @@ struct SourcesView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
+						// Keep the native fixed spacer (and independent glass group),
+						// but reduce the extra visual gap beside the icon capsule.
+						.padding(.leading, -4)
 					.tint(.primary)
 				}
 			}

@@ -210,8 +210,8 @@ private final class ZagBadgeAnchorView: UIView {
 		guard let window, bounds.width > 0 else { return }
 		let rect = convert(bounds, to: window)
 		let width = max(20, CGFloat(String(count).count) * 8 + 10)
-		badge.frame = CGRect(x: rect.maxX - width + 5,
-		                     y: rect.minY - 8, width: width, height: 20)
+		badge.frame = CGRect(x: rect.maxX - width + 7,
+		                     y: rect.minY - 10, width: width, height: 20)
 		window.bringSubviewToFront(badge)
 	}
 	deinit { badge.removeFromSuperview() }
@@ -238,6 +238,9 @@ struct ZagProfileToolbarButton: View {
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
+				// A circular label prevents the system from sizing the glass
+				// from an unconstrained rectangular image surface.
+				.clipShape(Circle())
 				.background {
 					ZagBadgeAnchor(count: updateManager.updateCount,
 					               hidden: isAccountPresenting)
