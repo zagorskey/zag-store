@@ -287,6 +287,9 @@ struct SourcesView: View {
 			}
 			.environment(\.editMode, .constant(_isRearrangingRepositories ? .active : .inactive))
 			.toolbar {
+				ToolbarItem(placement: .principal) {
+					Color.clear.frame(width: 0, height: 0)
+				}
 				ToolbarItemGroup(
 					placement: .topBarLeading
 				) {
