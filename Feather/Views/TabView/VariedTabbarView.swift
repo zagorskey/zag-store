@@ -85,7 +85,10 @@ struct VariedTabbarView: View {
 				TabbarView()
 			}
 		}
-		.onAppear { updateDockTint() }
+		.onAppear {
+            updateDockTint()
+            hideCollapsedNavigationTitles()
+        }
 		.onChange(of: themeColorHex) { _ in updateDockTint() }
 		.background {
 			if wallpaperEnabled {
@@ -100,6 +103,32 @@ struct VariedTabbarView: View {
 			// SourcesViewModel commits repository and update state together.
 		}
 	}
+    // Hide only the compact title that appears when large navigation titles
+    // collapse on scroll. Do not alter large-title text or navigation controls.
+    private func hideCollapsedNavigationTitles() {
+        UINavigationBar.appearance().titleTextAttributes = [
+            .foregroundColor: UIColor.clear
+        ]
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            for window in scene.windows {
+                applyCollapsedTitleStyle(to: window.rootViewController)
+            }
+        }
+    }
+
+    private func applyCollapsedTitleStyle(to controller: UIViewController?) {
+        guard let controller else { return }
+        if let navigation = controller as? UINavigationController {
+            navigation.navigationBar.titleTextAttributes = [.foregroundColor: UIColor.clear]
+        }
+        for child in controller.children {
+            applyCollapsedTitleStyle(to: child)
+        }
+        if let presented = controller.presentedViewController {
+            applyCollapsedTitleStyle(to: presented)
+        }
+    }
+
 	private func updateDockTint() {
 		let color = UIColor(ZagWideGamutTint.color(hex: themeColorHex))
 		// SwiftUI's native tab bar may override tintColor. Set the selected
