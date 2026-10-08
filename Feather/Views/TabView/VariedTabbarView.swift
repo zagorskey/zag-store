@@ -233,6 +233,7 @@ struct ZagProfileToolbarButton: View {
 				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
+		.buttonBorderShape(.circle)
 		.tint(.primary)
 		.contentShape(Circle())
 		.accessibilityLabel("Account and App Updates")
