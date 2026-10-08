@@ -73,7 +73,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch self {
 		case .discover:		return "safari.fill"
 		case .activity:		return "clock.arrow.circlepath"
-		case .devices:		return "iphone.radiowaves.left.and.right"
+		case .devices:		return "iphone"
 		case .sources: 		return "atom"
 		case .library: 		return "square.stack.3d.up.fill"
 		case .settings: 	return "gearshape.fill"
@@ -139,7 +139,7 @@ private struct ZagActivityPage: View {
 private struct ZagDevicesPage: View {
     var body: some View {
         NBNavigationView("Devices") {
-            ZagEmptyDestination(title: "Device Management", symbol: "iphone.radiowaves.left.and.right",
+            ZagEmptyDestination(title: "Device Management", symbol: "iphone",
                 message: "Registered and paired devices will appear here.")
                 .toolbar {
                     ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
