@@ -308,9 +308,9 @@ struct SourcesView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
-						// Translate the independent glass button, not its layout bounds.
-						// Negative padding distorted the native button centering.
-						.offset(x: -7)
+						// Adjust the toolbar item’s layout footprint rather than
+						// offsetting its contents away from the native glass.
+						.padding(.leading, -10)
 					.tint(.primary)
 				}
 			}
