@@ -433,12 +433,38 @@ struct SourcesView: View {
     }
 
     private func _startDictationFromSearchMic() {
-        // Match the repository detail search: activate the native search
-        // text field before asking UIKit to start keyboard dictation.
         _searchFieldFocused = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        // UIKit's native search activation is asynchronous. Wait until the
+        // actual search field owns keyboard focus before starting dictation.
+        _startDictationWhenSearchIsReady(attempt: 0)
+    }
+
+    private func _startDictationWhenSearchIsReady(attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            guard let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows })
+                .first(where: { $0.isKeyWindow }),
+                  let field = Self._findSearchTextField(in: window)
+            else {
+                if attempt < 12 { _startDictationWhenSearchIsReady(attempt: attempt + 1) }
+                return
+            }
+            guard field.isFirstResponder else {
+                field.becomeFirstResponder()
+                if attempt < 12 { _startDictationWhenSearchIsReady(attempt: attempt + 1) }
+                return
+            }
             _startSystemDictation()
         }
+    }
+
+    private static func _findSearchTextField(in view: UIView) -> UISearchTextField? {
+        if let field = view as? UISearchTextField { return field }
+        for subview in view.subviews {
+            if let field = _findSearchTextField(in: subview) { return field }
+        }
+        return nil
     }
 
     private func _startSystemDictation() {
