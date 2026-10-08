@@ -2042,6 +2042,7 @@ private struct ZagUpdateDiagnosticsReportView: View {
 
 
 struct ZagRepositoryPerformanceView: View {
+    var showsLargeTitle = true
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(key: "name", ascending: true)]
@@ -2146,8 +2147,13 @@ struct ZagRepositoryPerformanceView: View {
 				}
 			}
 		}
-		.navigationTitle("Repository Performance")
-		.navigationBarTitleDisplayMode(.inline)
+		.navigationTitle(showsLargeTitle ? "Repository Performance" : "")
+        .navigationBarTitleDisplayMode(showsLargeTitle ? .large : .inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
 		.zagWallpaperSurface()
 		.onAppear {
 			reload()
