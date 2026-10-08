@@ -1547,11 +1547,15 @@ private struct ZagRepositoryHealthView: View {
 
     private func countBadge(_ count: Int) -> some View {
         Text(count.formatted())
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(ZagWideGamutTint.color(hex: themeColorHex), in: Capsule())
+            .background(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.14), in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.5), lineWidth: 1)
+            }
             .accessibilityLabel("\\(count) repositories")
     }
 
