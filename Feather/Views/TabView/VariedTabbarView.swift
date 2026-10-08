@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreData
+import PhotosUI
 import UIKit
 
 extension Notification.Name {
@@ -334,15 +335,19 @@ struct ZagAccountPopup: View {
 		NavigationStack {
 			Form {
 				Section {
-					HStack(spacing: 14) {
-						ZagGlobalProfileAvatar(revision: avatarRevision)
-							.frame(width: 62, height: 62)
-						VStack(alignment: .leading, spacing: 3) {
-							Text("Zag Store").font(.title3.weight(.semibold))
-							Text("Profile").foregroundStyle(.secondary)
-						}
-					}
-					.padding(.vertical, 6)
+                    NavigationLink {
+                        ZagAccountAvatarEditor()
+                    } label: {
+                        HStack(spacing: 14) {
+                            ZagGlobalProfileAvatar(revision: avatarRevision)
+                                .frame(width: 62, height: 62)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Zag Store").font(.title3.weight(.semibold))
+                                Text("Profile").foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
 				}
 				Section {
 					NavigationLink {
@@ -376,4 +381,59 @@ struct ZagAccountPopup: View {
 			avatarRevision = UUID()
 		}
 	}
+}
+
+
+private struct ZagAccountAvatarEditor: View {
+    @State private var selection: PhotosPickerItem?
+    @State private var revision = UUID()
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    Spacer()
+                    ZagGlobalProfileAvatar(revision: revision)
+                        .frame(width: 112, height: 112)
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+                PhotosPicker(selection: $selection, matching: .images) {
+                    Label("Choose Profile Avatar", systemImage: "photo")
+                }
+                .onChange(of: selection) { item in
+                    guard let item else { return }
+                    Task {
+                        if let data = try? await item.loadTransferable(type: Data.self) {
+                            try? ZagProfileAvatarStore.save(data)
+                            await MainActor.run {
+                                revision = UUID()
+                                selection = nil
+                            }
+                        }
+                    }
+                }
+                if ZagProfileAvatarStore.customImage() != nil {
+                    Button(role: .destructive) {
+                        ZagProfileAvatarStore.removeCustomImage()
+                        revision = UUID()
+                    } label: {
+                        Label("Use Default Avatar", systemImage: "arrow.counterclockwise")
+                    }
+                }
+            } header: {
+                Text("Profile Avatar")
+            }
+        }
+        .navigationTitle("Profile Avatar")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
+            revision = UUID()
+        }
+    }
 }
