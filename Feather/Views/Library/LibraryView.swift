@@ -319,7 +319,7 @@ struct LibraryView: View {
 					HStack(spacing: 9) {
 						Text(.localized("Updates"))
 							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(zagUpdatesTitleColor)
+							.foregroundStyle(.secondary)
 
 						ZagFlashingUpdateDot()
 							.frame(width: 9, height: 9)
@@ -332,6 +332,7 @@ struct LibraryView: View {
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
+                        .padding(.horizontal, 6)
 
 					ZStack {
 						ZagUpdatesPillSurface(
@@ -1875,12 +1876,12 @@ private struct ZagFlashingUpdateDot: View {
 			let energy = min(1, ambient * 0.48 + receive)
 
 			Circle()
-				.fill(Color.green)
+				.fill(Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1)))
 				.frame(width: 9, height: 9)
 				.opacity(0.30 + (energy * 0.70))
 				.scaleEffect(0.80 + (energy * 0.30))
 				.shadow(
-					color: Color.green.opacity(energy * 0.88),
+					color: Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1)).opacity(energy * 0.88),
 					radius: 4.2 + receive * 3
 				)
 		}
