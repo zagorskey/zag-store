@@ -1697,14 +1697,14 @@ private struct ZagUpdateTransferParticles: View {
 					// The electrical path is visible enough to connect both
 					// controls, but remains subordinate to the moving energy.
 					Capsule()
-						.fill(ZagWideGamutTint.color(hex: zagUpdatesThemeHex))
+						.fill(ZagWideGamutTint.color(hex: themeColorHex))
 						.frame(
 							width: max(0, (width + 8) * grow),
 							height: 1.0 / UIScreen.main.scale
 						)
 						.opacity(0.43 * filament)
 						.shadow(
-							color: ZagWideGamutTint.color(hex: zagUpdatesThemeHex).opacity(0.34 * filament),
+							color: ZagWideGamutTint.color(hex: themeColorHex).opacity(0.34 * filament),
 							radius: 2.4
 						)
 						.frame(maxWidth: .infinity, alignment: .trailing)
@@ -1713,7 +1713,7 @@ private struct ZagUpdateTransferParticles: View {
 					// Launch flare lives just under the counter's left edge.
 					ZStack {
 						Circle()
-							.fill(ZagWideGamutTint.color(hex: zagUpdatesThemeHex).opacity(0.42))
+							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.42))
 							.frame(width: 13, height: 13)
 							.blur(radius: 4)
 						Circle()
@@ -1736,12 +1736,12 @@ private struct ZagUpdateTransferParticles: View {
 
 						ZStack {
 							Capsule()
-								.fill(ZagWideGamutTint.color(hex: zagUpdatesThemeHex).opacity(0.30 * strength))
+								.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.30 * strength))
 								.frame(width: tail, height: pulse == 0 ? 4 : 3)
 								.blur(radius: 2.4)
 
 							Capsule()
-								.fill(ZagWideGamutTint.color(hex: zagUpdatesThemeHex))
+								.fill(ZagWideGamutTint.color(hex: themeColorHex))
 								.frame(width: core, height: pulse == 0 ? 1.8 : 1.3)
 
 							Circle()
@@ -1758,7 +1758,7 @@ private struct ZagUpdateTransferParticles: View {
 					// Reception flare is tucked beneath the Updates capsule.
 					ZStack {
 						Circle()
-							.fill(ZagWideGamutTint.color(hex: zagUpdatesThemeHex).opacity(0.52))
+							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.52))
 							.frame(width: 15, height: 15)
 							.blur(radius: 4.5)
 						Circle()
