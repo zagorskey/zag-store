@@ -12,6 +12,20 @@ import UIKit
 import ObjectiveC.runtime
 
 
+// Keep the profile toolbar separate from the repository view’s large
+// search/title/menu expression to avoid SwiftUI type-checker blowups.
+private struct ZagRepositoryProfileToolbar: ViewModifier {
+	func body(content: Content) -> some View {
+		content.toolbar {
+			ToolbarItem(placement: .topBarTrailing) {
+				ZagProfileToolbarButton()
+					.tint(.primary)
+					.padding(.trailing, -2)
+			}
+		}
+	}
+}
+
 // MARK: - System Dictation Lifecycle Bridge
 
 private extension Notification.Name {
@@ -507,19 +521,15 @@ struct SourceAppsView: View {
 			}
 		}
 		.toolbar {
-			ToolbarItemGroup(placement: .topBarTrailing) {
-				NBToolbarMenu(
-					systemImage: "line.3.horizontal.decrease",
-					style: .icon,
-					placement: .topBarTrailing
-				) {
-					_sortActions()
-				}
-				ZagProfileToolbarButton()
-					.tint(.primary)
-					.padding(.trailing, -2)
+			NBToolbarMenu(
+				systemImage: "line.3.horizontal.decrease",
+				style: .icon,
+				placement: .topBarTrailing
+			) {
+				_sortActions()
 			}
 		}
+		.modifier(ZagRepositoryProfileToolbar())
 		.onAppear {
 			_probeSystemDictation()
 
