@@ -31,7 +31,15 @@ struct TabbarView: View {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				TabEnum.view(for: tab)
 					.tabItem {
-						Label(tab.title, systemImage: tab.icon)
+						if tab == .sources {
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                ZagSourcesTabIcon.label
+                            }
+                        } else {
+                            Label(tab.title, systemImage: tab.icon)
+                        }
 					}
 					.tag(tab)
 			}
