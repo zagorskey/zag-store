@@ -40,6 +40,11 @@ enum ZagWideGamutTint {
 	static func color(hex: String) -> Color {
 		// Treat the theme's RGB hex values as native Display P3 components.
 		// Converting through UIColor(Color(hex:)) would first interpret them as sRGB.
+		// Native uses the vivid system-blue P3 components rather than the softer
+		// palette swatch (#3F8EF7). V2 and Berry retain their selected hex.
+		if hex.uppercased() == "#3F8EF7" {
+			return Color(uiColor: UIColor(displayP3Red: 0, green: 0.47843137, blue: 1, alpha: 1))
+		}
 		let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines)
 			.replacingOccurrences(of: "#", with: "")
 		guard digits.count == 6, let value = UInt32(digits, radix: 16) else {
