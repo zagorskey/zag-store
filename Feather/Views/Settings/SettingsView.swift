@@ -14,6 +14,27 @@ import NimbleJSON
 import Photos
 import PhotosUI
 
+
+// Shared avatar for pushed Settings destinations. Keep it on the destination
+// (not the parent) so the native back button and existing actions remain intact.
+private struct ZagSettingsDestinationAvatar: ViewModifier {
+    func body(content: Content) -> some View {
+        content.toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ZagProfileToolbarButton()
+                    .tint(.primary)
+                    .padding(.trailing, -2)
+            }
+        }
+    }
+}
+
+private extension View {
+    func zagSettingsDestinationAvatar() -> some View {
+        modifier(ZagSettingsDestinationAvatar())
+    }
+}
+
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
 	case pages
@@ -135,16 +156,16 @@ struct SettingsView: View {
 			}
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.navigationDestination(isPresented: $_routeInstallation) {
-				InstallationView()
+				InstallationView().zagSettingsDestinationAvatar()
 			}
 			.navigationDestination(isPresented: $_routeInstallationDiagnostics) {
-				ZagInstallationDiagnosticsView()
+				ZagInstallationDiagnosticsView().zagSettingsDestinationAvatar()
 			}
 			.navigationDestination(isPresented: $_routeRPPairingDiagnostics) {
-				RPPairingDiagnosticsView()
+				RPPairingDiagnosticsView().zagSettingsDestinationAvatar()
 			}
 			.navigationDestination(isPresented: $_routeUpdateDiagnostics) {
-				ZagUpdateDiagnosticsView()
+				ZagUpdateDiagnosticsView().zagSettingsDestinationAvatar()
 			}
 			.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
 				guard let route = note.object as? ZagStoreRoute else { return }
@@ -286,7 +307,7 @@ extension SettingsView {
 		}
 
 		Section {
-			NavigationLink(destination: ZagExperimentalSigningView()) {
+			NavigationLink(destination: ZagExperimentalSigningView().zagSettingsDestinationAvatar()) {
 				Label("Signing", systemImage: "signature")
 			}
 		} header: {
@@ -294,7 +315,7 @@ extension SettingsView {
 		}
 
 		Section {
-			NavigationLink(destination: ZagLoggingSettingsView()) {
+			NavigationLink(destination: ZagLoggingSettingsView().zagSettingsDestinationAvatar()) {
 				Label("Logging", systemImage: "doc.text.magnifyingglass")
 			}
 		} header: {
@@ -337,10 +358,10 @@ extension SettingsView {
 						Label("Use Default Avatar", systemImage: "arrow.counterclockwise")
 					}
 				}
-				NavigationLink(destination: AppearanceView()) {
+				NavigationLink(destination: AppearanceView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
 				}
-				NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
+				NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
 					Label(.localized("App Icon"), systemImage: "app.badge")
 				}
 			} header: {
@@ -375,7 +396,7 @@ extension SettingsView {
 
 		case .certificates:
 			Section {
-				NavigationLink(destination: CertificatesView()) {
+				NavigationLink(destination: CertificatesView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Certificates"), systemImage: "checkmark.seal")
 				}
 
@@ -412,13 +433,13 @@ extension SettingsView {
 
 		case .features:
 			Section {
-				NavigationLink(destination: InstallationView()) {
+				NavigationLink(destination: InstallationView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Installation"), systemImage: "arrow.down.circle")
 				}
-				NavigationLink(destination: ConfigurationView()) {
+				NavigationLink(destination: ConfigurationView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Signing Options"), systemImage: "signature")
 				}
-				NavigationLink(destination: ArchiveView()) {
+				NavigationLink(destination: ArchiveView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Archive & Compression"), systemImage: "archivebox")
 				}
 
@@ -441,13 +462,13 @@ extension SettingsView {
 
 		case .diagnostics:
 			Section {
-				NavigationLink(destination: ZagInstallationDiagnosticsView()) {
+				NavigationLink(destination: ZagInstallationDiagnosticsView().zagSettingsDestinationAvatar()) {
 					Label("Installation Diagnostics", systemImage: "arrow.down.app")
 				}
-				NavigationLink(destination: ZagUpdateDiagnosticsView()) {
+				NavigationLink(destination: ZagUpdateDiagnosticsView().zagSettingsDestinationAvatar()) {
 					Label("Update Diagnostics", systemImage: "waveform.path.ecg.rectangle")
 				}
-				NavigationLink(destination: ZagRepositoryPerformanceView()) {
+				NavigationLink(destination: ZagRepositoryPerformanceView().zagSettingsDestinationAvatar()) {
 					Label("Repository Performance", systemImage: "speedometer")
 				}
 			} header: {
@@ -456,7 +477,7 @@ extension SettingsView {
 
 		case .health:
 			Section {
-				NavigationLink(destination: RPPairingDiagnosticsView()) {
+				NavigationLink(destination: RPPairingDiagnosticsView().zagSettingsDestinationAvatar()) {
 					Label("Health Checks", systemImage: "stethoscope")
 				}
 			} header: {
@@ -517,7 +538,7 @@ extension SettingsView {
 
 		case .reset:
 			Section {
-				NavigationLink(destination: ResetView()) {
+				NavigationLink(destination: ResetView().zagSettingsDestinationAvatar()) {
 					Label(.localized("Reset"), systemImage: "arrow.counterclockwise")
 				}
 			} header: {
@@ -600,10 +621,10 @@ extension SettingsView {
 	@ViewBuilder
 	private var _backupAndRestoreSection: some View {
 		Section {
-			NavigationLink(destination: ZagSettingsBackupView()) {
+			NavigationLink(destination: ZagSettingsBackupView().zagSettingsDestinationAvatar()) {
 				Label("Backup Settings", systemImage: "square.and.arrow.up")
 			}
-			NavigationLink(destination: ZagSettingsRestoreView()) {
+			NavigationLink(destination: ZagSettingsRestoreView().zagSettingsDestinationAvatar()) {
 				Label("Restore Settings", systemImage: "square.and.arrow.down")
 			}
 		} header: {
@@ -614,7 +635,7 @@ extension SettingsView {
 	@ViewBuilder
 	private func _feedback() -> some View {
 		Section {
-			NavigationLink(destination: AboutView()) {
+			NavigationLink(destination: AboutView().zagSettingsDestinationAvatar()) {
 				Label {
 					Text("Zag Store")
 				} icon: {
@@ -868,7 +889,7 @@ private struct ZagLoggingSettingsView: View {
 					Label("Generate Diagnostic Report", systemImage: "stethoscope")
 				}
 
-				NavigationLink(destination: ZagLogViewerView()) {
+				NavigationLink(destination: ZagLogViewerView().zagSettingsDestinationAvatar()) {
 					Label("View Logs", systemImage: "doc.text")
 				}
 				Button {
@@ -1100,7 +1121,7 @@ private struct ZagLoggingSettingsView: View {
 
 	@ViewBuilder
 	private func _activityLink(_ title: String, count: Int, mode: ZagLogViewerView.LaunchMode) -> some View {
-		NavigationLink(destination: ZagLogViewerView(launchMode: mode)) {
+		NavigationLink(destination: ZagLogViewerView(launchMode: mode).zagSettingsDestinationAvatar()) {
 			HStack {
 				Text(title)
 				Spacer()
@@ -1951,7 +1972,7 @@ private struct ZagUpdateDiagnosticsView: View {
 		Form {
 
 			Section {
-				NavigationLink(destination: ZagUpdateDiagnosticsReportView()) {
+				NavigationLink(destination: ZagUpdateDiagnosticsReportView().zagSettingsDestinationAvatar()) {
 					HStack {
 						Label("View Full Report", systemImage: "doc.text.magnifyingglass")
 						Spacer()
@@ -2109,7 +2130,7 @@ private struct ZagInstallationDiagnosticsView: View {
 	var body: some View {
 		NBList("Installation Diagnostics") {
 			Section {
-				NavigationLink(destination: RPPairingDiagnosticsView()) {
+				NavigationLink(destination: RPPairingDiagnosticsView().zagSettingsDestinationAvatar()) {
 					Label("RPPairing Diagnostics", systemImage: "stethoscope")
 				}
 			} header: {
