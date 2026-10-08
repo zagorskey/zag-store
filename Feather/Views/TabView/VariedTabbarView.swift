@@ -200,7 +200,7 @@ struct ZagProfileToolbarButton: View {
 				.frame(width: 40, height: 40)
 				.overlay(alignment: .topTrailing) {
                     ZagProfileBadge(count: updateManager.updateCount)
-                        .offset(x: 7, y: -10)
+                        // Stay within the 40pt toolbar item: Liquid Glass clips overflow after navigation.
                         .opacity(isAccountPresenting ? 0 : 1)
                         .animation(.easeInOut(duration: 0.24), value: isAccountPresenting)
                 }
