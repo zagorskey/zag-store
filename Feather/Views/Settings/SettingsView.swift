@@ -29,7 +29,7 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func zagSettingsDestinationAvatar() -> some View {
         modifier(ZagSettingsDestinationAvatar())
     }
