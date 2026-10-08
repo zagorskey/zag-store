@@ -87,7 +87,6 @@ struct VariedTabbarView: View {
 		}
 		.onAppear {
             updateDockTint()
-            hideCollapsedNavigationTitles()
         }
 		.onChange(of: themeColorHex) { _ in updateDockTint() }
 		.background {
@@ -103,65 +102,6 @@ struct VariedTabbarView: View {
 			// SourcesViewModel commits repository and update state together.
 		}
 	}
-    // Apply the compact-title styling to every UIKit navigation-bar
-    // appearance, not just the legacy titleTextAttributes property.
-    // Preserve largeTitleTextAttributes and existing toolbar appearance.
-    private func hideCollapsedNavigationTitles() {
-        let proxy = UINavigationBar.appearance()
-        proxy.titleTextAttributes = [.foregroundColor: UIColor.clear]
-        let standard = proxy.standardAppearance.copy() as! UINavigationBarAppearance
-        standard.titleTextAttributes[.foregroundColor] = UIColor.clear
-        proxy.standardAppearance = standard
-        let compact = (proxy.compactAppearance?.copy() as? UINavigationBarAppearance)
-            ?? (standard.copy() as! UINavigationBarAppearance)
-        compact.titleTextAttributes[.foregroundColor] = UIColor.clear
-        proxy.compactAppearance = compact
-        let edge = (proxy.scrollEdgeAppearance?.copy() as? UINavigationBarAppearance)
-            ?? (standard.copy() as! UINavigationBarAppearance)
-        edge.titleTextAttributes[.foregroundColor] = UIColor.clear
-        proxy.scrollEdgeAppearance = edge
-        if #available(iOS 15.0, *) {
-            let compactEdge = (proxy.compactScrollEdgeAppearance?.copy() as? UINavigationBarAppearance)
-                ?? (compact.copy() as! UINavigationBarAppearance)
-            compactEdge.titleTextAttributes[.foregroundColor] = UIColor.clear
-            proxy.compactScrollEdgeAppearance = compactEdge
-        }
-        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-            for window in scene.windows {
-                applyCollapsedTitleStyle(to: window.rootViewController)
-            }
-        }
-    }
-
-    private func applyCollapsedTitleStyle(to controller: UIViewController?) {
-        guard let controller else { return }
-        if let navigation = controller as? UINavigationController {
-            let bar = navigation.navigationBar
-            bar.titleTextAttributes = [.foregroundColor: UIColor.clear]
-            let standard = bar.standardAppearance.copy() as! UINavigationBarAppearance
-            standard.titleTextAttributes[.foregroundColor] = UIColor.clear
-            bar.standardAppearance = standard
-            if let edge = bar.scrollEdgeAppearance?.copy() as? UINavigationBarAppearance {
-                edge.titleTextAttributes[.foregroundColor] = UIColor.clear
-                bar.scrollEdgeAppearance = edge
-            }
-            if let compact = bar.compactAppearance?.copy() as? UINavigationBarAppearance {
-                compact.titleTextAttributes[.foregroundColor] = UIColor.clear
-                bar.compactAppearance = compact
-            }
-            if #available(iOS 15.0, *),
-               let compactEdge = bar.compactScrollEdgeAppearance?.copy() as? UINavigationBarAppearance {
-                compactEdge.titleTextAttributes[.foregroundColor] = UIColor.clear
-                bar.compactScrollEdgeAppearance = compactEdge
-            }
-        }
-        for child in controller.children {
-            applyCollapsedTitleStyle(to: child)
-        }
-        if let presented = controller.presentedViewController {
-            applyCollapsedTitleStyle(to: presented)
-        }
-    }
 
 	private func updateDockTint() {
 		let color = UIColor(ZagWideGamutTint.color(hex: themeColorHex))
