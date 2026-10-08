@@ -68,12 +68,6 @@ struct ZagSourcesAtomIcon: View {
 	}
 }
 
-struct ZagSourcesTabIcon: View {
-	var body: some View {
-		Image(systemName: "atom")
-	}
-}
-
 // MARK: - View
 struct SourcesView: View {
 	@Environment(\.horizontalSizeClass)
