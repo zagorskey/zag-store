@@ -145,10 +145,9 @@ private struct ZagDevicesPage: View {
     private var hardwareIdentifier: String {
         var info = utsname()
         uname(&info)
-        return withUnsafePointer(to: &info.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: info.machine)) {
-                String(cString: $0)
-            }
+        let machine = info.machine
+        return withUnsafeBytes(of: machine) { bytes in
+            String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
         }
     }
 
