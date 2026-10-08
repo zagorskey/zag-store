@@ -722,12 +722,14 @@ struct LibraryView: View {
 				placement: .platform(),
 				prompt: Text("Apps, Games and More")
 			)
+			.modifier(ZagNativeInlineSearchDictationModifier())
 			.modifier(
 				ZagRepositorySearchFocusModifier(
 					isFocused: $_searchFieldFocused
 				)
 			)
 			.background {
+                if #unavailable(iOS 27.0) {
 				ZagNativeSearchMicInstaller(
 					isAvailable: _dictationAvailable,
 					action: _startDictationFromSearchMic,
@@ -735,6 +737,7 @@ struct LibraryView: View {
 					activePrompt: "Apps, Games and More"
 				)
 				.frame(width: 0, height: 0)
+                }
 			}
 
 
