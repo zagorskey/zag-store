@@ -308,9 +308,9 @@ struct SourcesView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
-						// Keep the native fixed spacer (and independent glass group),
-						// but reduce the extra visual gap beside the icon capsule.
-						.padding(.leading, -4)
+						// Translate the independent glass button, not its layout bounds.
+						// Negative padding distorted the native button centering.
+						.offset(x: -7)
 					.tint(.primary)
 				}
 			}

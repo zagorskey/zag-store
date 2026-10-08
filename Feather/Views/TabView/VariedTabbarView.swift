@@ -237,14 +237,13 @@ struct ZagProfileToolbarButton: View {
 			withAnimation(.easeInOut(duration: 0.24)) { isAccountPresenting = true }
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
-				.frame(width: 40, height: 40)
-				// A circular label prevents the system from sizing the glass
-				// from an unconstrained rectangular image surface.
-				.clipShape(Circle())
-				.background {
-					ZagBadgeAnchor(count: updateManager.updateCount,
-					               hidden: isAccountPresenting)
-				}
+					.frame(width: 40, height: 40)
+					.background {
+						ZagBadgeAnchor(count: updateManager.updateCount,
+						               hidden: isAccountPresenting)
+					}
+					// Give the native circular toolbar glass a symmetric footprint.
+					.frame(width: 44, height: 44, alignment: .center)
 		}
 		.buttonStyle(ZagProfilePressStyle())
 		.modifier(ZagCircularToolbarBorder())
