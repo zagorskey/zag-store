@@ -122,6 +122,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+    <string>Zag Store uses the microphone to search repositories and apps by voice.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Zag Store transcribes your speech into search text when you tap the search microphone.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Zag Store uses Photos access to let you choose images for app and repository artwork.</string>
 	<key>NSLocalNetworkUsageDescription</key>
