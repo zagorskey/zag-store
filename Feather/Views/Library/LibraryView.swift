@@ -1799,7 +1799,7 @@ private struct ZagUpdatesPillSurface: View {
 							progress: progress,
 							offset: -0.085,
 							length: 0.27,
-							color: ZagWideGamutTint.color(hex: zagUpdatesThemeHex),
+							color: ZagWideGamutTint.color(hex: themeColorHex),
 							opacity: 0.20,
 							lineWidth: 3.8
 						)
@@ -1809,7 +1809,7 @@ private struct ZagUpdatesPillSurface: View {
 							progress: progress,
 							offset: -0.038,
 							length: 0.15,
-							color: ZagWideGamutTint.color(hex: zagUpdatesThemeHex),
+							color: ZagWideGamutTint.color(hex: themeColorHex),
 							opacity: 0.40,
 							lineWidth: 1.3
 						)
@@ -1827,7 +1827,7 @@ private struct ZagUpdatesPillSurface: View {
 						Circle()
 							.trim(from: 0.43, to: 0.57)
 							.stroke(
-								ZagWideGamutTint.color(hex: zagUpdatesThemeHex).opacity(0.30 + charge * 0.55),
+								ZagWideGamutTint.color(hex: themeColorHex).opacity(0.30 + charge * 0.55),
 								style: StrokeStyle(lineWidth: 1.5 + charge * 0.9, lineCap: .round)
 							)
 							.blur(radius: charge * 1.6)
