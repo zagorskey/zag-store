@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 import PhotosUI
+import Network
 import UIKit
 
 extension Notification.Name {
@@ -434,6 +435,80 @@ private struct ZagAccountAvatarEditor: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             revision = UUID()
+        }
+    }
+}
+
+
+// A reachability check, not an inspection of another app's VPN manager.
+// Only a successful device-services connection is reported as ON.
+@MainActor
+private final class ZagLocalVPNReachability: ObservableObject {
+    static let shared = ZagLocalVPNReachability()
+    @Published private(set) var reachable: Bool? = nil
+    private var checking = false
+
+    func refresh() {
+        guard !checking else { return }
+        checking = true
+        let connection = NWConnection(host: "10.7.0.1", port: 62078, using: .tcp)
+        let queue = DispatchQueue(label: "zag.localvpn.reachability")
+        let lock = NSLock()
+        var finished = false
+        func complete(_ success: Bool) {
+            lock.lock()
+            let shouldFinish = !finished
+            if shouldFinish { finished = true }
+            lock.unlock()
+            guard shouldFinish else { return }
+            connection.cancel()
+            Task { @MainActor in
+                self.reachable = success ? true : nil
+                self.checking = false
+            }
+        }
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready: complete(true)
+            case .failed, .cancelled: complete(false)
+            default: break
+            }
+        }
+        connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 2) { complete(false) }
+    }
+}
+
+struct ZagLocalVPNToolbarStatus: View {
+    @StateObject private var monitor = ZagLocalVPNReachability.shared
+    @Environment(\.scenePhase) private var scenePhase
+    private let refresh = Timer.publish(every: 12, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("LOCAL")
+                .font(.system(size: 8, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+            Text("VPN")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(monitor.reachable == true ? Color.green : Color.secondary)
+                    .frame(width: 4, height: 4)
+                Text(monitor.reachable == true ? "ON" : "—")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(monitor.reachable == true ? Color.green : Color.secondary)
+            }
+        }
+        .frame(width: 44, height: 39)
+        .accessibilityLabel(monitor.reachable == true ? "Local VPN device services reachable" : "Local VPN status unknown")
+        .onAppear { monitor.refresh() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { monitor.refresh() }
+        }
+        .onReceive(refresh) { _ in
+            if scenePhase == .active { monitor.refresh() }
         }
     }
 }
