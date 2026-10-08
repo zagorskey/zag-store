@@ -308,10 +308,7 @@ struct SourcesView: View {
 				}
 				ToolbarItem(placement: .topBarTrailing) {
 					ZagProfileToolbarButton()
-						// Adjust the toolbar item’s layout footprint rather than
-						// offsetting its contents away from the native glass.
-						.padding(.leading, -10)
-					.tint(.primary)
+						.tint(.primary)
 				}
 			}
 			.refreshable {
