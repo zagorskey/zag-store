@@ -115,6 +115,7 @@ struct ZagSectionHeader: View {
 // MARK: - Standard Zag Store Action Pill
 
 struct ZagActionPill: View {
+	@AppStorage("Feather.userTintColor") private var actionTintHex: String = "#3F8EF7"
 	let title: String
 	var showsProgress: Bool = false
 	var width: CGFloat? = 88
@@ -148,7 +149,7 @@ struct ZagActionPill: View {
 			}
 			.padding(.horizontal, width == nil ? horizontalPadding : 0)
 			.frame(width: width, height: 34)
-			.foregroundStyle(Color.accentColor)
+			.foregroundStyle(ZagWideGamutTint.color(hex: actionTintHex))
 			.background(pillBackground)
 			.clipShape(Capsule())
 			.contentShape(Capsule())
