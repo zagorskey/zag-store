@@ -892,76 +892,26 @@ struct LibraryView: View {
 
 
 				if _editMode.isEditing {
-
-
-
-					NBToolbarButton(
-
-
-
-						.localized("Delete"),
-
-
-
-						systemImage: "trash",
-
-
-
-						isDisabled: _selectedAppUUIDs.isEmpty
-
-
-
-					) {
-
-
-
-						_bulkDeleteSelectedApps()
-
-
-
-					}
-
-
-
-				} else {
-
-
-
-					NBToolbarMenu(
-
-
-
-						systemImage: "plus",
-
-
-
-						style: .icon,
-
-
-
-						placement: .topBarTrailing
-
-
-
-					) {
-
-
-
-						_importActions()
-
-
-
-					}
-
-
-
-				}
-
-				ToolbarItem(placement: .topBarTrailing) {
-					ZagProfileToolbarButton()
-					.tint(.primary)
-				}
-
+                    NBToolbarButton(
+                        .localized("Delete"),
+                        systemImage: "trash",
+                        isDisabled: _selectedAppUUIDs.isEmpty
+                    ) {
+                        _bulkDeleteSelectedApps()
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if !_editMode.isEditing {
+                        Menu {
+                            _importActions()
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                    }
+                    ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
+                }
 
 
 			}

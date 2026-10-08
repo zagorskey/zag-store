@@ -203,16 +203,16 @@ struct SettingsView: View {
 				}
 
 				ToolbarItemGroup(placement: .topBarTrailing) {
-					Button {
-						UIApplication.open("https://github.com/zagorskey/zag-store")
-					} label: {
-						Image(systemName: "chevron.left.forwardslash.chevron.right")
-					}
-					.accessibilityLabel("GitHub Repository")
-				}
-				ToolbarItem(placement: .topBarTrailing) {
-					ZagProfileToolbarButton()
-				}
+                    Button {
+                        UIApplication.open("https://github.com/zagorskey/zag-store")
+                    } label: {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    }
+                    .accessibilityLabel("GitHub Repository")
+                    ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
+                }
 			}
 		}
 		.sheet(item: $_selectedCertificateInfo) { cert in

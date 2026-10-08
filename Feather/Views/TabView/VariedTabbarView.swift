@@ -155,66 +155,26 @@ private struct ZagProfilePressStyle: ButtonStyle {
 	}
 }
 
-private struct ZagBadgeAnchor: UIViewRepresentable {
-	let count: Int
-	let hidden: Bool
-	func makeUIView(context: Context) -> ZagBadgeAnchorView { ZagBadgeAnchorView() }
-	func updateUIView(_ view: ZagBadgeAnchorView, context: Context) {
-		view.update(count: count, hidden: hidden)
-	}
-}
-
-private final class ZagBadgeAnchorView: UIView {
-	private let badge = UILabel()
-	private var count = 0
-	private var badgeHidden = false
-	private weak var hostWindow: UIWindow?
-	override init(frame: CGRect) {
-		super.init(frame: frame)
-		isUserInteractionEnabled = false
-		backgroundColor = .clear
-		badge.textAlignment = .center
-		badge.textColor = .white
-		badge.font = .systemFont(ofSize: 12, weight: .regular)
-		badge.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
-		badge.layer.cornerRadius = 10
-		badge.layer.masksToBounds = true
-		badge.isUserInteractionEnabled = false
-	}
-	required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-	func update(count: Int, hidden: Bool) {
-		self.count = count
-		badgeHidden = hidden
-		badge.text = String(count)
-		badge.isHidden = count == 0
-		UIView.animate(withDuration: 0.24) {
-			self.badge.alpha = hidden ? 0 : 1
-		}
-		setNeedsLayout()
-		positionBadge()
-	}
-	override func didMoveToWindow() {
-		super.didMoveToWindow()
-		if hostWindow !== window {
-			badge.removeFromSuperview()
-			hostWindow = window
-			window?.addSubview(badge)
-		}
-		positionBadge()
-	}
-	override func layoutSubviews() {
-		super.layoutSubviews()
-		positionBadge()
-	}
-	private func positionBadge() {
-		guard let window, bounds.width > 0 else { return }
-		let rect = convert(bounds, to: window)
-		let width = max(20, CGFloat(String(count).count) * 8 + 10)
-		badge.frame = CGRect(x: rect.maxX - width + 7,
-		                     y: rect.minY - 10, width: width, height: 20)
-		window.bringSubviewToFront(badge)
-	}
-	deinit { badge.removeFromSuperview() }
+// The badge belongs to the avatar, not the UIWindow. This keeps its
+// lifetime and geometry tied to the active navigation toolbar.
+private struct ZagProfileBadge: View {
+    let count: Int
+    var body: some View {
+        if count > 0 {
+            Text(count.description)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 20, minHeight: 20)
+                .background(
+                    Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)),
+                    in: Capsule()
+                )
+                .fixedSize()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
 }
 
 private struct ZagCircularToolbarBorder: ViewModifier {
@@ -238,10 +198,12 @@ struct ZagProfileToolbarButton: View {
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.background {
-					ZagBadgeAnchor(count: updateManager.updateCount,
-					               hidden: isAccountPresenting)
-				}
+				.overlay(alignment: .topTrailing) {
+                    ZagProfileBadge(count: updateManager.updateCount)
+                        .offset(x: 7, y: -10)
+                        .opacity(isAccountPresenting ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.24), value: isAccountPresenting)
+                }
 		}
 		.buttonStyle(ZagProfilePressStyle())
 		.modifier(ZagCircularToolbarBorder())
