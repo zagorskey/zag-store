@@ -448,6 +448,8 @@ private final class ZagLocalVPNReachability: ObservableObject {
 
     @Published private(set) var reachable: Bool? = nil
     @Published private(set) var checking = false
+    @Published private(set) var lastSuccess: Date?
+    @Published private(set) var lastResponseMilliseconds: Int?
 
     private var observers: [NSObjectProtocol] = []
     private var refreshTimer: Timer?
@@ -501,6 +503,7 @@ private final class ZagLocalVPNReachability: ObservableObject {
     func refresh() {
         guard active, !checking else { return }
         checking = true
+        let startedAt = ProcessInfo.processInfo.systemUptime
         let connection = NWConnection(host: "10.7.0.1", port: 62078, using: .tcp)
         let queue = DispatchQueue(label: "zag.localvpn.reachability")
         let lock = NSLock()
@@ -514,6 +517,10 @@ private final class ZagLocalVPNReachability: ObservableObject {
             connection.cancel()
             Task { @MainActor in
                 self.reachable = success ? true : nil
+                if success {
+                    self.lastSuccess = Date()
+                    self.lastResponseMilliseconds = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
+                }
                 self.checking = false
             }
         }
@@ -531,6 +538,7 @@ private final class ZagLocalVPNReachability: ObservableObject {
 
 struct ZagLocalVPNToolbarStatus: View {
     @StateObject private var monitor = ZagLocalVPNReachability.shared
+    @State private var showDetails = false
 
     private var statusColor: Color {
         if monitor.checking { return .secondary }
@@ -560,6 +568,59 @@ struct ZagLocalVPNToolbarStatus: View {
         .frame(width: 44, height: 39)
         .accessibilityLabel(monitor.checking ? "Checking local VPN connection" :
             (monitor.reachable == true ? "Local VPN device services reachable" : "Local VPN status unknown"))
+        .contentShape(Rectangle())
+        .onTapGesture { showDetails = true }
+        .accessibilityAddTraits(.isButton)
+        .popover(isPresented: $showDetails, arrowEdge: .top) {
+            ZagLocalVPNDetailsView()
+                .presentationCompactAdaptation(.popover)
+        }
         .onAppear { monitor.startIfNeeded() }
+    }
+}
+
+private struct ZagLocalVPNDetailsView: View {
+    @ObservedObject private var monitor = ZagLocalVPNReachability.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Local VPN", systemImage: "network")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    monitor.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(monitor.checking)
+                .accessibilityLabel("Refresh Local VPN status")
+            }
+            Divider()
+            LabeledContent("Connection") {
+                Text(monitor.checking ? "Checking…" : (monitor.reachable == true ? "Reachable" : "Unknown"))
+                    .foregroundStyle(monitor.reachable == true && !monitor.checking ? .green : .secondary)
+            }
+            LabeledContent("Last successful check") {
+                if let date = monitor.lastSuccess {
+                    Text(date, style: .time)
+                } else {
+                    Text("None").foregroundStyle(.secondary)
+                }
+            }
+            LabeledContent("Response time") {
+                if let milliseconds = monitor.lastResponseMilliseconds {
+                    Text("\(milliseconds) ms")
+                } else {
+                    Text("—").foregroundStyle(.secondary)
+                }
+            }
+            Text("Checks whether iPhone device services are reachable through the local tunnel. This does not read LocalDevVPN's own connection state.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .frame(width: 300)
     }
 }
