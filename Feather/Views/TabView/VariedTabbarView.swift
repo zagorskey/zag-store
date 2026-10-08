@@ -447,6 +447,20 @@ private struct ZagAccountAvatarEditor: View {
 }
 
 
+// Synchronizes the one-shot network callback and timeout across queues.
+private final class ZagVPNCompletionGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return false }
+        finished = true
+        return true
+    }
+}
+
 // Reachability verifies the device-services path, not another app's VPN manager.
 // A failed probe is inconclusive and must never be displayed as confirmed OFF.
 @MainActor
@@ -513,14 +527,9 @@ private final class ZagLocalVPNReachability: ObservableObject {
         let startedAt = ProcessInfo.processInfo.systemUptime
         let connection = NWConnection(host: "10.7.0.1", port: 62078, using: .tcp)
         let queue = DispatchQueue(label: "zag.localvpn.reachability")
-        let lock = NSLock()
-        var finished = false
+        let completionGate = ZagVPNCompletionGate()
         @Sendable nonisolated func complete(_ success: Bool) {
-            lock.lock()
-            let shouldFinish = !finished
-            if shouldFinish { finished = true }
-            lock.unlock()
-            guard shouldFinish else { return }
+            guard completionGate.claim() else { return }
             connection.cancel()
             Task { @MainActor in
                 self.reachable = success ? true : nil
