@@ -44,6 +44,11 @@ struct TabbarView: View {
 					.tag(tab)
 			}
 		}
+		.onOpenURL { url in
+            if let tab = TabEnum.tab(for: url) {
+                selectedTab.wrappedValue = tab
+            }
+        }
 		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
 			guard let route = note.object as? ZagStoreRoute,
 			      let tab = TabEnum(rawValue: route.tab)
