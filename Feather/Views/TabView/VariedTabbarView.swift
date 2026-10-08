@@ -217,6 +217,17 @@ private final class ZagBadgeAnchorView: UIView {
 	deinit { badge.removeFromSuperview() }
 }
 
+private struct ZagCircularToolbarBorder: ViewModifier {
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if #available(iOS 17.0, *) {
+			content.buttonBorderShape(.circle)
+		} else {
+			content
+		}
+	}
+}
+
 struct ZagProfileToolbarButton: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@State private var isAccountPresenting = false
@@ -233,7 +244,7 @@ struct ZagProfileToolbarButton: View {
 				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
-		.buttonBorderShape(.circle)
+		.modifier(ZagCircularToolbarBorder())
 		.tint(.primary)
 		.contentShape(Circle())
 		.accessibilityLabel("Account and App Updates")
