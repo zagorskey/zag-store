@@ -165,7 +165,6 @@ private struct ZagBadgeAnchor: UIViewRepresentable {
 }
 
 private final class ZagBadgeAnchorView: UIView {
-	private static weak var visibleOwner: ZagBadgeAnchorView?
 	private let badge = UILabel()
 	private var count = 0
 	private var badgeHidden = false
@@ -187,7 +186,7 @@ private final class ZagBadgeAnchorView: UIView {
 		self.count = count
 		badgeHidden = hidden
 		badge.text = String(count)
-		badge.isHidden = count == 0 || hidden
+		badge.isHidden = count == 0
 		UIView.animate(withDuration: 0.24) {
 			self.badge.alpha = hidden ? 0 : 1
 		}
@@ -200,10 +199,6 @@ private final class ZagBadgeAnchorView: UIView {
 			badge.removeFromSuperview()
 			hostWindow = window
 			window?.addSubview(badge)
-			if let previous = Self.visibleOwner, previous !== self {
-				previous.badge.isHidden = true
-			}
-			Self.visibleOwner = self
 		}
 		positionBadge()
 	}
@@ -213,8 +208,6 @@ private final class ZagBadgeAnchorView: UIView {
 	}
 	private func positionBadge() {
 		guard let window, bounds.width > 0 else { return }
-		guard Self.visibleOwner === self else { badge.isHidden = true; return }
-		badge.isHidden = count == 0 || badgeHidden
 		let rect = convert(bounds, to: window)
 		let width = max(20, CGFloat(String(count).count) * 8 + 10)
 		badge.frame = CGRect(x: rect.maxX - width + 7,
@@ -248,7 +241,6 @@ struct ZagProfileToolbarButton: View {
 				.background {
 					ZagBadgeAnchor(count: updateManager.updateCount,
 					               hidden: isAccountPresenting)
-						.frame(width: 40, height: 40)
 				}
 		}
 		.buttonStyle(ZagProfilePressStyle())
