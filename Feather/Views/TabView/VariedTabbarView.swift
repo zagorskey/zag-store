@@ -186,7 +186,7 @@ private final class ZagBadgeAnchorView: UIView {
 		self.count = count
 		badgeHidden = hidden
 		badge.text = String(count)
-		badge.isHidden = count == 0 || hidden
+		badge.isHidden = count == 0
 		UIView.animate(withDuration: 0.24) {
 			self.badge.alpha = hidden ? 0 : 1
 		}
@@ -210,8 +210,8 @@ private final class ZagBadgeAnchorView: UIView {
 		guard let window, bounds.width > 0 else { return }
 		let rect = convert(bounds, to: window)
 		let width = max(20, CGFloat(String(count).count) * 8 + 10)
-		badge.frame = CGRect(x: rect.maxX - width + 4,
-		                     y: rect.minY - 9, width: width, height: 20)
+		badge.frame = CGRect(x: rect.maxX - width + 5,
+		                     y: rect.minY - 8, width: width, height: 20)
 		window.bringSubviewToFront(badge)
 	}
 	deinit { badge.removeFromSuperview() }
@@ -227,7 +227,6 @@ struct ZagProfileToolbarButton: View {
 		} label: {
 			ZagGlobalProfileAvatar(revision: avatarRevision)
 				.frame(width: 40, height: 40)
-				.contentShape(Circle())
 				.background {
 					ZagBadgeAnchor(count: updateManager.updateCount,
 					               hidden: isAccountPresenting)
