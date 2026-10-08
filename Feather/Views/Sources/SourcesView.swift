@@ -38,7 +38,10 @@ struct ZagSourcesAtomIcon: View {
             }
             .trim(from: 0, to: strokeProgress)
             .stroke(.white, style: StrokeStyle(lineWidth: 5.8, lineCap: .round, lineJoin: .round))
-            .frame(width: 39, height: 39)
+            // The path uses fixed 30-point coordinates. A larger frame alone
+            // does not scale those coordinates and offsets the artwork.
+            .frame(width: 30, height: 30)
+            .scaleEffect(1.5, anchor: .center)
         }
         .frame(width: 62, height: 62)
         .task(id: animated) {
