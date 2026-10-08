@@ -230,6 +230,7 @@ private struct RPPairingView: View {
 		Section {
 			NavigationLink {
 				RPPairingDiagnosticsView()
+                    .zagSettingsDestinationAvatar()
 			} label: {
 				Label("RPPairing Diagnostics", systemImage: "stethoscope")
 			}
