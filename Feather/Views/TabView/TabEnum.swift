@@ -26,12 +26,14 @@ enum ZagPageStartupPolicy {
 		let rawValue = remembersLastPage
 			? defaults.string(forKey: lastPageKey)
 			: defaults.string(forKey: defaultStartPageKey)
-		return TabEnum(rawValue: rawValue ?? TabEnum.sources.rawValue) ?? .sources
+		return TabEnum(rawValue: rawValue == "home" ? TabEnum.discover.rawValue : (rawValue ?? TabEnum.sources.rawValue)) ?? .sources
 	}
 }
 
 enum TabEnum: String, CaseIterable, Hashable {
-	case home
+	case discover
+	case activity
+	case devices
 	case sources
 	case library
 	case settings
@@ -39,7 +41,9 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	var title: String {
 		switch self {
-		case .home:			return .localized("Home")
+		case .discover:		return "Discover"
+		case .activity:		return "Activity"
+		case .devices:		return "Devices"
 		case .sources:     	return .localized("Sources")
 		case .library: 		return .localized("Apps")
 		case .settings: 	return .localized("Settings")
@@ -49,7 +53,9 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	var icon: String {
 		switch self {
-		case .home:			return "house.fill"
+		case .discover:		return "safari.fill"
+		case .activity:		return "clock.arrow.circlepath"
+		case .devices:		return "iphone.gen3.radiowaves.left.and.right"
 		case .sources: 		return "atom"
 		case .library: 		return "square.stack.3d.up.fill"
 		case .settings: 	return "gearshape.fill"
@@ -60,7 +66,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 	@ViewBuilder
 	static func view(for tab: TabEnum) -> some View {
 		switch tab {
-		case .home: NBNavigationView(.localized("Home")) {
+		case .discover: NBNavigationView("Discover") {
 			Color.clear
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
 				.zagWallpaperSurface()
@@ -70,6 +76,8 @@ enum TabEnum: String, CaseIterable, Hashable {
 					}
 				}
 		}
+		case .activity: ZagActivityPage()
+		case .devices: ZagDevicesPage()
 		case .sources: SourcesView()
 		case .library: LibraryView()
 		case .settings: SettingsView()
@@ -79,10 +87,11 @@ enum TabEnum: String, CaseIterable, Hashable {
 	
 	static var defaultTabs: [TabEnum] {
 		return [
-			.home,
+			.discover,
 			.sources,
 			.library,
-			.settings
+			.activity,
+			.devices
 		]
 	}
 	
@@ -91,4 +100,33 @@ enum TabEnum: String, CaseIterable, Hashable {
 			.certificates
 		]
 	}
+}
+
+
+// Initial dedicated destinations; the existing Apps and RPPairing workflows
+// remain untouched while Activity and device registration are developed.
+private struct ZagActivityPage: View {
+    var body: some View {
+        NBNavigationView("Activity") {
+            ContentUnavailableView("No Recent Activity", systemImage: "clock.arrow.circlepath",
+                description: Text("App installation, signing and refresh activity will appear here."))
+                .toolbar {
+                    ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                    ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+                }
+        }
+    }
+}
+
+private struct ZagDevicesPage: View {
+    var body: some View {
+        NBNavigationView("Devices") {
+            ContentUnavailableView("Device Management", systemImage: "iphone.gen3.radiowaves.left.and.right",
+                description: Text("Registered and paired devices will appear here."))
+                .toolbar {
+                    ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                    ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+                }
+        }
+    }
 }
