@@ -137,15 +137,127 @@ private struct ZagActivityPage: View {
 }
 
 private struct ZagDevicesPage: View {
+    @State private var batteryLevel: Float = -1
+    @State private var batteryState: UIDevice.BatteryState = .unknown
+    @State private var storageAvailable: Int64?
+    @State private var storageTotal: Int64?
+
+    private var hardwareIdentifier: String {
+        var info = utsname()
+        uname(&info)
+        return withUnsafePointer(to: &info.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: info.machine)) {
+                String(cString: $0)
+            }
+        }
+    }
+
+    private var storageDescription: String {
+        guard let available = storageAvailable, let total = storageTotal else { return "Unavailable" }
+        return "\(ByteCountFormatter.string(fromByteCount: total - available, countStyle: .file)) used of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+    }
+
+    private func refreshInformation() {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        batteryLevel = UIDevice.current.batteryLevel
+        batteryState = UIDevice.current.batteryState
+        if let values = try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [
+            .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey
+        ]) {
+            storageTotal = values.volumeTotalCapacity.map(Int64.init)
+            storageAvailable = values.volumeAvailableCapacityForImportantUsage
+        }
+    }
+
     var body: some View {
         NBNavigationView("Devices") {
-            ZagEmptyDestination(title: "Device Management", symbol: "iphone",
-                message: "Registered and paired devices will appear here.")
-                .toolbar {
-                    ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                    ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 18) {
+                        Image(systemName: UIDevice.current.userInterfaceIdiom == .pad ? "ipad.gen2" : "iphone.gen3")
+                            .font(.system(size: 48, weight: .ultraLight))
+                            .foregroundStyle(.primary)
+                            .frame(width: 68, height: 82)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("This Device")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text(UIDevice.current.model)
+                                .font(.title2.weight(.semibold))
+                            Text("\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("DEVICE INFORMATION")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        VStack(spacing: 0) {
+                            detailRow("Operating System", value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)", symbol: "gear")
+                            Divider().padding(.leading, 48)
+                            detailRow("Hardware Identifier", value: hardwareIdentifier, symbol: "cpu")
+                            Divider().padding(.leading, 48)
+                            detailRow("Device Type", value: UIDevice.current.localizedModel, symbol: "iphone")
+                        }
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("SYSTEM STATUS")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        VStack(spacing: 0) {
+                            detailRow("Battery", value: batteryLevel >= 0 ? "\(Int((batteryLevel * 100).rounded()))% \(batteryState == .charging ? "· Charging" : batteryState == .full ? "· Fully Charged" : "")" : "Unavailable", symbol: "battery.100")
+                            Divider().padding(.leading, 48)
+                            detailRow("Storage", value: storageDescription, symbol: "internaldrive")
+                        }
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+
+                    Text("Information is read directly from this device. Paired and registered devices will appear here when device management is available.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+            .zagWallpaperSurface()
+            .onAppear(perform: refreshInformation)
+            .refreshable { refreshInformation() }
+            .toolbar {
+                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+            }
         }
+    }
+
+    private func detailRow(_ title: String, value: String, symbol: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 17))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+            Text(title)
+                .font(.subheadline)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
     }
 }
 
