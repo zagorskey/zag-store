@@ -38,7 +38,7 @@ struct ZagSourcesAtomIcon: View {
             }
             .trim(from: 0, to: strokeProgress)
             .stroke(.white, style: StrokeStyle(lineWidth: 5.8, lineCap: .round, lineJoin: .round))
-            .frame(width: 30, height: 30)
+            .frame(width: 39, height: 39)
         }
         .frame(width: 62, height: 62)
         .task(id: animated) {
