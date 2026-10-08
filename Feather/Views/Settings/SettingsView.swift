@@ -20,7 +20,7 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
     func body(content: Content) -> some View {
         content.toolbar {
             ToolbarItem(placement: .principal) {
-                Color.clear.frame(width: 0, height: 0)
+                ZagLocalVPNToolbarStatus()
             }
             ToolbarItem(placement: .primaryAction) {
                 ZagProfileToolbarButton()
@@ -181,7 +181,7 @@ struct SettingsView: View {
 			.zagWallpaperSurface()
 			.toolbar {
 				ToolbarItem(placement: .principal) {
-					Color.clear.frame(width: 0, height: 0)
+					ZagLocalVPNToolbarStatus()
 				}
 				ToolbarItemGroup(placement: .topBarLeading) {
 					if _isReorderingSettings {
