@@ -440,16 +440,66 @@ private struct ZagAccountAvatarEditor: View {
 }
 
 
-// A reachability check, not an inspection of another app's VPN manager.
-// Only a successful device-services connection is reported as ON.
+// Reachability verifies the device-services path, not another app's VPN manager.
+// A failed probe is inconclusive and must never be displayed as confirmed OFF.
 @MainActor
 private final class ZagLocalVPNReachability: ObservableObject {
     static let shared = ZagLocalVPNReachability()
+
     @Published private(set) var reachable: Bool? = nil
-    private var checking = false
+    @Published private(set) var checking = false
+
+    private var observers: [NSObjectProtocol] = []
+    private var refreshTimer: Timer?
+    private let pathMonitor = NWPathMonitor()
+    private let pathQueue = DispatchQueue(label: "zag.localvpn.path")
+    private var started = false
+    private var active = true
+
+    private init() {}
+
+    func startIfNeeded() {
+        guard !started else { return }
+        started = true
+        active = UIApplication.shared.applicationState == .active
+
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.active = true
+                self?.refresh()
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.active = false }
+        })
+
+        pathMonitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.active else { return }
+                self.reachable = nil
+                self.refresh()
+            }
+        }
+        pathMonitor.start(queue: pathQueue)
+
+        // One shared timer, independent of the number of toolbar instances.
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.active else { return }
+                self.refresh()
+            }
+        }
+        if active { refresh() }
+    }
 
     func refresh() {
-        guard !checking else { return }
+        guard active, !checking else { return }
         checking = true
         let connection = NWConnection(host: "10.7.0.1", port: 62078, using: .tcp)
         let queue = DispatchQueue(label: "zag.localvpn.reachability")
@@ -481,8 +531,14 @@ private final class ZagLocalVPNReachability: ObservableObject {
 
 struct ZagLocalVPNToolbarStatus: View {
     @StateObject private var monitor = ZagLocalVPNReachability.shared
-    @Environment(\.scenePhase) private var scenePhase
-    private let refresh = Timer.publish(every: 12, on: .main, in: .common).autoconnect()
+
+    private var statusColor: Color {
+        if monitor.checking { return .secondary }
+        if monitor.reachable == true {
+            return Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1))
+        }
+        return .secondary
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -494,21 +550,16 @@ struct ZagLocalVPNToolbarStatus: View {
                 .foregroundStyle(.primary)
             HStack(spacing: 3) {
                 Circle()
-                    .fill(monitor.reachable == true ? Color.green : Color.secondary)
+                    .fill(statusColor)
                     .frame(width: 4, height: 4)
-                Text(monitor.reachable == true ? "ON" : "—")
+                Text(monitor.checking ? "…" : (monitor.reachable == true ? "ON" : "—"))
                     .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(monitor.reachable == true ? Color.green : Color.secondary)
+                    .foregroundStyle(statusColor)
             }
         }
         .frame(width: 44, height: 39)
-        .accessibilityLabel(monitor.reachable == true ? "Local VPN device services reachable" : "Local VPN status unknown")
-        .onAppear { monitor.refresh() }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active { monitor.refresh() }
-        }
-        .onReceive(refresh) { _ in
-            if scenePhase == .active { monitor.refresh() }
-        }
+        .accessibilityLabel(monitor.checking ? "Checking local VPN connection" :
+            (monitor.reachable == true ? "Local VPN device services reachable" : "Local VPN status unknown"))
+        .onAppear { monitor.startIfNeeded() }
     }
 }
