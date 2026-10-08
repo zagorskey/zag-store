@@ -124,6 +124,11 @@ struct ExtendedTabbarView: View {
 			}
 		}
 		.tabViewCustomization($customization)
+		.onOpenURL { url in
+            if let tab = TabEnum.tab(for: url) {
+                selectedTab.wrappedValue = tab.rawValue
+            }
+        }
 		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
 			guard let route = note.object as? ZagStoreRoute else { return }
 			selectedTab.wrappedValue = route.tab
