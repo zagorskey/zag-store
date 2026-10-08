@@ -475,7 +475,7 @@ extension SettingsView {
 					Label("Update Diagnostics", systemImage: "waveform.path.ecg.rectangle")
 				}
 				NavigationLink(destination: ZagRepositoryPerformanceView().zagSettingsDestinationAvatar()) {
-					Label("Repository Performance", systemImage: "speedometer")
+					Label("Repo Performance", systemImage: "speedometer")
 				}
 			} header: {
 				Text("Diagnostics")
@@ -2147,7 +2147,7 @@ struct ZagRepositoryPerformanceView: View {
 				}
 			}
 		}
-		.navigationTitle(showsLargeTitle ? "Repository Performance" : "")
+		.navigationTitle(showsLargeTitle ? "Repo Performance" : "")
         .navigationBarTitleDisplayMode(showsLargeTitle ? .large : .inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
