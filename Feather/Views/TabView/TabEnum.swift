@@ -126,8 +126,8 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagActivityPage: View {
     var body: some View {
         NBNavigationView("Activity") {
-            ContentUnavailableView("No Recent Activity", systemImage: "clock.arrow.circlepath",
-                description: Text("App installation, signing and refresh activity will appear here."))
+            ZagEmptyDestination(title: "No Recent Activity", symbol: "clock.arrow.circlepath",
+                message: "App installation, signing and refresh activity will appear here.")
                 .toolbar {
                     ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                     ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
@@ -139,12 +139,37 @@ private struct ZagActivityPage: View {
 private struct ZagDevicesPage: View {
     var body: some View {
         NBNavigationView("Devices") {
-            ContentUnavailableView("Device Management", systemImage: "iphone.gen3.radiowaves.left.and.right",
-                description: Text("Registered and paired devices will appear here."))
+            ZagEmptyDestination(title: "Device Management", symbol: "iphone.radiowaves.left.and.right",
+                message: "Registered and paired devices will appear here.")
                 .toolbar {
                     ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                     ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
                 }
         }
+    }
+}
+
+
+// iOS 16-compatible replacement for ContentUnavailableView.
+private struct ZagEmptyDestination: View {
+    let title: String
+    let symbol: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 4)
+            Text(title)
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
