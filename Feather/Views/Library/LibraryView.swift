@@ -319,7 +319,11 @@ struct LibraryView: View {
 					HStack(spacing: 9) {
 						Text(.localized("Updates"))
 							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(.secondary)
+							.foregroundStyle(Color(uiColor: UIColor { traits in
+                                traits.userInterfaceStyle == .dark
+                                    ? UIColor(white: 0.72, alpha: 1)
+                                    : UIColor(white: 0.38, alpha: 1)
+                            }))
 
 						ZagFlashingUpdateDot()
 							.frame(width: 9, height: 9)
@@ -332,9 +336,6 @@ struct LibraryView: View {
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
-						// The animation has an intrinsic left-side inset; compensate
-						// only there while preserving the original right-side gap.
-						.padding(.leading, -14)
 
 					ZStack {
 						ZagUpdatesPillSurface(
