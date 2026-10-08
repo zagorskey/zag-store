@@ -1490,6 +1490,7 @@ private struct ZagAppCountTransition: ViewModifier {
 
 // MARK: - Repository Health
 private struct ZagRepositoryHealthView: View {
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#3F8EF7"
     @Environment(\.dismiss) private var dismiss
     let sources: [AltSource]
     let loadedIDs: Set<NSManagedObjectID>
@@ -1500,17 +1501,17 @@ private struct ZagRepositoryHealthView: View {
             List {
                 Section("Overview") {
                     LabeledContent {
-                        Text(String(sources.count))
+                        countBadge(sources.count)
                     } label: {
                         Label("Configured repositories", systemImage: "square.stack.3d.up")
                     }
                     LabeledContent {
-                        Text(String(loadedIDs.count))
+                        countBadge(loadedIDs.count)
                     } label: {
                         Label("Loaded repositories", systemImage: "checkmark.circle")
                     }
                     LabeledContent {
-                        Text(String(sources.count - loadedIDs.count))
+                        countBadge(sources.count - loadedIDs.count)
                     } label: {
                         Label("Not loaded", systemImage: "questionmark.circle")
                     }
@@ -1542,6 +1543,16 @@ private struct ZagRepositoryHealthView: View {
                 }
             }
         }
+    }
+
+    private func countBadge(_ count: Int) -> some View {
+        Text(count.formatted())
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(ZagWideGamutTint.color(hex: themeColorHex), in: Capsule())
+            .accessibilityLabel("\\(count) repositories")
     }
 
     private func repositoryRow(_ source: AltSource) -> some View {
