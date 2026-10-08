@@ -1696,14 +1696,14 @@ private struct ZagUpdateTransferParticles: View {
 					// The electrical path is visible enough to connect both
 					// controls, but remains subordinate to the moving energy.
 					Capsule()
-						.fill(Color(hex: themeColorHex))
+						.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)))
 						.frame(
 							width: max(0, (width + 8) * grow),
 							height: 1.0 / UIScreen.main.scale
 						)
 						.opacity(0.43 * filament)
 						.shadow(
-							color: Color(hex: themeColorHex).opacity(0.34 * filament),
+							color: Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)).opacity(0.34 * filament),
 							radius: 2.4
 						)
 						.frame(maxWidth: .infinity, alignment: .trailing)
@@ -1712,7 +1712,7 @@ private struct ZagUpdateTransferParticles: View {
 					// Launch flare lives just under the counter's left edge.
 					ZStack {
 						Circle()
-							.fill(Color(hex: themeColorHex).opacity(0.42))
+							.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)).opacity(0.42))
 							.frame(width: 13, height: 13)
 							.blur(radius: 4)
 						Circle()
@@ -1735,12 +1735,12 @@ private struct ZagUpdateTransferParticles: View {
 
 						ZStack {
 							Capsule()
-								.fill(Color(hex: themeColorHex).opacity(0.30 * strength))
+								.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)).opacity(0.30 * strength))
 								.frame(width: tail, height: pulse == 0 ? 4 : 3)
 								.blur(radius: 2.4)
 
 							Capsule()
-								.fill(Color(hex: themeColorHex))
+								.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)))
 								.frame(width: core, height: pulse == 0 ? 1.8 : 1.3)
 
 							Circle()
@@ -1757,7 +1757,7 @@ private struct ZagUpdateTransferParticles: View {
 					// Reception flare is tucked beneath the Updates capsule.
 					ZStack {
 						Circle()
-							.fill(Color(hex: themeColorHex).opacity(0.52))
+							.fill(Color(uiColor: UIColor(displayP3Red: 0.24, green: 0.57, blue: 1, alpha: 1)).opacity(0.52))
 							.frame(width: 15, height: 15)
 							.blur(radius: 4.5)
 						Circle()
