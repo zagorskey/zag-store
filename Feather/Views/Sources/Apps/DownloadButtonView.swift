@@ -27,6 +27,7 @@ struct DownloadButtonView: View {
 	@State private var installedBundleID: String?
 	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
+	@State private var retrySignedUUID: String?
 	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
 	@State private var isPALInfoPresented = false
@@ -64,7 +65,13 @@ struct DownloadButtonView: View {
 					} else {
 						_indeterminateRing()
 					}
-				} else if _isPALApp {
+				} else if retrySignedUUID != nil, _retrySignedCopy() != nil {
+                    ZagActionPill(title: .localized("Retry")) {
+                        _performAction { _retryInstallation() }
+                    }
+                    .disabled(actionClaimed)
+                    .accessibilityLabel(Text("Retry installing \(app.currentName)"))
+                } else if _isPALApp {
 					ZagActionPill(title: "PAL") {
 						UIImpactFeedbackGenerator(style: .light).impactOccurred()
 						isPALInfoPresented = true
@@ -430,8 +437,28 @@ struct DownloadButtonView: View {
 		) as? String
 	}
 
+	private func _retrySignedCopy() -> Signed? {
+        guard let retrySignedUUID, let signed = _signedApp(uuid: retrySignedUUID) else {
+            return nil
+        }
+        // Never reuse a package belonging to a different repository app or release.
+        guard let matching = _existingSignedCopy(),
+              matching.objectID == signed.objectID else {
+            return nil
+        }
+        return signed
+    }
+
+    private func _retryInstallation() {
+        guard zagPhase == .idle, let signed = _retrySignedCopy() else { return }
+        zagPhase = .installing
+        installationProgress = 0
+        _installInline(signed)
+    }
+
 	private func _installExistingSignedCopy() {
 		guard zagPhase == .idle, let signed = _existingSignedCopy() else { return }
+		retrySignedUUID = signed.uuid
 		zagPhase = .installing
 		installationProgress = 0
 		_installInline(signed)
@@ -639,6 +666,7 @@ struct DownloadButtonView: View {
 				_failTransaction(.localized("Signing completed, but Zag Store could not locate the signed app."))
 				return
 			}
+			retrySignedUUID = signedUUID
 			zagPhase = .installing
 			installationProgress = 0
 			_installInline(signed, imported: imported)
@@ -695,6 +723,7 @@ struct DownloadButtonView: View {
 					installationProgress = 1
 				}
 
+				retrySignedUUID = nil
 				installedBundleID = signed.identifier
 				_rememberRepositoryOrigin()
 				_markManagedInstalled(signed)
