@@ -1584,6 +1584,14 @@ private struct ZagRefreshBaselineView: View {
     @ObservedObject private var sourceModel = SourcesViewModel.shared
 
     private var realRepositoryRows: some View {
+        repositoryRows(realRefresh: false)
+    }
+
+    private var realRefreshRepositoryRows: some View {
+        repositoryRows(realRefresh: true)
+    }
+
+    private func repositoryRows(realRefresh: Bool) -> some View {
         List {
             Section {
                 HStack(spacing: 10) {
@@ -1615,7 +1623,11 @@ private struct ZagRefreshBaselineView: View {
         .scrollContentBackground(.hidden)
         .zagWallpaperSurface()
         .refreshable {
-            try? await Task.sleep(for: .seconds(1))
+            if realRefresh {
+                await sourceModel.fetchSources(actualSources, refresh: true)
+            } else {
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
     }
 
@@ -1658,6 +1670,8 @@ private struct ZagRefreshBaselineView: View {
         NavigationStack {
             Group {
                 switch mode {
+                case 5:
+                    realRefreshRepositoryRows
                 case 4:
                     realRepositoryRows
                 case 1:
@@ -1685,6 +1699,7 @@ private struct ZagRefreshBaselineView: View {
                         Button("3 · List + Search") { mode = 2 }
                         Button("4 · List + Search + Wallpaper") { mode = 3 }
                         Button("5 · Real Repository Rows (no downloads)") { mode = 4 }
+                        Button("6 · Real Repository Refresh") { mode = 5 }
                     } label: {
                         Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
                     }
