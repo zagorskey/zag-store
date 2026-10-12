@@ -50,6 +50,7 @@ struct LibraryCellView: View {
 
 	var app: AppInfoPresentable
 	var isManagedInstalled: Bool = false
+	var availableUpdate: UpdateManager.AvailableUpdate? = nil
 	var isRemoving: Bool = false
 	var showsSeparator: Bool = true
 	var onDeleteApp: ((AppInfoPresentable) -> Void)? = nil
@@ -68,6 +69,8 @@ struct LibraryCellView: View {
 	@State private var signingRingRotation: Double = 0
 	@State private var isInstallingImmediately = false
 	@State private var installingRingRotation: Double = 0
+	@ObservedObject private var updateTransaction = ZagUpdateTransactionManager.shared
+	@State private var updateRingRotation: Double = 0
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -493,7 +496,9 @@ extension LibraryCellView {
 	) -> some View {
 		if app.isSigned {
 			ZStack {
-				if isManagedInstalled, let id = app.identifier {
+				if isManagedInstalled, let update = availableUpdate {
+					_installedUpdateAction(update)
+				} else if isManagedInstalled, let id = app.identifier {
 					ZagActionPill(title: .localized("Open")) {
 						UIApplication.openApp(with: id)
 					}
@@ -578,6 +583,60 @@ extension LibraryCellView {
 					}
 				}
 			}
+	}
+
+	@ViewBuilder
+	private func _installedUpdateAction(_ update: UpdateManager.AvailableUpdate) -> some View {
+		let stage = updateTransaction.stage(for: update)
+		VStack(spacing: 2) {
+			if let stage, !isFailedUpdateStage(stage) {
+				_installingIndeterminateRing()
+					.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+			} else {
+				ZagActionPill(title: stage?.title ?? .localized("Update")) {
+					_startInstalledUpdate(update)
+				}
+			}
+			Text(updateStageCaption(stage))
+					.font(.system(size: 9, weight: .medium))
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+					.frame(width: 88, height: 11)
+		}
+	}
+
+	private func isFailedUpdateStage(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
+		if case .failed = stage { return true }
+		return false
+	}
+
+	private func updateStageCaption(_ stage: ZagUpdateTransactionManager.Stage?) -> String {
+		switch stage {
+		case .downloading: return .localized("Downloading…")
+		case .importing, .signing, .readyToInstall: return .localized("Preparing…")
+		case .installing: return .localized("Installing…")
+		default: return ""
+		}
+	}
+
+	private func _startInstalledUpdate(_ update: UpdateManager.AvailableUpdate) {
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		updateTransaction.prepare(update) { result in
+			switch result {
+			case .success(let signedUUID):
+				Task { @MainActor in
+					do {
+						try await updateTransaction.installPreparedUpdate(signedUUID: signedUUID)
+						try? ZagRPPairingCore.shared.refreshInstalledApps()
+					} catch {
+						updateTransaction.failInstallation(update: update, error: error)
+						UIAlertController.showAlertWithOk(title: .localized("Update Failed"), message: error.localizedDescription)
+					}
+				}
+			case .failure(let error):
+				UIAlertController.showAlertWithOk(title: .localized("Update Failed"), message: error.localizedDescription)
+			}
+		}
 	}
 
 	private func _signingIndeterminateRing() -> some View {
