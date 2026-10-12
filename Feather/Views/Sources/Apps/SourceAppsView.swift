@@ -573,17 +573,16 @@ struct SourceAppsView: View {
 			ToolbarItem(placement: .principal) {
 				ZagLocalVPNToolbarStatus()
 			}
-			if #available(iOS 26.0, *) {
+			if #available(iOS 26.0, *), object.count == 1 {
 				ToolbarItem(placement: .largeTitle) {
-					HStack(alignment: .center, spacing: 8) {
-						Text(_navigationTitle)
-							.font(.largeTitle.weight(.bold))
+					HStack(alignment: .firstTextBaseline, spacing: 8) {
+						Text("Repository")
+							.font(.system(size: UIFont.preferredFont(forTextStyle: .largeTitle).pointSize, weight: .bold))
 							.foregroundStyle(.primary)
 							.lineLimit(1)
 						Spacer(minLength: 8)
 						_repositoryActionPills
 					}
-					.frame(maxWidth: .infinity, alignment: .leading)
 				}
 			}
 		}
