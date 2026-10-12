@@ -147,7 +147,10 @@ struct DownloadButtonView: View {
 			}
 		}
 		.frame(width: 88, height: 84, alignment: .center)
-		.onAppear(perform: setupObserver)
+		.onAppear {
+			setupObserver()
+			_restoreRetryIfAvailable()
+		}
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
 			get: { transactionError != nil },
@@ -437,6 +440,20 @@ struct DownloadButtonView: View {
 		) as? String
 	}
 
+    private var _retryStorageKey: String {
+        "zagStore.installRetry." + app.currentUniqueId
+    }
+
+    private func _restoreRetryIfAvailable() {
+        guard retrySignedUUID == nil,
+              let uuid = UserDefaults.standard.string(forKey: _retryStorageKey) else { return }
+        retrySignedUUID = uuid
+        if _retrySignedCopy() == nil {
+            retrySignedUUID = nil
+            UserDefaults.standard.removeObject(forKey: _retryStorageKey)
+        }
+    }
+
 	private func _retrySignedCopy() -> Signed? {
         guard let retrySignedUUID, let signed = _signedApp(uuid: retrySignedUUID) else {
             return nil
@@ -459,6 +476,7 @@ struct DownloadButtonView: View {
 	private func _installExistingSignedCopy() {
 		guard zagPhase == .idle, let signed = _existingSignedCopy() else { return }
 		retrySignedUUID = signed.uuid
+		if let uuid = signed.uuid { UserDefaults.standard.set(uuid, forKey: _retryStorageKey) }
 		zagPhase = .installing
 		installationProgress = 0
 		_installInline(signed)
@@ -667,6 +685,7 @@ struct DownloadButtonView: View {
 				return
 			}
 			retrySignedUUID = signedUUID
+			UserDefaults.standard.set(signedUUID, forKey: _retryStorageKey)
 			zagPhase = .installing
 			installationProgress = 0
 			_installInline(signed, imported: imported)
@@ -724,6 +743,7 @@ struct DownloadButtonView: View {
 				}
 
 				retrySignedUUID = nil
+				UserDefaults.standard.removeObject(forKey: _retryStorageKey)
 				installedBundleID = signed.identifier
 				_rememberRepositoryOrigin()
 				_markManagedInstalled(signed)
