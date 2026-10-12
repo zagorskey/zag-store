@@ -1591,6 +1591,36 @@ private struct ZagRefreshBaselineView: View {
         repositoryRows(realRefresh: true)
     }
 
+    private var diagnosticRows: some View {
+        List {
+            Section {
+                Text("Diagnostic mode \\(mode + 1)")
+                Text("Pull down while scrolling. Results are printed to the device console.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                ZagRepositoriesHeader(count: actualSources.count)
+                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
+                    SourcesCellView(
+                        source: source,
+                        showsSeparator: index < actualSources.count - 1,
+                        repository: sourceModel.sources[source],
+                        isRefreshing: source.sourceURL.map {
+                            sourceModel.refreshingSourceURLs.contains($0.absoluteString)
+                        } ?? false
+                    )
+                    .listRowSeparator(.hidden)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .zagWallpaperSurface()
+        .refreshable {
+            await sourceModel.fetchSources(actualSources, refresh: true, diagnosticMode: mode + 1)
+        }
+    }
+
     private var noReconciliationRows: some View {
         repositoryRows(realRefresh: true, skipReconciliation: true)
     }
@@ -1674,6 +1704,8 @@ private struct ZagRefreshBaselineView: View {
         NavigationStack {
             Group {
                 switch mode {
+                case 7...13:
+                    diagnosticRows
                 case 6:
                     noReconciliationRows
                 case 5:
@@ -1707,6 +1739,14 @@ private struct ZagRefreshBaselineView: View {
                         Button("5 · Real Repository Rows (no downloads)") { mode = 4 }
                         Button("6 · Real Repository Refresh") { mode = 5 }
                         Button("7 · Refresh Without Reconciliation") { mode = 6 }
+                        Divider()
+                        Button("8 · Fetch + Decode Only") { mode = 7 }
+                        Button("9 · Refresh State Only") { mode = 8 }
+                        Button("10 · Publish Once (Cached)") { mode = 9 }
+                        Button("11 · Publish Per Row (Cached)") { mode = 10 }
+                        Button("12 · Fetch + Progress Only") { mode = 11 }
+                        Button("13 · Fetch + Final Publish") { mode = 12 }
+                        Button("14 · Fetch + Final Publish (No Progress)") { mode = 13 }
                     } label: {
                         Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
                     }
