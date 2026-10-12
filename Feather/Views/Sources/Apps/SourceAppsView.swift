@@ -502,10 +502,10 @@ struct SourceAppsView: View {
 							.listRowBackground(Color.clear)
 					}
 				}
-				ForEach(Array(repositoryEntries.enumerated()), id: \\.element.id) { index, entry in
+				ForEach(repositoryEntries, id: \.id) { entry in
 					SourceAppsCellView(source: entry.source, app: entry.app)
 						.frame(height: ZagListLayout.compactRowHeight)
-						.zagCompactRowSeparator(index < repositoryEntries.count - 1)
+						.zagCompactRowSeparator()
 						.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
 						.listRowBackground(Color.clear)
 						.contentShape(Rectangle())
