@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+import CoreData
+import AltSourceKit
+import NukeUI
 
 enum FRIconAppearance: Int {
 	case light = 0
@@ -123,4 +126,50 @@ struct FRAppIconView: View {
 		)
 	}
 
+}
+
+// Resolve a repository entry to one unambiguous locally signed bundle.
+// Both the bundle identifier and display name must match, preventing
+// variants with shared identifiers from borrowing each other's icons.
+struct ZagRepositoryAppIconView: View {
+	let app: ASRepository.App
+	var size: CGFloat = 62
+
+	@FetchRequest(
+		entity: Signed.entity(),
+		sortDescriptors: []
+	) private var signedApps: FetchedResults<Signed>
+
+	private func normalized(_ name: String) -> String {
+		name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+			.components(separatedBy: CharacterSet.alphanumerics.inverted)
+			.joined().lowercased()
+	}
+
+	private var matchingSignedApp: Signed? {
+		guard let identifier = app.id, !identifier.isEmpty else { return nil }
+		let name = normalized(app.currentName)
+		guard !name.isEmpty else { return nil }
+		let matches = signedApps.filter {
+			$0.identifier == identifier && normalized($0.name ?? "") == name &&
+			Storage.shared.getAppDirectory(for: $0) != nil
+		}
+		return matches.count == 1 ? matches.first : nil
+	}
+
+	var body: some View {
+		Group {
+			if let signed = matchingSignedApp {
+				FRAppIconView(app: signed, size: size)
+			} else {
+				LazyImage(url: app.iconURL) { state in
+					if let image = state.image {
+						image.appIconStyle(size: size)
+					} else {
+						Image("App_Unknown").appIconStyle(size: size)
+					}
+				}
+			}
+		}
+	}
 }
