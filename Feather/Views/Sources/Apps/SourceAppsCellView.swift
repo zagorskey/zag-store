@@ -79,20 +79,7 @@ struct SourceAppsCellView: View {
 	@ViewBuilder
 	private var appIcon: some View {
 		ZStack(alignment: .bottomLeading) {
-			if let iconURL = app.iconURL {
-				LazyImage(url: iconURL) { state in
-					if let image = state.image {
-						image
-							.appIconStyle(
-								size: 62
-							)
-					} else {
-						standardIcon
-					}
-				}
-			} else {
-				standardIcon
-			}
+			ZagRepositoryAppIconView(app: app, size: 62)
 
 			if let sourceIconURL =
 				source.currentIconURL
