@@ -575,15 +575,7 @@ struct SourceAppsView: View {
 			}
 			if #available(iOS 26.0, *) {
 				ToolbarItem(placement: .largeTitle) {
-					HStack(alignment: .center, spacing: 8) {
-						Text(_navigationTitle)
-							.font(.system(size: 34, weight: .bold))
-							.foregroundStyle(.primary)
-							.lineLimit(1)
-							.minimumScaleFactor(0.8)
-						Spacer(minLength: 8)
-						_repositoryActionPills
-					}
+					_repositoryActionPills
 				}
 			}
 		}
