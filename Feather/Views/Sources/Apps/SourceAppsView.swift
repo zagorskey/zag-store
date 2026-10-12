@@ -465,10 +465,10 @@ struct SourceAppsView: View {
 			{
 				SourceAppsTableRepresentableView(
 					sources: _sources,
+					repositoryName: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 					searchText: $_searchText,
 					sortOption: $_sortOption,
 					sortAscending: $_sortAscending,
-					repositoryName: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 					onSelect: { route in
 						self._selectedRoute = route
 					}
