@@ -256,7 +256,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 		}
 		
 		DispatchQueue.main.async {
-			let nsError = error as NSError
+			let nsError = error! as NSError
 			if nsError.domain == NSURLErrorDomain,
 			   let data = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
 			   !data.isEmpty {
