@@ -12,6 +12,7 @@ import Combine
 import NukeUI
 
 struct SourceAppsCellView: View {
+	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@AppStorage("Feather.storeCellAppearance")
 	private var _storeCellAppearance: Int = 0
 
@@ -79,7 +80,19 @@ struct SourceAppsCellView: View {
 	@ViewBuilder
 	private var appIcon: some View {
 		ZStack(alignment: .bottomLeading) {
-			ZagRepositoryAppIconView(app: app, size: 62)
+			if let bundleID = app.id, pairingCore.installedBundleIDs.contains(bundleID) {
+				ZagRepositoryAppIconView(app: app, size: 62)
+			} else if let iconURL = app.iconURL {
+				LazyImage(url: iconURL) { state in
+					if let image = state.image {
+						image.appIconStyle(size: 62)
+					} else {
+						standardIcon
+					}
+				}
+			} else {
+				standardIcon
+			}
 
 			if let sourceIconURL =
 				source.currentIconURL
