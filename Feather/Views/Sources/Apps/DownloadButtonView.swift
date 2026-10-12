@@ -49,7 +49,7 @@ struct DownloadButtonView: View {
 	var body: some View {
 		ZStack {
 			ZStack {
-				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId), currentDownload.canRetry {
+				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId), currentDownload.canRetry, zagPhase == .idle, !_isPALApp, !_isCurrentVariantInstalled {
                     ZagActionPill(title: .localized("Retry")) {
                         _performAction { _startGetAndInstall() }
                     }
@@ -188,6 +188,14 @@ struct DownloadButtonView: View {
 		}
 		.animation(.easeInOut(duration: 0.25), value: zagPhase)
 	}
+
+	private var _isCurrentVariantInstalled: Bool {
+        guard let bundleID = app.id else { return false }
+        return (installedBundleID == bundleID) ||
+            (pairingCore.isInstalled(bundleID: bundleID) &&
+             _matchesTrackedVariant(bundleID: bundleID) &&
+             _installedReleaseRelationship(bundleID: bundleID) == .same)
+    }
 
 	private var _isPALApp: Bool {
 		guard let marketplaceID = app.marketplaceID else { return false }
