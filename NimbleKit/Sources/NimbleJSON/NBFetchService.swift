@@ -190,6 +190,37 @@ public class NBFetchService {
 	private func validatorKey(_ name: String, url: URL) -> String {
 		"NBFetchService.\(name)." + cacheKey(for: url)
 	}
+	// Reuse the last valid repository when a refresh cannot provide valid JSON.
+	private func completeFromCache<T: Decodable>(
+		url: URL,
+		cachedData: Data?,
+		networkElapsed: Double,
+		failure: Error,
+		completion: @escaping (Result<T, Error>) -> Void
+	) {
+		if let decoded: T = cachedDecodedValue(for: url, as: T.self) {
+			completion(.success(decoded))
+			return
+		}
+		if let cachedData,
+		   let decoded = try? JSONDecoder().decode(T.self, from: cachedData) {
+			storeDecodedValue(decoded, for: url, byteCost: cachedData.count)
+			NBRepositoryFetchDiagnostics.record(
+				NBRepositoryFetchMetric(
+					url: url.absoluteString,
+					status: "disk-cache/fallback",
+					byteCount: cachedData.count,
+					networkSeconds: networkElapsed,
+					decodeSeconds: 0,
+					recordedAt: Date()
+				)
+			)
+			print("[Zag Store Sources] Cache fallback: \(url.host ?? url.absoluteString) — \(failure.localizedDescription)")
+			completion(.success(decoded))
+			return
+		}
+		completion(.failure(failure))
+	}
 }
 
 // MARK: - Class extension: fetch
@@ -238,45 +269,19 @@ extension NBFetchService {
 			URLSession.shared.dataTask(with: request) { data, response, error in
 				let networkElapsed = CFAbsoluteTimeGetCurrent() - requestStartedAt
 
-				// A failed refresh must not make a previously valid repository
-				// disappear. Only fall back to payloads that decode successfully.
-				func completeFromCache(or failure: Error) {
-					if let decoded: T = self.cachedDecodedValue(for: url, as: T.self) {
-						completion(.success(decoded))
-						return
-					}
-					if let cachedData,
-					   let decoded = try? JSONDecoder().decode(T.self, from: cachedData) {
-						self.storeDecodedValue(decoded, for: url, byteCost: cachedData.count)
-						NBRepositoryFetchDiagnostics.record(
-							NBRepositoryFetchMetric(
-								url: url.absoluteString,
-								status: "disk-cache/fallback",
-								byteCount: cachedData.count,
-								networkSeconds: networkElapsed,
-								decodeSeconds: 0,
-								recordedAt: Date()
-							)
-						)
-						print("[Zag Store Sources] Cache fallback: \(url.host ?? url.absoluteString) — \(failure.localizedDescription)")
-						completion(.success(decoded))
-						return
-					}
-					completion(.failure(failure))
-				}
 
 				if let error {
-					completeFromCache(or: NBFetchServiceError.networkError(error))
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.networkError(error), completion: completion)
 					return
 				}
 
 				let http = response as? HTTPURLResponse
 				if let http, http.statusCode != 304,
 				   !(200...299).contains(http.statusCode) {
-					completeFromCache(or: NBFetchServiceError.networkError(
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.networkError(
 						NSError(domain: "NBFetchService.HTTP", code: http.statusCode,
 							userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
-					))
+					), completion: completion)
 					return
 				}
 
@@ -287,13 +292,13 @@ extension NBFetchService {
 					responseData = cachedData
 					sourceLabel = "disk-cache/304"
 				} else if http?.statusCode == 304 {
-					completeFromCache(or: NBFetchServiceError.noData)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, completion: completion)
 					return
 				} else if let data {
 					responseData = data
 					sourceLabel = "network/\(http?.statusCode ?? 0)"
 				} else {
-					completeFromCache(or: NBFetchServiceError.noData)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, completion: completion)
 					return
 				}
 
@@ -389,7 +394,7 @@ extension NBFetchService {
 				} catch {
 					// Never replace the last-known-good payload unless the new
 					// response decoded successfully.
-					completeFromCache(or: NBFetchServiceError.parsingError(error))
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.parsingError(error), completion: completion)
 				}
 			}.resume()
 		}
