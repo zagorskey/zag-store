@@ -152,8 +152,9 @@ final class SourcesViewModel: ObservableObject {
 						continue
 					}
 
+					// Stage results until reconciliation completes; avoid rebuilding
+					// the visible Sources and Updates views for every response.
 					refreshedSources[source] = repo
-					self.sources = refreshedSources
 				}
 			}
 
