@@ -1591,7 +1591,11 @@ private struct ZagRefreshBaselineView: View {
         repositoryRows(realRefresh: true)
     }
 
-    private func repositoryRows(realRefresh: Bool) -> some View {
+    private var noReconciliationRows: some View {
+        repositoryRows(realRefresh: true, skipReconciliation: true)
+    }
+
+    private func repositoryRows(realRefresh: Bool, skipReconciliation: Bool = false) -> some View {
         List {
             Section {
                 HStack(spacing: 10) {
@@ -1624,7 +1628,7 @@ private struct ZagRefreshBaselineView: View {
         .zagWallpaperSurface()
         .refreshable {
             if realRefresh {
-                await sourceModel.fetchSources(actualSources, refresh: true)
+                await sourceModel.fetchSources(actualSources, refresh: true, diagnosticSkipReconciliation: skipReconciliation)
             } else {
                 try? await Task.sleep(for: .seconds(1))
             }
@@ -1670,6 +1674,8 @@ private struct ZagRefreshBaselineView: View {
         NavigationStack {
             Group {
                 switch mode {
+                case 6:
+                    noReconciliationRows
                 case 5:
                     realRefreshRepositoryRows
                 case 4:
@@ -1700,6 +1706,7 @@ private struct ZagRefreshBaselineView: View {
                         Button("4 · List + Search + Wallpaper") { mode = 3 }
                         Button("5 · Real Repository Rows (no downloads)") { mode = 4 }
                         Button("6 · Real Repository Refresh") { mode = 5 }
+                        Button("7 · Refresh Without Reconciliation") { mode = 6 }
                     } label: {
                         Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
                     }
