@@ -78,7 +78,7 @@ class DownloadManager: NSObject, ObservableObject {
 		id: String = UUID().uuidString,
 		zagImported: ((String?, Error?) -> Void)? = nil
 	) -> Download {
-		if let existingDownload = downloads.first(where: { $0.url == url }) {
+		if let existingDownload = downloads.first(where: { $0.id == id && $0.url == url }) {
 			if let zagImported {
 				existingDownload.zagImported = zagImported
 			}
@@ -135,8 +135,8 @@ class DownloadManager: NSObject, ObservableObject {
 			#if !targetEnvironment(macCatalyst)
 			_updateBackgroundAudioState()
 			#endif
-		} else if let url = download.task?.originalRequest?.url {
-			let task = _session.downloadTask(with: url)
+		} else {
+			let task = _session.downloadTask(with: download.url)
 			download.task = task
 			task.resume()
 			
@@ -266,10 +266,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
 			   !data.isEmpty {
 				download.resumeData = data
 			}
+			let hasRepositoryCallback = download.zagImported != nil
 			download.canRetry = true
 			download.zagImported?(nil, error)
 			download.zagImported = nil
-			// Keep failed downloads in memory so the next Get can resume them.
+			// Retain failed repository downloads for retry; discard failed manual
+			// downloads that have no repository button to resume them.
+			if !hasRepositoryCallback,
+			   let index = self.getDownloadIndex(by: download.id) {
+				self.downloads.remove(at: index)
+			}
 		}
 	}
 }
