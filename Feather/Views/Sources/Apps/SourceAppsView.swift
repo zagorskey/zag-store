@@ -538,20 +538,6 @@ struct SourceAppsView: View {
 		NBListAdaptable(transparentBackground: true) {
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
-					HStack(alignment: .firstTextBaseline, spacing: 8) {
-						Text(_navigationTitle)
-							.font(.system(size: 34, weight: .bold))
-							.foregroundStyle(.primary)
-							.lineLimit(1)
-							.minimumScaleFactor(0.8)
-						Spacer(minLength: 8)
-						_repositoryActionPills
-					}
-					.padding(.top, 8)
-					.padding(.bottom, 10)
-					.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
 					ZagSectionHeader(
 						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 						count: sources.reduce(0) { $0 + $1.apps.count }
@@ -580,12 +566,25 @@ struct SourceAppsView: View {
 		}
 		.zagWallpaperSurface()
 
-		.navigationTitle("")
-		.navigationBarTitleDisplayMode(.inline)
+		.navigationTitle(_navigationTitle)
+		.navigationBarTitleDisplayMode(.large)
 		.toolbarBackground(.hidden, for: .navigationBar)
 		.toolbar {
 			ToolbarItem(placement: .principal) {
 				ZagLocalVPNToolbarStatus()
+			}
+			if #available(iOS 26.0, *) {
+				ToolbarItem(placement: .largeTitle) {
+					HStack(alignment: .center, spacing: 8) {
+						Text(_navigationTitle)
+							.font(.system(size: 34, weight: .bold))
+							.foregroundStyle(.primary)
+							.lineLimit(1)
+							.minimumScaleFactor(0.8)
+						Spacer(minLength: 8)
+						_repositoryActionPills
+					}
+				}
 			}
 		}
 		.searchable(
