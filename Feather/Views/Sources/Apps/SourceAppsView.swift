@@ -520,6 +520,11 @@ struct SourceAppsView: View {
 
 		.navigationTitle(_navigationTitle)
 		.toolbarBackground(.hidden, for: .navigationBar)
+		.toolbar {
+			ToolbarItem(placement: .principal) {
+				ZagLocalVPNToolbarStatus()
+			}
+		}
 		.searchable(
 			text: $_searchText,
 			placement: .platform(),
