@@ -95,7 +95,7 @@ struct SourcesView: View {
 				ascending: true
 			)
 		],
-		animation: nil
+		animation: .snappy
 	)
 	private var _sources:
 		FetchedResults<AltSource>
