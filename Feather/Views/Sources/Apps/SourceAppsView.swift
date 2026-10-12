@@ -570,7 +570,7 @@ struct SourceAppsView: View {
 			if object.count == 1 && _searchText.isEmpty {
 				_repositoryActionPills
 					.padding(.trailing, ZagListLayout.horizontalInset)
-					.offset(y: -82)
+					.offset(y: -96)
 			}
 		}
 		.navigationTitle(_navigationTitle)
