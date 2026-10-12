@@ -458,7 +458,7 @@ struct SourceAppsView: View {
 		if object.count == 1 {
 			"Repository"
 		} else {
-			.localized("%lld Sources", arguments: object.count)
+			"Sources: \(object.count)"
 		}
 	}
 	
@@ -538,6 +538,15 @@ struct SourceAppsView: View {
 		NBListAdaptable(transparentBackground: true) {
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
+					if object.count == 1 {
+						HStack(spacing: 8) {
+							Spacer(minLength: 0)
+							_repositoryActionPills
+						}
+						.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
+					}
 					ZagSectionHeader(
 						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 						count: sources.reduce(0) { $0 + $1.apps.count }
@@ -572,18 +581,6 @@ struct SourceAppsView: View {
 		.toolbar {
 			ToolbarItem(placement: .principal) {
 				ZagLocalVPNToolbarStatus()
-			}
-			if #available(iOS 26.0, *), object.count == 1 {
-				ToolbarItem(placement: .largeTitle) {
-					HStack(alignment: .firstTextBaseline, spacing: 8) {
-						Text("Repository")
-							.font(.system(size: UIFont.preferredFont(forTextStyle: .largeTitle).pointSize, weight: .bold))
-							.foregroundStyle(.primary)
-							.lineLimit(1)
-						Spacer(minLength: 8)
-						_repositoryActionPills
-					}
-				}
 			}
 		}
 		.searchable(
