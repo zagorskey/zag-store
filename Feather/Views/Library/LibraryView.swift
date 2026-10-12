@@ -2442,7 +2442,7 @@ struct ZagUpdatesPopup: View {
 								sectionBackground,
 								in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 							)
-						} else if !cachedAvailableRows.isEmpty {
+						} else if updateManager.isRepositoryRefreshInProgress && !cachedAvailableRows.isEmpty {
 							Text(.localized("Available Updates"))
 								.font(.headline)
 								.foregroundStyle(.secondary)
