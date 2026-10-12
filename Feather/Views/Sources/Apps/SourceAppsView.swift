@@ -454,29 +454,70 @@ struct SourceAppsView: View {
 	@ObservedObject var viewModel: SourcesViewModel
 	@State private var _sources: [ASRepository]?
 	
-	// MARK: Body
-	var body: some View {
-		ZStack {
-			ZagWallpaperBackground()
-
-			if
-				let _sources,
-				!_sources.isEmpty
-			{
-				SourceAppsTableRepresentableView(
-					sources: _sources,
-					repositoryName: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
-					searchText: $_searchText,
-					sortOption: $_sortOption,
-					sortAscending: $_sortAscending,
-					onSelect: { route in
-						self._selectedRoute = route
-					}
-				)
-			} else {
-				ProgressView()
+	// Use the same native scrolling list as Apps and Sources. UIKit's embedded
+	// table did not participate in the navigation bar's scroll-edge transitions.
+	private var repositoryEntries: [SourceAppRoute] {
+		let all = (_sources ?? []).flatMap { source in
+			source.apps.map { SourceAppRoute(source: source, app: $0) }
+		}
+		let filtered = _searchText.isEmpty ? all : all.filter { entry in
+			let app = entry.app
+			return (app.id?.localizedCaseInsensitiveContains(_searchText) ?? false)
+				|| app.currentName.localizedCaseInsensitiveContains(_searchText)
+				|| (app.currentDescription?.localizedCaseInsensitiveContains(_searchText) ?? false)
+				|| (app.subtitle?.localizedCaseInsensitiveContains(_searchText) ?? false)
+				|| (app.localizedDescription?.localizedCaseInsensitiveContains(_searchText) ?? false)
+		}
+		switch _sortOption {
+		case .default:
+			return _sortAscending ? filtered : Array(filtered.reversed())
+		case .name:
+			return filtered.sorted {
+				let comparison = $0.app.currentName.localizedStandardCompare($1.app.currentName)
+				return _sortAscending ? comparison == .orderedAscending : comparison == .orderedDescending
+			}
+		case .date:
+			return filtered.sorted {
+				let left = $0.app.currentDate?.date ?? .distantPast
+				let right = $1.app.currentDate?.date ?? .distantPast
+				return _sortAscending ? left < right : left > right
 			}
 		}
+	}
+
+	// MARK: Body
+	var body: some View {
+		NBListAdaptable(transparentBackground: true) {
+			if let sources = _sources, !sources.isEmpty {
+				if _searchText.isEmpty {
+					ZagSectionHeader(
+						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
+						count: sources.reduce(0) { $0 + $1.apps.count }
+					)
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
+					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
+						SourceNewsView(news: news)
+							.listRowSeparator(.hidden)
+							.listRowBackground(Color.clear)
+					}
+				}
+				ForEach(Array(repositoryEntries.enumerated()), id: \\.element.id) { index, entry in
+					SourceAppsCellView(source: entry.source, app: entry.app)
+						.frame(height: ZagListLayout.compactRowHeight)
+						.zagCompactRowSeparator(index < repositoryEntries.count - 1)
+						.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
+						.listRowBackground(Color.clear)
+						.contentShape(Rectangle())
+						.onTapGesture { _selectedRoute = entry }
+				}
+			} else {
+				ProgressView().frame(maxWidth: .infinity)
+					.listRowBackground(Color.clear)
+			}
+		}
+		.zagWallpaperSurface()
+
 		.navigationTitle(_navigationTitle)
 		.toolbarBackground(.hidden, for: .navigationBar)
 		.searchable(
