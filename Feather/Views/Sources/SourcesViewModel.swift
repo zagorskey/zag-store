@@ -32,19 +32,9 @@ final class SourcesViewModel: ObservableObject {
 		_ sources: FetchedResults<AltSource>,
 		refresh: Bool = false,
 		batchSize: Int = 4,
-		diagnosticSkipReconciliation: Bool = false,
-		diagnosticMode: Int = 0
+		diagnosticSkipReconciliation: Bool = false
 	) async {
 		guard isFinished else { return }
-        // Diagnostic modes are isolated from the production refresh path.
-        // 8: fetch+decode only, 9: state-only, 10: publish once,
-        // 11: publish per repository, 12: fetch+decode with state only,
-        // 13: fetch+decode with one final publication, 14: full refresh
-        // with deferred publication (no per-repository state updates).
-        if (8...14).contains(diagnosticMode) {
-            await runRefreshDiagnostic(sources, mode: diagnosticMode)
-            return
-        }
 		let diagnosticStart = CFAbsoluteTimeGetCurrent()
 		print("[Zag Refresh Diagnostic] Begin — skip reconciliation: \(diagnosticSkipReconciliation)")
 
@@ -150,9 +140,8 @@ final class SourcesViewModel: ObservableObject {
 					}
 				}
 
-				var completedURLs = Set<String>()
-                for await (url, repo) in group {
-                    completedURLs.insert(url.absoluteString)
+				for await (url, repo) in group {
+					refreshingSourceURLs.remove(url.absoluteString)
 
 					guard
 						let repo,
@@ -167,12 +156,8 @@ final class SourcesViewModel: ObservableObject {
 					}
 
 					refreshedSources[source] = repo
-                }
-                // Publish once per batch instead of once per completed repository.
-                if !completedURLs.isEmpty {
-                    refreshingSourceURLs.subtract(completedURLs)
-                    self.sources = refreshedSources
-                }
+					self.sources = refreshedSources
+				}
 			}
 
 			let savedSourceURLs = Set(
@@ -229,81 +214,6 @@ final class SourcesViewModel: ObservableObject {
 	}
 
 
-    @MainActor
-    private func runRefreshDiagnostic(_ input: FetchedResults<AltSource>, mode: Int) async {
-        let start = CFAbsoluteTimeGetCurrent()
-        let entries = Array(input).compactMap { source -> (AltSource, URL)? in
-            guard let url = source.sourceURL else { return nil }
-            return (source, url)
-        }
-        guard !entries.isEmpty else { return }
-        print("[Zag Mode \(mode)] START, repositories=\(entries.count)")
-        // Snapshot-only modes avoid network and never modify stored data.
-        if mode == 9 {
-            isRefreshing = true
-            refreshingSourceURLs = Set(entries.map { $0.1.absoluteString })
-            for (_, url) in entries {
-                refreshingSourceURLs.remove(url.absoluteString)
-                await Task.yield()
-            }
-            isRefreshing = false
-        } else if mode == 10 || mode == 11 {
-            let snapshot = sources
-            if mode == 10 {
-                sources = snapshot
-            } else {
-                for _ in entries {
-                    sources = snapshot
-                    await Task.yield()
-                }
-            }
-        } else {
-            // Modes 8/12/13/14 use the same real fetch+decode service as production.
-            // No Core Data writes, origin reconciliation, or inventory scans.
-            // Mode 8 publishes nothing. Mode 12 publishes only progress.
-            // Mode 13 publishes one final snapshot. Mode 14 additionally
-            // suppresses all progress publication.
-            if mode == 12 || mode == 13 {
-                isRefreshing = true
-                refreshingSourceURLs = Set(entries.map { $0.1.absoluteString })
-            }
-            var result = sources
-            for batchStart in stride(from: 0, to: entries.count, by: 4) {
-                let batch = Array(entries[batchStart..<min(batchStart + 4, entries.count)])
-                await withTaskGroup(of: (URL, ASRepository?).self) { group in
-                    for (_, url) in batch {
-                        group.addTask {
-                            await withCheckedContinuation { continuation in
-                                self._dataService.fetch(from: url) { (outcome: RepositoryDataHandler) in
-                                    switch outcome {
-                                    case .success(let repository):
-                                        continuation.resume(returning: (url, repository))
-                                    case .failure:
-                                        continuation.resume(returning: (url, nil))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    for await (url, repository) in group {
-                        if mode == 12 || mode == 13 {
-                            refreshingSourceURLs.remove(url.absoluteString)
-                        }
-                        if let repository,
-                           let source = batch.first(where: { $0.1 == url })?.0 {
-                            result[source] = repository
-                        }
-                    }
-                }
-            }
-            if mode == 13 || mode == 14 { sources = result }
-            if mode == 12 || mode == 13 {
-                refreshingSourceURLs.removeAll()
-                isRefreshing = false
-            }
-        }
-        print("[Zag Mode \(mode)] END elapsed=\(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - start))s")
-    }
 
 	@MainActor
 	private func _refreshUpdatesUsingInstalledInventory(
