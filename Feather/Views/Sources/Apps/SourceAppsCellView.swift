@@ -47,28 +47,11 @@ struct SourceAppsCellView: View {
 		HStack(spacing: 10) {
 			appIcon
 
-			VStack(
-				alignment: .leading,
-				spacing: 2
-			) {
-				Text(app.currentName)
-					.font(
-						.system(
-							size: 17,
-							weight: .regular
-						)
-					)
-					.foregroundStyle(.primary)
-					.lineLimit(1)
-
-				Text(
-					Self.appDescription(
-						app: app
-					)
-				)
-				.zagContentSubtitleStyle()
-				.lineLimit(1)
-			}
+			NBTitleWithSubtitleView(
+				title: app.currentName,
+				subtitle: Self.appDescription(app: app),
+				linelimit: 0
+			)
 			.frame(
 				maxWidth: .infinity,
 				alignment: .leading

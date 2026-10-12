@@ -444,7 +444,7 @@ struct SourceAppsView: View {
 
 	private var _navigationTitle: String {
 		if object.count == 1 {
-			object[0].name ?? .localized("Unknown")
+			"Repository"
 		} else {
 			.localized("%lld Sources", arguments: object.count)
 		}
@@ -468,6 +468,7 @@ struct SourceAppsView: View {
 					searchText: $_searchText,
 					sortOption: $_sortOption,
 					sortAscending: $_sortAscending,
+					repositoryName: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 					onSelect: { route in
 						self._selectedRoute = route
 					}

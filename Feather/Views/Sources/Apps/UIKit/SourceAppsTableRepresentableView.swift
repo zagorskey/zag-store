@@ -200,6 +200,7 @@ private final class ZagGitHubHistoryResolver {
 // MARK: - Representable
 struct SourceAppsTableRepresentableView: UIViewRepresentable {
 	var sources: [ASRepository]
+	var repositoryName: String
 	@Binding var searchText: String
 	@Binding var sortOption: SourceAppsView.SortOption
 	@Binding var sortAscending: Bool
@@ -214,6 +215,7 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 		tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "SectionHeader")
 		// Rows draw their own one-physical-pixel separator below.
 		tableView.separatorStyle = .none
+		tableView.sectionHeaderTopPadding = 0
 		let footer = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: ZagListLayout.pageBottomSpacing))
 		footer.backgroundColor = .clear
 		tableView.tableFooterView = footer
@@ -224,24 +226,23 @@ struct SourceAppsTableRepresentableView: UIViewRepresentable {
 			tableView.allowsSelection = false
 		}
 		
-		if
-			let firstSource = sources.first,
-			sources.count == 1,
-			let news = firstSource.news,
-			!news.isEmpty
-		{
-			let header = UIHostingController(rootView: SourceNewsView(news: news))
-			header.view.translatesAutoresizingMaskIntoConstraints = true
-			header.view.backgroundColor = .clear
-			let fixedHeight: CGFloat = 161
-			let width = tableView.bounds.width
-			header.view.frame = CGRect(origin: .zero, size: CGSize(width: width, height: fixedHeight))
-
-			DispatchQueue.main.async {
-				tableView.tableHeaderView = header.view
+		// Keep the repository heading in scrolling content, not a sticky section.
+		let count = sources.reduce(0) { $0 + $1.apps.count }
+		let news = sources.count == 1 ? sources.first?.news : nil
+		let hasNews = !(news?.isEmpty ?? true)
+		let headerHeight: CGFloat = 76 + (hasNews ? 161 : 0)
+		let header = UIHostingController(rootView: VStack(spacing: 0) {
+			ZagSectionHeader(title: repositoryName, count: count)
+				.padding(.horizontal, ZagListLayout.horizontalInset)
+				.frame(height: 76)
+			if let news, !news.isEmpty {
+				SourceNewsView(news: news).frame(height: 161)
 			}
-		}
-		
+		})
+		header.view.backgroundColor = .clear
+		header.view.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: headerHeight)
+		tableView.tableHeaderView = header.view
+
 		tableView.alpha = 0
 		
 		UIView.transition(with: tableView,  duration: 0.5, options: [.transitionCrossDissolve], animations: {
@@ -459,7 +460,7 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		let title: String
 		
 		switch sortOption {
-		case .default: title = .localized("%lld Apps", arguments: _sortedApps.count)
+		case .default: return nil
 		case .name, .date: title = _sortedSectionTitles[section]
 		}
 		
@@ -478,6 +479,10 @@ extension SourceAppsTableRepresentableView { class Coordinator: NSObject, UITabl
 		return headerView
 	}
 	
+	func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+		sortOption == .default ? .leastNormalMagnitude : UITableView.automaticDimension
+	}
+
 	func sectionIndexTitles(for tableView: UITableView) -> [String]? {
 		sortOption == .name ? _sortedSectionTitles : nil
 	}
