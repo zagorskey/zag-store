@@ -606,17 +606,36 @@ struct SourceAppsView: View {
 
 	// Only show metadata we can actually verify from the loaded manifest.
 	private var _repositorySummary: some View {
-		HStack(spacing: 7) {
-			Label("Loaded", systemImage: "checkmark.circle")
-				.foregroundStyle(.green)
+		VStack(alignment: .leading, spacing: 12) {
+			HStack(spacing: 8) {
+				Label("Loaded", systemImage: "checkmark.circle.fill")
+					.foregroundStyle(.green)
+				if let url = object.first?.sourceURL {
+					Label(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP", systemImage: "lock.shield")
+						.foregroundStyle(.secondary)
+				}
+			}
+			.font(.system(size: 12, weight: .medium))
 			if let url = object.first?.sourceURL {
-				Label(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP", systemImage: "lock.shield")
-					.foregroundStyle(.secondary)
+				Divider()
+				HStack(alignment: .top, spacing: 8) {
+					Image(systemName: "link")
+						.foregroundStyle(.secondary)
+					Text(url.absoluteString)
+						.font(.system(size: 12))
+						.foregroundStyle(.secondary)
+						.lineLimit(2)
+						.textSelection(.enabled)
+					Spacer(minLength: 0)
+				}
 			}
 		}
-		.font(.system(size: 11, weight: .medium))
+		.padding(14)
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
 		.padding(.horizontal, ZagListLayout.horizontalInset)
-		.padding(.vertical, 6)
+		.padding(.top, 2)
+		.padding(.bottom, 12)
 	}
 
 	private func _repositoryDetailRow(_ label: String, value: String) -> some View {
