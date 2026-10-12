@@ -150,12 +150,12 @@ struct DownloadButtonView: View {
 
 			if let caption = _actionCaption {
 				Text(caption.text)
-					.font(.system(size: 10, weight: .regular))
+					.font(.system(size: 8, weight: .regular))
 					.foregroundStyle(caption.color)
 					.lineLimit(1)
 					.minimumScaleFactor(0.75)
 					.frame(width: 88, height: 11)
-					.offset(y: 24)
+					.offset(y: 26)
 			}
 		}
 		.frame(width: 88, height: 84, alignment: .center)
