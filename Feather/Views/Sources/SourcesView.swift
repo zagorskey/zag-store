@@ -1577,6 +1577,48 @@ private struct ZagRefreshBaselineView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var mode = 0
     @State private var searchText = ""
+    @FetchRequest(
+        entity: AltSource.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
+    ) private var actualSources: FetchedResults<AltSource>
+    @ObservedObject private var sourceModel = SourcesViewModel.shared
+
+    private var realRepositoryRows: some View {
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    ZagSourcesAtomIcon(animated: sourceModel.isRefreshing)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Your Sources").font(.system(size: 20))
+                        Text("See all \(sourceModel.sources.values.reduce(0) { $0 + $1.apps.count }.formatted()) apps from sources")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Section {
+                ZagRepositoriesHeader(count: actualSources.count)
+                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
+                    SourcesCellView(
+                        source: source,
+                        showsSeparator: index < actualSources.count - 1,
+                        repository: sourceModel.sources[source],
+                        isRefreshing: source.sourceURL.map {
+                            sourceModel.refreshingSourceURLs.contains($0.absoluteString)
+                        } ?? false
+                    )
+                    .listRowSeparator(.hidden)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .zagWallpaperSurface()
+        .refreshable {
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+
 
     private var testRows: some View {
         ForEach(0..<60, id: \.self) { index in
@@ -1616,6 +1658,8 @@ private struct ZagRefreshBaselineView: View {
         NavigationStack {
             Group {
                 switch mode {
+                case 4:
+                    realRepositoryRows
                 case 1:
                     listRows
                 case 2:
@@ -1640,6 +1684,7 @@ private struct ZagRefreshBaselineView: View {
                         Button("2 · Plain List") { mode = 1 }
                         Button("3 · List + Search") { mode = 2 }
                         Button("4 · List + Search + Wallpaper") { mode = 3 }
+                        Button("5 · Real Repository Rows (no downloads)") { mode = 4 }
                     } label: {
                         Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
                     }
