@@ -2412,10 +2412,17 @@ struct ZagUpdatesPopup: View {
 	}
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
-		let recentBundleIDs = Set(cachedRecentRows.map(\.bundleID))
-		return updates.filter {
-			!completedUpdateIDs.contains($0.id) &&
-			!recentBundleIDs.contains($0.app.id ?? $0.id)
+		return updates.filter { update in
+			guard !completedUpdateIDs.contains(update.id) else { return false }
+			let bundleID = update.app.id ?? update.id
+			// A recent installation only suppresses the same release, not a newer one.
+			// Match the update identity too, so variants sharing a bundle ID
+			// cannot hide each other's updates.
+			return !cachedRecentRows.contains { recent in
+				recent.id == update.id &&
+				recent.bundleID == bundleID &&
+				recent.version == update.availableVersion
+			}
 		}
 	}
 
