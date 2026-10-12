@@ -1591,6 +1591,49 @@ private struct ZagRefreshBaselineView: View {
         repositoryRows(realRefresh: true)
     }
 
+    // Diagnostic: isolate row refresh observations from the list container.
+    private struct ZagIsolatedDiagnosticRow: View {
+        let source: AltSource
+        let showsSeparator: Bool
+        @ObservedObject private var model = SourcesViewModel.shared
+
+        var body: some View {
+            SourcesCellView(
+                source: source,
+                showsSeparator: showsSeparator,
+                repository: model.sources[source],
+                isRefreshing: source.sourceURL.map {
+                    model.refreshingSourceURLs.contains($0.absoluteString)
+                } ?? false
+            )
+        }
+    }
+
+    private var isolatedDiagnosticRows: some View {
+        List {
+            Section {
+                Text("Isolated row observation")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                ZagRepositoriesHeader(count: actualSources.count)
+                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
+                    ZagIsolatedDiagnosticRow(
+                        source: source,
+                        showsSeparator: index < actualSources.count - 1
+                    )
+                    .listRowSeparator(.hidden)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .zagWallpaperSurface()
+        .refreshable {
+            await sourceModel.fetchSources(actualSources, refresh: true, diagnosticMode: 9)
+        }
+    }
+
     private var diagnosticRows: some View {
         List {
             Section {
@@ -1704,6 +1747,8 @@ private struct ZagRefreshBaselineView: View {
         NavigationStack {
             Group {
                 switch mode {
+                case 14:
+                    isolatedDiagnosticRows
                 case 7...13:
                     diagnosticRows
                 case 6:
@@ -1747,6 +1792,7 @@ private struct ZagRefreshBaselineView: View {
                         Button("12 · Fetch + Progress Only") { mode = 11 }
                         Button("13 · Fetch + Final Publish") { mode = 12 }
                         Button("14 · Fetch + Final Publish (No Progress)") { mode = 13 }
+                        Button("15 · Isolated Rows + State Only") { mode = 14 }
                     } label: {
                         Label("Test Mode \(mode + 1)", systemImage: "slider.horizontal.3")
                     }
