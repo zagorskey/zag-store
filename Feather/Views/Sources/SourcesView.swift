@@ -768,7 +768,7 @@ struct SourcesView: View {
 						horizontalSizeClass
 							!= .compact
 					HStack(spacing: 10) {
-						ZagSourcesAtomIcon(animated: false)
+						ZagSourcesAtomIcon(animated: viewModel.isRefreshing)
 
 						VStack(
 							alignment: .leading,
