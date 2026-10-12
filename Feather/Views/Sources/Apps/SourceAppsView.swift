@@ -23,7 +23,6 @@ private struct ZagRepositoryActionsToolbar<SortContent: View>: ViewModifier {
                 sortActions()
                 ZagProfileToolbarButton()
                     .tint(.primary)
-                    .padding(.trailing, -2)
             }
         }
     }
@@ -485,6 +484,39 @@ struct SourceAppsView: View {
 		}
 	}
 
+	private var _repositoryURLs: [URL] {
+		object.compactMap(\.sourceURL)
+	}
+
+	private var _repositoryActionPills: some View {
+		HStack(spacing: 8) {
+			if object.count == 1, let website = _sources?.first?.website {
+				Button { UIApplication.open(website) } label: {
+					Label("Website", systemImage: "globe")
+				}
+				.buttonStyle(.bordered)
+				.controlSize(.small)
+			}
+			Button {
+				UIPasteboard.general.string = _repositoryURLs.map(\.absoluteString).joined(separator: "\n")
+			} label: {
+				Label("Copy URL", systemImage: "doc.on.doc")
+			}
+			.buttonStyle(.bordered)
+			.controlSize(.small)
+			.disabled(_repositoryURLs.isEmpty)
+			ShareLink(item: _repositoryURLs.map(\.absoluteString).joined(separator: "\n")) {
+				Label("Share", systemImage: "square.and.arrow.up")
+			}
+			.buttonStyle(.bordered)
+			.controlSize(.small)
+			.disabled(_repositoryURLs.isEmpty)
+			Spacer(minLength: 0)
+		}
+		.font(.system(size: 12, weight: .medium))
+		.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 8, trailing: ZagListLayout.horizontalInset))
+	}
+
 	// MARK: Body
 	var body: some View {
 		NBListAdaptable(transparentBackground: true) {
@@ -496,6 +528,9 @@ struct SourceAppsView: View {
 					)
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
+					_repositoryActionPills
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
 					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
 						SourceNewsView(news: news)
 							.listRowSeparator(.hidden)
@@ -542,43 +577,7 @@ struct SourceAppsView: View {
 				.frame(width: 0, height: 0)
 			}
 		}
-		.toolbarTitleMenu {
-			if
-				let _sources,
-				_sources.count == 1
-			{
-				if let url = _sources[0].website {
-					Button(.localized("Visit Website"), systemImage: "globe") {
-						UIApplication.open(url)
-					}
-				}
-				
-				if let url = _sources[0].patreonURL {
-					Button(.localized("Visit Patreon"), systemImage: "dollarsign.circle") {
-						UIApplication.open(url)
-					}
-				}
-			}
-			
-			Divider()
-			
-			Button(.localized("Copy"), systemImage: "doc.on.doc") {
-				guard !object.isEmpty else {
-					UIAlertController.showAlertWithOk(
-						title: .localized("Error"),
-						message: .localized("No sources to copy")
-					)
-					return
-				}
-				UIPasteboard.general.string = object.map {
-					$0.sourceURL!.absoluteString
-				}.joined(separator: "\n")
-				UIAlertController.showAlertWithOk(
-					title: .localized("Success"),
-					message: .localized("Sources copied to clipboard")
-				)
-			}
-		}
+
 		.modifier(ZagRepositoryActionsToolbar(sortActions: {
             Menu {
                 _sortActions()
