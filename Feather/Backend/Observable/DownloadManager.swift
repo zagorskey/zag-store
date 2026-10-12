@@ -122,6 +122,10 @@ class DownloadManager: NSObject, ObservableObject {
 	
 	func resumeDownload(_ download: Download) {
 		download.canRetry = false
+		download.progress = 0
+		download.bytesDownloaded = 0
+		download.totalBytes = 0
+		download.unpackageProgress = 0
 		if let resumeData = download.resumeData {
 			download.resumeData = nil
 			let task = _session.downloadTask(withResumeData: resumeData)
