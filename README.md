@@ -1,4 +1,4 @@
-# Feather
+Zag Store
 
 [![GitHub Release](https://img.shields.io/github/v/release/claration/Feather?include_prereleases)](https://github.com/claration/Feather/releases)
 [![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/claration/Feather/total)](https://github.com/claration/Feather/releases)
