@@ -196,6 +196,14 @@ struct LibraryView: View {
 		}
 	}
 
+	// Never guess between variants that share a bundle identifier.
+	// Only offer a row-level update when exactly one repository candidate matches.
+	private func _installedRowUpdate(for app: Signed) -> UpdateManager.AvailableUpdate? {
+		guard let identifier = app.identifier, !identifier.isEmpty else { return nil }
+		let matches = updateManager.updates.filter { $0.app.id == identifier }
+		return matches.count == 1 ? matches.first : nil
+	}
+
 	private var _filteredSignedOnlyApps: [Signed] {
 		_filteredSignedApps.filter { app in
 			if let uuid = app.uuid, _transactionSignedUUIDs.contains(uuid) {
@@ -591,6 +599,7 @@ struct LibraryView: View {
 						LibraryCellView(
 							app: app,
 							isManagedInstalled: true,
+							availableUpdate: _installedRowUpdate(for: app),
 							isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
 							showsSeparator: index < _filteredInstalledApps.count - 1,
 							onDeleteApp: _deleteStoredApp,
