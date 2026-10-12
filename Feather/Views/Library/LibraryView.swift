@@ -2499,7 +2499,6 @@ struct ZagUpdatesPopup: View {
 			.onReceive(updateManager.$updates) { _ in
 				_cacheAvailableRows()
 			}
-			.animation(.easeInOut(duration: 0.35), value: displayedAvailableCount)
 			.navigationTitle(.localized("App Updates"))
 			.navigationBarTitleDisplayMode(.inline)
 			.navigationDestination(
