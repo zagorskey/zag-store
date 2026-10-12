@@ -31,9 +31,12 @@ final class SourcesViewModel: ObservableObject {
 	func fetchSources(
 		_ sources: FetchedResults<AltSource>,
 		refresh: Bool = false,
-		batchSize: Int = 4
+		batchSize: Int = 4,
+		diagnosticSkipReconciliation: Bool = false
 	) async {
 		guard isFinished else { return }
+		let diagnosticStart = CFAbsoluteTimeGetCurrent()
+		print("[Zag Refresh Diagnostic] Begin — skip reconciliation: \(diagnosticSkipReconciliation)")
 
 		let currentSourceURLs = Set(
 			sources.compactMap {
@@ -171,6 +174,7 @@ final class SourcesViewModel: ObservableObject {
 			}
 		}
 
+		print("[Zag Refresh Diagnostic] Repository fetch + publication — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
 		let completedSources = refreshedSources
 		let completedRepositories = Array(completedSources.values)
 		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
@@ -179,6 +183,11 @@ final class SourcesViewModel: ObservableObject {
 		// one completed refresh. Until this point the previous Updates
 		// pill/count and app-icon badge remain untouched.
 		self.sources = completedSources
+
+		if diagnosticSkipReconciliation {
+			print("[Zag Refresh Diagnostic] Skipped origin + inventory/update reconciliation; total — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
+			return
+		}
 
 		let originsStartedAt = CFAbsoluteTimeGetCurrent()
 		reconcileRepositoryOrigins()
