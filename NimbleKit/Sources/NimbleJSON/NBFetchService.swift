@@ -238,23 +238,62 @@ extension NBFetchService {
 			URLSession.shared.dataTask(with: request) { data, response, error in
 				let networkElapsed = CFAbsoluteTimeGetCurrent() - requestStartedAt
 
+				// A failed refresh must not make a previously valid repository
+				// disappear. Only fall back to payloads that decode successfully.
+				func completeFromCache(or failure: Error) {
+					if let decoded: T = self.cachedDecodedValue(for: url, as: T.self) {
+						completion(.success(decoded))
+						return
+					}
+					if let cachedData,
+					   let decoded = try? JSONDecoder().decode(T.self, from: cachedData) {
+						self.storeDecodedValue(decoded, for: url, byteCost: cachedData.count)
+						NBRepositoryFetchDiagnostics.record(
+							NBRepositoryFetchMetric(
+								url: url.absoluteString,
+								status: "disk-cache/fallback",
+								byteCount: cachedData.count,
+								networkSeconds: networkElapsed,
+								decodeSeconds: 0,
+								recordedAt: Date()
+							)
+						)
+						print("[Zag Store Sources] Cache fallback: \(url.host ?? url.absoluteString) — \(failure.localizedDescription)")
+						completion(.success(decoded))
+						return
+					}
+					completion(.failure(failure))
+				}
+
 				if let error {
-					completion(.failure(NBFetchServiceError.networkError(error)))
+					completeFromCache(or: NBFetchServiceError.networkError(error))
 					return
 				}
 
 				let http = response as? HTTPURLResponse
+				if let http, http.statusCode != 304,
+				   !(200...299).contains(http.statusCode) {
+					completeFromCache(or: NBFetchServiceError.networkError(
+						NSError(domain: "NBFetchService.HTTP", code: http.statusCode,
+							userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
+					))
+					return
+				}
+
 				let responseData: Data
 				let sourceLabel: String
 
 				if http?.statusCode == 304, let cachedData {
 					responseData = cachedData
 					sourceLabel = "disk-cache/304"
+				} else if http?.statusCode == 304 {
+					completeFromCache(or: NBFetchServiceError.noData)
+					return
 				} else if let data {
 					responseData = data
 					sourceLabel = "network/\(http?.statusCode ?? 0)"
 				} else {
-					completion(.failure(NBFetchServiceError.noData))
+					completeFromCache(or: NBFetchServiceError.noData)
 					return
 				}
 
@@ -350,7 +389,7 @@ extension NBFetchService {
 				} catch {
 					// Never replace the last-known-good payload unless the new
 					// response decoded successfully.
-					completion(.failure(NBFetchServiceError.parsingError(error)))
+					completeFromCache(or: NBFetchServiceError.parsingError(error))
 				}
 			}.resume()
 		}
