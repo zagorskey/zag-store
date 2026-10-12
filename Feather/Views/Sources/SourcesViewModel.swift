@@ -150,8 +150,9 @@ final class SourcesViewModel: ObservableObject {
 					}
 				}
 
-				for await (url, repo) in group {
-					refreshingSourceURLs.remove(url.absoluteString)
+				var completedURLs = Set<String>()
+                for await (url, repo) in group {
+                    completedURLs.insert(url.absoluteString)
 
 					guard
 						let repo,
@@ -166,8 +167,12 @@ final class SourcesViewModel: ObservableObject {
 					}
 
 					refreshedSources[source] = repo
-					self.sources = refreshedSources
-				}
+                }
+                // Publish once per batch instead of once per completed repository.
+                if !completedURLs.isEmpty {
+                    refreshingSourceURLs.subtract(completedURLs)
+                    self.sources = refreshedSources
+                }
 			}
 
 			let savedSourceURLs = Set(
