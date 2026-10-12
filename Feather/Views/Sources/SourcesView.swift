@@ -73,7 +73,6 @@ struct SourcesView: View {
 		SourcesViewModel.shared
 	@State private var _isAddingPresenting = false
 	@State private var _showRepositoryHealth = false
-	@State private var _showRefreshBaseline = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
 	@State private var _dictationAvailable = false
@@ -313,9 +312,6 @@ struct SourcesView: View {
 					_sources,
 					refresh: true
 				)
-			}
-			.sheet(isPresented: $_showRefreshBaseline) {
-				ZagRefreshBaselineView()
 			}
 			.sheet(isPresented: $_showRepositoryHealth) {
 				ZagRepositoryHealthView(
@@ -576,10 +572,6 @@ struct SourcesView: View {
 				Divider()
 				Button { _beginRearranging() } label: {
 					Label("Reorder", systemImage: "arrow.up.arrow.down")
-				}
-				Divider()
-				Button { _showRefreshBaseline = true } label: {
-					Label("Refresh Smoothness Test", systemImage: "hand.draw")
 				}
 			} label: {
 				Image(systemName: "line.3.horizontal.decrease")
@@ -1566,240 +1558,6 @@ private struct ZagRepositoryHealthView: View {
                 Text(loaded ? "Repository data available" : "Not loaded in this session")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-
-// Temporary comparison screen. Switch configurations without rebuilding the app.
-private struct ZagRefreshBaselineView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var mode = 0
-    @State private var searchText = ""
-    @FetchRequest(
-        entity: AltSource.entity(),
-        sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
-    ) private var actualSources: FetchedResults<AltSource>
-    @ObservedObject private var sourceModel = SourcesViewModel.shared
-
-    private var realRepositoryRows: some View {
-        repositoryRows(realRefresh: false)
-    }
-
-    private var realRefreshRepositoryRows: some View {
-        repositoryRows(realRefresh: true)
-    }
-
-    // Diagnostic: isolate row refresh observations from the list container.
-    private struct ZagIsolatedDiagnosticRow: View {
-        let source: AltSource
-        let showsSeparator: Bool
-        @ObservedObject private var model = SourcesViewModel.shared
-
-        var body: some View {
-            SourcesCellView(
-                source: source,
-                showsSeparator: showsSeparator,
-                repository: model.sources[source],
-                isRefreshing: source.sourceURL.map {
-                    model.refreshingSourceURLs.contains($0.absoluteString)
-                } ?? false
-            )
-        }
-    }
-
-    private var isolatedDiagnosticRows: some View {
-        List {
-            Section {
-                Text("Isolated row observation")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
-                ZagRepositoriesHeader(count: actualSources.count)
-                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
-                    ZagIsolatedDiagnosticRow(
-                        source: source,
-                        showsSeparator: index < actualSources.count - 1
-                    )
-                    .listRowSeparator(.hidden)
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .zagWallpaperSurface()
-        .refreshable {
-            await sourceModel.fetchSources(actualSources, refresh: true, diagnosticMode: 9)
-        }
-    }
-
-    private var diagnosticRows: some View {
-        List {
-            Section {
-                Text("Diagnostic mode \(mode + 1)")
-                Text("Pull down while scrolling. Results are printed to the device console.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
-                ZagRepositoriesHeader(count: actualSources.count)
-                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
-                    SourcesCellView(
-                        source: source,
-                        showsSeparator: index < actualSources.count - 1,
-                        repository: sourceModel.sources[source],
-                        isRefreshing: source.sourceURL.map {
-                            sourceModel.refreshingSourceURLs.contains($0.absoluteString)
-                        } ?? false
-                    )
-                    .listRowSeparator(.hidden)
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .zagWallpaperSurface()
-        .refreshable {
-            await sourceModel.fetchSources(actualSources, refresh: true, diagnosticMode: mode + 1)
-        }
-    }
-
-    private var noReconciliationRows: some View {
-        repositoryRows(realRefresh: true, skipReconciliation: true)
-    }
-
-    private func repositoryRows(realRefresh: Bool, skipReconciliation: Bool = false) -> some View {
-        List {
-            Section {
-                HStack(spacing: 10) {
-                    ZagSourcesAtomIcon(animated: sourceModel.isRefreshing)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Your Sources").font(.system(size: 20))
-                        Text("See all \(sourceModel.sources.values.reduce(0) { $0 + $1.apps.count }.formatted()) apps from sources")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            Section {
-                ZagRepositoriesHeader(count: actualSources.count)
-                ForEach(Array(actualSources.enumerated()), id: \.element.objectID) { index, source in
-                    SourcesCellView(
-                        source: source,
-                        showsSeparator: index < actualSources.count - 1,
-                        repository: sourceModel.sources[source],
-                        isRefreshing: source.sourceURL.map {
-                            sourceModel.refreshingSourceURLs.contains($0.absoluteString)
-                        } ?? false
-                    )
-                    .listRowSeparator(.hidden)
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .zagWallpaperSurface()
-        .refreshable {
-            if realRefresh {
-                await sourceModel.fetchSources(actualSources, refresh: true, diagnosticSkipReconciliation: skipReconciliation)
-            } else {
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
-    }
-
-
-    private var testRows: some View {
-        ForEach(0..<60, id: \.self) { index in
-            HStack {
-                Text("Test Row \(index + 1)")
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .frame(height: 58)
-        }
-    }
-
-    private var scrollRows: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                testRows
-            }
-        }
-        .refreshable {
-            try? await Task.sleep(for: .seconds(1))
-        }
-    }
-
-    private var listRows: some View {
-        List {
-            testRows
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets())
-        }
-        .listStyle(.plain)
-        .refreshable {
-            try? await Task.sleep(for: .seconds(1))
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                switch mode {
-                case 14:
-                    isolatedDiagnosticRows
-                case 7...13:
-                    diagnosticRows
-                case 6:
-                    noReconciliationRows
-                case 5:
-                    realRefreshRepositoryRows
-                case 4:
-                    realRepositoryRows
-                case 1:
-                    listRows
-                case 2:
-                    listRows
-                        .searchable(text: $searchText, prompt: "Search Test Rows")
-                case 3:
-                    listRows
-                        .scrollContentBackground(.hidden)
-                        .zagWallpaperSurface()
-                        .searchable(text: $searchText, prompt: "Search Test Rows")
-                default:
-                    scrollRows
-                }
-            }
-            .id(mode)
-            .navigationTitle(mode == 0 ? "Scroll Baseline" : "List Baseline")
-            .navigationBarTitleDisplayMode(mode == 0 ? .inline : .automatic)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button("1 · ScrollView (known smooth)") { mode = 0 }
-                        Button("2 · Plain List") { mode = 1 }
-                        Button("3 · List + Search") { mode = 2 }
-                        Button("4 · List + Search + Wallpaper") { mode = 3 }
-                        Button("5 · Real Repository Rows (no downloads)") { mode = 4 }
-                        Button("6 · Real Repository Refresh") { mode = 5 }
-                        Button("7 · Refresh Without Reconciliation") { mode = 6 }
-                        Divider()
-                        Button("8 · Fetch + Decode Only") { mode = 7 }
-                        Button("9 · Refresh State Only") { mode = 8 }
-                        Button("10 · Publish Once (Cached)") { mode = 9 }
-                        Button("11 · Publish Per Row (Cached)") { mode = 10 }
-                        Button("12 · Fetch + Progress Only") { mode = 11 }
-                        Button("13 · Fetch + Final Publish") { mode = 12 }
-                        Button("14 · Fetch + Final Publish (No Progress)") { mode = 13 }
-                        Button("15 · Isolated Rows + State Only") { mode = 14 }
-                    } label: {
-                        Label("Test Mode \(mode + 1)", systemImage: "slider.horizontal.3")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
             }
         }
     }
