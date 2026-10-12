@@ -232,7 +232,7 @@ final class SourcesViewModel: ObservableObject {
             return (source, url)
         }
         guard !entries.isEmpty else { return }
-        print("[Zag Mode \\(mode)] START, repositories=\\(entries.count)")
+        print("[Zag Mode \(mode)] START, repositories=\(entries.count)")
         // Snapshot-only modes avoid network and never modify stored data.
         if mode == 9 {
             isRefreshing = true
@@ -297,7 +297,7 @@ final class SourcesViewModel: ObservableObject {
                 isRefreshing = false
             }
         }
-        print("[Zag Mode \\(mode)] END elapsed=\\(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - start))s")
+        print("[Zag Mode \(mode)] END elapsed=\(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - start))s")
     }
 
 	@MainActor
