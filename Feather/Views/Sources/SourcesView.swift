@@ -73,6 +73,7 @@ struct SourcesView: View {
 		SourcesViewModel.shared
 	@State private var _isAddingPresenting = false
 	@State private var _showRepositoryHealth = false
+	@State private var _showRefreshBaseline = false
 	@State private var _addingSourceLoading = false
 	@State private var _searchText = ""
 	@State private var _dictationAvailable = false
@@ -312,6 +313,9 @@ struct SourcesView: View {
 					_sources,
 					refresh: true
 				)
+			}
+			.sheet(isPresented: $_showRefreshBaseline) {
+				ZagRefreshBaselineView()
 			}
 			.sheet(isPresented: $_showRepositoryHealth) {
 				ZagRepositoryHealthView(
@@ -572,6 +576,10 @@ struct SourcesView: View {
 				Divider()
 				Button { _beginRearranging() } label: {
 					Label("Reorder", systemImage: "arrow.up.arrow.down")
+				}
+				Divider()
+				Button { _showRefreshBaseline = true } label: {
+					Label("Refresh Smoothness Test", systemImage: "hand.draw")
 				}
 			} label: {
 				Image(systemName: "line.3.horizontal.decrease")
@@ -1558,6 +1566,40 @@ private struct ZagRepositoryHealthView: View {
                 Text(loaded ? "Repository data available" : "Not loaded in this session")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+
+// Temporary isolated baseline: no repositories, Core Data, or animated artwork.
+private struct ZagRefreshBaselineView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(0..<60, id: \.self) { index in
+                        HStack {
+                            Text("Test Row \\(index + 1)")
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .frame(height: 58)
+                        Divider().padding(.leading, 20)
+                    }
+                }
+            }
+            .refreshable {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            .navigationTitle("Refresh Baseline")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }
