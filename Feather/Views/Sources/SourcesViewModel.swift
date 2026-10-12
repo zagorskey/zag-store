@@ -431,8 +431,31 @@ final class UpdateManager: ObservableObject {
 	private static let notifiedUpdateSignaturesKey =
 		"ZagStore.notifiedUpdateSignatures"
 
+	// The popup and every badge must count the same release-aware update set.
+	var visibleUpdates: [AvailableUpdate] {
+		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		return updates.filter { update in
+			let bundleID = update.app.id ?? update.id
+			return !recent.contains { row in
+				row.id == update.id && row.bundleID == bundleID &&
+				row.version == update.availableVersion
+			}
+		}
+	}
+
 	var updateCount: Int {
-		updates.isEmpty ? persistedUpdateCount : updates.count
+		// A successfully reconciled empty snapshot means zero, not stale history.
+		if hasCompletedReconciliation { return visibleUpdates.count }
+		return updates.isEmpty ? persistedUpdateCount : visibleUpdates.count
+	}
+
+	private var hasCompletedReconciliation = false
+
+	func updateCompletionDidChange() {
+		objectWillChange.send()
+		persistedUpdateCount = visibleUpdates.count
+		UserDefaults.standard.set(persistedUpdateCount, forKey: Self.persistedUpdateCountKey)
+		Task { await syncAppIconBadge() }
 	}
 
 	var hasVisibleUpdates: Bool {
@@ -981,7 +1004,8 @@ final class UpdateManager: ObservableObject {
 			) == .orderedAscending
 		}
 
-		persistedUpdateCount = updates.count
+		hasCompletedReconciliation = true
+		persistedUpdateCount = visibleUpdates.count
 		UserDefaults.standard.set(
 			persistedUpdateCount,
 			forKey: Self.persistedUpdateCountKey
