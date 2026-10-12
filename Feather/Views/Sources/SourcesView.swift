@@ -1551,7 +1551,7 @@ private struct ZagRepositoryHealthView: View {
                 Capsule()
                     .strokeBorder(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.5), lineWidth: 1)
             }
-            .accessibilityLabel("\\(count) repositories")
+            .accessibilityLabel("\(count) repositories")
     }
 
     private func repositoryRow(_ source: AltSource) -> some View {
@@ -1594,7 +1594,7 @@ private struct ZagRefreshBaselineView: View {
     private var diagnosticRows: some View {
         List {
             Section {
-                Text("Diagnostic mode \\(mode + 1)")
+                Text("Diagnostic mode \(mode + 1)")
                 Text("Pull down while scrolling. Results are printed to the device console.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -1669,7 +1669,7 @@ private struct ZagRefreshBaselineView: View {
     private var testRows: some View {
         ForEach(0..<60, id: \.self) { index in
             HStack {
-                Text("Test Row \\(index + 1)")
+                Text("Test Row \(index + 1)")
                 Spacer()
             }
             .padding(.horizontal, 20)
@@ -1748,7 +1748,7 @@ private struct ZagRefreshBaselineView: View {
                         Button("13 · Fetch + Final Publish") { mode = 12 }
                         Button("14 · Fetch + Final Publish (No Progress)") { mode = 13 }
                     } label: {
-                        Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
+                        Label("Test Mode \(mode + 1)", systemImage: "slider.horizontal.3")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
