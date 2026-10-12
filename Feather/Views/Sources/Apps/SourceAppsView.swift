@@ -604,6 +604,63 @@ struct SourceAppsView: View {
 		}
 	}
 
+	// Only show metadata we can actually verify from the loaded manifest.
+	private var _repositorySummary: some View {
+		HStack(spacing: 7) {
+			Label("Loaded", systemImage: "checkmark.circle")
+				.foregroundStyle(.green)
+			if let url = object.first?.sourceURL {
+				Label(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP", systemImage: "lock.shield")
+					.foregroundStyle(.secondary)
+			}
+		}
+		.font(.system(size: 11, weight: .medium))
+		.padding(.horizontal, ZagListLayout.horizontalInset)
+		.padding(.vertical, 6)
+	}
+
+	private func _repositoryDetailRow(_ label: String, value: String) -> some View {
+		HStack(alignment: .firstTextBaseline, spacing: 12) {
+			Text(label)
+				.foregroundStyle(.secondary)
+			Spacer(minLength: 8)
+			Text(value)
+				.multilineTextAlignment(.trailing)
+				.textSelection(.enabled)
+		}
+		.font(.subheadline)
+	}
+
+	private func _repositoryDetails(_ source: ASRepository) -> some View {
+		VStack(alignment: .leading, spacing: 12) {
+			Label("Repository Information", systemImage: "info.circle")
+				.font(.headline)
+			Divider()
+			_repositoryDetailRow("Repository", value: source.name ?? "Repository")
+			if let identifier = source.id, !identifier.isEmpty {
+				Divider()
+				_repositoryDetailRow("Identifier", value: identifier)
+			}
+			Divider()
+			_repositoryDetailRow("Total Apps", value: source.apps.count.formatted())
+			if let url = object.first?.sourceURL {
+				Divider()
+				_repositoryDetailRow("Connection", value: url.scheme?.uppercased() ?? "Unknown")
+				Divider()
+				_repositoryDetailRow("Source URL", value: url.absoluteString)
+			}
+			if let website = source.website {
+				Divider()
+				_repositoryDetailRow("Website", value: website.absoluteString)
+			}
+		}
+		.padding(16)
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+		.padding(.horizontal, ZagListLayout.horizontalInset)
+		.padding(.vertical, 16)
+	}
+
 	// MARK: Body
 	var body: some View {
 		NBListAdaptable(transparentBackground: true) {
@@ -616,6 +673,12 @@ struct SourceAppsView: View {
 
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
+					if object.count == 1 {
+						_repositorySummary
+							.listRowInsets(EdgeInsets())
+							.listRowSeparator(.hidden)
+							.listRowBackground(Color.clear)
+					}
 					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
 						SourceNewsView(news: news)
 							.listRowSeparator(.hidden)
@@ -630,6 +693,12 @@ struct SourceAppsView: View {
 						.listRowBackground(Color.clear)
 						.contentShape(Rectangle())
 						.onTapGesture { _selectedRoute = entry }
+				}
+				if object.count == 1, _searchText.isEmpty, let source = sources.first {
+					_repositoryDetails(source)
+						.listRowInsets(EdgeInsets())
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
 				}
 			} else {
 				ProgressView().frame(maxWidth: .infinity)
