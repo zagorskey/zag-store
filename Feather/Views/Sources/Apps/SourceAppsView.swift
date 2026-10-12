@@ -41,10 +41,73 @@ private struct ZagRepositoryIconPill: ViewModifier {
     }
 }
 
-private struct ZagRepositoryScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+// Observe the actual list scroll view rather than a SwiftUI row preference.
+// List row geometry can be cached/recycled and is not a reliable scroll signal.
+private struct ZagRepositoryScrollObserver: UIViewRepresentable {
+    @Binding var scrolled: Bool
+
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.onScroll = { scrolled = $0 }
+        return view
+    }
+
+    func updateUIView(_ view: Probe, context: Context) {
+        view.onScroll = { scrolled = $0 }
+        DispatchQueue.main.async { [weak view] in view?.attach() }
+    }
+
+    final class Probe: UIView {
+        var onScroll: ((Bool) -> Void)?
+        private var observation: NSKeyValueObservation?
+        private weak var observedScrollView: UIScrollView?
+        private var initialOffset: CGFloat?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil {
+                observation = nil
+                observedScrollView = nil
+                initialOffset = nil
+            } else {
+                DispatchQueue.main.async { [weak self] in self?.attach() }
+            }
+        }
+
+        func attach() {
+            guard window != nil else { return }
+            // The probe is attached to the list's background; locate the
+            // nearest list scroll view within its hosting view hierarchy.
+            var node: UIView? = superview
+            var scroll: UIScrollView?
+            while let current = node, scroll == nil {
+                scroll = current.subviews.compactMap { findScrollView(in: $0) }.first
+                node = current.superview
+            }
+            guard let scroll, scroll !== observedScrollView else { return }
+            observation = nil
+            observedScrollView = scroll
+            initialOffset = scroll.contentOffset.y
+            observation = scroll.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    let origin = self.initialOffset ?? scroll.contentOffset.y
+                    self.onScroll?(scroll.contentOffset.y - origin > 12)
+                }
+            }
+        }
+
+        private func findScrollView(in view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView,
+               !(scroll is UITextView),
+               scroll.isScrollEnabled {
+                return scroll
+            }
+            for child in view.subviews {
+                if let scroll = findScrollView(in: child) { return scroll }
+            }
+            return nil
+        }
     }
 }
 
@@ -453,8 +516,7 @@ struct SourceAppsView: View {
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
 	@State private var _searchText = ""
-	@State private var _repositoryScrollOffset: CGFloat = 0
-	@State private var _repositoryInitialHeaderY: CGFloat?
+	@State private var _repositoryScrolled = false
 	@State private var _dictationAvailable = false
 	@State private var _dictationStatus = "Dictation unavailable"
 	@FocusState private var _searchFieldFocused: Bool
@@ -551,14 +613,7 @@ struct SourceAppsView: View {
 						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 						count: sources.reduce(0) { $0 + $1.apps.count }
 					)
-					.background {
-						GeometryReader { geometry in
-							Color.clear.preference(
-								key: ZagRepositoryScrollOffsetKey.self,
-								value: geometry.frame(in: .global).minY
-							)
-						}
-					}
+
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
@@ -581,12 +636,11 @@ struct SourceAppsView: View {
 					.listRowBackground(Color.clear)
 			}
 		}
-		.onPreferenceChange(ZagRepositoryScrollOffsetKey.self) { value in
-			guard object.count == 1, value > 0 else { return }
-			if _repositoryInitialHeaderY == nil || value > (_repositoryInitialHeaderY ?? 0) {
-				_repositoryInitialHeaderY = value
+		.background {
+			if object.count == 1 {
+				ZagRepositoryScrollObserver(scrolled: $_repositoryScrolled)
+					.frame(width: 0, height: 0)
 			}
-			_repositoryScrollOffset = max(0, (_repositoryInitialHeaderY ?? value) - value)
 		}
 		.zagWallpaperSurface()
 
@@ -595,8 +649,8 @@ struct SourceAppsView: View {
 				_repositoryActionPills
 					.padding(.trailing, ZagListLayout.horizontalInset)
 					.offset(y: -96)
-					.opacity(_repositoryScrollOffset > 12 ? 0 : 1)
-					.allowsHitTesting(_repositoryScrollOffset <= 12)
+					.opacity(_repositoryScrolled ? 0 : 1)
+					.allowsHitTesting(!_repositoryScrolled)
 			}
 		}
 		.navigationTitle(_navigationTitle)
