@@ -28,6 +28,7 @@ struct DownloadButtonView: View {
 	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
 	@State private var retrySignedUUID: String?
+	@State private var retryImportedUUID: String?
 	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
 	@State private var isPALInfoPresented = false
@@ -71,6 +72,12 @@ struct DownloadButtonView: View {
                     }
                     .disabled(actionClaimed)
                     .accessibilityLabel(Text("Retry installing \(app.currentName)"))
+                } else if retryImportedUUID != nil, _retryImportedCopy() != nil {
+                    ZagActionPill(title: .localized("Retry")) {
+                        _performAction { _retrySigning() }
+                    }
+                    .disabled(actionClaimed)
+                    .accessibilityLabel(Text("Retry signing \(app.currentName)"))
                 } else if _isPALApp {
 					ZagActionPill(title: "PAL") {
 						UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -150,6 +157,7 @@ struct DownloadButtonView: View {
 		.onAppear {
 			setupObserver()
 			_restoreRetryIfAvailable()
+			_restoreSigningRetryIfAvailable()
 		}
 		.onDisappear { cancellable?.cancel() }
 		.alert(.localized("Unable to Install"), isPresented: Binding(
@@ -454,6 +462,37 @@ struct DownloadButtonView: View {
         }
     }
 
+    private var _signingRetryStorageKey: String {
+        "zagStore.signingRetry." + app.currentUniqueId
+    }
+
+    private func _retryImportedCopy() -> Imported? {
+        guard let retryImportedUUID,
+              let imported = _importedApp(uuid: retryImportedUUID),
+              let identifier = imported.identifier,
+              identifier == app.id,
+              let version = imported.version,
+              version == app.currentVersion,
+              Storage.shared.getAppDirectory(for: imported) != nil
+        else { return nil }
+        return imported
+    }
+
+    private func _restoreSigningRetryIfAvailable() {
+        guard retryImportedUUID == nil,
+              let uuid = UserDefaults.standard.string(forKey: _signingRetryStorageKey) else { return }
+        retryImportedUUID = uuid
+        if _retryImportedCopy() == nil {
+            retryImportedUUID = nil
+            UserDefaults.standard.removeObject(forKey: _signingRetryStorageKey)
+        }
+    }
+
+    private func _retrySigning() {
+        guard zagPhase == .idle, let imported = _retryImportedCopy() else { return }
+        _signAndInstall(imported)
+    }
+
 	private func _retrySignedCopy() -> Signed? {
         guard let retrySignedUUID, let signed = _signedApp(uuid: retrySignedUUID) else {
             return nil
@@ -616,6 +655,8 @@ struct DownloadButtonView: View {
 							_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
 							return
 						}
+						retryImportedUUID = uuid
+						UserDefaults.standard.set(uuid, forKey: _signingRetryStorageKey)
 						_signAndInstall(imported, certificate: certificate)
 					}
 				}
@@ -684,6 +725,8 @@ struct DownloadButtonView: View {
 				_failTransaction(.localized("Signing completed, but Zag Store could not locate the signed app."))
 				return
 			}
+			retryImportedUUID = nil
+			UserDefaults.standard.removeObject(forKey: _signingRetryStorageKey)
 			retrySignedUUID = signedUUID
 			UserDefaults.standard.set(signedUUID, forKey: _retryStorageKey)
 			zagPhase = .installing
