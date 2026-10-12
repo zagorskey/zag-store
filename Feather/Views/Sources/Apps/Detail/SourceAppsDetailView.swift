@@ -242,6 +242,7 @@ struct SourceAppsDetailView: View {
 				}
 				ZagProfileToolbarButton()
 					.tint(.primary)
+					.padding(.trailing, -2)
 			}
 		}
 		.onAppear {

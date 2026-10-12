@@ -23,8 +23,29 @@ private struct ZagRepositoryActionsToolbar<SortContent: View>: ViewModifier {
                 sortActions()
                 ZagProfileToolbarButton()
                     .tint(.primary)
+                    .padding(.trailing, -2)
             }
         }
+    }
+}
+
+private struct ZagRepositoryIconPill: ViewModifier {
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#3F8EF7"
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
+            .frame(width: 38, height: 27)
+            .background(
+                Capsule()
+                    .fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.12))
+            )
+            .overlay {
+                Capsule()
+                    .strokeBorder(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.38), lineWidth: 0.75)
+            }
+            .contentShape(Capsule())
     }
 }
 
@@ -488,32 +509,32 @@ struct SourceAppsView: View {
 		object.compactMap(\.sourceURL)
 	}
 
+
 	private var _repositoryActionPills: some View {
 		HStack(spacing: 8) {
 			if object.count == 1, let website = _sources?.first?.website {
 				Button { UIApplication.open(website) } label: {
-					Label("Website", systemImage: "globe")
+					Image(systemName: "globe")
 				}
-				.buttonStyle(.bordered)
-				.controlSize(.small)
+				.accessibilityLabel("Visit Website")
+				.modifier(ZagRepositoryIconPill())
 			}
 			Button {
 				UIPasteboard.general.string = _repositoryURLs.map(\.absoluteString).joined(separator: "\n")
 			} label: {
-				Label("Copy URL", systemImage: "doc.on.doc")
+				Image(systemName: "doc.on.doc")
 			}
-			.buttonStyle(.bordered)
-			.controlSize(.small)
+			.accessibilityLabel("Copy Repository URL")
+			.modifier(ZagRepositoryIconPill())
 			.disabled(_repositoryURLs.isEmpty)
 			ShareLink(item: _repositoryURLs.map(\.absoluteString).joined(separator: "\n")) {
-				Label("Share", systemImage: "square.and.arrow.up")
+				Image(systemName: "square.and.arrow.up")
 			}
-			.buttonStyle(.bordered)
-			.controlSize(.small)
+			.accessibilityLabel("Share Repository")
+			.modifier(ZagRepositoryIconPill())
 			.disabled(_repositoryURLs.isEmpty)
 			Spacer(minLength: 0)
 		}
-		.font(.system(size: 12, weight: .medium))
 		.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 8, trailing: ZagListLayout.horizontalInset))
 	}
 
