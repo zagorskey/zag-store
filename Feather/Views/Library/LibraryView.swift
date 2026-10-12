@@ -2310,53 +2310,7 @@ private struct ZagUpdateRow: View {
 	@ViewBuilder
 	private var appIcon: some View {
 		ZStack(alignment: .bottomLeading) {
-			Group {
-				if
-					let bundleID = update.app.id,
-					let deviceIconURL = pairingCore.installedAppIconURLs[bundleID],
-					let deviceImage = UIImage(contentsOfFile: deviceIconURL.path)
-				{
-					Image(uiImage: deviceImage)
-						.resizable()
-						.aspectRatio(contentMode: .fill)
-						.modifier(
-							ZagUpdateIconAppearanceModifier(
-								shouldTint: shouldTintIcons,
-								tintHex: selectedColorHex
-							)
-						)
-				} else {
-					LazyImage(url: update.app.iconURL) { state in
-						if let image = state.image {
-							image
-								.resizable()
-								.aspectRatio(contentMode: .fill)
-								.modifier(
-									ZagUpdateIconAppearanceModifier(
-										shouldTint: shouldTintIcons,
-										tintHex: selectedColorHex
-									)
-								)
-						} else {
-							Image(systemName: "app.fill")
-								.resizable()
-								.scaledToFit()
-								.padding(10)
-								.foregroundStyle(.secondary)
-								.background(
-									Color(uiColor: .secondarySystemBackground)
-								)
-						}
-					}
-				}
-			}
-			.frame(width: 62, height: 62)
-			.clipShape(
-				RoundedRectangle(
-					cornerRadius: 62 * 0.2677,
-					style: .continuous
-				)
-			)
+			ZagRepositoryAppIconView(app: update.app, size: 62)
 
 			if let sourceIconURL = update.source.currentIconURL {
 				LazyImage(url: sourceIconURL) { state in
