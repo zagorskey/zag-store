@@ -1945,7 +1945,7 @@ private struct ZagUpdateIconAppearanceModifier: ViewModifier {
 	}
 }
 
-private struct ZagUpdateRowSnapshot: Codable, Identifiable {
+struct ZagUpdateRowSnapshot: Codable, Identifiable {
 	let id: String
 	let bundleID: String
 	let name: String
@@ -2375,28 +2375,11 @@ struct ZagUpdatesPopup: View {
 	}
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
-		return updates.filter { update in
-			guard !completedUpdateIDs.contains(update.id) else { return false }
-			let bundleID = update.app.id ?? update.id
-			// A recent installation only suppresses the same release, not a newer one.
-			// Match the update identity too, so variants sharing a bundle ID
-			// cannot hide each other's updates.
-			return !cachedRecentRows.contains { recent in
-				recent.id == update.id &&
-				recent.bundleID == bundleID &&
-				recent.version == update.availableVersion
-			}
-		}
+		updateManager.visibleUpdates.filter { !completedUpdateIDs.contains($0.id) }
 	}
 
 	private var displayedAvailableCount: Int {
-		if !updates.isEmpty || !updateManager.isRepositoryRefreshInProgress {
-			return availableUpdates.count
-		}
-		return max(
-			cachedAvailableRows.count,
-			max(0, updateManager.persistedUpdateCount - completedUpdateIDs.count)
-		)
+		updateManager.updateCount
 	}
 
 	var body: some View {
@@ -2594,6 +2577,7 @@ private extension ZagUpdatesPopup {
 			completedUpdates.insert(update, at: 0)
 		}
 		_cacheAvailableRows()
+		updateManager.updateCompletionDidChange()
 	}
 
 	func _snapshot(
