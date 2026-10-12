@@ -538,15 +538,6 @@ struct SourceAppsView: View {
 		NBListAdaptable(transparentBackground: true) {
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
-					if object.count == 1 {
-						HStack(spacing: 8) {
-							Spacer(minLength: 0)
-							_repositoryActionPills
-						}
-						.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
-						.listRowSeparator(.hidden)
-						.listRowBackground(Color.clear)
-					}
 					ZagSectionHeader(
 						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
 						count: sources.reduce(0) { $0 + $1.apps.count }
@@ -575,6 +566,13 @@ struct SourceAppsView: View {
 		}
 		.zagWallpaperSurface()
 
+		.overlay(alignment: .topTrailing) {
+			if object.count == 1 && _searchText.isEmpty {
+				_repositoryActionPills
+					.padding(.trailing, ZagListLayout.horizontalInset)
+					.offset(y: -117)
+			}
+		}
 		.navigationTitle(_navigationTitle)
 		.navigationBarTitleDisplayMode(.large)
 		.toolbarBackground(.hidden, for: .navigationBar)
