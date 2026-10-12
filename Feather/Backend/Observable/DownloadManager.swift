@@ -24,6 +24,7 @@ class Download: Identifiable, @unchecked Sendable {
 	
 	var task: URLSessionDownloadTask?
 	var resumeData: Data?
+	var canRetry: Bool = false
 	
 	let id: String
 	let url: URL
@@ -81,7 +82,7 @@ class DownloadManager: NSObject, ObservableObject {
 			if let zagImported {
 				existingDownload.zagImported = zagImported
 			}
-			resumeDownload(existingDownload)
+			if existingDownload.canRetry { resumeDownload(existingDownload) }
 			return existingDownload
 		}
 		
@@ -120,7 +121,9 @@ class DownloadManager: NSObject, ObservableObject {
 	}
 	
 	func resumeDownload(_ download: Download) {
+		download.canRetry = false
 		if let resumeData = download.resumeData {
+			download.resumeData = nil
 			let task = _session.downloadTask(withResumeData: resumeData)
 			download.task = task
 			task.resume()
@@ -140,6 +143,7 @@ class DownloadManager: NSObject, ObservableObject {
 	}
 	
 	func cancelDownload(_ download: Download) {
+		download.resumeData = nil
 		download.task?.cancel()
 		download.zagImported?(nil, URLError(.cancelled))
 		download.zagImported = nil
@@ -252,11 +256,16 @@ extension DownloadManager: URLSessionDownloadDelegate {
 		}
 		
 		DispatchQueue.main.async {
+			let nsError = error as NSError
+			if nsError.domain == NSURLErrorDomain,
+			   let data = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
+			   !data.isEmpty {
+				download.resumeData = data
+			}
+			download.canRetry = true
 			download.zagImported?(nil, error)
 			download.zagImported = nil
-			if let index = self.getDownloadIndex(by: download.id) {
-				self.downloads.remove(at: index)
-			}
+			// Keep failed downloads in memory so the next Get can resume them.
 		}
 	}
 }
