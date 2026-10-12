@@ -152,7 +152,7 @@ class DownloadManager: NSObject, ObservableObject {
 		download.zagImported?(nil, URLError(.cancelled))
 		download.zagImported = nil
 		
-		if let index = downloads.firstIndex(where: { $0.id == download.id }) {
+		if let index = downloads.firstIndex(where: { $0 === download }) {
 			downloads.remove(at: index)
 			
 			#if !targetEnvironment(macCatalyst)
@@ -195,7 +195,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 			}
 			
 			DispatchQueue.main.async {
-				if let index = DownloadManager.shared.getDownloadIndex(by: dl.id) {
+				if let index = DownloadManager.shared.downloads.firstIndex(where: { $0 === dl }) {
 					DownloadManager.shared.downloads.remove(at: index)
 					
 					#if !targetEnvironment(macCatalyst)
@@ -228,7 +228,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
 			
 			try handlePachageFile(url: destinationURL, dl: download)
 		} catch {
-			print("Error handling downloaded file: \(error.localizedDescription)")
+			DispatchQueue.main.async {
+				guard let index = self.downloads.firstIndex(where: { $0 === download && $0.task === downloadTask }) else { return }
+				download.zagImported?(nil, error)
+				download.zagImported = nil
+				self.downloads.remove(at: index)
+			}
 		}
 	}
 	
@@ -236,6 +241,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 		guard let download = getDownloadTask(by: downloadTask) else { return }
 		
 		DispatchQueue.main.async {
+			guard self.downloads.contains(where: { $0 === download && $0.task === downloadTask }) else { return }
 			download.progress = totalBytesExpectedToWrite > 0
 			? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
 			: 0
@@ -260,6 +266,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 		}
 		
 		DispatchQueue.main.async {
+			guard self.downloads.contains(where: { $0 === download && $0.task === downloadTask }) else { return }
 			let nsError = error! as NSError
 			if nsError.domain == NSURLErrorDomain,
 			   let data = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
@@ -273,7 +280,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 			// Retain failed repository downloads for retry; discard failed manual
 			// downloads that have no repository button to resume them.
 			if !hasRepositoryCallback,
-			   let index = self.getDownloadIndex(by: download.id) {
+			   let index = self.downloads.firstIndex(where: { $0 === download }) {
 				self.downloads.remove(at: index)
 			}
 		}
