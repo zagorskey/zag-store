@@ -1572,31 +1572,78 @@ private struct ZagRepositoryHealthView: View {
 }
 
 
-// Temporary isolated baseline: no repositories, Core Data, or animated artwork.
+// Temporary comparison screen. Switch configurations without rebuilding the app.
 private struct ZagRefreshBaselineView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var mode = 0
+    @State private var searchText = ""
+
+    private var testRows: some View {
+        ForEach(0..<60, id: \.self) { index in
+            HStack {
+                Text("Test Row \\(index + 1)")
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 58)
+        }
+    }
+
+    private var scrollRows: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                testRows
+            }
+        }
+        .refreshable {
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+
+    private var listRows: some View {
+        List {
+            testRows
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
+        }
+        .listStyle(.plain)
+        .refreshable {
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(0..<60, id: \.self) { index in
-                        HStack {
-                            Text("Test Row \\(index + 1)")
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .frame(height: 58)
-                        Divider().padding(.leading, 20)
-                    }
+            Group {
+                switch mode {
+                case 1:
+                    listRows
+                case 2:
+                    listRows
+                        .searchable(text: $searchText, prompt: "Search Test Rows")
+                case 3:
+                    listRows
+                        .scrollContentBackground(.hidden)
+                        .zagWallpaperSurface()
+                        .searchable(text: $searchText, prompt: "Search Test Rows")
+                default:
+                    scrollRows
                 }
             }
-            .refreshable {
-                try? await Task.sleep(for: .seconds(1))
-            }
-            .navigationTitle("Refresh Baseline")
-            .navigationBarTitleDisplayMode(.inline)
+            .id(mode)
+            .navigationTitle(mode == 0 ? "Scroll Baseline" : "List Baseline")
+            .navigationBarTitleDisplayMode(mode == 0 ? .inline : .automatic)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button("1 · ScrollView (known smooth)") { mode = 0 }
+                        Button("2 · Plain List") { mode = 1 }
+                        Button("3 · List + Search") { mode = 2 }
+                        Button("4 · List + Search + Wallpaper") { mode = 3 }
+                    } label: {
+                        Label("Test Mode \\(mode + 1)", systemImage: "slider.horizontal.3")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
