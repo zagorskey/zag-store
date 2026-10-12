@@ -49,7 +49,12 @@ struct DownloadButtonView: View {
 	var body: some View {
 		ZStack {
 			ZStack {
-				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
+				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId), currentDownload.canRetry {
+                    ZagActionPill(title: .localized("Retry")) {
+                        _performAction { _startGetAndInstall() }
+                    }
+                    .disabled(actionClaimed)
+                } else if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
 					_progressRing(progress: downloadProgress, showsStop: downloadProgress < 0.75)
 						.onTapGesture {
 							if downloadProgress <= 0.75 {
