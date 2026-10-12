@@ -41,6 +41,13 @@ private struct ZagRepositoryIconPill: ViewModifier {
     }
 }
 
+private struct ZagRepositoryScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // MARK: - System Dictation Lifecycle Bridge
 
 private extension Notification.Name {
@@ -446,6 +453,7 @@ struct SourceAppsView: View {
 	@State var isLoading = true
 	@State var hasLoadedOnce = false
 	@State private var _searchText = ""
+	@State private var _repositoryScrollOffset: CGFloat = 0
 	@State private var _dictationAvailable = false
 	@State private var _dictationStatus = "Dictation unavailable"
 	@FocusState private var _searchFieldFocused: Bool
@@ -536,6 +544,17 @@ struct SourceAppsView: View {
 	// MARK: Body
 	var body: some View {
 		NBListAdaptable(transparentBackground: true) {
+			GeometryReader { geometry in
+				Color.clear
+					.preference(
+						key: ZagRepositoryScrollOffsetKey.self,
+						value: geometry.frame(in: .named("zagRepositoryScroll")).minY
+					)
+			}
+			.frame(height: 0)
+			.listRowInsets(EdgeInsets())
+			.listRowSeparator(.hidden)
+			.listRowBackground(Color.clear)
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
 					ZagSectionHeader(
@@ -564,6 +583,10 @@ struct SourceAppsView: View {
 					.listRowBackground(Color.clear)
 			}
 		}
+		.coordinateSpace(name: "zagRepositoryScroll")
+		.onPreferenceChange(ZagRepositoryScrollOffsetKey.self) { value in
+			_repositoryScrollOffset = value
+		}
 		.zagWallpaperSurface()
 
 		.overlay(alignment: .topTrailing) {
@@ -571,6 +594,8 @@ struct SourceAppsView: View {
 				_repositoryActionPills
 					.padding(.trailing, ZagListLayout.horizontalInset)
 					.offset(y: -96)
+					.opacity(_repositoryScrollOffset < -12 ? 0 : 1)
+					.allowsHitTesting(_repositoryScrollOffset >= -12)
 			}
 		}
 		.navigationTitle(_navigationTitle)
