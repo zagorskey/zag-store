@@ -530,31 +530,52 @@ struct DownloadButtonView: View {
 			return
 		}
 		guard zagPhase == .idle, let url = app.currentDownloadUrl else { return }
-		ZagLogger.shared.info("Repository Install", "Download started: \(app.currentName) | id=\(app.id ?? "unknown") | version=\(app.currentVersion ?? "unknown")")
-		zagPhase = .downloading
 
-		_ = downloadManager.startDownload(
-			from: url,
-			id: app.currentUniqueId,
-			zagImported: { uuid, error in
-				DispatchQueue.main.async {
-					if let error {
-						if (error as? URLError)?.code == .cancelled {
-							zagPhase = .idle
-						} else {
-							_failTransaction(error.localizedDescription)
-						}
-						return
-					}
-					ZagLogger.shared.info("Repository Install", "Download/import completed: \(app.currentName) | importedUUID=\(uuid ?? "unknown")")
-					guard let uuid, let imported = _importedApp(uuid: uuid) else {
-						_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
-						return
-					}
-					_signAndInstall(imported)
-				}
+		// Validate installation settings and choose the signing identity before
+		// downloading a potentially large IPA.
+		Task { @MainActor in
+			guard zagPhase == .idle else { return }
+			let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
+			let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
+			if method == 0 && serverMethod != 0 {
+				_failTransaction("Semi Local installation requires the installation preview. Choose Fully Local, idevice, or RPPairing for inline repository installs.")
+				return
 			}
-		)
+			guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+				if Storage.shared.getAllCertificates().isEmpty {
+					_failTransaction(.localized("Add a signing certificate before downloading this app."))
+				} else {
+					zagPhase = .idle
+				}
+				return
+			}
+			guard zagPhase == .idle else { return }
+			ZagLogger.shared.info("Repository Install", "Download started: \\(app.currentName) | id=\\(app.id ?? "unknown") | version=\\(app.currentVersion ?? "unknown")")
+			zagPhase = .downloading
+
+			_ = downloadManager.startDownload(
+				from: url,
+				id: app.currentUniqueId,
+				zagImported: { uuid, error in
+					DispatchQueue.main.async {
+						if let error {
+							if (error as? URLError)?.code == .cancelled {
+								zagPhase = .idle
+							} else {
+								_failTransaction(error.localizedDescription)
+							}
+							return
+						}
+						ZagLogger.shared.info("Repository Install", "Download/import completed: \\(app.currentName) | importedUUID=\\(uuid ?? "unknown")")
+						guard let uuid, let imported = _importedApp(uuid: uuid) else {
+							_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
+							return
+						}
+						_signAndInstall(imported, certificate: certificate)
+					}
+				}
+			)
+		}
 	}
 
 	private func _signAndInstall(_ imported: Imported) {
