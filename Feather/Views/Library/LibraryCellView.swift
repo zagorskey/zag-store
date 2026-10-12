@@ -588,7 +588,7 @@ extension LibraryCellView {
 	@ViewBuilder
 	private func _installedUpdateAction(_ update: UpdateManager.AvailableUpdate) -> some View {
 		let stage = updateTransaction.stage(for: update)
-		VStack(spacing: 2) {
+		ZStack {
 			if let stage, !isFailedUpdateStage(stage) {
 				_installingIndeterminateRing()
 					.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
@@ -597,12 +597,16 @@ extension LibraryCellView {
 					_startInstalledUpdate(update)
 				}
 			}
-			Text(updateStageCaption(stage))
+			if !updateStageCaption(stage).isEmpty {
+				Text(updateStageCaption(stage))
 					.font(.system(size: 9, weight: .medium))
 					.foregroundStyle(.secondary)
 					.lineLimit(1)
 					.frame(width: 88, height: 11)
+					.offset(y: 26)
+			}
 		}
+		.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 	}
 
 	private func isFailedUpdateStage(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
