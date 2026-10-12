@@ -550,7 +550,7 @@ struct DownloadButtonView: View {
 				return
 			}
 			guard zagPhase == .idle else { return }
-			ZagLogger.shared.info("Repository Install", "Download started: \\(app.currentName) | id=\\(app.id ?? "unknown") | version=\\(app.currentVersion ?? "unknown")")
+			ZagLogger.shared.info("Repository Install", "Download started: \(app.currentName) | id=\(app.id ?? "unknown") | version=\(app.currentVersion ?? "unknown")")
 			zagPhase = .downloading
 
 			_ = downloadManager.startDownload(
@@ -566,7 +566,7 @@ struct DownloadButtonView: View {
 							}
 							return
 						}
-						ZagLogger.shared.info("Repository Install", "Download/import completed: \\(app.currentName) | importedUUID=\\(uuid ?? "unknown")")
+						ZagLogger.shared.info("Repository Install", "Download/import completed: \(app.currentName) | importedUUID=\(uuid ?? "unknown")")
 						guard let uuid, let imported = _importedApp(uuid: uuid) else {
 							_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
 							return
