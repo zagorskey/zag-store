@@ -30,21 +30,13 @@ private struct ZagRepositoryActionsToolbar<SortContent: View>: ViewModifier {
 }
 
 private struct ZagRepositoryIconPill: ViewModifier {
-    @AppStorage("Feather.userTintColor") private var themeColorHex = "#3F8EF7"
-
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
-            .frame(width: 38, height: 27)
-            .background(
-                Capsule()
-                    .fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.12))
-            )
-            .overlay {
-                Capsule()
-                    .strokeBorder(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.38), lineWidth: 0.75)
-            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.tint)
+            .frame(width: 32, height: 25)
+            .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.75))
             .contentShape(Capsule())
     }
 }
@@ -511,31 +503,34 @@ struct SourceAppsView: View {
 
 
 	private var _repositoryActionPills: some View {
-		HStack(spacing: 8) {
+		HStack(spacing: 6) {
 			if object.count == 1, let website = _sources?.first?.website {
-				Button { UIApplication.open(website) } label: {
+				Button {
+					UIApplication.open(website)
+				} label: {
 					Image(systemName: "globe")
 				}
-				.accessibilityLabel("Visit Website")
+				.buttonStyle(.plain)
 				.modifier(ZagRepositoryIconPill())
+				.accessibilityLabel("Visit Website")
 			}
 			Button {
 				UIPasteboard.general.string = _repositoryURLs.map(\.absoluteString).joined(separator: "\n")
 			} label: {
 				Image(systemName: "doc.on.doc")
 			}
-			.accessibilityLabel("Copy Repository URL")
+			.buttonStyle(.plain)
 			.modifier(ZagRepositoryIconPill())
+			.accessibilityLabel("Copy Repository URL")
 			.disabled(_repositoryURLs.isEmpty)
 			ShareLink(item: _repositoryURLs.map(\.absoluteString).joined(separator: "\n")) {
 				Image(systemName: "square.and.arrow.up")
 			}
-			.accessibilityLabel("Share Repository")
+			.buttonStyle(.plain)
 			.modifier(ZagRepositoryIconPill())
+			.accessibilityLabel("Share Repository")
 			.disabled(_repositoryURLs.isEmpty)
-			Spacer(minLength: 0)
 		}
-		.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 8, trailing: ZagListLayout.horizontalInset))
 	}
 
 	// MARK: Body
@@ -543,15 +538,17 @@ struct SourceAppsView: View {
 		NBListAdaptable(transparentBackground: true) {
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
-					ZagSectionHeader(
-						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
-						count: sources.reduce(0) { $0 + $1.apps.count }
-					)
+					HStack(alignment: .center, spacing: 8) {
+						ZagSectionHeader(
+							title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
+							count: sources.reduce(0) { $0 + $1.apps.count }
+						)
+						Spacer(minLength: 4)
+						_repositoryActionPills
+					}
+					.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
-					_repositoryActionPills
-						.listRowSeparator(.hidden)
-						.listRowBackground(Color.clear)
 					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
 						SourceNewsView(news: news)
 							.listRowSeparator(.hidden)
