@@ -635,10 +635,11 @@ struct DownloadButtonView: View {
 					_failTransaction(.localized("Add a signing certificate before downloading this app."))
 				} else {
 					zagPhase = .idle
+					actionClaimed = false
 				}
 				return
 			}
-			guard zagPhase == .idle else { return }
+			guard zagPhase == .idle else { actionClaimed = false; return }
 			ZagLogger.shared.info("Repository Install", "Download started: \(app.currentName) | id=\(app.id ?? "unknown") | version=\(app.currentVersion ?? "unknown")")
 			zagPhase = .downloading
 
@@ -650,6 +651,7 @@ struct DownloadButtonView: View {
 						if let error {
 							if (error as? URLError)?.code == .cancelled {
 								zagPhase = .idle
+								actionClaimed = false
 							} else {
 								_failTransaction(error.localizedDescription)
 							}
@@ -876,6 +878,7 @@ struct DownloadButtonView: View {
 	private func _failTransaction(_ message: String) {
 		ZagLogger.shared.error("Repository Transaction", "\(app.currentName) | id=\(app.id ?? "unknown") | \(message)")
 		zagPhase = .idle
+		actionClaimed = false
 		transactionError = message
 	}
 
