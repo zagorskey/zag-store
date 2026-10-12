@@ -606,36 +606,57 @@ struct SourceAppsView: View {
 
 	// Only show metadata we can actually verify from the loaded manifest.
 	private var _repositorySummary: some View {
-		VStack(alignment: .leading, spacing: 12) {
+		VStack(alignment: .leading, spacing: 13) {
 			HStack(spacing: 8) {
-				Label("Loaded", systemImage: "checkmark.circle.fill")
-					.foregroundStyle(.green)
+				HStack(spacing: 6) {
+					Image(systemName: "checkmark.circle.fill")
+					Text("Loaded")
+				}
+				.foregroundStyle(.green)
+				.padding(.horizontal, 10)
+				.padding(.vertical, 7)
+				.background(Color.green.opacity(0.10), in: Capsule())
+
 				if let url = object.first?.sourceURL {
-					Label(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP", systemImage: "lock.shield")
+					HStack(spacing: 6) {
+						Image(systemName: url.scheme?.lowercased() == "https" ? "lock.shield.fill" : "lock.open")
+						Text(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP")
+						}
 						.foregroundStyle(.secondary)
+						.padding(.horizontal, 10)
+						.padding(.vertical, 7)
+						.background(Color.primary.opacity(0.06), in: Capsule())
 				}
 			}
-			.font(.system(size: 12, weight: .medium))
+			.font(.system(size: 12, weight: .semibold))
+
 			if let url = object.first?.sourceURL {
-				Divider()
-				HStack(alignment: .top, spacing: 8) {
-					Image(systemName: "link")
-						.foregroundStyle(.secondary)
-					Text(url.absoluteString)
-						.font(.system(size: 12))
-						.foregroundStyle(.secondary)
-						.lineLimit(2)
-						.textSelection(.enabled)
-					Spacer(minLength: 0)
-				}
+					Divider()
+					HStack(alignment: .center, spacing: 10) {
+						Image(systemName: "link")
+							.font(.system(size: 14, weight: .medium))
+							.foregroundStyle(.secondary)
+							.frame(width: 20)
+						VStack(alignment: .leading, spacing: 4) {
+							Text("SOURCE URL")
+								.font(.system(size: 10, weight: .semibold))
+								.tracking(0.7)
+								.foregroundStyle(.tertiary)
+							Text(url.absoluteString)
+								.font(.system(size: 12, weight: .medium))
+								.foregroundStyle(.secondary)
+								.lineLimit(2)
+								.textSelection(.enabled)
+						}
+						.frame(maxWidth: .infinity, alignment: .leading)
+					}
 			}
 		}
-		.padding(14)
+		.padding(.horizontal, 16)
+		.padding(.vertical, 14)
 		.frame(maxWidth: .infinity, alignment: .leading)
-		.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+		.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 		.padding(.horizontal, ZagListLayout.horizontalInset)
-		.padding(.top, 2)
-		.padding(.bottom, 12)
 	}
 
 	private func _repositoryDetailRow(_ label: String, value: String) -> some View {
@@ -694,7 +715,7 @@ struct SourceAppsView: View {
 					.listRowBackground(Color.clear)
 					if object.count == 1 {
 						_repositorySummary
-							.listRowInsets(EdgeInsets())
+							.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
 							.listRowSeparator(.hidden)
 							.listRowBackground(Color.clear)
 					}
