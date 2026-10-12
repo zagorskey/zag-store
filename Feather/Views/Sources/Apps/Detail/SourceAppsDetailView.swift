@@ -228,17 +228,21 @@ struct SourceAppsDetailView: View {
 		.flexibleHeaderScrollView()
 		.shouldSetInset()
 		.toolbar {
-			NBToolbarButton(
-				systemImage: "square.and.arrow.up",
-				placement: .topBarTrailing
-			) {
-				let sharedString = """
-				\(app.currentName) - \(app.currentVersion ?? "0")
-				\(app.currentDescription ?? .localized("An awesome application"))
-				---
-				\(source.website?.absoluteString ?? source.name ?? "")
-				"""
-				UIActivityViewController.show(activityItems: [sharedString])
+			ToolbarItemGroup(placement: .topBarTrailing) {
+				Button {
+					let sharedString = """
+					\(app.currentName) - \(app.currentVersion ?? "0")
+					\(app.currentDescription ?? .localized("An awesome application"))
+					---
+					\(source.website?.absoluteString ?? source.name ?? "")
+					"""
+					UIActivityViewController.show(activityItems: [sharedString])
+				} label: {
+					Image(systemName: "square.and.arrow.up")
+				}
+				ZagProfileToolbarButton()
+					.tint(.primary)
+					.padding(.trailing, -2)
 			}
 		}
 		.onAppear {
