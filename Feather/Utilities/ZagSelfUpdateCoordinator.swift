@@ -431,6 +431,45 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         )
     }
 
+    /// Compare embedded provisioning profiles with executable entitlements.
+    /// Diagnostic only: profile authorization and actual keychain continuity
+    /// require additional validation before self-replacement.
+    func inspectKeychainProvisioning(_ signed: Signed) throws -> [String: String] {
+        guard let appURL = Storage.shared.getAppDirectory(for: signed) else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let installedURL = Bundle.main.bundleURL.appendingPathComponent("embedded.mobileprovision")
+        let candidateURL = appURL.appendingPathComponent("embedded.mobileprovision")
+        guard let installed = CertificateReader(installedURL).decoded,
+              let candidate = CertificateReader(candidateURL).decoded else {
+            throw UpdateError.incompatibleSigningTeam
+        }
+        let actual = try inspectKeychainAccessGroups(signed)
+        func profileGroups(_ certificate: Certificate) -> [String] {
+            certificate.Entitlements?["keychain-access-groups"]?.value as? [String] ?? []
+        }
+        let currentProfile = profileGroups(installed)
+        let nextProfile = profileGroups(candidate)
+        func allows(_ profile: [String], group: String) -> Bool {
+            profile.contains { permitted in
+                permitted == group ||
+                (permitted.hasSuffix(".*") &&
+                 group.hasPrefix(String(permitted.dropLast())) &&
+                 group.count > permitted.count - 1)
+            }
+        }
+        let currentAuthorized = actual.installed.allSatisfy { allows(currentProfile, group: $0) }
+        let nextAuthorized = actual.candidate.allSatisfy { allows(nextProfile, group: $0) }
+        return [
+            "Installed profile groups": currentProfile.joined(separator: "\\n"),
+            "Candidate profile groups": nextProfile.joined(separator: "\\n"),
+            "Installed entitlement/profile": currentAuthorized ? "Structurally compatible" : "Unverified or mismatch",
+            "Candidate entitlement/profile": nextAuthorized ? "Structurally compatible" : "Unverified or mismatch",
+            "Candidate profile expires": candidate.ExpirationDate.formatted(date: .abbreviated, time: .omitted),
+            "Same provisioning team": installed.TeamIdentifier.first == candidate.TeamIdentifier.first ? "Yes" : "No"
+        ]
+    }
+
     /// Controlled test entry point. The caller must explicitly confirm the
     /// self-replacement experiment and supply a signed IPA already imported
     /// into Zag Store. This does not silently update the running application.
