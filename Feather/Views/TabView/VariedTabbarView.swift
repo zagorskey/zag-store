@@ -415,7 +415,7 @@ struct ZagAccountPopup: View {
             .navigationDestination(for: AccountDestination.self) { destination in
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
-                case .updates: ZagUpdatesPopup(updates: updateManager.updates)
+                case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
                 case .settings: SettingsView()
                 }
             }
