@@ -9,6 +9,8 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     ) private var signedApps: FetchedResults<Signed>
 
     @State private var report: [(String, String)] = []
+    @State private var installedGroups: [String] = []
+    @State private var candidateGroups: [String] = []
     @State private var errorMessage: String?
     @State private var selectedUUID: String = ""
 
@@ -47,6 +49,15 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             }
             if !report.isEmpty {
+                Section("Installed Keychain Groups") {
+                    if installedGroups.isEmpty { Text("None reported") }
+                    ForEach(installedGroups, id: \.self) { Text($0).font(.footnote).textSelection(.enabled) }
+                }
+                Section("Candidate Keychain Groups") {
+                    if candidateGroups.isEmpty { Text("None reported") }
+                    ForEach(candidateGroups, id: \.self) { Text($0).font(.footnote).textSelection(.enabled) }
+                }
+
                 Section("Executable Entitlements") {
                     ForEach(report, id: \.0) { item in
                         LabeledContent(item.0, value: item.1)
@@ -60,6 +71,8 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
 
     private func inspect() {
         report = []
+        installedGroups = []
+        candidateGroups = []
         errorMessage = nil
         guard let candidate = candidates.first(where: { $0.uuid == selectedUUID }) else {
             errorMessage = "Choose a signed Zag Store candidate."
@@ -68,6 +81,9 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
         do {
             let result = try ZagSelfUpdateCoordinator.shared.inspectExecutableEntitlements(candidate)
             report = result.keys.sorted().map { ($0, result[$0] ?? "") }
+            let groups = try ZagSelfUpdateCoordinator.shared.inspectKeychainAccessGroups(candidate)
+            installedGroups = groups.installed
+            candidateGroups = groups.candidate
         } catch {
             errorMessage = error.localizedDescription
         }
