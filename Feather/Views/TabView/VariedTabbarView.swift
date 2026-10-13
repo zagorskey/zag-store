@@ -371,7 +371,7 @@ struct ZagAccountPopup: View {
                 Section {
                     NavigationLink(value: AccountDestination.profile) {
                         HStack(spacing: 14) {
-                            ZagGlobalProfileAvatar(revision: avatarRevision, animatedBorder: true)
+                            ZagGlobalProfileAvatar(revision: avatarRevision)
                                 .frame(width: 54, height: 54)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Petar Zagorski")
@@ -385,6 +385,19 @@ struct ZagAccountPopup: View {
                         }
                         .padding(.vertical, 7)
                     }
+                    HStack(spacing: 14) {
+                        Image("ZagAccountIconDark")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 30, height: 30)
+                            .clipShape(Circle())
+                            .frame(width: 54)
+                        Text("Account Type")
+                        Spacer()
+                        Text("Standard")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
                 }
                 Section {
                     NavigationLink(value: AccountDestination.updates) {
