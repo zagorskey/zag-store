@@ -431,6 +431,7 @@ struct ZagAccountPopup: View {
                 }
             }
         }
+        .environment(\.zagInsideAccountPopup, true)
         .overlay(alignment: .topLeading) {
             if accountPath.isEmpty {
                 HStack(spacing: 9) {
