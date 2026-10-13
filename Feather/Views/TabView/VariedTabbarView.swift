@@ -42,10 +42,10 @@ enum ZagWideGamutTint {
 	static func color(hex: String) -> Color {
 		// Treat the theme's RGB hex values as native Display P3 components.
 		// Converting through UIColor(Color(hex:)) would first interpret them as sRGB.
-		// Native uses the vivid system-blue P3 components rather than the softer
-		// palette swatch (#3F8EF7). V2 and Berry retain their selected hex.
-		if hex.uppercased() == "#3F8EF7" {
-			return Color(uiColor: UIColor(displayP3Red: 0, green: 0.47843137, blue: 1, alpha: 1))
+		// The default App Store-matched blue uses the same #0090FF
+		// components in Display P3. Custom themes retain their selected hex.
+		if hex.uppercased() == "#0090FF" {
+			return Color(uiColor: UIColor(displayP3Red: 0, green: 144.0 / 255.0, blue: 1, alpha: 1))
 		}
 		let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines)
 			.replacingOccurrences(of: "#", with: "")
@@ -60,7 +60,7 @@ enum ZagWideGamutTint {
 }
 
 struct VariedTabbarView: View {
-	@AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
+	@AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
@@ -88,6 +88,11 @@ struct VariedTabbarView: View {
 			}
 		}
 		.onAppear {
+            // Migrate only the previous built-in blues; leave custom themes intact.
+            let previous = themeColorHex.uppercased()
+            if ["#3F8EF7", "#4395F8"].contains(previous) {
+                themeColorHex = "#0090FF"
+            }
             updateDockTint()
         }
 		.onChange(of: themeColorHex) { _ in updateDockTint() }
@@ -355,7 +360,7 @@ struct ZagAccountPopup: View {
     @ObservedObject private var updateManager = UpdateManager.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
+    @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
 
