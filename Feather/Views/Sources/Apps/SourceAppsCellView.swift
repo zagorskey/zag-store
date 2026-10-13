@@ -98,6 +98,14 @@ struct SourceAppsCellView: View {
 					.foregroundStyle(colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8"))
 					.buttonStyle(.borderless)
 					}
+				}
+				.background {
+					GeometryReader { geometry in
+						Color.clear
+							.onAppear { descriptionWidth = geometry.size.width }
+							.onChange(of: geometry.size.width) { _, width in descriptionWidth = width }
+					}
+			}
 			} else if !showsRepositoryDetails, _storeCellAppearance != 0, let desc = app.localizedDescription {
 				Text(desc).font(.subheadline).foregroundStyle(.secondary)
 			}
