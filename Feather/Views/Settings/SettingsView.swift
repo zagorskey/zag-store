@@ -81,6 +81,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 
 // MARK: - View
 struct SettingsView: View {
+	var embeddedInAccountNavigation = false
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
@@ -127,9 +128,7 @@ struct SettingsView: View {
     
 	private let _githubUrl = "https://github.com/claration/Feather"
     
-	// MARK: Body
-	var body: some View {
-		NBNavigationView(.localized("Settings")) {
+	private var settingsContent: some View {
 			Form {
 				if _isReorderingSettings {
 					Section {
@@ -237,6 +236,17 @@ struct SettingsView: View {
                         .tint(.primary)
                         .padding(.trailing, -2)
                 }
+			}
+		.navigationTitle("Settings")
+	}
+
+	// MARK: Body
+	var body: some View {
+		Group {
+			if embeddedInAccountNavigation {
+				settingsContent
+			} else {
+				NBNavigationView(.localized("Settings")) { settingsContent }
 			}
 		}
 		.sheet(item: $_selectedCertificateInfo) { cert in
