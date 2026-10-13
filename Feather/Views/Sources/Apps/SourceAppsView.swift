@@ -806,7 +806,13 @@ struct SourceAppsView: View {
 	private func _repositorySectionHeader(_ title: String, count: Int? = nil, collapsed: Bool, toggle: @escaping () -> Void) -> some View {
 		Button(action: toggle) {
 			HStack(spacing: 8) {
-				ZagSectionHeader(title: title, count: count ?? 0)
+				if let count {
+					ZagSectionHeader(title: title, count: count)
+				} else {
+					Text(title)
+						.font(.system(size: 22, weight: .bold))
+						.foregroundStyle(.primary)
+				}
 				Spacer(minLength: 8)
 				Image(systemName: "chevron.down")
 					.font(.system(size: 20, weight: .semibold))
@@ -889,10 +895,16 @@ struct SourceAppsView: View {
 		NBListAdaptable(transparentBackground: true) {
 			if let sources = _sources, !sources.isEmpty {
 				if _searchText.isEmpty {
-					ZagSectionHeader(
-						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
-						count: object.count == 1 ? 0 : sources.reduce(0) { $0 + $1.apps.count }
-					)
+					Group {
+						if object.count == 1 {
+							Text(object[0].name ?? "Repository")
+								.font(.system(size: 22, weight: .bold))
+								.foregroundStyle(.primary)
+								.padding(.horizontal, ZagListLayout.horizontalInset)
+						} else {
+							ZagSectionHeader(title: "Your Sources", count: sources.reduce(0) { $0 + $1.apps.count })
+						}
+					}
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 					if object.count == 1 {
