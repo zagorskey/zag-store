@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CryptoKit
 import CoreData
+import IDeviceSwift
 
 /// Self-update preparation and launch reconciliation.
 /// Installation is intentionally not invoked until in-place RPPairing replacement
@@ -201,9 +202,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 do {
-                    try core.installGate4IPA(at: packageURL, deviceIP: "10.7.0.1") { result in
+                    try core.installGate4IPA(at: packageURL, deviceIP: "10.7.0.1", completion: { result in
                         continuation.resume(with: result)
-                    }
+                    })
                 } catch {
                     continuation.resume(throwing: error)
                 }
