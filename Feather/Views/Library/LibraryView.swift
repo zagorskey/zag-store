@@ -983,6 +983,13 @@ struct LibraryView: View {
             .sheet(isPresented: $_isUpdatesPresenting) {
 				_updatesSheetContent
 			}
+            .onChange(of: _isUpdatesPresenting) { _, presented in
+                NotificationCenter.default.post(
+                    name: .zagUpdatesSheetVisibilityDidChange,
+                    object: nil,
+                    userInfo: ["presented": presented]
+                )
+            }
 
 			.sheet(item: $_pendingRemoveApp) { app in
 				_removeAppSheetContent(app)
