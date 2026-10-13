@@ -656,7 +656,9 @@ struct SourceAppsView: View {
 
 	// Curated statuses must be explicitly assigned; never infer trust from HTTPS or load success.
 	// Add approved canonical manifest URLs here only after editorial review.
-	private var _zagFeaturedManifestURLs: Set<String> { [] }
+	private var _zagFeaturedManifestURLs: Set<String> {
+		Set(SourcesAddView.zagFeaturedSourceURLs.map(\.absoluteString))
+	}
 
 	private var _isZagFeatured: Bool {
 		guard let url = object.first?.sourceURL else { return false }
