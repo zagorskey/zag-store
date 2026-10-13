@@ -220,7 +220,7 @@ private final class ZagProfileBadgeCoordinator {
                     label = UILabel()
                     label.textAlignment = .center
                     label.textColor = .white
-                    label.font = .systemFont(ofSize: 14, weight: .regular)
+                    label.font = .systemFont(ofSize: 12, weight: .regular)
                     label.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
                     label.layer.cornerRadius = 11
                     label.layer.masksToBounds = true
@@ -231,7 +231,7 @@ private final class ZagProfileBadgeCoordinator {
                 let count = chosen.1.count
                 label.text = count.description
                 label.isHidden = count == 0 || chosen.1.hidden
-                let width = max(22, CGFloat(count.description.count * 9 + 10))
+                let width = max(22, CGFloat(count.description.count * 8 + 8))
                 label.frame = CGRect(x: chosen.2.maxX - width + 9,
                                      y: chosen.2.minY - 11, width: width, height: 22)
                 window.bringSubviewToFront(label)
