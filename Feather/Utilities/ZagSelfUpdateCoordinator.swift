@@ -483,10 +483,10 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let version = info["CFBundleShortVersionString"] as? String
         let build = info["CFBundleVersion"] as? String
         result["Bundle identifier"] = identifier == bundleID && signed.identifier == bundleID ? "PASS" : "FAIL"
-        result["Candidate version/build"] = (version?.isEmpty == false && build?.isEmpty == false) ? "\\(version ?? "") (\\(build ?? ""))" : "FAIL"
+        result["Candidate version/build"] = (version?.isEmpty == false && build?.isEmpty == false) ? "\(version ?? "") (\(build ?? ""))" : "FAIL"
         let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        result["Installed version/build"] = "\\(currentVersion) (\\(currentBuild))"
+        result["Installed version/build"] = "\(currentVersion) (\(currentBuild))"
         result["RPPairing configured"] = ZagRPPairingCore.shared.pairingFileExists ? "YES" : "NO"
         result["Installer idle"] = !ZagRPPairingCore.shared.isGate4Running ? "YES" : "NO"
         do {
