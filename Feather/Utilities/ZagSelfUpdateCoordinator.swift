@@ -387,8 +387,22 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             }
             if let currentGroups = current as? [String],
                let nextGroups = next as? [String] {
-                report[key] = Set(currentGroups).isSubset(of: Set(nextGroups))
-                    ? "Compatible" : "Mismatch"
+                let missing = Set(currentGroups).subtracting(Set(nextGroups))
+                if missing.isEmpty {
+                    report[key] = "Exact compatible"
+                } else if missing.allSatisfy({ group in
+                    group.hasSuffix(".*") &&
+                    nextGroups.contains(where: { candidate in
+                        candidate.hasPrefix(String(group.dropLast())) &&
+                        candidate.count > group.count - 1
+                    })
+                }) {
+                    // This is a structural comparison only; it does not prove
+                    // that existing keychain items remain accessible.
+                    report[key] = "Wildcard-compatible (unverified)"
+                } else {
+                    report[key] = "Mismatch"
+                }
             } else {
                 report[key] = String(describing: current) == String(describing: next)
                     ? "Match" : "Mismatch"
