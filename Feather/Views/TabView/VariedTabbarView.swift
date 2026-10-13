@@ -357,22 +357,19 @@ struct ZagAccountPopup: View {
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
     @State private var avatarRevision = UUID()
+    @State private var accountPath: [AccountDestination] = []
+
+    private enum AccountDestination: Hashable {
+        case profile, updates, settings
+    }
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
 
-    // The dedicated dark artwork is already bundled as ZagProfileDark.
-    // Never fall back to the light app icon in this account header.
-    private var accountIcon: UIImage? {
-        UIImage(named: "ZagAccountIconDark")
-    }
-
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $accountPath) {
             Form {
                 Section {
-                    NavigationLink {
-                        ZagAccountAvatarEditor()
-                    } label: {
+                    NavigationLink(value: AccountDestination.profile) {
                         HStack(spacing: 14) {
                             ZagGlobalProfileAvatar(revision: avatarRevision, animatedBorder: true)
                                 .frame(width: 54, height: 54)
@@ -390,9 +387,7 @@ struct ZagAccountPopup: View {
                     }
                 }
                 Section {
-                    NavigationLink {
-                        ZagUpdatesPopup(updates: updateManager.updates)
-                    } label: {
+                    NavigationLink(value: AccountDestination.updates) {
                         HStack {
                             Text("App Updates")
                             Spacer()
@@ -408,15 +403,20 @@ struct ZagAccountPopup: View {
                     }
                 }
                 Section {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
+                    NavigationLink(value: AccountDestination.settings) {
                         Label {
                             Text("Zag Store Settings").foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "gearshape").foregroundStyle(themeTint)
                         }
                     }
+                }
+            }
+            .navigationDestination(for: AccountDestination.self) { destination in
+                switch destination {
+                case .profile: ZagAccountAvatarEditor()
+                case .updates: ZagUpdatesPopup(updates: updateManager.updates)
+                case .settings: SettingsView()
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -428,18 +428,13 @@ struct ZagAccountPopup: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            HStack(spacing: 9) {
-                if let accountIcon {
-                    Image(uiImage: accountIcon)
-                        .resizable().scaledToFill()
+            if accountPath.isEmpty {
+                HStack(spacing: 9) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
                         .frame(width: 27, height: 27)
                         .clipShape(Circle())
-                } else {
-                    Image(systemName: "app.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(themeTint)
-                        .frame(width: 27, height: 27)
-                }
                 Text("Zag Account")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.primary)
@@ -447,7 +442,8 @@ struct ZagAccountPopup: View {
             }
             .padding(.leading, 20)
             .padding(.top, 28)
-            .allowsHitTesting(false)
+                .allowsHitTesting(false)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
