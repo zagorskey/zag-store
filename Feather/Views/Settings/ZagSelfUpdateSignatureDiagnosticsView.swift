@@ -8,6 +8,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
         sortDescriptors: [NSSortDescriptor(key: "date", ascending: false)]
     ) private var signedApps: FetchedResults<Signed>
 
+    @State private var probeMessage: String?
     @State private var report: [(String, String)] = []
     @State private var provisioningReport: [(String, String)] = []
     @State private var installedGroups: [String] = []
@@ -43,6 +44,41 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             } header: {
                 Text("Self-Update Candidate")
+            }
+            Section("Keychain Continuity Probe") {
+                Text("Create a disposable marker before an update. After a separately confirmed update, use Read Marker to check whether it survived. This never reads existing app credentials.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Create or Read Marker") {
+                    do {
+                        let marker = try ZagSelfUpdateKeychainProbe.createIfMissing()
+                        probeMessage = "Marker available: \\(marker)"
+                    } catch {
+                        probeMessage = error.localizedDescription
+                    }
+                }
+                Button("Read Existing Marker") {
+                    do {
+                        if let marker = try ZagSelfUpdateKeychainProbe.read() {
+                            probeMessage = "Marker readable: \\(marker)"
+                        } else {
+                            probeMessage = "No marker found."
+                        }
+                    } catch {
+                        probeMessage = error.localizedDescription
+                    }
+                }
+                Button("Delete Test Marker", role: .destructive) {
+                    do {
+                        try ZagSelfUpdateKeychainProbe.remove()
+                        probeMessage = "Test marker removed."
+                    } catch {
+                        probeMessage = error.localizedDescription
+                    }
+                }
+                if let probeMessage {
+                    Text(probeMessage).font(.footnote).textSelection(.enabled)
+                }
             }
             if let errorMessage {
                 Section("Inspection Error") {
