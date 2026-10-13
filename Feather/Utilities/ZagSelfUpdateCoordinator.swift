@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import CryptoKit
 
 /// Self-update preparation and launch reconciliation.
@@ -102,7 +103,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
         guard release.ipaURL.scheme?.lowercased() == "https",
               release.sha256.count == 64,
-              release.sha256.unicodeScalars.allSatisfy({ CharacterSet.hexadecimalDigits.contains($0) }) else {
+              release.sha256.unicodeScalars.allSatisfy({ "0123456789abcdefABCDEF".unicodeScalars.contains($0) }) else {
             throw UpdateError.invalidRelease
         }
         if let minimum = release.minimumIOSVersion,
