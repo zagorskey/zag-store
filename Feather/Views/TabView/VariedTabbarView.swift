@@ -387,10 +387,10 @@ struct ZagAccountPopup: View {
                     }
                     HStack(spacing: 14) {
                         ZagSourcesTabIcon.label
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
+                            .foregroundStyle(themeTint)
+                            .frame(width: 13, height: 13)
                             .frame(width: 30, height: 30)
-                            .background(themeTint, in: Circle())
+                            .background(Color(uiColor: .tertiarySystemFill), in: Circle())
                             .frame(width: 54)
                         Text("Account Type")
                         Spacer()
