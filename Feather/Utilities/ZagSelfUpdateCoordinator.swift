@@ -303,8 +303,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         try validateProvisioningTeam(at: appURL)
     }
 
-    /// Compare embedded provisioning Team IDs before attempting replacement.
-    /// A missing or unreadable profile fails closed.
+    /// Fail closed if the replacement profile cannot authorize the same
+    /// application identity and keychain access as the running installation.
     private func validateProvisioningTeam(at appURL: URL) throws {
         let installedProfile = Bundle.main.bundleURL.appendingPathComponent("embedded.mobileprovision")
         let replacementProfile = appURL.appendingPathComponent("embedded.mobileprovision")
@@ -313,8 +313,47 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               let currentTeam = installed.TeamIdentifier.first,
               let nextTeam = replacement.TeamIdentifier.first,
               !currentTeam.isEmpty, currentTeam == nextTeam,
-              replacement.ExpirationDate > Date() else {
+              replacement.ExpirationDate > Date(),
+              let currentEntitlements = installed.Entitlements,
+              let nextEntitlements = replacement.Entitlements else {
             throw UpdateError.incompatibleSigningTeam
+        }
+
+        func string(_ entitlements: [String: AnyCodable], _ key: String) -> String? {
+            entitlements[key]?.value as? String
+        }
+        func strings(_ entitlements: [String: AnyCodable], _ key: String) -> [String]? {
+            entitlements[key]?.value as? [String]
+        }
+
+        let appIDKey = "application-identifier"
+        let teamKey = "com.apple.developer.team-identifier"
+        let expectedAppID = currentTeam + "." + currentBundleID
+
+        // A wildcard provisioning App ID is not sufficient evidence for
+        // safe self-replacement; require an explicit match on both profiles.
+        guard string(currentEntitlements, appIDKey) == expectedAppID,
+              string(nextEntitlements, appIDKey) == expectedAppID,
+              string(currentEntitlements, teamKey) == currentTeam,
+              string(nextEntitlements, teamKey) == currentTeam else {
+            throw UpdateError.incompatibleSigningTeam
+        }
+
+        // Keychain access groups affect persistence across an update.
+        // Require the replacement profile to retain every existing group.
+        if let existingGroups = strings(currentEntitlements, "keychain-access-groups") {
+            guard let replacementGroups = strings(nextEntitlements, "keychain-access-groups"),
+                  Set(existingGroups).isSubset(of: Set(replacementGroups)) else {
+                throw UpdateError.incompatibleSigningTeam
+            }
+        }
+
+        // Do not allow a replacement to change the provisioning mode.
+        if let existingDebug = currentEntitlements["get-task-allow"]?.value as? Bool {
+            guard let replacementDebug = nextEntitlements["get-task-allow"]?.value as? Bool,
+                  replacementDebug == existingDebug else {
+                throw UpdateError.incompatibleSigningTeam
+            }
         }
     }
 
