@@ -195,7 +195,7 @@ private final class ZagProfileBadgeCoordinator {
         guard visibleStates[key] != visible else { return }
         visibleStates[key] = visible
         label.isHidden = false
-        UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+        UIView.animate(withDuration: 0.34, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
             label.alpha = visible ? 1 : 0
         }
     }
