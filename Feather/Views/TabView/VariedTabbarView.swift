@@ -412,6 +412,22 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
+            .overlay(alignment: .topLeading) {
+                HStack(spacing: 9) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                    Text("Zag Account")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                .padding(.leading, 20)
+                .padding(.top, 28)
+                .allowsHitTesting(false)
+            }
             .navigationDestination(for: AccountDestination.self) { destination in
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
@@ -425,24 +441,6 @@ struct ZagAccountPopup: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Close")
                 }
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            if accountPath.isEmpty {
-                HStack(spacing: 9) {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                Text("Zag Account")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.primary)
-                Spacer()
-            }
-            .padding(.leading, 20)
-            .padding(.top, 28)
-                .allowsHitTesting(false)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
