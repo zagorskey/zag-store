@@ -487,6 +487,30 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
         result["Installed version/build"] = "\(currentVersion) (\(currentBuild))"
+        // An identical version/build cannot demonstrate that a self-update
+        // replaced the installed application.
+        if let version, let build, !version.isEmpty, !build.isEmpty {
+            let candidateVersion = version.split(separator: ".").compactMap { Int($0) }
+            let installedVersion = currentVersion.split(separator: ".").compactMap { Int($0) }
+            let validVersions = candidateVersion.count == version.split(separator: ".").count &&
+                installedVersion.count == currentVersion.split(separator: ".").count
+            if validVersions {
+                if candidateVersion.lexicographicallyPrecedes(installedVersion) {
+                    result["Newer candidate"] = "NO — older version"
+                } else if installedVersion.lexicographicallyPrecedes(candidateVersion) {
+                    result["Newer candidate"] = "YES — newer version"
+                } else if let candidateBuild = Int(build), let installedBuild = Int(currentBuild) {
+                    result["Newer candidate"] = candidateBuild > installedBuild
+                        ? "YES — newer build" : "NO — same or older build"
+                } else {
+                    result["Newer candidate"] = "UNVERIFIED — nonnumeric build"
+                }
+            } else {
+                result["Newer candidate"] = "UNVERIFIED — nonnumeric version"
+            }
+        } else {
+            result["Newer candidate"] = "NO — missing version or build"
+        }
         result["RPPairing configured"] = ZagRPPairingCore.shared.pairingFileExists ? "YES" : "NO"
         result["Installer idle"] = !ZagRPPairingCore.shared.isGate4Running ? "YES" : "NO"
         do {
