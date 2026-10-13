@@ -98,6 +98,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 // MARK: - View
 struct SettingsView: View {
 	var embeddedInAccountNavigation = false
+	@AppStorage("Feather.userTintColor") private var userTintColor = "#4395F8"
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
@@ -168,6 +169,7 @@ struct SettingsView: View {
 			.safeAreaInset(edge: .bottom) {
 				Color.clear.frame(height: 48)
 			}
+			.tint(Color(hex: userTintColor))
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.navigationDestination(isPresented: $_routeInstallation) {
 				InstallationView().zagSettingsDestinationAvatar()
@@ -226,6 +228,7 @@ struct SettingsView: View {
 						}
 						.accessibilityLabel("Settings Options")
 
+						if !embeddedInAccountNavigation {
 						Button {
 							if _advancedSettingsUnlocked {
 								withAnimation(.snappy) {
@@ -239,6 +242,7 @@ struct SettingsView: View {
 							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
 						}
 						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
+						}
 					}
 				}
 
@@ -249,9 +253,23 @@ struct SettingsView: View {
                         Image(systemName: "chevron.left.forwardslash.chevron.right")
                     }
                     .accessibilityLabel("GitHub Repository")
-                    ZagProfileToolbarButton()
-                        .tint(.primary)
-                        .padding(.trailing, -2)
+                    if embeddedInAccountNavigation {
+                        Button {
+                            if _advancedSettingsUnlocked {
+                                withAnimation(.snappy) { _advancedSettingsUnlocked = false }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } else {
+                                _presentAdvancedSettingsWarning()
+                            }
+                        } label: {
+                            Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
+                        }
+                        .accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
+                    } else {
+                        ZagProfileToolbarButton()
+                            .tint(.primary)
+                            .padding(.trailing, -2)
+                    }
                 }
 			}
 		.navigationTitle("Settings")
