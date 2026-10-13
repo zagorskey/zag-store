@@ -41,7 +41,7 @@ private struct ZagRepositoryShield: View {
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color(uiColor: UIColor(displayP3Red: 0, green: 0.35, blue: 0.08, alpha: 1)))
                     .frame(width: 15, height: 15)
                     .offset(y: -1)
             }
@@ -956,7 +956,7 @@ struct SourceAppsView: View {
 								Rectangle()
 									.fill(Color(uiColor: .separator))
 									.frame(height: ZagListLayout.separatorHeight)
-									.padding(.leading, ZagListLayout.separatorLeadingInset)
+									
 							}
 							.listRowSeparator(.hidden)
 							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
