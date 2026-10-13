@@ -361,7 +361,7 @@ struct ZagAccountPopup: View {
     @State private var showingUpdates = false
 
     private enum AccountDestination: Hashable {
-        case profile, updates, settings
+        case profile, settings
     }
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
