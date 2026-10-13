@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Read-only inspection of the entitlement blob inside a thin, 64-bit Mach-O.
 /// This is NOT cryptographic code-signature verification. Unsupported binaries
@@ -99,4 +100,95 @@ enum ZagMachOSignatureInspector {
         guard let result else { throw InspectionError.missingEntitlements }
         return result
     }
+    /// Diagnostic integrity check for thin arm64 CodeDirectory SHA-256 code pages.
+    /// This does NOT authenticate the CodeDirectory, CMS, certificates, special
+    /// slots, nested code or resource seal, and never authorizes installation.
+    static func inspectCodePageHashes(at executable: URL) throws -> String {
+        let data = try Data(contentsOf: executable, options: .mappedIfSafe)
+        func le32(_ p: Int) throws -> Int {
+            guard p >= 0, p <= data.count - 4 else { throw InspectionError.malformedSignature }
+            return Int(data[p]) | (Int(data[p+1]) << 8) |
+                (Int(data[p+2]) << 16) | (Int(data[p+3]) << 24)
+        }
+        func be32(_ p: Int) throws -> Int {
+            guard p >= 0, p <= data.count - 4 else { throw InspectionError.malformedSignature }
+            return (Int(data[p]) << 24) | (Int(data[p+1]) << 16) |
+                (Int(data[p+2]) << 8) | Int(data[p+3])
+        }
+        guard try le32(0) == 0xfeedfacf else { throw InspectionError.unsupportedFormat }
+        let ncmds = try le32(16), sizeofcmds = try le32(20)
+        guard ncmds <= 4096, sizeofcmds <= data.count - 32 else {
+            throw InspectionError.malformedSignature
+        }
+        let end = 32 + sizeofcmds
+        var cursor = 32
+        var signature: (Int, Int)?
+        for _ in 0..<ncmds {
+            guard cursor <= end - 8 else { throw InspectionError.malformedSignature }
+            let cmd = try le32(cursor), size = try le32(cursor + 4)
+            guard size >= 8, size <= end - cursor else { throw InspectionError.malformedSignature }
+            if cmd == 0x1d {
+                guard size >= 16, signature == nil else { throw InspectionError.malformedSignature }
+                signature = (try le32(cursor + 8), try le32(cursor + 12))
+            }
+            cursor += size
+        }
+        guard let (offset, length) = signature, length >= 12,
+              offset >= 0, offset <= data.count - length,
+              try be32(offset) == 0xfade0cc0 else {
+            throw InspectionError.malformedSignature
+        }
+        let total = try be32(offset + 4), count = try be32(offset + 8)
+        guard total >= 12, total <= length, count <= 1024,
+              count <= (total - 12) / 8 else { throw InspectionError.malformedSignature }
+        var cd: (Int, Int)?
+        for i in 0..<count {
+            let entry = offset + 12 + i * 8
+            let type = try be32(entry), relative = try be32(entry + 4)
+            guard relative >= 12, relative <= total - 8 else {
+                throw InspectionError.malformedSignature
+            }
+            let blob = offset + relative, blobLength = try be32(blob + 4)
+            guard blobLength >= 8, blobLength <= total - relative else {
+                throw InspectionError.malformedSignature
+            }
+            if type == 0 {
+                guard cd == nil, try be32(blob) == 0xfade0c02 else {
+                    throw InspectionError.malformedSignature
+                }
+                cd = (blob, blobLength)
+            }
+        }
+        guard let (base, size) = cd, size >= 44 else {
+            throw InspectionError.malformedSignature
+        }
+        let hashOffset = try be32(base + 16)
+        let specialSlots = try be32(base + 24)
+        let codeSlots = try be32(base + 28)
+        let codeLimit = try be32(base + 32)
+        let hashSize = Int(data[base + 36])
+        let hashType = data[base + 37]
+        let pageExponent = Int(data[base + 39])
+        guard hashType == 2, hashSize == 32, pageExponent == 14,
+              codeSlots > 0, codeSlots <= 100000,
+              specialSlots <= 1024,
+              hashOffset >= specialSlots * hashSize,
+              hashOffset <= size,
+              codeSlots <= (size - hashOffset) / hashSize,
+              codeLimit <= offset,
+              (codeLimit + 16383) / 16384 == codeSlots else {
+            throw InspectionError.unsupportedFormat
+        }
+        for i in 0..<codeSlots {
+            let start = i * 16384
+            let finish = min(start + 16384, codeLimit)
+            let digest = SHA256.hash(data: data[start..<finish])
+            let slot = base + hashOffset + i * hashSize
+            guard Data(digest) == data.subdata(in: slot..<(slot + hashSize)) else {
+                return "FAIL — code page \\(i) hash mismatch"
+            }
+        }
+        return "PASS — \\(codeSlots) SHA-256 code pages (integrity only; unauthenticated)"
+    }
+
 }
