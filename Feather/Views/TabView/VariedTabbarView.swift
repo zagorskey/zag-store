@@ -231,7 +231,7 @@ private final class ZagProfileBadgeCoordinator {
                 let count = chosen.1.count
                 label.text = count.description
                 label.isHidden = count == 0 || chosen.1.hidden
-                let width = max(23.5, CGFloat(count.description.count * 8 + 8.5))
+                let width = max(23.5, CGFloat(count.description.count * 8) + 8.5)
                 label.frame = CGRect(x: chosen.2.maxX - width + 7,
                                      y: chosen.2.minY - 7, width: width, height: 18)
                 window.bringSubviewToFront(label)
