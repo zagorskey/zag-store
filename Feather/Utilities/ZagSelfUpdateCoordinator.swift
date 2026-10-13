@@ -397,6 +397,26 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         return report
     }
 
+    /// Detailed read-only keychain diagnostics for the currently installed
+    /// executable and a signed candidate. Never used to authorize installation.
+    func inspectKeychainAccessGroups(_ signed: Signed) throws -> (installed: [String], candidate: [String]) {
+        guard let appURL = Storage.shared.getAppDirectory(for: signed),
+              let currentExecutable = Bundle.main.executableURL,
+              let executableName = Bundle(url: appURL)?.object(
+                forInfoDictionaryKey: "CFBundleExecutable"
+              ) as? String else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let installed = try ZagMachOSignatureInspector.entitlements(at: currentExecutable)
+        let replacement = try ZagMachOSignatureInspector.entitlements(
+            at: appURL.appendingPathComponent(executableName)
+        )
+        return (
+            installed["keychain-access-groups"] as? [String] ?? [],
+            replacement["keychain-access-groups"] as? [String] ?? []
+        )
+    }
+
     /// Controlled test entry point. The caller must explicitly confirm the
     /// self-replacement experiment and supply a signed IPA already imported
     /// into Zag Store. This does not silently update the running application.
