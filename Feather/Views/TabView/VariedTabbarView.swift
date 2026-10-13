@@ -428,7 +428,8 @@ struct ZagAccountPopup: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            HStack(spacing: 9) {
+            if accountPath.isEmpty {
+                HStack(spacing: 9) {
                 Image("ZagAccountIconDark")
                     .resizable()
                     .scaledToFill()
@@ -441,7 +442,8 @@ struct ZagAccountPopup: View {
             }
             .padding(.leading, 20)
             .padding(.top, 28)
-            .allowsHitTesting(false)
+                .allowsHitTesting(false)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
