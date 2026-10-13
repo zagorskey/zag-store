@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CryptoKit
+import CoreData
 
 /// Self-update preparation and launch reconciliation.
 /// Installation is intentionally not invoked until in-place RPPairing replacement
@@ -32,6 +33,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case insecureDownload
         case checksumMismatch
         case noUpdateAvailable
+        case signedIdentityMismatch
+        case pairingUnavailable
+        case installationAlreadyRunning
 
         var errorDescription: String? {
             switch self {
@@ -40,6 +44,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             case .insecureDownload: return "Zag Store updates require HTTPS downloads."
             case .checksumMismatch: return "The downloaded IPA failed its SHA-256 verification."
             case .noUpdateAvailable: return "This Zag Store version is already up to date."
+            case .signedIdentityMismatch: return "The signed update does not match the current Zag Store identity and version."
+            case .pairingUnavailable: return "RPPairing must be configured before installing this update."
+            case .installationAlreadyRunning: return "Another RPPairing installation is already running."
             }
         }
     }
@@ -162,6 +169,52 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let data = try JSONEncoder().encode(pending)
         UserDefaults.standard.set(data, forKey: pendingKey)
         pendingInstallation = pending
+    }
+
+    /// Controlled test entry point. The caller must explicitly confirm the
+    /// self-replacement experiment and supply a signed IPA already imported
+    /// into Zag Store. This does not silently update the running application.
+    ///
+    /// The archive is prepared before recording the handoff so an archive
+    /// failure never leaves a false pending installation.
+    func installVerifiedSignedUpdate(
+        _ signed: Signed,
+        release: Release,
+        userConfirmedSelfReplacement: Bool
+    ) async throws {
+        guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
+        guard release.bundleIdentifier == currentBundleID,
+              signed.identifier == currentBundleID,
+              signed.version == release.version else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let core = ZagRPPairingCore.shared
+        guard core.pairingFileExists else { throw UpdateError.pairingUnavailable }
+        guard !core.isGate4Running else { throw UpdateError.installationAlreadyRunning }
+
+        let status = InstallerStatusViewModel(isIdevice: false)
+        let archive = ArchiveHandler(app: signed, viewModel: status)
+        try await archive.move()
+        let packageURL = try await archive.archive()
+
+        try recordInstallationHandoff(for: release)
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                do {
+                    try core.installGate4IPA(at: packageURL, deviceIP: "10.7.0.1") { result in
+                        continuation.resume(with: result)
+                    }
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        } catch {
+            // Only clear the pending handoff for a confirmed failure.
+            // If the process was terminated during replacement, the
+            // persisted record is reconciled on the next launch.
+            clearFailedHandoff()
+            throw error
+        }
     }
 
     func clearFailedHandoff() {
