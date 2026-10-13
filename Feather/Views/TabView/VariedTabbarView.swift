@@ -363,7 +363,7 @@ struct ZagAccountPopup: View {
     // The dedicated dark artwork is already bundled as ZagProfileDark.
     // Never fall back to the light app icon in this account header.
     private var accountIcon: UIImage? {
-        UIImage(named: "ZagProfileDark")
+        UIImage(named: "ZagAccountIconDark")
     }
 
     var body: some View {
