@@ -231,7 +231,7 @@ private final class ZagProfileBadgeCoordinator {
                 let count = chosen.1.count
                 label.text = count.description
                 label.isHidden = count == 0 || chosen.1.hidden
-                let width = max(24, CGFloat(count.description.count * 8 + 8))
+                let width = max(22, CGFloat(count.description.count * 8 + 8))
                 label.frame = CGRect(x: chosen.2.maxX - width + 9,
                                      y: chosen.2.minY - 11, width: width, height: 22)
                 window.bringSubviewToFront(label)
@@ -417,8 +417,8 @@ struct ZagAccountPopup: View {
                                 Text(updateManager.updateCount.description)
                                     .font(.system(size: 20, weight: .regular))
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 7)
-                                    .frame(minWidth: 28, minHeight: 24)
+                                    .padding(.horizontal, 5)
+                                    .frame(minWidth: 26, minHeight: 24)
                                     .background(Color(red: 1, green: 66.0 / 255.0, blue: 68.0 / 255.0), in: Capsule())
                             }
                         }
