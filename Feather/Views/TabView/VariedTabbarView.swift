@@ -220,7 +220,7 @@ private final class ZagProfileBadgeCoordinator {
                     label = UILabel()
                     label.textAlignment = .center
                     label.textColor = .white
-                    label.font = .systemFont(ofSize: 12, weight: .regular)
+                    label.font = .systemFont(ofSize: 13, weight: .regular)
                     label.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
                     label.layer.cornerRadius = 9
                     label.layer.masksToBounds = true
