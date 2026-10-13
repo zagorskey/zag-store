@@ -111,6 +111,40 @@ private struct ZagRepositoryScrollObserver: UIViewRepresentable {
     }
 }
 
+private struct ZagRepositoryFeaturedPill: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rotating = false
+
+    private let spectrum: [Color] = [
+        .cyan, .blue, .purple, .pink, .orange, .yellow, .green, .cyan
+    ]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "sparkles")
+            Text("Zag Featured")
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(
+                AngularGradient(colors: spectrum, center: .center, angle: .degrees(rotating ? 360 : 0)),
+                lineWidth: 1.6
+            )
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+                rotating = true
+            }
+        }
+        .accessibilityLabel("Zag Featured repository")
+    }
+}
+
 // MARK: - System Dictation Lifecycle Bridge
 
 private extension Notification.Name {
@@ -517,6 +551,7 @@ struct SourceAppsView: View {
 	@State var hasLoadedOnce = false
 	@State private var _searchText = ""
 	@State private var _repositoryScrolled = false
+	@State private var _repositoryManifestBytes: Int64?
 	@State private var _dictationAvailable = false
 	@State private var _dictationStatus = "Dictation unavailable"
 	@FocusState private var _searchFieldFocused: Bool
@@ -619,6 +654,35 @@ struct SourceAppsView: View {
 			: Color(hex: "#F8F8FA")
 	}
 
+	// Curated statuses must be explicitly assigned; never infer trust from HTTPS or load success.
+	// Add approved canonical manifest URLs here only after editorial review.
+	private var _zagFeaturedManifestURLs: Set<String> { [] }
+
+	private var _isZagFeatured: Bool {
+		guard let url = object.first?.sourceURL else { return false }
+		return _zagFeaturedManifestURLs.contains(url.absoluteString)
+	}
+
+	private func _loadRepositoryManifestSize() {
+		guard let url = object.first?.sourceURL,
+			  url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http"
+		else { return }
+		if let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)) {
+			_repositoryManifestBytes = Int64(cached.data.count)
+			return
+		}
+		var request = URLRequest(url: url)
+		request.httpMethod = "HEAD"
+		request.timeoutInterval = 10
+		URLSession.shared.dataTask(with: request) { _, response, _ in
+			let length = response?.expectedContentLength ?? -1
+			guard length > 0 else { return }
+			DispatchQueue.main.async {
+				_repositoryManifestBytes = length
+			}
+		}.resume()
+	}
+
 	private var _repositorySummary: some View {
 		VStack(alignment: .leading, spacing: 13) {
 			HStack(spacing: 8) {
@@ -632,17 +696,18 @@ struct SourceAppsView: View {
 				.padding(.vertical, 8)
 				.background(_repositoryPillColor, in: Capsule())
 
-				if let host = object.first?.sourceURL?.host, !host.isEmpty {
+				if let bytes = _repositoryManifestBytes {
 					HStack(spacing: 6) {
-						Image(systemName: "server.rack")
-						Text(host)
-								.lineLimit(1)
-								.truncationMode(.middle)
+						Image(systemName: "doc.zipper")
+						Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
 					}
 					.foregroundStyle(.secondary)
 					.padding(.horizontal, 11)
 					.padding(.vertical, 8)
 					.background(_repositoryPillColor, in: Capsule())
+				}
+				if _isZagFeatured {
+					ZagRepositoryFeaturedPill()
 				}
 			}
 			.font(.system(size: 12, weight: .semibold))
@@ -813,6 +878,7 @@ struct SourceAppsView: View {
             }
         }))
 		.onAppear {
+			_loadRepositoryManifestSize()
 			_probeSystemDictation()
 
 			if !hasLoadedOnce, _requestedSourcesAreAvailable {
