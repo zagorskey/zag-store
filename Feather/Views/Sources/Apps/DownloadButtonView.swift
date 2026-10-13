@@ -33,6 +33,28 @@ struct DownloadButtonView: View {
 	@State private var actionClaimed = false
 	@State private var isPALInfoPresented = false
 
+	// A successful repository download remains in history even after its
+	// Imported, Signed, and Installed records are deleted.
+	@State private var wasDownloadedBefore = false
+	private let downloadHistoryKey = "zagStore.previouslyDownloadedBundleIDs"
+
+	private func _refreshDownloadHistory() {
+		guard let id = app.id, !id.isEmpty else { wasDownloadedBefore = false; return }
+		let history = UserDefaults.standard.stringArray(forKey: downloadHistoryKey) ?? []
+		let legacyOrigins = UserDefaults.standard.dictionary(forKey: "zagStore.repositoryOrigins") ?? [:]
+		wasDownloadedBefore = history.contains(id) || legacyOrigins[id] != nil
+	}
+
+	private func _rememberSuccessfulDownload() {
+		guard let id = app.id, !id.isEmpty else { return }
+		var history = UserDefaults.standard.stringArray(forKey: downloadHistoryKey) ?? []
+		if !history.contains(id) {
+			history.append(id)
+			UserDefaults.standard.set(history, forKey: downloadHistoryKey)
+		}
+		wasDownloadedBefore = true
+	}
+
 	private var pillBackground: Color {
 		colorScheme == .dark
 			? Color(hex: "#1C1C1E")
@@ -138,6 +160,19 @@ struct DownloadButtonView: View {
 					}
 					.disabled(actionClaimed)
 					.accessibilityLabel(Text("Install \(app.currentName)"))
+				} else if wasDownloadedBefore {
+					Button {
+						_performAction { _startGetAndInstall() }
+					} label: {
+						Image(systemName: "icloud.and.arrow.down")
+							.font(.system(size: 25, weight: .regular))
+							.foregroundStyle(pillForeground)
+							.frame(width: 88, height: 34)
+							.contentShape(Rectangle())
+					}
+					.buttonStyle(.plain)
+					.disabled(actionClaimed)
+					.accessibilityLabel(Text("Download again: \(app.currentName)"))
 				} else {
 					ZagActionPill(title: title) {
 						_performAction { _startGetAndInstall() }
@@ -160,6 +195,7 @@ struct DownloadButtonView: View {
 		}
 		.frame(width: 88, height: 84, alignment: .center)
 		.onAppear {
+			_refreshDownloadHistory()
 			setupObserver()
 			_restoreRetryIfAvailable()
 			_restoreSigningRetryIfAvailable()
@@ -670,6 +706,7 @@ struct DownloadButtonView: View {
 							_failTransaction(.localized("The downloaded app was imported, but Zag Store could not locate it for signing."))
 							return
 						}
+						_rememberSuccessfulDownload()
 						retryImportedUUID = uuid
 						UserDefaults.standard.set(uuid, forKey: _signingRetryStorageKey)
 						_signAndInstall(imported, certificate: certificate)
