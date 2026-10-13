@@ -82,9 +82,9 @@ struct SourcesCellView: View {
 			let label: String
 			switch daysAgo {
 			case 0: label = "Today"
-			case 1: label = "Yesterday"
-			case 2: label = "Two Days Ago"
-			default: label = "Three Days Ago"
+			case 1: label = "1 Day Ago"
+			case 2: label = "2 Days Ago"
+			default: label = "3 Days Ago"
 			}
 			if looksDateOnly {
 				return "Updated: \(label)"
