@@ -658,6 +658,7 @@ struct SourceAppsView: View {
 				UIPasteboard.general.string = _repositoryURLs.map(\.absoluteString).joined(separator: "\n")
 			} label: {
 				Image(systemName: "doc.on.doc")
+					.font(.system(size: 11, weight: .medium))
 			}
 			.buttonStyle(.plain)
 			.modifier(ZagRepositoryIconPill())
@@ -665,6 +666,7 @@ struct SourceAppsView: View {
 			.disabled(_repositoryURLs.isEmpty)
 			ShareLink(item: _repositoryURLs.map(\.absoluteString).joined(separator: "\n")) {
 				Image(systemName: "square.and.arrow.up")
+					.font(.system(size: 11, weight: .medium))
 			}
 			.buttonStyle(.plain)
 			.modifier(ZagRepositoryIconPill())
@@ -851,18 +853,25 @@ struct SourceAppsView: View {
 
 	private var _repositoryDetailsLink: some View {
 		Button { _showRepositoryDetails = true } label: {
-			HStack {
+			HStack(spacing: 12) {
+				Image(systemName: "info.circle")
+					.font(.system(size: 19, weight: .regular))
+					.foregroundStyle(.tint)
+					.frame(width: 24)
 				Text("View Detailed Info")
 					.foregroundStyle(.primary)
-				Spacer()
+				Spacer(minLength: 8)
 				Image(systemName: "chevron.right")
-					.foregroundStyle(.secondary)
+					.font(.system(size: 13, weight: .semibold))
+					.foregroundStyle(.tertiary)
 			}
-			.font(.subheadline)
-			.padding(16)
-			.frame(maxWidth: .infinity)
+			.font(.body)
+			.padding(.horizontal, 16)
+			.padding(.vertical, 13)
+			.frame(maxWidth: .infinity, alignment: .leading)
 			.background(_repositoryCardColor, in: RoundedRectangle(cornerRadius: 16))
 			.padding(.horizontal, ZagListLayout.horizontalInset)
+			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
 	}
@@ -950,13 +959,14 @@ struct SourceAppsView: View {
 							.listRowSeparator(.hidden)
 							.listRowBackground(Color.clear)
 					}
-					ForEach(repositoryEntries, id: \.id) { entry in
+					ForEach(Array(repositoryEntries.enumerated()), id: \.element.id) { index, entry in
 						SourceAppsCellView(source: entry.source, app: entry.app, showsRepositoryDetails: object.count == 1)
 							.overlay(alignment: .bottom) {
-								Rectangle()
-									.fill(Color(uiColor: .separator))
-									.frame(height: ZagListLayout.separatorHeight)
-									
+								if index < repositoryEntries.count - 1 {
+									Rectangle()
+										.fill(Color(uiColor: .separator))
+										.frame(height: ZagListLayout.separatorHeight)
+								}
 							}
 							.listRowSeparator(.hidden)
 							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
