@@ -103,7 +103,7 @@ struct SourceAppsCellView: View {
 					GeometryReader { geometry in
 						Color.clear
 							.onAppear { descriptionWidth = geometry.size.width }
-							.onChange(of: geometry.size.width) { _, width in descriptionWidth = width }
+							.onChange(of: geometry.size.width) { width in descriptionWidth = width }
 					}
 			}
 			} else if !showsRepositoryDetails, _storeCellAppearance != 0, let desc = app.localizedDescription {
