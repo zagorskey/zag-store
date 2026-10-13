@@ -470,6 +470,48 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         ]
     }
 
+    /// Conservative, read-only self-update preflight. A passing structural
+    /// check is not an installation authorization or signature verification.
+    func inspectSelfUpdatePreflight(_ signed: Signed) -> [String: String] {
+        var result: [String: String] = [:]
+        let bundleID = currentBundleID
+        guard let appURL = Storage.shared.getAppDirectory(for: signed),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")) else {
+            return ["Candidate bundle": "FAIL: missing signed app or Info.plist"]
+        }
+        let identifier = info["CFBundleIdentifier"] as? String
+        let version = info["CFBundleShortVersionString"] as? String
+        let build = info["CFBundleVersion"] as? String
+        result["Bundle identifier"] = identifier == bundleID && signed.identifier == bundleID ? "PASS" : "FAIL"
+        result["Candidate version/build"] = (version?.isEmpty == false && build?.isEmpty == false) ? "\\(version ?? "") (\\(build ?? ""))" : "FAIL"
+        let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        result["Installed version/build"] = "\\(currentVersion) (\\(currentBuild))"
+        result["RPPairing configured"] = ZagRPPairingCore.shared.pairingFileExists ? "YES" : "NO"
+        result["Installer idle"] = !ZagRPPairingCore.shared.isGate4Running ? "YES" : "NO"
+        do {
+            let entitlements = try inspectExecutableEntitlements(signed)
+            for key in ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow"] {
+                result["Executable: " + key] = entitlements[key] ?? "MISSING"
+            }
+            result["Executable: keychain-access-groups"] = entitlements["keychain-access-groups"] ?? "MISSING"
+            let profiles = try inspectKeychainProvisioning(signed)
+            result["Provisioning team"] = profiles["Same provisioning team"] ?? "UNKNOWN"
+            result["Installed entitlement/profile"] = profiles["Installed entitlement/profile"] ?? "UNKNOWN"
+            result["Candidate entitlement/profile"] = profiles["Candidate entitlement/profile"] ?? "UNKNOWN"
+        } catch {
+            result["Signing inspection"] = "FAIL: " + error.localizedDescription
+        }
+        do {
+            result["Keychain marker"] = try ZagSelfUpdateKeychainProbe.read() == nil ? "NOT CREATED" : "READABLE"
+        } catch {
+            result["Keychain marker"] = "FAIL: " + error.localizedDescription
+        }
+        result["Cryptographic signature verification"] = "NOT IMPLEMENTED"
+        result["Installation authorization"] = "BLOCKED — diagnostic only"
+        return result
+    }
+
     /// Controlled test entry point. The caller must explicitly confirm the
     /// self-replacement experiment and supply a signed IPA already imported
     /// into Zag Store. This does not silently update the running application.
