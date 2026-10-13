@@ -360,7 +360,7 @@ struct ZagAccountPopup: View {
     @State private var accountPath: [AccountDestination] = []
 
     private enum AccountDestination: Hashable {
-        case profile, updates, notifications, settings
+        case profile, updates, certificates, installation, signing, notifications, settings
     }
 
     private var themeTint: Color { Color(hex: themeColorHex) }
@@ -401,6 +401,15 @@ struct ZagAccountPopup: View {
                             }
                         }
                     }
+                    NavigationLink(value: AccountDestination.certificates) {
+                        Text("Certificates")
+                    }
+                    NavigationLink(value: AccountDestination.installation) {
+                        Text("Installation")
+                    }
+                    NavigationLink(value: AccountDestination.signing) {
+                        Text("Signing")
+                    }
                     NavigationLink(value: AccountDestination.notifications) {
                         Text("Notifications")
                     }
@@ -419,6 +428,9 @@ struct ZagAccountPopup: View {
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
                 case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
+                case .certificates: CertificatesView()
+                case .installation: InstallationView()
+                case .signing: ConfigurationView()
                 case .notifications: ZagAccountNotificationsView()
                 case .settings: SettingsView(embeddedInAccountNavigation: true)
                 }
