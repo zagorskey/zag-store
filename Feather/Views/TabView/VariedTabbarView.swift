@@ -309,6 +309,7 @@ struct ZagProfileToolbarButton: View {
 
 struct ZagGlobalProfileAvatar: View {
     let revision: UUID
+    var animatedBorder: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var borderRotation = false
@@ -333,14 +334,16 @@ struct ZagGlobalProfileAvatar: View {
         .id(revision)
         .clipShape(Circle())
         .overlay {
-            Circle().strokeBorder(
-                AngularGradient(colors: borderSpectrum, center: .center,
-                                angle: .degrees(borderRotation ? 360 : 0)),
-                lineWidth: 1.1
-            )
+            if animatedBorder {
+                Circle().strokeBorder(
+                    AngularGradient(colors: borderSpectrum, center: .center,
+                                    angle: .degrees(borderRotation ? 360 : 0)),
+                    lineWidth: 1.1
+                )
+            }
         }
         .onAppear {
-            guard !reduceMotion else { return }
+            guard animatedBorder && !reduceMotion else { return }
             withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
                 borderRotation = true
             }
@@ -357,11 +360,8 @@ struct ZagAccountPopup: View {
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
 
-    // Use the supplied appearance-specific account icons when present in Assets.
-    // Until they are added, fall back to the installed app's actual icon.
     private var accountIcon: UIImage? {
-        let name = colorScheme == .dark ? "ZagAccountIconDark" : "ZagAccountIconLight"
-        if let image = UIImage(named: name) { return image }
+        if let image = UIImage(named: "ZagAccountIconDark") { return image }
         guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
               let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
               let names = primary["CFBundleIconFiles"] as? [String] else { return nil }
@@ -376,7 +376,7 @@ struct ZagAccountPopup: View {
                         ZagAccountAvatarEditor()
                     } label: {
                         HStack(spacing: 14) {
-                            ZagGlobalProfileAvatar(revision: avatarRevision)
+                            ZagGlobalProfileAvatar(revision: avatarRevision, animatedBorder: true)
                                 .frame(width: 54, height: 54)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Petar Zagorski")
@@ -438,21 +438,19 @@ struct ZagAccountPopup: View {
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.primary)
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                            .background(.regularMaterial, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close")
+
                 }
                 .padding(.horizontal, 20)
-                .frame(height: 92, alignment: .top)
-                .padding(.top, 12)
+                .frame(height: 48)
+                .padding(.top, 6)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
