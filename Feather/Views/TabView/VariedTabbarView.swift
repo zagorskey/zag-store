@@ -360,10 +360,10 @@ struct ZagAccountPopup: View {
     @State private var accountPath: [AccountDestination] = []
 
     private enum AccountDestination: Hashable {
-        case profile, updates, settings
+        case profile, updates, notifications, settings
     }
 
-    private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
+    private var themeTint: Color { Color(hex: themeColorHex) }
 
     var body: some View {
         NavigationStack(path: $accountPath) {
@@ -401,11 +401,14 @@ struct ZagAccountPopup: View {
                             }
                         }
                     }
+                    NavigationLink(value: AccountDestination.notifications) {
+                        Text("Notifications")
+                    }
                 }
                 Section {
                     NavigationLink(value: AccountDestination.settings) {
                         Label {
-                            Text("Zag Store Settings").foregroundStyle(.primary)
+                            Text("Zag Store Settings").foregroundStyle(themeTint)
                         } icon: {
                             Image(systemName: "gearshape").foregroundStyle(themeTint)
                         }
@@ -416,6 +419,7 @@ struct ZagAccountPopup: View {
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
                 case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
+                case .notifications: ZagAccountNotificationsView()
                 case .settings: SettingsView(embeddedInAccountNavigation: true)
                 }
             }
@@ -448,6 +452,31 @@ struct ZagAccountPopup: View {
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
         }
+    }
+}
+
+private struct ZagAccountNotificationsView: View {
+    @AppStorage(UpdateManager.updateNotificationsEnabledKey) private var updateNotificationsEnabled = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Update Notifications", isOn: $updateNotificationsEnabled)
+                    .onChange(of: updateNotificationsEnabled) { enabled in
+                        guard enabled else { return }
+                        Task {
+                            let granted = await UpdateManager.shared.requestUpdateNotificationPermission()
+                            if !granted {
+                                await MainActor.run { updateNotificationsEnabled = false }
+                            }
+                        }
+                    }
+            } footer: {
+                Text("Get notified when Zag Store discovers new app versions.")
+            }
+        }
+        .navigationTitle("Notifications")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
