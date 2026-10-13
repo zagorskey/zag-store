@@ -900,7 +900,7 @@ struct SourceAppsView: View {
 							Text(object[0].name ?? "Repository")
 								.font(.system(size: 22, weight: .bold))
 								.foregroundStyle(.primary)
-								.padding(.horizontal, ZagListLayout.horizontalInset)
+								.padding(.horizontal, 0)
 						} else {
 							ZagSectionHeader(title: "Your Sources", count: sources.reduce(0) { $0 + $1.apps.count })
 						}
@@ -926,8 +926,7 @@ struct SourceAppsView: View {
 							.listRowBackground(Color.clear)
 					}
 					ForEach(repositoryEntries, id: \.id) { entry in
-						SourceAppsCellView(source: entry.source, app: entry.app)
-							.frame(height: ZagListLayout.compactRowHeight)
+						SourceAppsCellView(source: entry.source, app: entry.app, showsRepositoryDetails: object.count == 1)
 							.zagCompactRowSeparator()
 							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
 							.listRowBackground(Color.clear)
