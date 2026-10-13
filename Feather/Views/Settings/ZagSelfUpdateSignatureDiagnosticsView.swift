@@ -9,6 +9,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     ) private var signedApps: FetchedResults<Signed>
 
     @State private var report: [(String, String)] = []
+    @State private var provisioningReport: [(String, String)] = []
     @State private var installedGroups: [String] = []
     @State private var candidateGroups: [String] = []
     @State private var errorMessage: String?
@@ -49,6 +50,14 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             }
             if !report.isEmpty {
+                Section("Provisioning Profile Comparison") {
+                    ForEach(provisioningReport, id: \.0) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.0).font(.subheadline)
+                            Text(item.1).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                    }
+                }
                 Section("Installed Keychain Groups") {
                     if installedGroups.isEmpty { Text("None reported") }
                     ForEach(installedGroups, id: \.self) { Text($0).font(.footnote).textSelection(.enabled) }
@@ -71,6 +80,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
 
     private func inspect() {
         report = []
+        provisioningReport = []
         installedGroups = []
         candidateGroups = []
         errorMessage = nil
@@ -84,6 +94,8 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
             let groups = try ZagSelfUpdateCoordinator.shared.inspectKeychainAccessGroups(candidate)
             installedGroups = groups.installed
             candidateGroups = groups.candidate
+            let profiles = try ZagSelfUpdateCoordinator.shared.inspectKeychainProvisioning(candidate)
+            provisioningReport = profiles.keys.sorted().map { ($0, profiles[$0] ?? "") }
         } catch {
             errorMessage = error.localizedDescription
         }
