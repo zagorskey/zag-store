@@ -99,7 +99,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
 	var embeddedInAccountNavigation = false
-	@AppStorage("Feather.userTintColor") private var userTintColor = "#4395F8"
+	@AppStorage("Feather.userTintColor") private var userTintColor = "#0090FF"
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
