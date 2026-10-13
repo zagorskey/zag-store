@@ -400,7 +400,7 @@ struct ZagAccountPopup: View {
                             Spacer()
                             if updateManager.updateCount > 0 {
                                 Text(updateManager.updateCount.description)
-                                    .font(.system(size: 17, weight: .regular))
+                                    .font(.system(size: 20, weight: .regular))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 7)
                                     .frame(minWidth: 28, minHeight: 24)
@@ -421,28 +421,6 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .overlay(alignment: .topLeading) {
-                HStack(spacing: 9) {
-                    Group {
-                        if let accountIcon {
-                            Image(uiImage: accountIcon).resizable().scaledToFill()
-                        } else {
-                            Image(systemName: "app.fill")
-                                .resizable().scaledToFit()
-                                .foregroundStyle(themeTint)
-                        }
-                    }
-                    .frame(width: 27, height: 27)
-                    .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Spacer()
-
-                }
-                .padding(.leading, 20)
-                .padding(.top, 16)
-            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -450,6 +428,28 @@ struct ZagAccountPopup: View {
                         .accessibilityLabel("Close")
                 }
             }
+        }
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 9) {
+                if let accountIcon {
+                    Image(uiImage: accountIcon)
+                        .resizable().scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: "app.fill")
+                        .font(.system(size: 24))
+                        .foregroundStyle(themeTint)
+                        .frame(width: 27, height: 27)
+                }
+                Text("Zag Account")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+            }
+            .padding(.leading, 20)
+            .padding(.top, 17)
+            .allowsHitTesting(false)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
