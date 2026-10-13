@@ -125,8 +125,12 @@ private struct ZagRepositoryFeaturedPill: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            ZagSourcesTabIcon.label
+            Image(uiImage: ZagSourcesTabIcon.image)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
                 .frame(width: 13, height: 13)
+                .accessibilityHidden(true)
             Text("Featured")
         }
         .font(.system(size: 12, weight: .semibold))
