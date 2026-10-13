@@ -35,14 +35,14 @@ private struct ZagRepositoryShield: View {
     var body: some View {
         Image(systemName: "shield.fill")
             .font(.system(size: 24, weight: .regular))
-            .foregroundStyle(.green)
+            .foregroundStyle(Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0, alpha: 1)))
             .overlay {
                 Image(uiImage: ZagSourcesTabIcon.image)
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
                     .foregroundStyle(.white)
-                    .frame(width: 10, height: 10)
+                    .frame(width: 15, height: 15)
                     .offset(y: -1)
             }
             .frame(width: 25, height: 27)
@@ -918,7 +918,7 @@ struct SourceAppsView: View {
 				if _searchText.isEmpty {
 					Group {
 						if object.count == 1 {
-							HStack(alignment: .center, spacing: 8) {
+							HStack(alignment: .center, spacing: 6) {
 								ZagRepositoryShield()
 								Text(object[0].name ?? "Repository")
 									.font(.system(size: 22, weight: .bold))
@@ -958,6 +958,7 @@ struct SourceAppsView: View {
 									.frame(height: ZagListLayout.separatorHeight)
 									.padding(.leading, ZagListLayout.separatorLeadingInset)
 							}
+							.listRowSeparator(.hidden)
 							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
 							.listRowBackground(Color.clear)
 							.contentShape(Rectangle())
