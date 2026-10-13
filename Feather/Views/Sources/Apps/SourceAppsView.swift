@@ -125,8 +125,9 @@ private struct ZagRepositoryFeaturedPill: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "sparkles")
-            Text("Zag Featured")
+            ZagSourcesTabIcon.label
+                .frame(width: 13, height: 13)
+            Text("Featured")
         }
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.primary)
@@ -141,7 +142,7 @@ private struct ZagRepositoryFeaturedPill: View {
         }
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
+            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
                 rotating = true
             }
         }
@@ -716,6 +717,13 @@ struct SourceAppsView: View {
 		}.resume()
 	}
 
+	// Local manifest health only: successfully parsed source with usable app entries.
+	// This does not assert server uptime, IPA safety, or download-link validity.
+	private var _repositoryIsHealthy: Bool {
+		guard object.count == 1, let source = _sources?.first else { return false }
+		return !(source.id ?? "").isEmpty && !source.apps.isEmpty
+	}
+
 	private var _repositorySummary: some View {
 		VStack(alignment: .leading, spacing: 13) {
 			HStack(spacing: 8) {
@@ -723,9 +731,9 @@ struct SourceAppsView: View {
 					ZagRepositoryFeaturedPill()
 				}
 				HStack(spacing: 6) {
-					Image(systemName: "checkmark.circle.fill")
-						.foregroundStyle(.green)
-					Text("Loaded")
+					Image(systemName: _repositoryIsHealthy ? "heart.fill" : "questionmark.circle.fill")
+						.foregroundStyle(_repositoryIsHealthy ? Color.green : Color.secondary)
+					Text(_repositoryIsHealthy ? "Healthy" : "Unchecked")
 						.foregroundStyle(.primary)
 				}
 				.padding(.horizontal, 11)
