@@ -386,11 +386,11 @@ struct ZagAccountPopup: View {
                         .padding(.vertical, 7)
                     }
                     HStack(spacing: 14) {
-                        Image("ZagAccountIconDark")
-                            .resizable()
-                            .scaledToFill()
+                        ZagSourcesTabIcon.label
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
                             .frame(width: 30, height: 30)
-                            .clipShape(Circle())
+                            .background(themeTint, in: Circle())
                             .frame(width: 54)
                         Text("Account Type")
                         Spacer()
