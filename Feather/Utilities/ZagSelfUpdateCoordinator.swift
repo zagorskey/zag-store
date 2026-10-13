@@ -37,6 +37,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case signedIdentityMismatch
         case pairingUnavailable
         case installationAlreadyRunning
+        case unsupportedIOSVersion
 
         var errorDescription: String? {
             switch self {
@@ -48,6 +49,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             case .signedIdentityMismatch: return "The signed update does not match the current Zag Store identity and version."
             case .pairingUnavailable: return "RPPairing must be configured before installing this update."
             case .installationAlreadyRunning: return "Another RPPairing installation is already running."
+            case .unsupportedIOSVersion: return "This release requires a newer version of iOS."
             }
         }
     }
@@ -114,11 +116,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               release.sha256.unicodeScalars.allSatisfy({ "0123456789abcdefABCDEF".unicodeScalars.contains($0) }) else {
             throw UpdateError.invalidRelease
         }
-        if let minimum = release.minimumIOSVersion,
-           ProcessInfo.processInfo.operatingSystemVersionString.isEmpty == false {
-            // OS compatibility must be enforced by the installation phase as well.
-            guard !minimum.isEmpty else { throw UpdateError.invalidRelease }
-        }
+        try validateMinimumIOSVersion(for: release)
         let installed = currentVersion.compare(release.version, options: .numeric)
         let buildComparison = currentBuild.compare(release.build, options: .numeric)
         let newer = installed == .orderedAscending ||
@@ -127,10 +125,28 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         return availableRelease
     }
 
+    private func validateMinimumIOSVersion(for release: Release) throws {
+        guard let minimum = release.minimumIOSVersion else { return }
+        let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.count <= 3,
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\\.isNumber) }),
+              let major = Int(parts[0]) else {
+            throw UpdateError.invalidRelease
+        }
+        let minor = parts.count > 1 ? Int(parts[1]) : 0
+        let patch = parts.count > 2 ? Int(parts[2]) : 0
+        guard let minor, let patch else { throw UpdateError.invalidRelease }
+        let required = OperatingSystemVersion(majorVersion: major, minorVersion: minor, patchVersion: patch)
+        guard ProcessInfo.processInfo.isOperatingSystemAtLeast(required) else {
+            throw UpdateError.unsupportedIOSVersion
+        }
+    }
+
     func prepare(_ release: Release) async throws -> URL {
         guard release.bundleIdentifier == currentBundleID else {
             throw UpdateError.incompatibleBundleIdentifier
         }
+        try validateMinimumIOSVersion(for: release)
         guard release.ipaURL.scheme?.lowercased() == "https" else {
             throw UpdateError.insecureDownload
         }
@@ -179,6 +195,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         release: Release,
         certificate: CertificatePair
     ) async throws -> Signed {
+        try validateMinimumIOSVersion(for: release)
         guard release.bundleIdentifier == currentBundleID,
               imported.identifier == currentBundleID,
               imported.version == release.version else {
@@ -232,6 +249,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         userConfirmedSelfReplacement: Bool
     ) async throws {
         guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
+        try validateMinimumIOSVersion(for: release)
         guard release.bundleIdentifier == currentBundleID,
               signed.identifier == currentBundleID,
               signed.version == release.version else {
