@@ -360,6 +360,43 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
     }
 
+    /// Diagnostic only: inspect the installed and candidate executable's
+    /// embedded XML entitlements. Does not authorize installation.
+    func inspectExecutableEntitlements(_ signed: Signed) throws -> [String: String] {
+        guard let candidateURL = Storage.shared.getAppDirectory(for: signed),
+              let currentExecutable = Bundle.main.executableURL,
+              let candidateExecutableName = Bundle(url: candidateURL)?.object(
+                forInfoDictionaryKey: "CFBundleExecutable"
+              ) as? String else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let candidateExecutable = candidateURL.appendingPathComponent(candidateExecutableName)
+        let installed = try ZagMachOSignatureInspector.entitlements(at: currentExecutable)
+        let replacement = try ZagMachOSignatureInspector.entitlements(at: candidateExecutable)
+        let keys = [
+            "application-identifier",
+            "com.apple.developer.team-identifier",
+            "keychain-access-groups",
+            "get-task-allow"
+        ]
+        var report: [String: String] = [:]
+        for key in keys {
+            guard let current = installed[key], let next = replacement[key] else {
+                report[key] = "Missing in one or both signatures"
+                continue
+            }
+            if let currentGroups = current as? [String],
+               let nextGroups = next as? [String] {
+                report[key] = Set(currentGroups).isSubset(of: Set(nextGroups))
+                    ? "Compatible" : "Mismatch"
+            } else {
+                report[key] = String(describing: current) == String(describing: next)
+                    ? "Match" : "Mismatch"
+            }
+        }
+        return report
+    }
+
     /// Controlled test entry point. The caller must explicitly confirm the
     /// self-replacement experiment and supply a signed IPA already imported
     /// into Zag Store. This does not silently update the running application.
