@@ -254,6 +254,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         // Do not apply the normal repository app's PPQ suffix or identifier map.
         options.ppqProtection = false
         options.appIdentifier = currentBundleID
+        // Self-updates must not inherit a custom entitlement override.
+        // Zsign will derive entitlements from the selected provisioning profile.
+        options.appEntitlementsFile = nil
 
         let signedUUID: String = try await withCheckedThrowingContinuation { continuation in
             var resultingUUID: String?
