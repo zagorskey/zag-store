@@ -18,10 +18,9 @@ struct SourceAppsCellView: View {
 
 	@Environment(\.colorScheme) private var colorScheme
 	@State private var expandedDescription = false
-	var showsRepositoryDetails = false
-
 	var source: ASRepository
 	var app: ASRepository.App
+	var showsRepositoryDetails = false
 
 	private var uploadDate: String? {
 		guard let date = app.currentAppVersion?.date?.date ?? app.currentDate?.date else { return nil }
