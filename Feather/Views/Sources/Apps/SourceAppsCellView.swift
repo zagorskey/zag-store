@@ -31,9 +31,9 @@ struct SourceAppsCellView: View {
 		).day ?? 0
 		switch days {
 		case 0: return .localized("Today")
-		case 1: return .localized("Yesterday")
-		case 2: return .localized("Two Days Ago")
-		case 3: return .localized("Three Days Ago")
+		case 1: return "1 Day Ago"
+		case 2: return "2 Days Ago"
+		case 3: return "3 Days Ago"
 		default:
 			let formatter = DateFormatter()
 			formatter.locale = .current
@@ -98,7 +98,7 @@ struct SourceAppsCellView: View {
 					.zagContentTitleStyle()
 					.lineLimit(1)
 				Text(Self.appDescription(app: app, useDate: showsRepositoryDetails, dateText: uploadDate))
-					.font(.subheadline)
+					.font(.system(size: 15, weight: .regular))
 					.foregroundStyle(.secondary)
 					.lineLimit(1)
 			}
