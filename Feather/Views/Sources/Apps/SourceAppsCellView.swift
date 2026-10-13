@@ -18,6 +18,7 @@ struct SourceAppsCellView: View {
 
 	@Environment(\.colorScheme) private var colorScheme
 	@State private var expandedDescription = false
+	@State private var descriptionWidth: CGFloat = 0
 	var source: ASRepository
 	var app: ASRepository.App
 	var showsRepositoryDetails = false
@@ -48,6 +49,20 @@ struct SourceAppsCellView: View {
 		return value
 	}
 
+	private func descriptionNeedsExpansion(_ value: String) -> Bool {
+		guard descriptionWidth > 0 else { return false }
+		let font = UIFont.systemFont(ofSize: 17)
+		let paragraph = NSMutableParagraphStyle()
+		paragraph.lineBreakMode = .byWordWrapping
+		let measured = (value as NSString).boundingRect(
+			with: CGSize(width: descriptionWidth, height: .greatestFiniteMagnitude),
+			options: [.usesLineFragmentOrigin, .usesFontLeading],
+			attributes: [.font: font, .paragraphStyle: paragraph],
+			context: nil
+		)
+		return measured.height > font.lineHeight * 2 + 2
+	}
+
 	var body: some View {
 		VStack(alignment: .leading, spacing: 10) {
 			HStack(spacing: 10) {
@@ -62,7 +77,7 @@ struct SourceAppsCellView: View {
 						.lineLimit(expandedDescription ? nil : 2)
 						.frame(maxWidth: .infinity, alignment: .leading)
 						.mask {
-							if expandedDescription {
+							if expandedDescription || !descriptionNeedsExpansion(descriptionText) {
 								Rectangle()
 							} else {
 								HStack(spacing: 0) {
@@ -74,14 +89,15 @@ struct SourceAppsCellView: View {
 								}
 							}
 						}
-						.padding(.trailing, expandedDescription ? 0 : 42)
+						.padding(.trailing, expandedDescription || !descriptionNeedsExpansion(descriptionText) ? 0 : 42)
+					if descriptionNeedsExpansion(descriptionText) {
 					Button(.localized(expandedDescription ? "less" : "more")) {
 						withAnimation(.easeInOut(duration: 0.2)) { expandedDescription.toggle() }
 					}
 					.font(.system(size: 17, weight: .regular))
 					.foregroundStyle(colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8"))
 					.buttonStyle(.borderless)
-				}
+					}
 			} else if !showsRepositoryDetails, _storeCellAppearance != 0, let desc = app.localizedDescription {
 				Text(desc).font(.subheadline).foregroundStyle(.secondary)
 			}
