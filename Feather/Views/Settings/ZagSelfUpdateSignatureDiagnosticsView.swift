@@ -52,7 +52,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 Button("Create or Read Marker") {
                     do {
                         let marker = try ZagSelfUpdateKeychainProbe.createIfMissing()
-                        probeMessage = "Marker available: \\(marker)"
+                        probeMessage = "Marker available: \(marker)"
                     } catch {
                         probeMessage = error.localizedDescription
                     }
@@ -60,7 +60,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 Button("Read Existing Marker") {
                     do {
                         if let marker = try ZagSelfUpdateKeychainProbe.read() {
-                            probeMessage = "Marker readable: \\(marker)"
+                            probeMessage = "Marker readable: \(marker)"
                         } else {
                             probeMessage = "No marker found."
                         }
