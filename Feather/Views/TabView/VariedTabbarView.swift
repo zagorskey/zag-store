@@ -358,10 +358,9 @@ struct ZagAccountPopup: View {
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
-    @State private var showingUpdates = false
 
     private enum AccountDestination: Hashable {
-        case profile, settings
+        case profile, updates, settings
     }
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
@@ -388,7 +387,7 @@ struct ZagAccountPopup: View {
                     }
                 }
                 Section {
-                    Button { showingUpdates = true } label: {
+                    NavigationLink(value: AccountDestination.updates) {
                         HStack {
                             Text("App Updates")
                             Spacer()
@@ -416,6 +415,7 @@ struct ZagAccountPopup: View {
             .navigationDestination(for: AccountDestination.self) { destination in
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
+                case .updates: ZagUpdatesPopup(updates: updateManager.updates)
                 case .settings: SettingsView()
                 }
             }
@@ -442,9 +442,6 @@ struct ZagAccountPopup: View {
             .padding(.leading, 20)
             .padding(.top, 28)
             .allowsHitTesting(false)
-        }
-        .sheet(isPresented: $showingUpdates) {
-            ZagUpdatesPopup(updates: updateManager.updates)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
