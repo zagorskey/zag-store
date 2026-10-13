@@ -63,8 +63,9 @@ struct DownloadButtonView: View {
 
 	// Resolve the same dynamic accent used by the app's tinted controls.
 	// Do not reinterpret an sRGB preference hex string as P3 components.
+	@AppStorage("Feather.userTintColor") private var userTintColor: String = "#3F8EF7"
 	private var pillForeground: Color {
-		.accentColor
+		ZagWideGamutTint.color(hex: userTintColor)
 	}
 
 	var body: some View {
