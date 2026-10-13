@@ -38,11 +38,9 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
                     ZagLocalVPNToolbarStatus()
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if !embeddedInAccountNavigation {
-                        ZagProfileToolbarButton()
-                            .tint(.primary)
-                            .padding(.trailing, -2)
-                    }
+                    ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
                 }
             }
         }
