@@ -313,6 +313,11 @@ struct LibraryView: View {
 		if updateManager.hasVisibleUpdates {
 			Button {
 				_isUpdatesPresenting = true
+                NotificationCenter.default.post(
+                    name: .zagUpdatesSheetVisibilityDidChange,
+                    object: nil,
+                    userInfo: ["presented": true]
+                )
 			} label: {
 				HStack(spacing: 12) {
 					HStack(spacing: 9) {
@@ -392,22 +397,22 @@ struct LibraryView: View {
 
 	@ViewBuilder
 	private var _updatesSheetContent: some View {
-		ZagUpdatesPopup(updates: updateManager.updates)
-            .onAppear {
+        ZagUpdatesPopup(updates: updateManager.updates)
+    }
+
+    private var _animatedUpdatesSheetBinding: Binding<Bool> {
+        Binding(
+            get: { _isUpdatesPresenting },
+            set: { presented in
+                _isUpdatesPresenting = presented
                 NotificationCenter.default.post(
                     name: .zagUpdatesSheetVisibilityDidChange,
                     object: nil,
-                    userInfo: ["presented": true]
+                    userInfo: ["presented": presented]
                 )
             }
-            .onDisappear {
-                NotificationCenter.default.post(
-                    name: .zagUpdatesSheetVisibilityDidChange,
-                    object: nil,
-                    userInfo: ["presented": false]
-                )
-            }
-	}
+        )
+    }
 
 	@ViewBuilder
 	private func _removeAppSheetContent(_ app: AnyApp) -> some View {
@@ -994,7 +999,7 @@ struct LibraryView: View {
 			.sheet(isPresented: $_showAppDiagnostics) {
                 NavigationStack { RPPairingDiagnosticsView() }
             }
-            .sheet(isPresented: $_isUpdatesPresenting) {
+            .sheet(isPresented: _animatedUpdatesSheetBinding) {
 				_updatesSheetContent
 			}
 
