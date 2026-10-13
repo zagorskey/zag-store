@@ -64,8 +64,20 @@ struct DownloadButtonView: View {
 	@AppStorage("Feather.userTintColor")
 	private var userTintColor: String = "#4395F8"
 
+	// Preserve the configured tint in the Display P3 colour space for
+	// the cloud action and every download/sign/install progress indicator.
 	private var pillForeground: Color {
-		Color(hex: userTintColor)
+		let hex = userTintColor.trimmingCharacters(in: .whitespacesAndNewlines)
+			.replacingOccurrences(of: "#", with: "")
+		guard hex.count == 6, let rgb = UInt32(hex, radix: 16) else {
+			return Color(uiColor: UIColor(displayP3Red: 0.263, green: 0.584, blue: 0.973, alpha: 1))
+		}
+		return Color(uiColor: UIColor(
+			displayP3Red: CGFloat((rgb >> 16) & 0xFF) / 255,
+			green: CGFloat((rgb >> 8) & 0xFF) / 255,
+			blue: CGFloat(rgb & 0xFF) / 255,
+			alpha: 1
+		))
 	}
 
 	var body: some View {
