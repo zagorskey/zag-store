@@ -88,7 +88,6 @@ struct SettingsView: View {
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
-	@AppStorage(UpdateManager.updateNotificationsEnabledKey) private var _updateNotificationsEnabled = false
 	@AppStorage(ZagBackgroundUpdateRefresh.automaticPreparationKey) private var _automaticUpdatePreparation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.automaticInstallationKey) private var _automaticUpdateInstallation = false
 	@AppStorage("ZagStore.disableIdleTimeout") private var _disableIdleTimeout = false
@@ -483,19 +482,6 @@ extension SettingsView {
 					ZagBackgroundUpdateRefresh.shared.applySchedulingPreference()
 				}
 
-				Toggle(isOn: $_updateNotificationsEnabled) {
-					Label("Update Notifications", systemImage: "bell.badge")
-				}
-				.onChange(of: _updateNotificationsEnabled) { enabled in
-					guard enabled else { return }
-					Task {
-						let granted = await UpdateManager.shared.requestUpdateNotificationPermission()
-						if !granted {
-							await MainActor.run { _updateNotificationsEnabled = false }
-						}
-					}
-				}
-
 				Toggle(isOn: $_automaticUpdatePreparation) {
 					Label("Automatic Preparation", systemImage: "shippingbox.and.arrow.backward")
 				}
@@ -517,7 +503,7 @@ extension SettingsView {
 			} header: {
 				Text("Refreshing Apps")
 			} footer: {
-				Text("Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions.")
+				Text("Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available.")
 			}
 
 		case .aboutUs:
