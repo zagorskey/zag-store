@@ -191,7 +191,6 @@ struct LibraryCellView: View {
 				Rectangle()
 					.fill(Color(uiColor: .separator))
 					.frame(height: ZagListLayout.separatorHeight)
-					.padding(.leading, ZagListLayout.separatorLeadingInset)
 			}
 		}
 		.listRowInsets(
