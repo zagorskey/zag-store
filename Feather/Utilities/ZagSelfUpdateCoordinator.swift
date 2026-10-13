@@ -188,6 +188,52 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = pending
     }
 
+    /// Import a checksum-verified IPA through the same handler used by
+    /// repository downloads. Never download the IPA again after verification.
+    func importPreparedRelease(_ release: Release) async throws -> Imported {
+        guard release.bundleIdentifier == currentBundleID,
+              let ipa = preparedIPA,
+              FileManager.default.fileExists(atPath: ipa.path) else {
+            throw UpdateError.invalidRelease
+        }
+        let uuid: String = try await withCheckedThrowingContinuation { continuation in
+            var importedUUID: String?
+            FR.handlePackageFile(
+                ipa,
+                importedUUID: { importedUUID = $0 },
+                completion: { error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else if let uuid = importedUUID {
+                        continuation.resume(returning: uuid)
+                    } else {
+                        continuation.resume(throwing: UpdateError.invalidRelease)
+                    }
+                }
+            )
+        }
+        let request = NSFetchRequest<Imported>(entityName: "Imported")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "uuid == %@", uuid)
+        guard let imported = try Storage.shared.context.fetch(request).first,
+              imported.identifier == currentBundleID,
+              imported.version == release.version else {
+            throw UpdateError.incompatibleBundleIdentifier
+        }
+        return imported
+    }
+
+    /// Prepare a release for a separate, explicitly confirmed installation.
+    /// This method does not install or replace the running app.
+    func prepareSignedUpdate(
+        _ release: Release,
+        certificate: CertificatePair
+    ) async throws -> Signed {
+        _ = try await prepare(release)
+        let imported = try await importPreparedRelease(release)
+        return try await signImportedRelease(imported, release: release, certificate: certificate)
+    }
+
     /// Signs an already imported release without changing Zag Store's bundle ID.
     /// This prepares a candidate only; it never installs it automatically.
     func signImportedRelease(
