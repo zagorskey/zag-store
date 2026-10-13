@@ -2044,11 +2044,11 @@ private struct ZagUpdateRow: View {
 		case 0:
 			return .localized("Today")
 		case 1:
-			return .localized("Yesterday")
+			return "1 Day Ago"
 		case 2:
-			return .localized("Two Days Ago")
+			return "2 Days Ago"
 		case 3:
-			return .localized("Three Days Ago")
+			return "3 Days Ago"
 		default:
 			let formatter = DateFormatter()
 			formatter.locale = .current
@@ -2692,9 +2692,9 @@ private struct ZagCachedUpdateRow: View {
 		).day ?? 0
 		switch days {
 		case 0: return .localized("Today")
-		case 1: return .localized("Yesterday")
-		case 2: return .localized("Two Days Ago")
-		case 3: return .localized("Three Days Ago")
+		case 1: return "1 Day Ago"
+		case 2: return "2 Days Ago"
+		case 3: return "3 Days Ago"
 		default:
 			let formatter = DateFormatter()
 			formatter.locale = .current
