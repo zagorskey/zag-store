@@ -172,6 +172,54 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = pending
     }
 
+    /// Signs an already imported release without changing Zag Store's bundle ID.
+    /// This prepares a candidate only; it never installs it automatically.
+    func signImportedRelease(
+        _ imported: Imported,
+        release: Release,
+        certificate: CertificatePair
+    ) async throws -> Signed {
+        guard release.bundleIdentifier == currentBundleID,
+              imported.identifier == currentBundleID,
+              imported.version == release.version else {
+            throw UpdateError.incompatibleBundleIdentifier
+        }
+
+        var options = OptionsManager.shared.options
+        // Do not apply the normal repository app's PPQ suffix or identifier map.
+        options.ppqProtection = false
+        options.appIdentifier = currentBundleID
+
+        let signedUUID: String = try await withCheckedThrowingContinuation { continuation in
+            var resultingUUID: String?
+            FR.signPackageFile(
+                imported,
+                using: options,
+                icon: nil,
+                certificate: certificate,
+                signedUUID: { resultingUUID = $0 }
+            ) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let uuid = resultingUUID {
+                    continuation.resume(returning: uuid)
+                } else {
+                    continuation.resume(throwing: UpdateError.signedIdentityMismatch)
+                }
+            }
+        }
+
+        let request = NSFetchRequest<Signed>(entityName: "Signed")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "uuid == %@", signedUUID)
+        guard let signed = try Storage.shared.context.fetch(request).first,
+              signed.identifier == currentBundleID,
+              signed.version == release.version else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        return signed
+    }
+
     /// Controlled test entry point. The caller must explicitly confirm the
     /// self-replacement experiment and supply a signed IPA already imported
     /// into Zag Store. This does not silently update the running application.
