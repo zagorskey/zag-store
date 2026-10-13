@@ -605,57 +605,74 @@ struct SourceAppsView: View {
 	}
 
 	// Only show metadata we can actually verify from the loaded manifest.
+	@Environment(\.colorScheme) private var _repositoryColorScheme
+
+	private var _repositoryPillColor: Color {
+		_repositoryColorScheme == .dark
+			? Color(hex: "#1C1C1E")
+			: Color(hex: "#EEEEEF")
+	}
+
+	private var _repositoryCardColor: Color {
+		_repositoryColorScheme == .dark
+			? Color(hex: "#111113")
+			: Color(hex: "#F8F8FA")
+	}
+
 	private var _repositorySummary: some View {
 		VStack(alignment: .leading, spacing: 13) {
 			HStack(spacing: 8) {
 				HStack(spacing: 6) {
 					Image(systemName: "checkmark.circle.fill")
+						.foregroundStyle(.green)
 					Text("Loaded")
+						.foregroundStyle(.primary)
 				}
-				.foregroundStyle(.green)
-				.padding(.horizontal, 10)
-				.padding(.vertical, 7)
-				.background(Color.green.opacity(0.10), in: Capsule())
+				.padding(.horizontal, 11)
+				.padding(.vertical, 8)
+				.background(_repositoryPillColor, in: Capsule())
 
-				if let url = object.first?.sourceURL {
+				if let host = object.first?.sourceURL?.host, !host.isEmpty {
 					HStack(spacing: 6) {
-						Image(systemName: url.scheme?.lowercased() == "https" ? "lock.shield.fill" : "lock.open")
-						Text(url.scheme?.lowercased() == "https" ? "HTTPS" : "HTTP")
-						}
-						.foregroundStyle(.secondary)
-						.padding(.horizontal, 10)
-						.padding(.vertical, 7)
-						.background(Color.primary.opacity(0.06), in: Capsule())
+						Image(systemName: "server.rack")
+						Text(host)
+								.lineLimit(1)
+								.truncationMode(.middle)
+					}
+					.foregroundStyle(.secondary)
+					.padding(.horizontal, 11)
+					.padding(.vertical, 8)
+					.background(_repositoryPillColor, in: Capsule())
 				}
 			}
 			.font(.system(size: 12, weight: .semibold))
 
 			if let url = object.first?.sourceURL {
-					Divider()
-					HStack(alignment: .center, spacing: 10) {
-						Image(systemName: "link")
-							.font(.system(size: 14, weight: .medium))
+				Divider()
+				HStack(alignment: .center, spacing: 10) {
+					Image(systemName: "link")
+						.font(.system(size: 14, weight: .medium))
+						.foregroundStyle(.secondary)
+						.frame(width: 20)
+					VStack(alignment: .leading, spacing: 4) {
+						Text("SOURCE URL")
+							.font(.system(size: 10, weight: .semibold))
+							.tracking(0.7)
+							.foregroundStyle(.tertiary)
+						Text(url.absoluteString)
+							.font(.system(size: 12, weight: .medium))
 							.foregroundStyle(.secondary)
-							.frame(width: 20)
-						VStack(alignment: .leading, spacing: 4) {
-							Text("SOURCE URL")
-								.font(.system(size: 10, weight: .semibold))
-								.tracking(0.7)
-								.foregroundStyle(.tertiary)
-							Text(url.absoluteString)
-								.font(.system(size: 12, weight: .medium))
-								.foregroundStyle(.secondary)
-								.lineLimit(2)
-								.textSelection(.enabled)
-						}
-						.frame(maxWidth: .infinity, alignment: .leading)
+							.lineLimit(2)
+							.textSelection(.enabled)
 					}
+					.frame(maxWidth: .infinity, alignment: .leading)
+				}
 			}
 		}
 		.padding(.horizontal, 16)
 		.padding(.vertical, 14)
 		.frame(maxWidth: .infinity, alignment: .leading)
-		.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+		.background(_repositoryCardColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 		.padding(.horizontal, ZagListLayout.horizontalInset)
 	}
 
