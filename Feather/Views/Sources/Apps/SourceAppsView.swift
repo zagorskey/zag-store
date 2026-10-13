@@ -41,7 +41,7 @@ private struct ZagRepositoryShield: View {
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(Color(uiColor: UIColor(displayP3Red: 0, green: 0.35, blue: 0.08, alpha: 1)))
+                    .foregroundStyle(Color(uiColor: UIColor(displayP3Red: 0, green: 0.20, blue: 0.04, alpha: 1)))
                     .frame(width: 15, height: 15)
                     .offset(y: -1)
             }
