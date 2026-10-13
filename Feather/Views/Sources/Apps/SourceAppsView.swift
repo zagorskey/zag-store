@@ -562,6 +562,9 @@ struct SourceAppsView: View {
 	@State private var _searchText = ""
 	@State private var _repositoryScrolled = false
 	@State private var _repositoryManifestBytes: Int64?
+	@State private var _appsCollapsed = false
+	@State private var _detailsCollapsed = false
+	@State private var _showRepositoryDetails = false
 	@State private var _dictationAvailable = false
 	@State private var _dictationStatus = "Dictation unavailable"
 	@FocusState private var _searchFieldFocused: Bool
@@ -799,34 +802,86 @@ struct SourceAppsView: View {
 		.font(.subheadline)
 	}
 
-	private func _repositoryDetails(_ source: ASRepository) -> some View {
-		VStack(alignment: .leading, spacing: 12) {
-			Label("Repository Information", systemImage: "info.circle")
-				.font(.headline)
-			Divider()
-			_repositoryDetailRow("Repository", value: source.name ?? "Repository")
-			if let identifier = source.id, !identifier.isEmpty {
-				Divider()
-				_repositoryDetailRow("Identifier", value: identifier)
+
+	private func _repositorySectionHeader(_ title: String, count: Int? = nil, collapsed: Bool, toggle: @escaping () -> Void) -> some View {
+		Button(action: toggle) {
+			HStack(spacing: 8) {
+				ZagSectionHeader(title: title, count: count ?? 0)
+				Spacer(minLength: 8)
+				Image(systemName: "chevron.down")
+					.font(.system(size: 20, weight: .semibold))
+					.foregroundStyle(.secondary)
+					.frame(width: 44, height: 44)
+					.rotationEffect(.degrees(collapsed ? -90 : 0))
+					.animation(.easeInOut(duration: 0.28), value: collapsed)
 			}
-			Divider()
-			_repositoryDetailRow("Total Apps", value: source.apps.count.formatted())
-			if let url = object.first?.sourceURL {
-				Divider()
-				_repositoryDetailRow("Connection", value: url.scheme?.uppercased() ?? "Unknown")
-				Divider()
-				_repositoryDetailRow("Source URL", value: url.absoluteString)
-			}
-			if let website = source.website {
-				Divider()
-				_repositoryDetailRow("Website", value: website.absoluteString)
-			}
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.contentShape(Rectangle())
 		}
-		.padding(16)
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
-		.padding(.horizontal, ZagListLayout.horizontalInset)
-		.padding(.vertical, 16)
+		.buttonStyle(.plain)
+		.accessibilityValue(collapsed ? "Collapsed" : "Expanded")
+	}
+
+	private var _repositoryDetailsLink: some View {
+		Button { _showRepositoryDetails = true } label: {
+			HStack {
+				Text("View Detailed Info")
+					.foregroundStyle(.primary)
+				Spacer()
+				Image(systemName: "chevron.right")
+					.foregroundStyle(.secondary)
+			}
+			.font(.subheadline)
+			.padding(16)
+			.frame(maxWidth: .infinity)
+			.background(_repositoryCardColor, in: RoundedRectangle(cornerRadius: 16))
+			.padding(.horizontal, ZagListLayout.horizontalInset)
+		}
+		.buttonStyle(.plain)
+	}
+
+	private func _repositoryDetailsPage(_ source: ASRepository) -> some View {
+		ScrollView {
+			VStack(alignment: .leading, spacing: 12) {
+				_repositoryDetailRow("Repository", value: source.name ?? "Repository")
+				Divider()
+				if let identifier = source.id, !identifier.isEmpty {
+					_repositoryDetailRow("Identifier", value: identifier)
+					Divider()
+				}
+				_repositoryDetailRow("Total Apps", value: source.apps.count.formatted())
+				Divider()
+				_repositoryDetailRow("Manifest Status", value: _repositoryIsHealthy ? "Healthy (local validation)" : "Unchecked")
+				Divider()
+				_repositoryDetailRow("Zag Featured", value: _isZagFeatured ? "Yes" : "No")
+				if let bytes = _repositoryManifestBytes {
+					Divider()
+					_repositoryDetailRow("Manifest Size", value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+				}
+				if let url = object.first?.sourceURL {
+					Divider()
+					_repositoryDetailRow("Connection", value: url.scheme?.uppercased() ?? "Unknown")
+					Divider()
+					_repositoryDetailRow("Source URL", value: url.absoluteString)
+					if let host = url.host {
+						Divider()
+						_repositoryDetailRow("Host", value: host)
+					}
+				}
+				if let website = source.website {
+					Divider()
+					_repositoryDetailRow("Website", value: website.absoluteString)
+				}
+			}
+			.padding(16)
+			.background(_repositoryCardColor, in: RoundedRectangle(cornerRadius: 16))
+			.padding(.horizontal, ZagListLayout.horizontalInset)
+			.padding(.top, 16)
+			.padding(.bottom, 32)
+		}
+		.zagWallpaperSurface()
+		.navigationTitle("Repository Details")
+		.navigationBarTitleDisplayMode(.large)
 	}
 
 	// MARK: Body
@@ -836,9 +891,8 @@ struct SourceAppsView: View {
 				if _searchText.isEmpty {
 					ZagSectionHeader(
 						title: object.count == 1 ? (object[0].name ?? "Repository") : "Your Sources",
-						count: sources.reduce(0) { $0 + $1.apps.count }
+						count: object.count == 1 ? 0 : sources.reduce(0) { $0 + $1.apps.count }
 					)
-
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 					if object.count == 1 {
@@ -846,28 +900,47 @@ struct SourceAppsView: View {
 							.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
 							.listRowSeparator(.hidden)
 							.listRowBackground(Color.clear)
+						_repositorySectionHeader("Apps", count: sources.reduce(0) { $0 + $1.apps.count }, collapsed: _appsCollapsed) {
+							withAnimation(.easeInOut(duration: 0.28)) { _appsCollapsed.toggle() }
+						}
+						.listRowSeparator(.hidden)
+						.listRowBackground(Color.clear)
 					}
-					if sources.count == 1, let news = sources.first?.news, !news.isEmpty {
+				}
+				if !_appsCollapsed || object.count != 1 || !_searchText.isEmpty {
+					if _searchText.isEmpty, sources.count == 1, let news = sources.first?.news, !news.isEmpty {
 						SourceNewsView(news: news)
 							.listRowSeparator(.hidden)
 							.listRowBackground(Color.clear)
 					}
+					ForEach(repositoryEntries, id: \.id) { entry in
+						SourceAppsCellView(source: entry.source, app: entry.app)
+							.frame(height: ZagListLayout.compactRowHeight)
+							.zagCompactRowSeparator()
+							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
+							.listRowBackground(Color.clear)
+							.contentShape(Rectangle())
+							.onTapGesture { _selectedRoute = entry }
+							.transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .top))))
+					}
 				}
-				ForEach(repositoryEntries, id: \.id) { entry in
-					SourceAppsCellView(source: entry.source, app: entry.app)
-						.frame(height: ZagListLayout.compactRowHeight)
-						.zagCompactRowSeparator()
-						.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
-						.listRowBackground(Color.clear)
-						.contentShape(Rectangle())
-						.onTapGesture { _selectedRoute = entry }
+				if object.count == 1, _searchText.isEmpty, sources.first != nil {
+					_repositorySectionHeader("Details", collapsed: _detailsCollapsed) {
+						withAnimation(.easeInOut(duration: 0.28)) { _detailsCollapsed.toggle() }
+					}
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
+					if !_detailsCollapsed {
+						_repositoryDetailsLink
+							.listRowInsets(EdgeInsets())
+							.listRowSeparator(.hidden)
+							.listRowBackground(Color.clear)
+					}
 				}
-				if object.count == 1, _searchText.isEmpty, let source = sources.first {
-					_repositoryDetails(source)
-						.listRowInsets(EdgeInsets())
-						.listRowSeparator(.hidden)
-						.listRowBackground(Color.clear)
-				}
+				Color.clear.frame(height: 32)
+					.listRowInsets(EdgeInsets())
+					.listRowSeparator(.hidden)
+					.listRowBackground(Color.clear)
 			} else {
 				ProgressView().frame(maxWidth: .infinity)
 					.listRowBackground(Color.clear)
@@ -889,6 +962,9 @@ struct SourceAppsView: View {
 					.opacity(_repositoryScrolled ? 0 : 1)
 					.allowsHitTesting(!_repositoryScrolled)
 			}
+		}
+		.navigationDestination(isPresented: $_showRepositoryDetails) {
+			if let source = _sources?.first { _repositoryDetailsPage(source) }
 		}
 		.navigationTitle(_navigationTitle)
 		.navigationBarTitleDisplayMode(.large)
