@@ -583,6 +583,7 @@ struct SourceAppsView: View {
 	@State private var _searchText = ""
 	@State private var _repositoryScrolled = false
 	@State private var _repositoryManifestBytes: Int64?
+	@State private var _overviewCollapsed = false
 	@State private var _appsCollapsed = false
 	@State private var _detailsCollapsed = false
 	@State private var _showRepositoryDetails = false
@@ -927,14 +928,27 @@ struct SourceAppsView: View {
 				if _searchText.isEmpty {
 					Group {
 						if object.count == 1 {
-							HStack(alignment: .center, spacing: 6) {
-								ZagRepositoryShield()
-								Text(object[0].name ?? "Repository")
-									.font(.system(size: 22, weight: .bold))
-									.foregroundStyle(.primary)
-									.lineLimit(1)
+							Button {
+								withAnimation(.easeInOut(duration: 0.28)) { _overviewCollapsed.toggle() }
+							} label: {
+								HStack(spacing: 6) {
+									ZagRepositoryShield()
+									Text(object[0].name ?? "Repository")
+										.font(.system(size: 22, weight: .bold))
+										.foregroundStyle(.primary)
+										.lineLimit(1)
+									Spacer(minLength: 8)
+									Image(systemName: "chevron.down")
+										.font(.system(size: 20, weight: .semibold))
+										.foregroundStyle(.secondary)
+										.frame(width: 44, height: 44)
+										.rotationEffect(.degrees(_overviewCollapsed ? -90 : 0))
+										.animation(.easeInOut(duration: 0.28), value: _overviewCollapsed)
+								}
+								.contentShape(Rectangle())
 							}
-							.padding(.horizontal, 0)
+							.buttonStyle(.plain)
+							.accessibilityValue(_overviewCollapsed ? "Collapsed" : "Expanded")
 						} else {
 							ZagSectionHeader(title: "Your Sources", count: sources.reduce(0) { $0 + $1.apps.count })
 						}
@@ -942,10 +956,12 @@ struct SourceAppsView: View {
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 					if object.count == 1 {
-						_repositorySummary
-							.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
-							.listRowSeparator(.hidden)
-							.listRowBackground(Color.clear)
+						if !_overviewCollapsed {
+							_repositorySummary
+								.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+								.listRowSeparator(.hidden)
+								.listRowBackground(Color.clear)
+						}
 						_repositorySectionHeader("Apps", count: sources.reduce(0) { $0 + $1.apps.count }, collapsed: _appsCollapsed) {
 							withAnimation(.easeInOut(duration: 0.28)) { _appsCollapsed.toggle() }
 						}
