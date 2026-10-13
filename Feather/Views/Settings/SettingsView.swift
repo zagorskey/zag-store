@@ -97,6 +97,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 
 // MARK: - View
 struct SettingsView: View {
+	@Environment(\.dismiss) private var dismiss
 	var embeddedInAccountNavigation = false
 	@AppStorage("Feather.userTintColor") private var userTintColor = "#4395F8"
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
@@ -202,6 +203,12 @@ struct SettingsView: View {
 					}
 				}
 				ToolbarItemGroup(placement: .topBarLeading) {
+					if embeddedInAccountNavigation {
+						Button { dismiss() } label: {
+							Image(systemName: "chevron.left")
+						}
+						.accessibilityLabel("Back to Zag Account")
+					}
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -273,6 +280,7 @@ struct SettingsView: View {
                 }
 			}
 		.navigationTitle("Settings")
+		.navigationBarBackButtonHidden(embeddedInAccountNavigation)
 	}
 
 	// MARK: Body
