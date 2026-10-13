@@ -63,9 +63,8 @@ struct DownloadButtonView: View {
 
 	// Resolve the same dynamic accent used by the app's tinted controls.
 	// Do not reinterpret an sRGB preference hex string as P3 components.
-	@Environment(\.tint) private var themeTint
 	private var pillForeground: Color {
-		themeTint ?? .accentColor
+		.accentColor
 	}
 
 	var body: some View {
