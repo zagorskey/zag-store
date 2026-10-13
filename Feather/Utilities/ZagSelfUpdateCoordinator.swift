@@ -300,6 +300,22 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               build == release.build else {
             throw UpdateError.signedIdentityMismatch
         }
+        try validateProvisioningTeam(at: appURL)
+    }
+
+    /// Compare embedded provisioning Team IDs before attempting replacement.
+    /// A missing or unreadable profile fails closed.
+    private func validateProvisioningTeam(at appURL: URL) throws {
+        let installedProfile = Bundle.main.bundleURL.appendingPathComponent("embedded.mobileprovision")
+        let replacementProfile = appURL.appendingPathComponent("embedded.mobileprovision")
+        guard let installed = CertificateReader(installedProfile).decoded,
+              let replacement = CertificateReader(replacementProfile).decoded,
+              let currentTeam = installed.TeamIdentifier.first,
+              let nextTeam = replacement.TeamIdentifier.first,
+              !currentTeam.isEmpty, currentTeam == nextTeam,
+              replacement.ExpirationDate > Date() else {
+            throw UpdateError.incompatibleSigningTeam
+        }
     }
 
     /// Controlled test entry point. The caller must explicitly confirm the
