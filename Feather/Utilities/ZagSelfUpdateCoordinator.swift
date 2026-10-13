@@ -531,6 +531,16 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         } catch {
             result["Keychain marker"] = "FAIL: " + error.localizedDescription
         }
+        do {
+            guard let executableName = info["CFBundleExecutable"] as? String else {
+                throw UpdateError.signedIdentityMismatch
+            }
+            result["Code page SHA-256 integrity"] = try ZagMachOSignatureInspector.inspectCodePageHashes(
+                at: appURL.appendingPathComponent(executableName)
+            )
+        } catch {
+            result["Code page SHA-256 integrity"] = "UNVERIFIED — " + error.localizedDescription
+        }
         result["Cryptographic signature verification"] = "NOT IMPLEMENTED"
         result["Installation authorization"] = "BLOCKED — diagnostic only"
         return result
