@@ -64,7 +64,7 @@ struct SourceAppsCellView: View {
 	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 10) {
+		VStack(alignment: .leading, spacing: 4) {
 			HStack(spacing: 10) {
 				appInformation
 				DownloadButtonView(app: app, source: source)
@@ -110,7 +110,7 @@ struct SourceAppsCellView: View {
 				Text(desc).font(.subheadline).foregroundStyle(.secondary)
 			}
 		}
-		.padding(.vertical, showsRepositoryDetails ? 5 : 0)
+		.padding(.vertical, 0)
 		.frame(minHeight: ZagListLayout.compactRowHeight)
 	}
 
