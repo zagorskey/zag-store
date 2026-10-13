@@ -116,7 +116,11 @@ private struct ZagRepositoryFeaturedPill: View {
     @State private var rotating = false
 
     private let spectrum: [Color] = [
-        .cyan, .blue, .purple, .pink, .orange, .yellow, .green, .cyan
+        Color(red: 0.00, green: 0.86, blue: 1.00),
+        Color(red: 0.05, green: 0.37, blue: 1.00),
+        Color(red: 0.42, green: 0.18, blue: 1.00),
+        Color(red: 0.95, green: 0.16, blue: 0.89),
+        Color(red: 0.00, green: 0.86, blue: 1.00)
     ]
 
     var body: some View {
@@ -127,17 +131,17 @@ private struct ZagRepositoryFeaturedPill: View {
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.primary)
         .padding(.horizontal, 11)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: Capsule())
         .overlay {
             Capsule().strokeBorder(
                 AngularGradient(colors: spectrum, center: .center, angle: .degrees(rotating ? 360 : 0)),
-                lineWidth: 1.6
+                lineWidth: 1.1
             )
         }
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
                 rotating = true
             }
         }
@@ -667,27 +671,57 @@ struct SourceAppsView: View {
 
 	private func _loadRepositoryManifestSize() {
 		guard let url = object.first?.sourceURL,
-			  url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http"
+			  ["https", "http"].contains(url.scheme?.lowercased() ?? "")
 		else { return }
-		if let cached = URLCache.shared.cachedResponse(for: URLRequest(url: url)) {
+
+		_repositoryManifestBytes = nil
+		let cacheRequest = URLRequest(url: url)
+		if let cached = URLCache.shared.cachedResponse(for: cacheRequest),
+		   !cached.data.isEmpty {
 			_repositoryManifestBytes = Int64(cached.data.count)
 			return
 		}
-		var request = URLRequest(url: url)
-		request.httpMethod = "HEAD"
-		request.timeoutInterval = 10
-		URLSession.shared.dataTask(with: request) { _, response, _ in
-			let length = response?.expectedContentLength ?? -1
-			guard length > 0 else { return }
-			DispatchQueue.main.async {
-				_repositoryManifestBytes = length
+
+		// Prefer metadata: avoids downloading large manifests a second time.
+		var head = URLRequest(url: url)
+		head.httpMethod = "HEAD"
+		head.timeoutInterval = 10
+		URLSession.shared.dataTask(with: head) { _, response, _ in
+			if let http = response as? HTTPURLResponse,
+			   (200..<300).contains(http.statusCode),
+			   http.expectedContentLength > 0 {
+				DispatchQueue.main.async {
+					guard object.first?.sourceURL == url else { return }
+					_repositoryManifestBytes = http.expectedContentLength
+				}
+				return
 			}
+
+			// Some repository hosts omit Content-Length or reject HEAD.
+			// Fetch the actual manifest and count the bytes instead.
+			var get = URLRequest(url: url)
+			get.httpMethod = "GET"
+			get.timeoutInterval = 45
+			URLSession.shared.dataTask(with: get) { data, response, error in
+				guard error == nil,
+					  let http = response as? HTTPURLResponse,
+					  (200..<300).contains(http.statusCode),
+					  let data, !data.isEmpty else { return }
+				let bytes = Int64(data.count)
+				DispatchQueue.main.async {
+					guard object.first?.sourceURL == url else { return }
+					_repositoryManifestBytes = bytes
+				}
+			}.resume()
 		}.resume()
 	}
 
 	private var _repositorySummary: some View {
 		VStack(alignment: .leading, spacing: 13) {
 			HStack(spacing: 8) {
+				if _isZagFeatured {
+					ZagRepositoryFeaturedPill()
+				}
 				HStack(spacing: 6) {
 					Image(systemName: "checkmark.circle.fill")
 						.foregroundStyle(.green)
@@ -707,9 +741,6 @@ struct SourceAppsView: View {
 					.padding(.horizontal, 11)
 					.padding(.vertical, 8)
 					.background(_repositoryPillColor, in: Capsule())
-				}
-				if _isZagFeatured {
-					ZagRepositoryFeaturedPill()
 				}
 			}
 			.font(.system(size: 12, weight: .semibold))
