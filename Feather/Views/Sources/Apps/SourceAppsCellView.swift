@@ -110,7 +110,7 @@ struct SourceAppsCellView: View {
 				Text(desc).font(.subheadline).foregroundStyle(.secondary)
 			}
 		}
-		.padding(.vertical, showsRepositoryDetails ? 14 : 0)
+		.padding(.vertical, showsRepositoryDetails ? 5 : 0)
 		.frame(minHeight: ZagListLayout.compactRowHeight)
 	}
 
