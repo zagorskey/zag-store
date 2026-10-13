@@ -38,6 +38,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case pairingUnavailable
         case installationAlreadyRunning
         case unsupportedIOSVersion
+        case incompatibleSigningTeam
 
         var errorDescription: String? {
             switch self {
@@ -50,6 +51,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             case .pairingUnavailable: return "RPPairing must be configured before installing this update."
             case .installationAlreadyRunning: return "Another RPPairing installation is already running."
             case .unsupportedIOSVersion: return "This release requires a newer version of iOS."
+            case .incompatibleSigningTeam: return "The update is signed by a different team. In-place replacement may not preserve app data."
             }
         }
     }
@@ -280,7 +282,24 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               signed.version == release.version else {
             throw UpdateError.signedIdentityMismatch
         }
+        try validateSignedApp(signed, release: release)
         return signed
+    }
+
+    /// Check the signed app on disk, not just its Core Data metadata.
+    /// Reject a different application identifier or build before handoff.
+    func validateSignedApp(_ signed: Signed, release: Release) throws {
+        guard release.bundleIdentifier == currentBundleID,
+              let appURL = Storage.shared.getAppDirectory(for: signed),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let identifier = info["CFBundleIdentifier"] as? String,
+              let version = info["CFBundleShortVersionString"] as? String,
+              let build = info["CFBundleVersion"] as? String,
+              identifier == currentBundleID,
+              version == release.version,
+              build == release.build else {
+            throw UpdateError.signedIdentityMismatch
+        }
     }
 
     /// Controlled test entry point. The caller must explicitly confirm the
@@ -301,6 +320,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               signed.version == release.version else {
             throw UpdateError.signedIdentityMismatch
         }
+        try validateSignedApp(signed, release: release)
         let core = ZagRPPairingCore.shared
         guard core.pairingFileExists else { throw UpdateError.pairingUnavailable }
         guard !core.isGate4Running else { throw UpdateError.installationAlreadyRunning }
