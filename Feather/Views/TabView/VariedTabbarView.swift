@@ -400,11 +400,11 @@ struct ZagAccountPopup: View {
                             Spacer()
                             if updateManager.updateCount > 0 {
                                 Text(updateManager.updateCount.description)
-                                    .font(.body)
+                                    .font(.system(size: 17, weight: .regular))
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .frame(minWidth: 29, minHeight: 25)
-                                    .background(Color(uiColor: UIColor(displayP3Red: 1, green: 0.23, blue: 0.28, alpha: 1)), in: Capsule())
+                                    .padding(.horizontal, 7)
+                                    .frame(minWidth: 28, minHeight: 24)
+                                    .background(Color(red: 1, green: 66.0 / 255.0, blue: 68.0 / 255.0), in: Capsule())
                             }
                         }
                     }
@@ -421,7 +421,7 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
+            .overlay(alignment: .topLeading) {
                 HStack(spacing: 9) {
                     Group {
                         if let accountIcon {
@@ -440,9 +440,8 @@ struct ZagAccountPopup: View {
                     Spacer()
 
                 }
-                .padding(.horizontal, 20)
-                .frame(height: 48)
-                .padding(.top, 6)
+                .padding(.leading, 20)
+                .padding(.top, 16)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
