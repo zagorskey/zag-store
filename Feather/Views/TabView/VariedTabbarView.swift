@@ -386,9 +386,13 @@ struct ZagAccountPopup: View {
                         .padding(.vertical, 7)
                     }
                     HStack(spacing: 14) {
-                        ZagSourcesTabIcon.label
+                        Image(uiImage: ZagSourcesTabIcon.image)
+                            .resizable()
+                            .renderingMode(.template)
+                            .interpolation(.high)
+                            .scaledToFit()
                             .foregroundStyle(themeTint)
-                            .frame(width: 13, height: 13)
+                            .frame(width: 14, height: 14)
                             .frame(width: 30, height: 30)
                             .background(Color(uiColor: .tertiarySystemFill), in: Circle())
                             .frame(width: 54)
