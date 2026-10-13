@@ -222,7 +222,7 @@ private final class ZagProfileBadgeCoordinator {
                     label.textColor = .white
                     label.font = .systemFont(ofSize: 12, weight: .regular)
                     label.backgroundColor = UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)
-                    label.layer.cornerRadius = 8.5
+                    label.layer.cornerRadius = 9
                     label.layer.masksToBounds = true
                     label.isUserInteractionEnabled = false
                     window.addSubview(label)
@@ -231,9 +231,9 @@ private final class ZagProfileBadgeCoordinator {
                 let count = chosen.1.count
                 label.text = count.description
                 label.isHidden = count == 0 || chosen.1.hidden
-                let width = max(23, CGFloat(count.description.count * 8 + 8))
-                label.frame = CGRect(x: chosen.2.maxX - width + 9,
-                                     y: chosen.2.minY - 5, width: width, height: 17)
+                let width = max(23.5, CGFloat(count.description.count * 8 + 8.5))
+                label.frame = CGRect(x: chosen.2.maxX - width + 7,
+                                     y: chosen.2.minY - 7, width: width, height: 18)
                 window.bringSubviewToFront(label)
             }
         }
@@ -417,8 +417,8 @@ struct ZagAccountPopup: View {
                                 Text(updateManager.updateCount.description)
                                     .font(.system(size: 20, weight: .regular))
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .frame(minWidth: 26, minHeight: 24)
+                                    .padding(.horizontal, 5.75)
+                                    .frame(minWidth: 27.5, minHeight: 26)
                                     .background(Color(red: 1, green: 66.0 / 255.0, blue: 68.0 / 255.0), in: Capsule())
                             }
                         }
