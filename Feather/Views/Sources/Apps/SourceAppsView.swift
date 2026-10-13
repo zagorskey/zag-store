@@ -931,6 +931,7 @@ struct SourceAppsView: View {
 								Rectangle()
 									.fill(Color(uiColor: .separator))
 									.frame(height: ZagListLayout.separatorHeight)
+									.padding(.leading, ZagListLayout.separatorLeadingInset)
 							}
 							.listRowInsets(EdgeInsets(top: 0, leading: ZagListLayout.horizontalInset, bottom: 0, trailing: ZagListLayout.horizontalInset))
 							.listRowBackground(Color.clear)
