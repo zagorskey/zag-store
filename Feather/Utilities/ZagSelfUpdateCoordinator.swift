@@ -129,7 +129,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         guard let minimum = release.minimumIOSVersion else { return }
         let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
         guard !parts.isEmpty, parts.count <= 3,
-              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\\.isNumber) }),
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0.isNumber }) }),
               let major = Int(parts[0]) else {
             throw UpdateError.invalidRelease
         }
