@@ -13,6 +13,7 @@ import UIKit
 
 extension Notification.Name {
 	static let zagProfileAvatarDidChange = Notification.Name("ZagStore.profileAvatarDidChange")
+    static let zagUpdatesSheetVisibilityDidChange = Notification.Name("ZagStore.updatesSheetVisibilityDidChange")
 }
 
 enum ZagProfileAvatarStore {
@@ -177,6 +178,27 @@ private final class ZagProfileBadgeCoordinator {
     }
     private var entries: [ObjectIdentifier: Entry] = [:]
     private var labels: [ObjectIdentifier: UILabel] = [:]
+    private var visibleStates: [ObjectIdentifier: Bool] = [:]
+    private var updatesSheetPresented = false
+
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: .zagUpdatesSheetVisibilityDidChange, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            self.updatesSheetPresented = notification.userInfo?["presented"] as? Bool ?? false
+            self.refresh()
+        }
+    }
+
+    private func setBadgeVisible(_ visible: Bool, for key: ObjectIdentifier, label: UILabel) {
+        guard visibleStates[key] != visible else { return }
+        visibleStates[key] = visible
+        label.isHidden = false
+        UIView.animate(withDuration: 0.22, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            label.alpha = visible ? 1 : 0
+        }
+    }
 
     func update(_ anchor: UIView, count: Int, hidden: Bool) {
         entries[ObjectIdentifier(anchor)] = Entry(anchor: anchor, count: count, hidden: hidden)
@@ -192,6 +214,7 @@ private final class ZagProfileBadgeCoordinator {
         for (key, label) in labels where !windows.contains(key) {
             label.removeFromSuperview()
             labels.removeValue(forKey: key)
+            visibleStates.removeValue(forKey: key)
         }
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             for window in scene.windows {
@@ -210,7 +233,7 @@ private final class ZagProfileBadgeCoordinator {
                     if abs(a.2.maxX - b.2.maxX) > 1 { return a.2.maxX < b.2.maxX }
                     return a.2.minY > b.2.minY
                 }) else {
-                    labels[key]?.isHidden = true
+                    if let label = labels[key] { setBadgeVisible(false, for: key, label: label) }
                     continue
                 }
                 let label: UILabel
@@ -218,6 +241,7 @@ private final class ZagProfileBadgeCoordinator {
                     label = existing
                 } else {
                     label = UILabel()
+                    label.alpha = 0
                     label.textAlignment = .center
                     label.textColor = .white
                     label.font = .systemFont(ofSize: 13, weight: .regular)
@@ -230,7 +254,7 @@ private final class ZagProfileBadgeCoordinator {
                 }
                 let count = chosen.1.count
                 label.text = count.description
-                label.isHidden = count == 0 || chosen.1.hidden
+                setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented, for: key, label: label)
                 let width = max(23.5, CGFloat(count.description.count * 8) + 8.5)
                 label.frame = CGRect(x: chosen.2.maxX - width + 7,
                                      y: chosen.2.minY - 7, width: width, height: 18)
