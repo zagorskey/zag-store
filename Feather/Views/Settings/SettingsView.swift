@@ -14,18 +14,36 @@ import NimbleJSON
 import Photos
 
 
+// Account navigation is already presented as a sheet; nested settings screens
+// must not offer a second account sheet or duplicate the main VPN toolbar.
+private struct ZagInsideAccountPopupKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var zagInsideAccountPopup: Bool {
+        get { self[ZagInsideAccountPopupKey.self] }
+        set { self[ZagInsideAccountPopupKey.self] = newValue }
+    }
+}
+
 // Shared avatar for pushed Settings destinations. Keep it on the destination
 // (not the parent) so the native back button and existing actions remain intact.
 private struct ZagSettingsDestinationAvatar: ViewModifier {
+    @Environment(\.zagInsideAccountPopup) private var insideAccountPopup
     func body(content: Content) -> some View {
         content.toolbar {
-            ToolbarItem(placement: .principal) {
-                ZagLocalVPNToolbarStatus()
-            }
-            ToolbarItem(placement: .primaryAction) {
-                ZagProfileToolbarButton()
-                    .tint(.primary)
-                    .padding(.trailing, -2)
+            if !insideAccountPopup {
+                ToolbarItem(placement: .principal) {
+                    ZagLocalVPNToolbarStatus()
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if !embeddedInAccountNavigation {
+                        ZagProfileToolbarButton()
+                            .tint(.primary)
+                            .padding(.trailing, -2)
+                    }
+                }
             }
         }
     }
@@ -178,8 +196,10 @@ struct SettingsView: View {
 			}
 			.zagWallpaperSurface()
 			.toolbar {
-				ToolbarItem(placement: .principal) {
-					ZagLocalVPNToolbarStatus()
+				if !embeddedInAccountNavigation {
+					ToolbarItem(placement: .principal) {
+						ZagLocalVPNToolbarStatus()
+					}
 				}
 				ToolbarItemGroup(placement: .topBarLeading) {
 					if _isReorderingSettings {
