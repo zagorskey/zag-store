@@ -360,12 +360,10 @@ struct ZagAccountPopup: View {
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
 
+    // The dedicated dark artwork is already bundled as ZagProfileDark.
+    // Never fall back to the light app icon in this account header.
     private var accountIcon: UIImage? {
-        if let image = UIImage(named: "ZagAccountIconDark") { return image }
-        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
-              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-              let names = primary["CFBundleIconFiles"] as? [String] else { return nil }
-        return names.reversed().compactMap { UIImage(named: $0) }.first
+        UIImage(named: "ZagProfileDark")
     }
 
     var body: some View {
@@ -448,7 +446,7 @@ struct ZagAccountPopup: View {
                 Spacer()
             }
             .padding(.leading, 20)
-            .padding(.top, 17)
+            .padding(.top, 28)
             .allowsHitTesting(false)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
