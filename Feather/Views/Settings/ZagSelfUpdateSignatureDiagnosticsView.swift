@@ -8,6 +8,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
         sortDescriptors: [NSSortDescriptor(key: "date", ascending: false)]
     ) private var signedApps: FetchedResults<Signed>
 
+    @State private var preflightReport: [(String, String)] = []
     @State private var probeMessage: String?
     @State private var report: [(String, String)] = []
     @State private var provisioningReport: [(String, String)] = []
@@ -44,6 +45,27 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             } header: {
                 Text("Self-Update Candidate")
+            }
+            Section("Self-Update Preflight") {
+                Text("Read-only structural checks. Cryptographic signature verification is not implemented; this cannot authorize installation.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button("Run Preflight") {
+                    preflightReport = []
+                    if let candidate = candidates.first(where: { $0.uuid == selectedUUID }) {
+                        let results = ZagSelfUpdateCoordinator.shared.inspectSelfUpdatePreflight(candidate)
+                        preflightReport = results.keys.sorted().map { ($0, results[$0] ?? "") }
+                    } else {
+                        preflightReport = [("Candidate", "Select a signed Zag Store candidate first")]
+                    }
+                }
+                .disabled(selectedUUID.isEmpty)
+                ForEach(preflightReport, id: \.0) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.0).font(.subheadline)
+                        Text(item.1).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
             }
             Section("Keychain Continuity Probe") {
                 Text("Create a disposable marker before an update. After a separately confirmed update, use Read Marker to check whether it survived. This never reads existing app credentials.")
