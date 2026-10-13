@@ -416,7 +416,7 @@ struct ZagAccountPopup: View {
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
                 case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
-                case .settings: SettingsView()
+                case .settings: SettingsView(embeddedInAccountNavigation: true)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
