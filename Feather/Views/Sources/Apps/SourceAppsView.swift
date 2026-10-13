@@ -29,6 +29,27 @@ private struct ZagRepositoryActionsToolbar<SortContent: View>: ViewModifier {
     }
 }
 
+// Visual preview only. Replace the unconditional display with a trusted
+// verification-registry lookup when Zag Verified launches.
+private struct ZagRepositoryShield: View {
+    var body: some View {
+        Image(systemName: "shield.fill")
+            .font(.system(size: 24, weight: .regular))
+            .foregroundStyle(.green)
+            .overlay {
+                Image(uiImage: ZagSourcesTabIcon.image)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(.white)
+                    .frame(width: 10, height: 10)
+                    .offset(y: -1)
+            }
+            .frame(width: 25, height: 27)
+            .accessibilityLabel("Zag shield preview")
+    }
+}
+
 private struct ZagRepositoryIconPill: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -897,10 +918,14 @@ struct SourceAppsView: View {
 				if _searchText.isEmpty {
 					Group {
 						if object.count == 1 {
-							Text(object[0].name ?? "Repository")
-								.font(.system(size: 22, weight: .bold))
-								.foregroundStyle(.primary)
-								.padding(.horizontal, 0)
+							HStack(alignment: .center, spacing: 8) {
+								ZagRepositoryShield()
+								Text(object[0].name ?? "Repository")
+									.font(.system(size: 22, weight: .bold))
+									.foregroundStyle(.primary)
+									.lineLimit(1)
+							}
+							.padding(.horizontal, 0)
 						} else {
 							ZagSectionHeader(title: "Your Sources", count: sources.reduce(0) { $0 + $1.apps.count })
 						}
