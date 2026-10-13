@@ -328,69 +328,95 @@ struct ZagGlobalProfileAvatar: View {
 }
 
 struct ZagAccountPopup: View {
-	@ObservedObject private var updateManager = UpdateManager.shared
-	@Environment(\.dismiss) private var dismiss
-	@State private var avatarRevision = UUID()
+    @ObservedObject private var updateManager = UpdateManager.shared
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
+    @State private var avatarRevision = UUID()
 
-	var body: some View {
-		NavigationStack {
-			Form {
-				Section {
+    private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
                     NavigationLink {
                         ZagAccountAvatarEditor()
                     } label: {
                         HStack(spacing: 14) {
                             ZagGlobalProfileAvatar(revision: avatarRevision)
-                                .frame(width: 62, height: 62)
+                                .frame(width: 54, height: 54)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Zag Store").font(.title3.weight(.semibold))
-                                Text("Profile").foregroundStyle(.secondary)
+                                Text("Petar Zagorski")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                Text("Account info and settings")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 7)
+                    }
+                }
+                Section {
+                    NavigationLink {
+                        ZagUpdatesPopup(updates: updateManager.updates)
+                    } label: {
+                        HStack {
+                            Text("App Updates")
+                            Spacer()
+                            if updateManager.updateCount > 0 {
+                                Text(updateManager.updateCount.description)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .frame(minWidth: 29, minHeight: 25)
+                                    .background(Color(uiColor: UIColor(displayP3Red: 1, green: 0.23, blue: 0.28, alpha: 1)), in: Capsule())
                             }
                         }
-                        .padding(.vertical, 6)
                     }
-				}
-				Section {
+                }
+                Section {
                     NavigationLink {
                         SettingsView()
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        Label {
+                            Text("Zag Store Settings")
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "gearshape")
+                                .foregroundStyle(themeTint)
+                        }
                     }
                 }
-				Section {
-					NavigationLink {
-						ZagUpdatesPopup(updates: updateManager.updates)
-					} label: {
-						HStack {
-							Label("App Updates", systemImage: "arrow.down.app")
-							Spacer()
-							if updateManager.updateCount > 0 {
-								Text(updateManager.updateCount.description)
-									.font(.caption.weight(.bold))
-									.foregroundStyle(.white)
-									.padding(.horizontal, 7)
-									.frame(minHeight: 24)
-									.background(Color.red, in: Capsule())
-							}
-						}
-					}
-				}
-			}
-			.navigationTitle("Account")
-			.navigationBarTitleDisplayMode(.inline)
-			.toolbar {
-				ToolbarItem(placement: .topBarTrailing) {
-					Button { dismiss() } label: { Image(systemName: "xmark") }
-						.accessibilityLabel("Close")
-				}
-			}
-		}
-		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
-			avatarRevision = UUID()
-		}
-	}
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 9) {
+                        Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 27, height: 27)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        Text("Zag Account")
+                            .font(.system(size: 20, weight: .semibold))
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
+            avatarRevision = UUID()
+        }
+    }
 }
-
 
 private struct ZagAccountAvatarEditor: View {
     @State private var selection: PhotosPickerItem?
