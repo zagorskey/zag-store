@@ -393,6 +393,20 @@ struct LibraryView: View {
 	@ViewBuilder
 	private var _updatesSheetContent: some View {
 		ZagUpdatesPopup(updates: updateManager.updates)
+            .onAppear {
+                NotificationCenter.default.post(
+                    name: .zagUpdatesSheetVisibilityDidChange,
+                    object: nil,
+                    userInfo: ["presented": true]
+                )
+            }
+            .onDisappear {
+                NotificationCenter.default.post(
+                    name: .zagUpdatesSheetVisibilityDidChange,
+                    object: nil,
+                    userInfo: ["presented": false]
+                )
+            }
 	}
 
 	@ViewBuilder
@@ -983,13 +997,6 @@ struct LibraryView: View {
             .sheet(isPresented: $_isUpdatesPresenting) {
 				_updatesSheetContent
 			}
-            .onChange(of: _isUpdatesPresenting) { _, presented in
-                NotificationCenter.default.post(
-                    name: .zagUpdatesSheetVisibilityDidChange,
-                    object: nil,
-                    userInfo: ["presented": presented]
-                )
-            }
 
 			.sheet(item: $_pendingRemoveApp) { app in
 				_removeAppSheetContent(app)
