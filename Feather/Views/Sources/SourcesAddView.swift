@@ -38,24 +38,22 @@ struct SourcesAddView: View {
 	@State
 	private var _sourceURL = ""
 
-	let recommendedSources: [URL] = [
-		"https://raw.githubusercontent.com/claration/Feather/refs/heads/main/app-repo.json",
-		"https://raw.githubusercontent.com/Aidoku/Aidoku/altstore/apps.json",
-		"https://github.com/chachillie/Flycast-iOS/raw/main/flycast-ios.json",
+	static let zagFeaturedSourceURLs: [URL] = [
+		"https://repository.apptesters.org",
+		"https://altstore.fouadraheb.com",
+		"https://ipa.cypwn.xyz/cypwn.json",
+		"https://fastsign.dev/repo.json",
 		"https://xitrix.github.io/iTorrent/AltStore.json",
-		"https://altstore.oatmealdome.me/",
-		"https://raw.githubusercontent.com/LiveContainer/LiveContainer/refs/heads/main/apps.json",
-		"https://pokemmo.com/altstore",
-		"https://provenance-emu.com/apps.json",
-		"https://community-apps.sidestore.io/sidecommunity.json",
+		"https://github.com/jaydenjcpy/Eevee-Alt-Source/raw/refs/heads/main/apps.json",
+		"https://raw.githubusercontent.com/mrdrvt99/Altstore-Repository/main/ytkace.json",
+		"https://raw.githubusercontent.com/VortXTV/VortX/main/altstore/source.json",
+		"https://dl.strem.io/apple/altstore/source.json",
 		"https://alt.getutm.app",
-		"https://raw.githubusercontent.com/paigely/Navic/refs/heads/master/app-repo.json",
-		"https://stikdebug.xyz/index.json",
-		"https://apps.manicemu.site/altstore",
-		"https://alt.crystall1ne.dev"
-	].compactMap {
-		URL(string: $0)
-	}
+		"https://github.com/chachillie/Flycast-iOS/raw/main/flycast-ios.json",
+		"https://altstore.oatmealdome.me/"
+	].compactMap { URL(string: $0) }
+
+	let recommendedSources: [URL] = SourcesAddView.zagFeaturedSourceURLs
 
 	private var popupBackground: Color {
 		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
@@ -214,7 +212,7 @@ struct SourcesAddView: View {
 				} footer: {
 					Text(
 						.localized(
-							"Open an [issue](https://github.com/claration/Feather/issues) on GitHub if you want your source to be featured."
+							"Suggest a repository for Zag Featured through the Zag Store project."
 						)
 					)
 					.font(.subheadline)
