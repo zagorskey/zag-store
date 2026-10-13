@@ -2334,6 +2334,7 @@ private struct ZagUpdateRow: View {
 
 struct ZagUpdatesPopup: View {
 	let updates: [UpdateManager.AvailableUpdate]
+	var embeddedInAccountNavigation = false
 
 	@State private var completedUpdates: [UpdateManager.AvailableUpdate] = []
 	@State private var completedUpdateIDs: Set<String> = []
@@ -2383,7 +2384,16 @@ struct ZagUpdatesPopup: View {
 	}
 
 	var body: some View {
-		NavigationStack {
+		Group {
+			if embeddedInAccountNavigation {
+				updatesContent
+			} else {
+				NavigationStack { updatesContent }
+			}
+		}
+	}
+
+	private var updatesContent: some View {
 			ZStack {
 				popupBackground
 					.ignoresSafeArea()
@@ -2515,18 +2525,19 @@ struct ZagUpdatesPopup: View {
 					)
 				}
 			}
-			.interactiveDismissDisabled()
+			.interactiveDismissDisabled(!embeddedInAccountNavigation)
 			.toolbar {
 				ToolbarItem(placement: .topBarTrailing) {
+					if !embeddedInAccountNavigation {
 					Button {
 						dismiss()
 					} label: {
 						Image(systemName: "xmark")
 					}
 					.accessibilityLabel("Close")
+					}
 				}
 			}
-		}
 	}
 
 	private var updateAllCard: some View {
