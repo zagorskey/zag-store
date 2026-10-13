@@ -358,6 +358,7 @@ struct ZagAccountPopup: View {
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#3F8EF7"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
+    @State private var showingUpdates = false
 
     private enum AccountDestination: Hashable {
         case profile, updates, settings
@@ -387,7 +388,7 @@ struct ZagAccountPopup: View {
                     }
                 }
                 Section {
-                    NavigationLink(value: AccountDestination.updates) {
+                    Button { showingUpdates = true } label: {
                         HStack {
                             Text("App Updates")
                             Spacer()
@@ -412,26 +413,9 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .overlay(alignment: .topLeading) {
-                HStack(spacing: 9) {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                }
-                .padding(.leading, 20)
-                .padding(.top, 28)
-                .allowsHitTesting(false)
-            }
             .navigationDestination(for: AccountDestination.self) { destination in
                 switch destination {
                 case .profile: ZagAccountAvatarEditor()
-                case .updates: ZagUpdatesPopup(updates: updateManager.updates)
                 case .settings: SettingsView()
                 }
             }
@@ -442,6 +426,25 @@ struct ZagAccountPopup: View {
                         .accessibilityLabel("Close")
                 }
             }
+        }
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 9) {
+                Image("ZagAccountIconDark")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 27, height: 27)
+                    .clipShape(Circle())
+                Text("Zag Account")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+            }
+            .padding(.leading, 20)
+            .padding(.top, 28)
+            .allowsHitTesting(false)
+        }
+        .sheet(isPresented: $showingUpdates) {
+            ZagUpdatesPopup(updates: updateManager.updates)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
