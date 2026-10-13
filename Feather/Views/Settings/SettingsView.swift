@@ -363,7 +363,10 @@ extension SettingsView {
 		}
 
 		Section {
-			NavigationLink(destination: ZagExperimentalSigningView().zagSettingsDestinationAvatar()) {
+			NavigationLink(destination: ZagSelfUpdateSignatureDiagnosticsView().zagSettingsDestinationAvatar()) {
+                Label("Self-Update Signature Diagnostics", systemImage: "checkmark.shield")
+            }
+            NavigationLink(destination: ZagExperimentalSigningView().zagSettingsDestinationAvatar()) {
 				Label("Signing", systemImage: "signature")
 			}
 		} header: {
