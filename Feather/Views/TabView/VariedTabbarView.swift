@@ -308,23 +308,44 @@ struct ZagProfileToolbarButton: View {
 }
 
 struct ZagGlobalProfileAvatar: View {
-	let revision: UUID
-	@Environment(\.colorScheme) private var colorScheme
-	var body: some View {
-		Group {
-			if let image = ZagProfileAvatarStore.customImage() {
-				Image(uiImage: image).resizable().scaledToFill()
-			} else {
-				Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
-					.resizable().scaledToFill()
-			}
-		}
-		.id(revision)
-		.clipShape(Circle())
-		.background(.ultraThinMaterial, in: Circle())
-		.overlay(Circle().stroke(.white.opacity(0.16), lineWidth: 0.5))
-		.shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-	}
+    let revision: UUID
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var borderRotation = false
+
+    private let borderSpectrum: [Color] = [
+        Color(red: 0.00, green: 0.86, blue: 1.00),
+        Color(red: 0.05, green: 0.37, blue: 1.00),
+        Color(red: 0.42, green: 0.18, blue: 1.00),
+        Color(red: 0.95, green: 0.16, blue: 0.89),
+        Color(red: 0.00, green: 0.86, blue: 1.00)
+    ]
+
+    var body: some View {
+        Group {
+            if let image = ZagProfileAvatarStore.customImage() {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
+                    .resizable().scaledToFill()
+            }
+        }
+        .id(revision)
+        .clipShape(Circle())
+        .overlay {
+            Circle().strokeBorder(
+                AngularGradient(colors: borderSpectrum, center: .center,
+                                angle: .degrees(borderRotation ? 360 : 0)),
+                lineWidth: 1.1
+            )
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+                borderRotation = true
+            }
+        }
+    }
 }
 
 struct ZagAccountPopup: View {
@@ -335,6 +356,17 @@ struct ZagAccountPopup: View {
     @State private var avatarRevision = UUID()
 
     private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
+
+    // Use the supplied appearance-specific account icons when present in Assets.
+    // Until they are added, fall back to the installed app's actual icon.
+    private var accountIcon: UIImage? {
+        let name = colorScheme == .dark ? "ZagAccountIconDark" : "ZagAccountIconLight"
+        if let image = UIImage(named: name) { return image }
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let names = primary["CFBundleIconFiles"] as? [String] else { return nil }
+        return names.reversed().compactMap { UIImage(named: $0) }.first
+    }
 
     var body: some View {
         NavigationStack {
@@ -368,8 +400,7 @@ struct ZagAccountPopup: View {
                             Spacer()
                             if updateManager.updateCount > 0 {
                                 Text(updateManager.updateCount.description)
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .monospacedDigit()
+                                    .font(.body)
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 8)
                                     .frame(minWidth: 29, minHeight: 25)
@@ -383,34 +414,45 @@ struct ZagAccountPopup: View {
                         SettingsView()
                     } label: {
                         Label {
-                            Text("Zag Store Settings")
-                                .foregroundStyle(.primary)
+                            Text("Zag Store Settings").foregroundStyle(.primary)
                         } icon: {
-                            Image(systemName: "gearshape")
-                                .foregroundStyle(themeTint)
+                            Image(systemName: "gearshape").foregroundStyle(themeTint)
                         }
                     }
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 9) {
-                        Image(colorScheme == .dark ? "ZagProfileDark" : "ZagProfileLight")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 27, height: 27)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        Text("Zag Account")
-                            .font(.system(size: 20, weight: .semibold))
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack(spacing: 9) {
+                    Group {
+                        if let accountIcon {
+                            Image(uiImage: accountIcon).resizable().scaledToFill()
+                        } else {
+                            Image(systemName: "app.fill")
+                                .resizable().scaledToFit()
+                                .foregroundStyle(themeTint)
+                        }
                     }
-                    .accessibilityElement(children: .combine)
+                    .frame(width: 27, height: 27)
+                    .clipShape(Circle())
+                    Text("Zag Account")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Close")
-                }
+                .padding(.horizontal, 20)
+                .frame(height: 92, alignment: .top)
+                .padding(.top, 12)
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
