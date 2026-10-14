@@ -169,19 +169,20 @@ enum ZagMachOSignatureInspector {
         let hashSize = Int(data[base + 36])
         let hashType = data[base + 37]
         let pageExponent = Int(data[base + 39])
-        guard hashType == 2, hashSize == 32, pageExponent == 14,
+        let pageSize = 1 << pageExponent
+        guard hashType == 2, hashSize == 32, (pageExponent == 12 || pageExponent == 14),
               codeSlots > 0, codeSlots <= 100000,
               specialSlots <= 1024,
               hashOffset >= specialSlots * hashSize,
               hashOffset <= size,
               codeSlots <= (size - hashOffset) / hashSize,
               codeLimit <= offset,
-              (codeLimit + 16383) / 16384 == codeSlots else {
+              (codeLimit + pageSize - 1) / pageSize == codeSlots else {
             throw InspectionError.unsupportedFormat
         }
         for i in 0..<codeSlots {
-            let start = i * 16384
-            let finish = min(start + 16384, codeLimit)
+            let start = i * pageSize
+            let finish = min(start + pageSize, codeLimit)
             let digest = SHA256.hash(data: data[start..<finish])
             let slot = base + hashOffset + i * hashSize
             guard Data(digest) == data.subdata(in: slot..<(slot + hashSize)) else {
