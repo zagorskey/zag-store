@@ -180,7 +180,8 @@ enum ZagMachOSignatureInspector {
         }
         let pageSize = 1 << pageExponent
         let fieldSummary = "hashType=\(hashType), hashSize=\(hashSize), pageExponent=\(pageExponent), codeSlots=\(codeSlots), specialSlots=\(specialSlots), codeLimit=\(codeLimit), signatureOffset=\(offset), hashOffset=\(hashOffset), directorySize=\(size)"
-        guard hashType == 2, hashSize == 32, (pageExponent == 12 || pageExponent == 14),
+        guard ((hashType == 1 && hashSize == 20) || (hashType == 2 && hashSize == 32)),
+              (pageExponent == 12 || pageExponent == 14),
               codeSlots > 0, codeSlots <= 100000,
               specialSlots <= 1024,
               hashOffset >= specialSlots * hashSize,
@@ -190,17 +191,18 @@ enum ZagMachOSignatureInspector {
               (codeLimit + pageSize - 1) / pageSize == codeSlots else {
             return "UNVERIFIED — CodeDirectory fields: " + fieldSummary
         }
-        stage = "SHA-256 page comparison"
+        stage = "code-page hash comparison"
         for i in 0..<codeSlots {
             let start = i * pageSize
             let finish = min(start + pageSize, codeLimit)
-            let digest = SHA256.hash(data: data[start..<finish])
+            let page = data[start..<finish]
+            let digest: Data = hashType == 1 ? Data(Insecure.SHA1.hash(data: page)) : Data(SHA256.hash(data: page))
             let slot = base + hashOffset + i * hashSize
-            guard Data(digest) == data.subdata(in: slot..<(slot + hashSize)) else {
-                return "FAIL — code page \\(i) hash mismatch"
+            guard digest == data.subdata(in: slot..<(slot + hashSize)) else {
+                return "FAIL — code page \(i) hash mismatch"
             }
         }
-        return "PASS — \\(codeSlots) SHA-256 code pages (integrity only; unauthenticated)"
+        return "PASS — \(codeSlots) \(hashType == 1 ? "SHA-1" : "SHA-256") code pages (integrity only; unauthenticated; NOT installation authorization)"
         } catch InspectionError.unsupportedFormat {
             return "UNVERIFIED — unsupported format at " + stage
         } catch InspectionError.malformedSignature {
