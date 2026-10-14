@@ -104,9 +104,9 @@ enum ZagMachOSignatureInspector {
     /// This does NOT authenticate the CodeDirectory, CMS, certificates, special
     /// slots, nested code or resource seal, and never authorizes installation.
     static func inspectCodePageHashes(at executable: URL) throws -> String {
+        var stage = "Mach-O header"
         do {
         let data = try Data(contentsOf: executable, options: .mappedIfSafe)
-        var stage = "Mach-O header"
         func le32(_ p: Int) throws -> Int {
             guard p >= 0, p <= data.count - 4 else { throw InspectionError.malformedSignature }
             return Int(data[p]) | (Int(data[p+1]) << 8) |
