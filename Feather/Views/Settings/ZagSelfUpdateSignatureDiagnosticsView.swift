@@ -16,6 +16,8 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     @State private var candidateGroups: [String] = []
     @State private var errorMessage: String?
     @State private var selectedUUID: String = ""
+    @State private var hashTestUUID: String = ""
+    @State private var hashTestResult: String?
 
     private var candidates: [Signed] {
         signedApps.filter { $0.identifier == Bundle.main.bundleIdentifier }
@@ -45,6 +47,43 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             } header: {
                 Text("Self-Update Candidate")
+            }
+            Section("Signed App Hash Test") {
+                Text("Inspect the primary CodeDirectory of any signed app. Read-only: does not sign, install, or verify CMS authenticity.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if signedApps.isEmpty {
+                    Text("No signed apps in Library.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Signed app", selection: $hashTestUUID) {
+                        Text("Select signed app").tag("")
+                        ForEach(signedApps, id: \.uuid) { app in
+                            Text("\(app.name ?? app.identifier ?? "Unknown") — \(app.version ?? "?")")
+                                .tag(app.uuid ?? "")
+                        }
+                    }
+                    Button("Inspect CodeDirectory Hashes") {
+                        hashTestResult = nil
+                        guard let candidate = signedApps.first(where: { $0.uuid == hashTestUUID }),
+                              let appURL = Storage.shared.getAppDirectory(for: candidate),
+                              let executableURL = Bundle(url: appURL)?.executableURL else {
+                            hashTestResult = "UNVERIFIED — signed app or executable not found"
+                            return
+                        }
+                        do {
+                            hashTestResult = try ZagMachOSignatureInspector.inspectCodePageHashes(at: executableURL)
+                        } catch {
+                            hashTestResult = "UNVERIFIED — \(error.localizedDescription)"
+                        }
+                    }
+                    .disabled(hashTestUUID.isEmpty)
+                }
+                if let hashTestResult {
+                    Text(hashTestResult)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+                }
             }
             Section("Self-Update Preflight") {
                 Text("Read-only structural checks. Cryptographic signature verification is not implemented; this cannot authorize installation.")
