@@ -18,6 +18,13 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     @State private var selectedUUID: String = ""
     @State private var hashTestUUID: String = ""
     @State private var hashTestResult: String?
+    @FetchRequest(
+        entity: CertificatePair.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \CertificatePair.date, ascending: false)]
+    ) private var testCertificates: FetchedResults<CertificatePair>
+    @State private var testCertificateUUID = ""
+    @State private var sha256TestResult: String?
+    @State private var sha256TestRunning = false
 
     private var candidates: [Signed] {
         signedApps.filter { $0.identifier == Bundle.main.bundleIdentifier }
@@ -81,6 +88,27 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
                 if let hashTestResult {
                     Text(hashTestResult)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+                }
+            }
+            Section("Experimental SHA-256 Signing") {
+                Text("Signs only a temporary copy of the signed app selected above. Never installs, updates, or changes Library contents. A hash PASS does not verify CMS authenticity.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Picker("Test certificate", selection: $testCertificateUUID) {
+                    Text("Select certificate").tag("")
+                    ForEach(testCertificates, id: \.uuid) { cert in
+                        Text(cert.nickname ?? cert.uuid ?? "Unnamed certificate")
+                            .tag(cert.uuid ?? "")
+                    }
+                }
+                Button(sha256TestRunning ? "Signing temporary copy…" : "Test SHA-256 Signing") {
+                    Task { await runSHA256Test() }
+                }
+                .disabled(sha256TestRunning || hashTestUUID.isEmpty || testCertificateUUID.isEmpty)
+                if let sha256TestResult {
+                    Text(sha256TestResult)
                         .font(.footnote)
                         .textSelection(.enabled)
                 }
@@ -173,6 +201,47 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
         }
         .navigationTitle("Signature Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @MainActor
+    private func runSHA256Test() async {
+        guard !sha256TestRunning else { return }
+        sha256TestRunning = true
+        sha256TestResult = "Preparing disposable app copy…"
+        defer { sha256TestRunning = false }
+
+        guard let app = signedApps.first(where: { $0.uuid == hashTestUUID }),
+              let sourceURL = Storage.shared.getAppDirectory(for: app),
+              let certificate = testCertificates.first(where: { $0.uuid == testCertificateUUID }) else {
+            sha256TestResult = "UNVERIFIED — select an existing signed app and certificate."
+            return
+        }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zag-sha256-experiment-\(UUID().uuidString)", isDirectory: true)
+        let copyURL = directory.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            try FileManager.default.copyItem(at: sourceURL, to: copyURL)
+
+            var options = Options.defaultOptions
+            options.appEntitlementsFile = nil
+            options.removeProvisioning = false
+            let signer = ZsignHandler(appUrl: copyURL, options: options, cert: certificate)
+            try await signer.sign(sha256Only: true)
+            if let error = signer.hadError { throw error }
+            guard let executable = Bundle(url: copyURL)?.executableURL else {
+                sha256TestResult = "UNVERIFIED — executable missing after signing."
+                return
+            }
+            let result = try ZagMachOSignatureInspector.inspectCodePageHashes(at: executable)
+            sha256TestResult = result.contains("SHA-256")
+                ? "SHA-256 EXPERIMENT — \(result)\nCMS authenticity and installation remain UNVERIFIED. Temporary copy deleted."
+                : "UNVERIFIED — expected SHA-256 primary CodeDirectory; got: \(result)"
+        } catch {
+            sha256TestResult = "UNVERIFIED — \(error.localizedDescription). Temporary copy cleanup attempted."
+        }
     }
 
     private func inspect() {
