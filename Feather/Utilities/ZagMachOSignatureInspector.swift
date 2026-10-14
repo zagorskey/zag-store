@@ -175,7 +175,11 @@ enum ZagMachOSignatureInspector {
         let hashSize = Int(data[base + 36])
         let hashType = data[base + 37]
         let pageExponent = Int(data[base + 39])
+        guard pageExponent >= 0, pageExponent <= 30 else {
+            return "UNVERIFIED — CodeDirectory page exponent: \(pageExponent)"
+        }
         let pageSize = 1 << pageExponent
+        let fieldSummary = "hashType=\(hashType), hashSize=\(hashSize), pageExponent=\(pageExponent), codeSlots=\(codeSlots), specialSlots=\(specialSlots), codeLimit=\(codeLimit), signatureOffset=\(offset), hashOffset=\(hashOffset), directorySize=\(size)"
         guard hashType == 2, hashSize == 32, (pageExponent == 12 || pageExponent == 14),
               codeSlots > 0, codeSlots <= 100000,
               specialSlots <= 1024,
@@ -184,7 +188,7 @@ enum ZagMachOSignatureInspector {
               codeSlots <= (size - hashOffset) / hashSize,
               codeLimit <= offset,
               (codeLimit + pageSize - 1) / pageSize == codeSlots else {
-            throw InspectionError.unsupportedFormat
+            return "UNVERIFIED — CodeDirectory fields: " + fieldSummary
         }
         stage = "SHA-256 page comparison"
         for i in 0..<codeSlots {
