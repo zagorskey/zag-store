@@ -104,7 +104,9 @@ enum ZagMachOSignatureInspector {
     /// This does NOT authenticate the CodeDirectory, CMS, certificates, special
     /// slots, nested code or resource seal, and never authorizes installation.
     static func inspectCodePageHashes(at executable: URL) throws -> String {
+        do {
         let data = try Data(contentsOf: executable, options: .mappedIfSafe)
+        var stage = "Mach-O header"
         func le32(_ p: Int) throws -> Int {
             guard p >= 0, p <= data.count - 4 else { throw InspectionError.malformedSignature }
             return Int(data[p]) | (Int(data[p+1]) << 8) |
@@ -116,6 +118,7 @@ enum ZagMachOSignatureInspector {
                 (Int(data[p+2]) << 8) | Int(data[p+3])
         }
         guard try le32(0) == 0xfeedfacf else { throw InspectionError.unsupportedFormat }
+        stage = "Mach-O load commands"
         let ncmds = try le32(16), sizeofcmds = try le32(20)
         guard ncmds <= 4096, sizeofcmds <= data.count - 32 else {
             throw InspectionError.malformedSignature
@@ -133,6 +136,7 @@ enum ZagMachOSignatureInspector {
             }
             cursor += size
         }
+        stage = "embedded signature SuperBlob"
         guard let (offset, length) = signature, length >= 12,
               offset >= 0, offset <= data.count - length,
               try be32(offset) == 0xfade0cc0 else {
@@ -141,6 +145,7 @@ enum ZagMachOSignatureInspector {
         let total = try be32(offset + 4), count = try be32(offset + 8)
         guard total >= 12, total <= length, count <= 1024,
               count <= (total - 12) / 8 else { throw InspectionError.malformedSignature }
+        stage = "CodeDirectory lookup"
         var cd: (Int, Int)?
         for i in 0..<count {
             let entry = offset + 12 + i * 8
@@ -162,6 +167,7 @@ enum ZagMachOSignatureInspector {
         guard let (base, size) = cd, size >= 44 else {
             throw InspectionError.malformedSignature
         }
+        stage = "CodeDirectory fields"
         let hashOffset = try be32(base + 16)
         let specialSlots = try be32(base + 24)
         let codeSlots = try be32(base + 28)
@@ -180,6 +186,7 @@ enum ZagMachOSignatureInspector {
               (codeLimit + pageSize - 1) / pageSize == codeSlots else {
             throw InspectionError.unsupportedFormat
         }
+        stage = "SHA-256 page comparison"
         for i in 0..<codeSlots {
             let start = i * pageSize
             let finish = min(start + pageSize, codeLimit)
@@ -190,6 +197,13 @@ enum ZagMachOSignatureInspector {
             }
         }
         return "PASS — \\(codeSlots) SHA-256 code pages (integrity only; unauthenticated)"
+        } catch InspectionError.unsupportedFormat {
+            return "UNVERIFIED — unsupported format at " + stage
+        } catch InspectionError.malformedSignature {
+            return "UNVERIFIED — malformed signature at " + stage
+        } catch {
+            return "UNVERIFIED — " + stage + ": " + error.localizedDescription
+        }
     }
 
 }
