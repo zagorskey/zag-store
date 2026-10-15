@@ -11,7 +11,7 @@ struct ZagSelfUpdateStatusView: View {
     @ObservedObject private var coordinator = ZagSelfUpdateCoordinator.shared
     @ObservedObject private var gate4 = ZagRPPairingCore.shared
 
-    // Placeholder preferences only; no automatic update service is activated.
+    // Automatic installation remains disabled; release-channel checks are manual.
     @AppStorage("ZagStore.updatePreferences.autoInstall.placeholder")
     private var zagAutoInstallEnabled = false
     @AppStorage("ZagStore.updatePreferences.betaChannel.placeholder")
@@ -26,6 +26,8 @@ struct ZagSelfUpdateStatusView: View {
 
     @State private var report: [(key: String, value: String)] = []
     @State private var checkStatus = "Not checked"
+    @State private var releaseCheckStatus = "Not checked"
+    @State private var releaseCheckBusy = false
     @State private var markerStatus = "Not checked"
 
     private func createMarker() {
@@ -607,7 +609,7 @@ struct ZagSelfUpdateStatusView: View {
                     ZagStoreUpdateBetaPreferencesView()
                 } label: {
                     HStack {
-                        Text("Beta Updates")
+                        Text("Release Channel")
                         Spacer()
                         Text(zagBetaChannel == "beta" ? "Zag Store Beta" :
                              zagBetaChannel == "nightly" ? "Zag Store Nightly" : "Off")
@@ -615,6 +617,29 @@ struct ZagSelfUpdateStatusView: View {
                             .lineLimit(1)
                     }
                 }
+                Button {
+                    guard !releaseCheckBusy else { return }
+                    releaseCheckBusy = true
+                    releaseCheckStatus = "Checking " + (zagBetaChannel == "off" ? "Stable" : zagBetaChannel.capitalized) + "…"
+                    Task { @MainActor in
+                        defer { releaseCheckBusy = false }
+                        do {
+                            if let release = try await coordinator.checkForSelectedChannel() {
+                                releaseCheckStatus = "Available: " + release.version + " (Build " + release.build + ")"
+                            } else {
+                                releaseCheckStatus = "No newer release on this channel"
+                            }
+                        } catch {
+                            releaseCheckStatus = "Check failed: " + error.localizedDescription
+                        }
+                    }
+                } label: {
+                    Label("Check for Updates", systemImage: "arrow.clockwise")
+                }
+                .disabled(releaseCheckBusy)
+                Text(releaseCheckStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             if shouldCelebrateVerifiedReplacement {
@@ -905,7 +930,7 @@ private struct ZagSelfUpdateRainbowProgress: View {
 }
 
 
-// UI-only preferences; these do not schedule or install updates.
+// Automatic installation is still disabled; channel selection controls manual checks.
 private struct ZagStoreUpdateAutomaticPreferencesView: View {
     @AppStorage("ZagStore.updatePreferences.autoInstall.placeholder")
     private var enabled = false
@@ -949,10 +974,10 @@ private struct ZagStoreUpdateBetaPreferencesView: View {
                     }
                 }
             } footer: {
-                Text("Channel selection is not connected to update downloads yet.")
+                Text("Select which Zag Store release manifest to check. Updates are not installed automatically.")
             }
         }
-        .navigationTitle("Beta Updates")
+        .navigationTitle("Release Channel")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
