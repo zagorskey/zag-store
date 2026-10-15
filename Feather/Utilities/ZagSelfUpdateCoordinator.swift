@@ -21,6 +21,27 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let releaseNotes: String?
     }
 
+    // Stable is the default. Existing "off" preferences migrate without changing
+    // the user's selection; it means prerelease updates are disabled.
+    enum UpdateChannel: String, CaseIterable {
+        case stable, beta, nightly
+
+        static let preferenceKey = "ZagStore.updatePreferences.betaChannel.placeholder"
+
+        static var selected: Self {
+            let stored = UserDefaults.standard.string(forKey: preferenceKey) ?? "off"
+            return Self(rawValue: stored) ?? .stable
+        }
+
+        var manifestURL: URL {
+            URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store/main/releases/\(rawValue).json")!
+        }
+    }
+
+    func checkForSelectedChannel() async throws -> Release? {
+        try await checkForUpdate(manifestURL: UpdateChannel.selected.manifestURL)
+    }
+
     struct PendingInstallation: Codable {
         let version: String
         let build: String
