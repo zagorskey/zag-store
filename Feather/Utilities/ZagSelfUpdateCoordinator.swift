@@ -66,10 +66,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case installationAlreadyRunning
         case unsupportedIOSVersion
         case incompatibleSigningTeam
+        case channelNotPublished
 
         var errorDescription: String? {
             switch self {
             case .invalidRelease: return "The release metadata is incomplete or invalid."
+            case .channelNotPublished: return "No release manifest has been published for this channel yet."
             case .incompatibleBundleIdentifier: return "The update does not match this Zag Store installation."
             case .insecureDownload: return "Zag Store updates require HTTPS downloads."
             case .checksumMismatch: return "The downloaded IPA failed its SHA-256 verification."
@@ -145,9 +147,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.insecureDownload
         }
         let (data, response) = try await URLSession.shared.data(from: manifestURL)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
             throw UpdateError.invalidRelease
         }
+        if http.statusCode == 404 { throw UpdateError.channelNotPublished }
+        guard http.statusCode == 200 else { throw UpdateError.invalidRelease }
         let release = try JSONDecoder().decode(Release.self, from: data)
         guard !release.version.isEmpty, !release.build.isEmpty,
               release.bundleIdentifier == currentBundleID else {
