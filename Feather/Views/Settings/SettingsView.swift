@@ -165,6 +165,22 @@ struct SettingsView: View {
 					if _advancedSettingsUnlocked {
 						_advancedSettingsSections
 					}
+
+					// MARK: Zag Store Running Build Footer
+					Section {
+						VStack(spacing: 5) {
+							Text("Zag Store")
+								.font(.footnote.weight(.semibold))
+							Text(
+								"Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") (Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"))"
+							)
+							.font(.caption)
+							.monospacedDigit()
+						}
+						.frame(maxWidth: .infinity)
+						.foregroundStyle(.secondary)
+						.listRowBackground(Color.clear)
+					}
 				}
 			}
 			.safeAreaInset(edge: .bottom) {
@@ -1353,6 +1369,9 @@ private struct ZagLoggingSettingsView: View {
 		case .tunnel: return "Tunnel"
 		case .rsd: return "RSD"
 		case .installing: return "Installing"
+		case .uploading(let percent): return "Uploading \(percent)%"
+		case .staged: return "IPA Staged"
+		case .upgradeSubmitted: return "Upgrade Submitted"
 		case .progress(let percent): return "Installing \(percent)%"
 		case .complete: return "Complete"
 		case .failed(let message): return "Failed: \(message)"

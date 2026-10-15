@@ -183,8 +183,11 @@ struct LibraryView: View {
         }
     }
 
+    // Keep device inventory intact; hide the store's own signed archive from Library.
     private var _filteredSignedApps: [Signed] {
-		filteredAndSortedApps(from: _signedApps)
+		filteredAndSortedApps(from: _signedApps).filter {
+			$0.identifier != Bundle.main.bundleIdentifier
+		}
 	}
 
 	private var _filteredInstalledApps: [Signed] {

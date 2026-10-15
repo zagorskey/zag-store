@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import ZsignSwift
 
 /// Read-only development diagnostics. Never initiates installation.
 struct ZagSelfUpdateSignatureDiagnosticsView: View {
@@ -24,6 +25,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     ) private var testCertificates: FetchedResults<CertificatePair>
     @State private var testCertificateUUID = ""
     @State private var sha256TestResult: String?
+    @State private var installedIdentityResult: String?
     @State private var sha256TestRunning = false
 
     private var candidates: [Signed] {
@@ -47,7 +49,18 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                                 .tag(app.uuid ?? "")
                         }
                     }
-                    Button("Inspect Entitlements") {
+
+                Button("Inspect Installed Zag Store") {
+                    installedIdentityResult = inspectInstalledZagStore()
+                }
+
+                if let installedIdentityResult {
+                    Text(installedIdentityResult)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+
+Button("Inspect Entitlements") {
                         inspect()
                     }
                     .disabled(selectedUUID.isEmpty)
@@ -93,7 +106,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             }
             Section("Experimental SHA-256 Signing") {
-                Text("Signs only a temporary copy of the signed app selected above. Never installs, updates, or changes Library contents. A hash PASS does not verify CMS authenticity.")
+                Text("Signs only a temporary copy of the signed app selected above. Never installs, updates, or changes Library contents. Checks SHA-256 code pages, CMS authenticity, Apple hash-agility attributes and the X.509 certificate path. Does not authorize installation.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Picker("Test certificate", selection: $testCertificateUUID) {
@@ -114,7 +127,7 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 }
             }
             Section("Self-Update Preflight") {
-                Text("Read-only structural checks. Cryptographic signature verification is not implemented; this cannot authorize installation.")
+                Text("Read-only structural checks. Experimental CMS verification is available above; this preflight does not authorize installation.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Button("Run Preflight") {
@@ -204,6 +217,86 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
     }
 
     @MainActor
+
+    private func inspectInstalledZagStore() -> String {
+        let bundle = Bundle.main
+        let bundleID = bundle.bundleIdentifier ?? "UNKNOWN"
+
+        guard let executable = bundle.executableURL else {
+            return "FAIL — installed executable unavailable"
+        }
+
+        var lines = [
+            "INSTALLED ZAG STORE — READ ONLY",
+            "Bundle ID: \(bundleID)"
+        ]
+
+        do {
+            let entitlements =
+                try ZagMachOSignatureInspector.entitlements(
+                    at: executable
+                )
+
+            let appID =
+                entitlements["application-identifier"] as? String
+                ?? "MISSING"
+
+            let team =
+                entitlements[
+                    "com.apple.developer.team-identifier"
+                ] as? String ?? "MISSING"
+
+            let groups =
+                entitlements["keychain-access-groups"]
+                as? [String] ?? []
+
+            lines.append("Executable App ID: \(appID)")
+            lines.append("Executable Team: \(team)")
+            lines.append("Executable Keychain Groups: \(groups)")
+        } catch {
+            lines.append(
+                "Executable inspection FAILED: \(error.localizedDescription)"
+            )
+        }
+
+        let profileURL = bundle.bundleURL.appendingPathComponent(
+            "embedded.mobileprovision"
+        )
+
+        if let profile = CertificateReader(profileURL).decoded {
+            let team = profile.TeamIdentifier.first ?? "MISSING"
+
+            let appID =
+                profile.Entitlements?[
+                    "application-identifier"
+                ]?.value as? String ?? "MISSING"
+
+            let groups =
+                profile.Entitlements?[
+                    "keychain-access-groups"
+                ]?.value as? [String] ?? []
+
+            let expected = team + "." + bundleID
+
+            lines.append("Profile Team: \(team)")
+            lines.append("Profile App ID: \(appID)")
+            lines.append("Expected App ID: \(expected)")
+            lines.append(
+                "Bundle/Profile Match: " + (appID == expected ? "YES" : "NO")
+            )
+            lines.append("Profile Keychain Groups: \(groups)")
+            lines.append(
+                "Profile Expiration: \(profile.ExpirationDate)"
+            )
+        } else {
+            lines.append("Provisioning profile: UNAVAILABLE")
+        }
+
+        lines.append("Installation authorization: NOT VERIFIED")
+
+        return lines.joined(separator: "\n")
+    }
+
     private func runSHA256Test() async {
         guard !sha256TestRunning else { return }
         sha256TestRunning = true
@@ -236,9 +329,87 @@ struct ZagSelfUpdateSignatureDiagnosticsView: View {
                 return
             }
             let result = try ZagMachOSignatureInspector.inspectCodePageHashes(at: executable)
-            sha256TestResult = result.contains("SHA-256")
-                ? "SHA-256 EXPERIMENT — \(result)\nCMS authenticity and installation remain UNVERIFIED. Temporary copy deleted."
-                : "UNVERIFIED — expected SHA-256 primary CodeDirectory; got: \(result)"
+            guard result.hasPrefix("PASS —"),
+                  result.contains("SHA-256 code pages") else {
+                sha256TestResult = "UNVERIFIED — expected SHA-256 integrity PASS; got: \(result)"
+                return
+            }
+
+            let inputs = try ZagMachOSignatureInspector
+                .extractDetachedCMSInputs(at: executable)
+
+            let cmsResult = Zsign.verifyDetachedCMS(
+                cms: inputs.cms,
+                codeDirectory: inputs.codeDirectory
+            )
+
+            let chainResult = Zsign.inspectCMSCertificateChain(
+                cms: inputs.cms
+            )
+
+            let appleTrustResult = Zsign.inspectAppleSecurityTrust(
+                cms: inputs.cms
+            )
+
+
+            // Read-only audit of the temporary signed application.
+            // Profile decoding does not establish CMS authenticity.
+            let profileURL = copyURL.appendingPathComponent(
+                "embedded.mobileprovision"
+            )
+
+            var profileAudit = "UNVERIFIED — embedded provisioning profile missing or unreadable"
+
+            if let profile = CertificateReader(profileURL).decoded {
+                let bundleID = Bundle(url: copyURL)?.bundleIdentifier ?? ""
+                let team = profile.TeamIdentifier.first ?? ""
+
+                let appID = profile.Entitlements?[
+                    "application-identifier"
+                ]?.value as? String ?? ""
+
+                let expectedAppID = team.isEmpty
+                    ? ""
+                    : team + "." + bundleID
+
+                let appIDMatches = !expectedAppID.isEmpty
+                    && appID == expectedAppID
+
+                let notExpired = profile.ExpirationDate > Date()
+
+                let groups = profile.Entitlements?[
+                    "keychain-access-groups"
+                ]?.value as? [String] ?? []
+
+                profileAudit = """
+                Profile decoded: YES (authenticity UNVERIFIED)
+                Bundle identifier: \(bundleID)
+                Provisioning team: \(team)
+                Profile application identifier: \(appID)
+                Explicit App ID match: \(appIDMatches ? "YES" : "NO")
+                Profile expiration: \(profile.ExpirationDate)
+                Profile not expired: \(notExpired ? "YES" : "NO")
+                Profile keychain groups: \(groups.count)
+                Developer certificate match: NOT CHECKED
+                This device authorized: NOT CHECKED
+                Profile CMS authenticity: NOT VERIFIED
+                DER profile consistency: NOT VERIFIED
+                Executable entitlement compatibility: NOT CHECKED
+                """
+            }
+
+            sha256TestResult = """
+            SHA-256 EXPERIMENT — \(result)
+            CMS — \(cmsResult)
+            Certificate chain — \(chainResult)
+            Apple Security trust — \(appleTrustResult)
+            PROVISIONING PROFILE AUDIT
+            \(profileAudit)
+            Apple hash-agility V2: see CMS verification result.
+            Certificate trust: see X.509 chain result; Apple policy and revocation unverified.
+            Installation authorization: NOT ESTABLISHED.
+            Temporary copy cleanup scheduled.
+            """
         } catch {
             sha256TestResult = "UNVERIFIED — \(error.localizedDescription). Temporary copy cleanup attempted."
         }

@@ -1439,8 +1439,12 @@ async fn run_installed_app_icons(
 /// 203 = TLS-PSK tunnel established
 /// 204 = RSD established
 /// 205 = package upload/install started
-/// 206 = install progress (message is integer percent)
+/// 206 = installation_proxy progress (message is integer percent)
 /// 207 = installation complete
+/// 208 = signed IPA staging progress (actual transferred byte percentage)
+/// 209 = signed IPA fully staged via AFC
+/// 210 = Upgrade request transmitted (NOT a completion acknowledgment)
+/// 211 = real installation_proxy Status (not a completion guarantee)
 /// -4  = Gate 4 failure
 #[no_mangle]
 pub unsafe extern "C" fn zag_gate4_install(
@@ -1540,6 +1544,16 @@ async fn run_gate4_install(
             let is_upgrade = apps.contains_key(&bundle_id);
             drop(installation_proxy);
 
+            // Fail closed for Zag Store itself. A self-update must never
+            // silently fall back to a fresh installation when the existing
+            // app is absent from installation_proxy's user-app inventory.
+            if bundle_id == "com.cwd43.gu29" && !is_upgrade {
+                return Err(
+                    "Zag Store self-update refused: installed app not found; fresh installation is forbidden"
+                        .to_string(),
+                );
+            }
+
             emit(
                 callback,
                 205,
@@ -1550,7 +1564,101 @@ async fn run_gate4_install(
                 ),
             );
 
-            if is_upgrade {
+            if bundle_id == "com.cwd43.gu29" && is_upgrade {
+                // Only the verified self-update uses streamed AFC staging.
+                // Other installations retain the original proven helper path.
+                let total = std::fs::metadata(&ipa_path)
+                    .map_err(|error| format!("Self-update IPA metadata failed: {error}"))?
+                    .len();
+                if total == 0 {
+                    return Err("Self-update IPA is empty".to_string());
+                }
+                let mut afc = AfcClient::connect_rsd(&mut adapter, &mut handshake)
+                    .await
+                    .map_err(|error| format!("Self-update AFC connection failed: {error}"))?;
+                if afc.get_file_info("PublicStaging").await.is_err() {
+                    afc.mk_dir("PublicStaging")
+                        .await
+                        .map_err(|error| format!("Cannot create PublicStaging: {error}"))?;
+                }
+
+                let mut input = File::open(&ipa_path)
+                    .await
+                    .map_err(|error| format!("Cannot open signed IPA for staging: {error}"))?;
+                let mut output = afc
+                    .open("PublicStaging/idevice.ipa", AfcFopenMode::WrOnly)
+                    .await
+                    .map_err(|error| format!("Cannot open staged IPA on device: {error}"))?;
+                let mut buffer = vec![0u8; 128 * 1024];
+                let mut written = 0u64;
+                let mut previous_percent = 0u64;
+                loop {
+                    let count = tokio::io::AsyncReadExt::read(&mut input, &mut buffer)
+                        .await
+                        .map_err(|error| format!("Reading signed IPA failed: {error}"))?;
+                    if count == 0 {
+                        break;
+                    }
+                    output.write_entire(&buffer[..count])
+                        .await
+                        .map_err(|error| format!("Staging signed IPA failed: {error}"))?;
+                    written += count as u64;
+                    let percent = ((written as u128 * 100) / total as u128).min(100) as u64;
+                    if percent != previous_percent {
+                        emit(callback, 208, percent.to_string());
+                        previous_percent = percent;
+                    }
+                }
+                output.close()
+                    .await
+                    .map_err(|error| format!("Closing staged IPA failed: {error}"))?;
+                if written != total {
+                    return Err(format!(
+                        "Signed IPA staging length mismatch: expected {total}, wrote {written}"
+                    ));
+                }
+                // Verify the device itself reports the complete staged length
+                // before issuing a destructive replacement command.
+                let remote_info = afc
+                    .get_file_info_raw("PublicStaging/idevice.ipa")
+                    .await
+                    .map_err(|error| format!("Cannot verify staged IPA size: {error}"))?;
+                let remote_size = remote_info
+                    .get("st_size")
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .ok_or_else(|| "Staged IPA has no readable device-side size".to_string())?;
+                if remote_size != total {
+                    return Err(format!(
+                        "Device-side IPA length mismatch: expected {total}, found {remote_size}"
+                    ));
+                }
+                emit(callback, 209, "Signed IPA fully staged and size-verified on device");
+                drop(afc);
+
+                let mut installation_proxy =
+                    InstallationProxyClient::connect_rsd(&mut adapter, &mut handshake)
+                        .await
+                        .map_err(|error| format!("Self-update installation_proxy failed: {error}"))?;
+                let mut options = plist::Dictionary::new();
+                options.insert(
+                    "CFBundleIdentifier".to_string(),
+                    plist::Value::String(bundle_id.clone()),
+                );
+
+                // The public API sends Upgrade and waits for real iOS completion.
+                // Do not emit 210 here: transmission is not separately observable.
+                installation_proxy
+                    .upgrade_with_callback(
+                        "PublicStaging/idevice.ipa",
+                        Some(plist::Value::Dictionary(options)),
+                        |(percent, callback)| async move {
+                            emit(callback, 206, percent.to_string());
+                        },
+                        callback,
+                    )
+                    .await
+                    .map_err(|error| format!("Self-update Upgrade failed: {error}"))?;
+            } else if is_upgrade {
                 upgrade_package_with_callback_rsd(
                     &mut adapter,
                     &mut handshake,

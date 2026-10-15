@@ -668,12 +668,7 @@ struct DownloadButtonView: View {
 		// downloading a potentially large IPA.
 		Task { @MainActor in
 			guard zagPhase == .idle else { return }
-			let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
-			let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
-			if method == 0 && serverMethod != 0 {
-				_failTransaction("Semi Local installation requires the installation preview. Choose Fully Local, idevice, or RPPairing for inline repository installs.")
-				return
-			}
+                // Installation transport is selected automatically.
 			guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
 				if Storage.shared.getAllCertificates().isEmpty {
 					_failTransaction(.localized("Add a signing certificate before downloading this app."))
@@ -788,8 +783,12 @@ struct DownloadButtonView: View {
 	}
 
 	private func _installInline(_ signed: Signed, imported: Imported? = nil) {
-		let method = UserDefaults.standard.integer(forKey: "Feather.installationMethod")
-		let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
+		let method: Int
+		if #available(iOS 17.0, *) {
+			method = 2 // Native RPPairing
+		} else {
+			method = 1 // Legacy InstallationProxy
+		}
 		ZagLogger.shared.info("Installation", "Install started: \(signed.name ?? app.currentName) | id=\(signed.identifier ?? "unknown") | method=\(method)")
 
 		Task {
@@ -799,19 +798,7 @@ struct DownloadButtonView: View {
 				try await archive.move()
 				let packageURL = try await archive.archive()
 
-				if method == 0 {
-					guard serverMethod == 0 else {
-						throw ZagInlineInstallError.semiLocalRequiresPreview
-					}
-					let server = try ServerInstaller(app: signed, viewModel: status)
-					server.packageUrl = packageURL
-					status.status = .ready
-					guard let installURL = URL(string: server.iTunesLink) else {
-						throw ZagInlineInstallError.invalidInstallURL
-					}
-					await UIApplication.shared.open(installURL)
-					try await _pollInstall(bundleID: signed.identifier ?? "")
-				} else if method == 1 {
+				if method == 1 {
 					let proxy = InstallationProxy(viewModel: status)
 					try await proxy.install(at: packageURL, suspend: false)
 					installationProgress = 1

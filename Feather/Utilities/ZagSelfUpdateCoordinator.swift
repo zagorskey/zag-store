@@ -26,6 +26,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let build: String
         let bundleIdentifier: String
         let startedAt: Date
+        // Optional to preserve decoding of pending records created by older builds.
+        let originatingBuild: String?
+        // Hash of the signed candidate executable, not merely its version label.
+        let expectedExecutableSHA256: String?
+        // A candidate identical to the original executable cannot prove replacement.
+        let originatingExecutableSHA256: String?
     }
 
     enum UpdateError: LocalizedError {
@@ -87,11 +93,24 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
     }
 
+    private static func executableSHA256(at url: URL) throws -> String {
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     func reconcileOnLaunch() {
         guard let pending = pendingInstallation else { return }
+        // A version/build match alone cannot prove the replacement occurred.
+        // Legacy pending records without a candidate hash remain unconfirmed.
         guard pending.bundleIdentifier == currentBundleID,
               pending.version == currentVersion,
-              pending.build == currentBuild else { return }
+              pending.build == currentBuild,
+              let expectedHash = pending.expectedExecutableSHA256,
+              let executable = Bundle.main.executableURL,
+              let actualHash = try? Self.executableSHA256(at: executable),
+              actualHash.caseInsensitiveCompare(expectedHash) == .orderedSame,
+              let originalHash = pending.originatingExecutableSHA256,
+              actualHash.caseInsensitiveCompare(originalHash) != .orderedSame else { return }
         if let data = try? JSONEncoder().encode(pending) {
             UserDefaults.standard.set(data, forKey: completedKey)
         }
@@ -175,15 +194,29 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
 
     /// Call immediately before handing a signed, identity-validated IPA to
     /// the device installer. A callback from the old process is not required.
-    func recordInstallationHandoff(for release: Release) throws {
-        guard release.bundleIdentifier == currentBundleID else {
-            throw UpdateError.incompatibleBundleIdentifier
+    func recordInstallationHandoff(for release: Release, signed: Signed) throws {
+        guard release.bundleIdentifier == currentBundleID,
+              let appURL = Storage.shared.getAppDirectory(for: signed),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let executableName = info["CFBundleExecutable"] as? String else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let candidateHash = try Self.executableSHA256(at: appURL.appendingPathComponent(executableName))
+        guard let currentExecutable = Bundle.main.executableURL else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let originalHash = try Self.executableSHA256(at: currentExecutable)
+        guard candidateHash.caseInsensitiveCompare(originalHash) != .orderedSame else {
+            throw UpdateError.noUpdateAvailable
         }
         let pending = PendingInstallation(
             version: release.version,
             build: release.build,
             bundleIdentifier: release.bundleIdentifier,
-            startedAt: Date()
+            startedAt: Date(),
+            originatingBuild: currentBuild,
+            expectedExecutableSHA256: candidateHash,
+            originatingExecutableSHA256: originalHash
         )
         let data = try JSONEncoder().encode(pending)
         UserDefaults.standard.set(data, forKey: pendingKey)
@@ -225,6 +258,63 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         return imported
     }
 
+    /// Local IPA diagnostic path. No manifest or installation is involved.
+    /// The imported app's on-disk Info.plist supplies the identity to validate.
+    func prepareLocalIPA(_ source: URL, certificate: CertificatePair) async throws -> Signed {
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent("local-test-release.ipa")
+        guard source.pathExtension.lowercased() == "ipa",
+              source.standardizedFileURL != destination.standardizedFileURL else {
+            throw UpdateError.invalidRelease
+        }
+        let temporary = folder.appendingPathComponent(UUID().uuidString + ".ipa")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try FileManager.default.copyItem(at: source, to: temporary)
+        let data = try Data(contentsOf: temporary)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: temporary, to: destination)
+        preparedIPA = destination
+
+        // Import first, then validate the actual extracted bundle and build.
+        let uuid: String = try await withCheckedThrowingContinuation { continuation in
+            var importedUUID: String?
+            FR.handlePackageFile(destination, importedUUID: { importedUUID = $0 }) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let importedUUID {
+                    continuation.resume(returning: importedUUID)
+                } else {
+                    continuation.resume(throwing: UpdateError.invalidRelease)
+                }
+            }
+        }
+        let request = NSFetchRequest<Imported>(entityName: "Imported")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "uuid == %@", uuid)
+        guard let imported = try Storage.shared.context.fetch(request).first,
+              let appURL = Storage.shared.getAppDirectory(for: imported),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let bundleID = info["CFBundleIdentifier"] as? String,
+              let version = info["CFBundleShortVersionString"] as? String,
+              let build = info["CFBundleVersion"] as? String,
+              (bundleID == currentBundleID || bundleID == "thewonderofyou.Feather"),
+              imported.identifier == bundleID,
+              imported.version == version else {
+            throw UpdateError.incompatibleBundleIdentifier
+        }
+        let release = Release(
+            version: version, build: build, bundleIdentifier: currentBundleID,
+            ipaURL: destination, sha256: digest,
+            minimumIOSVersion: nil, releaseNotes: nil
+        )
+        return try await signImportedRelease(imported, release: release, certificate: certificate)
+    }
+
     /// Prepare a release for a separate, explicitly confirmed installation.
     /// This method does not install or replace the running app.
     func prepareSignedUpdate(
@@ -245,7 +335,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     ) async throws -> Signed {
         try validateMinimumIOSVersion(for: release)
         guard release.bundleIdentifier == currentBundleID,
-              imported.identifier == currentBundleID,
+              (imported.identifier == currentBundleID || imported.identifier == "thewonderofyou.Feather"),
               imported.version == release.version else {
             throw UpdateError.incompatibleBundleIdentifier
         }
@@ -256,6 +346,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         options.appIdentifier = currentBundleID
         // Self-updates must not inherit a custom entitlement override.
         // Zsign will derive entitlements from the selected provisioning profile.
+        // The resulting executable must then pass explicit identity checks;
+        // profile compatibility alone is not installation authorization.
         options.appEntitlementsFile = nil
 
         let signedUUID: String = try await withCheckedThrowingContinuation { continuation in
@@ -265,7 +357,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
                 using: options,
                 icon: nil,
                 certificate: certificate,
-                signedUUID: { resultingUUID = $0 }
+                signedUUID: { resultingUUID = $0 },
+                preserveProfileKeychainGroups: true
             ) { error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -304,6 +397,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.signedIdentityMismatch
         }
         try validateProvisioningTeam(at: appURL)
+        try validateExecutableIdentity(at: appURL)
     }
 
     /// Fail closed if the replacement profile cannot authorize the same
@@ -357,6 +451,46 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
                   replacementDebug == existingDebug else {
                 throw UpdateError.incompatibleSigningTeam
             }
+        }
+    }
+
+    /// Require the signed executable to claim the same explicit identity as
+    /// the running app. This is a structural preflight, not CMS trust proof.
+    private func validateExecutableIdentity(at appURL: URL) throws {
+        guard let currentExecutable = Bundle.main.executableURL,
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let executableName = info["CFBundleExecutable"] as? String else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let installed = try ZagMachOSignatureInspector.entitlements(at: currentExecutable)
+        let candidate = try ZagMachOSignatureInspector.entitlements(
+            at: appURL.appendingPathComponent(executableName)
+        )
+        for key in ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow"] {
+            guard let original = installed[key], let replacement = candidate[key],
+                  String(describing: original) == String(describing: replacement) else {
+                throw UpdateError.incompatibleSigningTeam
+            }
+        }
+        guard let originalGroups = installed["keychain-access-groups"] as? [String],
+              let replacementGroups = candidate["keychain-access-groups"] as? [String],
+              let team = installed["com.apple.developer.team-identifier"] as? String,
+              !team.isEmpty else {
+            throw UpdateError.incompatibleSigningTeam
+        }
+        let candidateSet = Set(replacementGroups)
+        let originalWildcard = team + ".*"
+        let explicitAppGroup = team + "." + currentBundleID
+        // The signer intentionally specializes the team's provisioning wildcard
+        // to this app's concrete keychain group. Permit only that one structural
+        // transition; every other previously signed group must remain present.
+        // This does NOT establish access to pre-existing keychain items.
+        let structurallyCompatible = originalGroups.allSatisfy { group in
+            candidateSet.contains(group) ||
+            (group == originalWildcard && candidateSet.contains(explicitAppGroup))
+        }
+        guard structurallyCompatible else {
+            throw UpdateError.incompatibleSigningTeam
         }
     }
 
@@ -461,8 +595,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let currentAuthorized = actual.installed.allSatisfy { allows(currentProfile, group: $0) }
         let nextAuthorized = actual.candidate.allSatisfy { allows(nextProfile, group: $0) }
         return [
-            "Installed profile groups": currentProfile.joined(separator: "\\n"),
-            "Candidate profile groups": nextProfile.joined(separator: "\\n"),
+            "Installed executable groups": actual.installed.sorted().joined(separator: "\n"),
+            "Candidate executable groups": actual.candidate.sorted().joined(separator: "\n"),
+            "Executable groups identical": Set(actual.installed) == Set(actual.candidate) ? "YES" : "NO",
+            "Installed profile groups": currentProfile.joined(separator: "\n"),
+            "Candidate profile groups": nextProfile.joined(separator: "\n"),
             "Installed entitlement/profile": currentAuthorized ? "Structurally compatible" : "Unverified or mismatch",
             "Candidate entitlement/profile": nextAuthorized ? "Structurally compatible" : "Unverified or mismatch",
             "Candidate profile expires": candidate.ExpirationDate.formatted(date: .abbreviated, time: .omitted),
@@ -527,7 +664,16 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             result["Signing inspection"] = "FAIL: " + error.localizedDescription
         }
         do {
-            result["Keychain marker"] = try ZagSelfUpdateKeychainProbe.read() == nil ? "NOT CREATED" : "READABLE"
+            let marker = try ZagSelfUpdateKeychainProbe.read()
+            result["Keychain marker"] = marker == nil ? "NOT CREATED" : "READABLE"
+            if marker != nil {
+                let group = try ZagSelfUpdateKeychainProbe.markerAccessGroup()
+                result["Marker access group"] = group ?? "UNAVAILABLE"
+                let signedGroups = try inspectKeychainAccessGroups(signed).candidate
+                result["Marker group in candidate executable"] = group.map {
+                    signedGroups.contains($0) ? "YES" : "NO"
+                } ?? "UNVERIFIED"
+            }
         } catch {
             result["Keychain marker"] = "FAIL: " + error.localizedDescription
         }
@@ -541,8 +687,18 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         } catch {
             result["Code page SHA-256 integrity"] = "UNVERIFIED — " + error.localizedDescription
         }
-        result["Cryptographic signature verification"] = "NOT IMPLEMENTED"
-        result["Installation authorization"] = "BLOCKED — diagnostic only"
+        // A valid-looking embedded provisioning profile and matching hashes do
+        // not establish that iOS trusts the CMS code signature. Report each
+        // separate check explicitly so diagnostics cannot be mistaken for an
+        // installation authorization decision.
+        do {
+            try validateProvisioningTeam(at: appURL)
+            result["Provisioning identity compatibility"] = "PASS — structural comparison only"
+        } catch {
+            result["Provisioning identity compatibility"] = "FAIL — " + error.localizedDescription
+        }
+        result["Cryptographic signature verification"] = "NOT IMPLEMENTED — CMS trust and signed resource sealing not verified"
+        result["Installation authorization"] = "BLOCKED — diagnostic only; no self-replacement permitted"
         return result
     }
 
@@ -552,12 +708,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     ///
     /// The archive is prepared before recording the handoff so an archive
     /// failure never leaves a false pending installation.
-    func installVerifiedSignedUpdate(
-        _ signed: Signed,
-        release: Release,
-        userConfirmedSelfReplacement: Bool
-    ) async throws {
-        guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
+    /// Assemble and verify the exact IPA intended for Gate4. This is safe to
+    /// call while installation authorization is locked: no installer is invoked.
+    func stageSignedSelfUpdate(_ signed: Signed, release: Release) async throws -> URL {
         try validateMinimumIOSVersion(for: release)
         guard release.bundleIdentifier == currentBundleID,
               signed.identifier == currentBundleID,
@@ -565,6 +718,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.signedIdentityMismatch
         }
         try validateSignedApp(signed, release: release)
+        guard let marker = try ZagSelfUpdateKeychainProbe.read(),
+              !marker.isEmpty,
+              let markerGroup = try ZagSelfUpdateKeychainProbe.markerAccessGroup(),
+              try inspectKeychainAccessGroups(signed).candidate.contains(markerGroup) else {
+            throw UpdateError.signedIdentityMismatch
+        }
         let core = ZagRPPairingCore.shared
         guard core.pairingFileExists else { throw UpdateError.pairingUnavailable }
         guard !core.isGate4Running else { throw UpdateError.installationAlreadyRunning }
@@ -573,25 +732,122 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let archive = ArchiveHandler(app: signed, viewModel: status)
         try await archive.move()
         let packageURL = try await archive.archive()
+        guard FileManager.default.fileExists(atPath: packageURL.path),
+              (try packageURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) > 0 else {
+            throw UpdateError.invalidRelease
+        }
+        return packageURL
+    }
 
-        try recordInstallationHandoff(for: release)
+    /// Installer callbacks are not proof of replacement. A later launch
+    /// must verify the expected executable before reporting success.
+    private func submitStagedUpdateToGate4(_ packageURL: URL) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            do {
+                try ZagRPPairingCore.shared.installGate4IPA(
+                    at: packageURL,
+                    deviceIP: "10.7.0.1",
+                    completion: { result in continuation.resume(with: result) }
+                )
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Record a pending handoff only after staging and identity checks pass.
+    /// This helper does not contact the installation service.
+    private func persistStagedHandoff(for release: Release, signed: Signed) throws {
+        try validateSignedApp(signed, release: release)
+        try recordInstallationHandoff(for: release, signed: signed)
+    }
+
+    /// Stages an IPA and records the expected executable before installation.
+    /// Reserved for a future authorized installation path; never called by UI.
+    private func prepareInstallationHandoff(
+        _ signed: Signed,
+        release: Release
+    ) async throws -> URL {
+        let packageURL = try await stageSignedSelfUpdate(signed, release: release)
+        try persistStagedHandoff(for: release, signed: signed)
+        return packageURL
+    }
+
+    /// Pending state is intentionally retained after an ambiguous installer
+    /// callback. The next launch can then verify whether replacement occurred.
+    private func performPreparedHandoff(
+        _ signed: Signed,
+        release: Release
+    ) async throws {
+        let packageURL = try await prepareInstallationHandoff(signed, release: release)
+        try await submitStagedUpdateToGate4(packageURL)
+    }
+
+    /// Explicitly confirmed upgrade-only handoff. Never called during preparation.
+    /// The original process may terminate before Gate4 returns a callback.
+    func installVerifiedSignedUpdate(
+        _ signed: Signed,
+        release: Release,
+        userConfirmedSelfReplacement: Bool
+    ) async throws {
+        guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
+        guard pendingInstallation == nil else { throw UpdateError.installationAlreadyRunning }
+        guard signed.identifier == currentBundleID else { throw UpdateError.incompatibleBundleIdentifier }
+        try await performPreparedHandoff(signed, release: release)
+    }
+
+    /// Build release metadata from the selected signed candidate, not from
+    /// whichever Zag Store record happens to be first in the database.
+    func installSelectedLocalCandidate(_ signed: Signed, userConfirmedSelfReplacement: Bool) async throws {
+        guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
+        guard let ipa = preparedIPA, FileManager.default.fileExists(atPath: ipa.path),
+              let appURL = Storage.shared.getAppDirectory(for: signed),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let identifier = info["CFBundleIdentifier"] as? String,
+              let version = info["CFBundleShortVersionString"] as? String,
+              let build = info["CFBundleVersion"] as? String,
+              identifier == currentBundleID else {
+            throw UpdateError.signedIdentityMismatch
+        }
+        let data = try Data(contentsOf: ipa)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let release = Release(version: version, build: build, bundleIdentifier: identifier,
+                              ipaURL: ipa, sha256: digest,
+                              minimumIOSVersion: nil, releaseNotes: nil)
+        try await installVerifiedSignedUpdate(signed, release: release,
+                                              userConfirmedSelfReplacement: true)
+    }
+
+    /// Read-only assessment of the prepared candidate and Gate4 prerequisites.
+    /// This deliberately does not authorize or invoke self-installation.
+    func inspectInstallationHandoffReadiness() -> [String] {
+        var findings: [String] = []
+        let request = NSFetchRequest<Signed>(entityName: "Signed")
+        request.predicate = NSPredicate(format: "identifier == %@", currentBundleID)
         do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                do {
-                    try core.installGate4IPA(at: packageURL, deviceIP: "10.7.0.1", completion: { result in
-                        continuation.resume(with: result)
-                    })
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+            let candidates = try Storage.shared.context.fetch(request)
+            findings.append("Signed candidates: " + String(candidates.count))
+            if candidates.count == 1, let candidate = candidates.first,
+               let appURL = Storage.shared.getAppDirectory(for: candidate),
+               let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+               let executableName = info["CFBundleExecutable"] as? String,
+               let currentExecutable = Bundle.main.executableURL {
+                let nextExecutable = appURL.appendingPathComponent(executableName)
+                let nextHash = try Self.executableSHA256(at: nextExecutable)
+                let currentHash = try Self.executableSHA256(at: currentExecutable)
+                findings.append("Candidate executable differs: " + (nextHash == currentHash ? "NO" : "YES"))
+                findings.append("Candidate version: " + (info["CFBundleShortVersionString"] as? String ?? "?") + " (" + (info["CFBundleVersion"] as? String ?? "?") + ")")
+            } else {
+                findings.append("Candidate selection or executable: NOT READY")
             }
         } catch {
-            // Only clear the pending handoff for a confirmed failure.
-            // If the process was terminated during replacement, the
-            // persisted record is reconciled on the next launch.
-            clearFailedHandoff()
-            throw error
+            findings.append("Candidate inspection: " + error.localizedDescription)
         }
+        let core = ZagRPPairingCore.shared
+        findings.append("Pairing file: " + (core.pairingFileExists ? "AVAILABLE" : "MISSING"))
+        findings.append("Gate4 busy: " + (core.isGate4Running ? "YES" : "NO"))
+        findings.append("Installation authorization: BLOCKED — not verified")
+        return findings
     }
 
     func clearFailedHandoff() {

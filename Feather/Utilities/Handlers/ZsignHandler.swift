@@ -39,7 +39,7 @@ final class ZsignHandler {
 		}
 	}
 	
-	func sign() async throws {
+	func sign(sha256Only: Bool = false, preserveProfileKeychainGroups: Bool = false) async throws {
 		guard let cert = _certificate else {
 			throw SigningFileHandlerError.missingCertifcate
 		}
@@ -53,7 +53,7 @@ final class ZsignHandler {
 			try _embedProvisioningProfileInAppExtensions(provisionURL)
 		}
 
-		let generatedEntitlementsURL = try _generatedEntitlementsURLIfNeeded(for: cert)
+		let generatedEntitlementsURL = try _generatedEntitlementsURLIfNeeded(for: cert, preserveProfileKeychainGroups: preserveProfileKeychainGroups)
 		defer {
 			if let generatedEntitlementsURL {
 				try? FileManager.default.removeItem(at: generatedEntitlementsURL)
@@ -68,6 +68,7 @@ final class ZsignHandler {
 			p12Password: cert.password ?? "",
 			entitlementsPath: entitlementsURL?.path ?? "",
 			removeProvision: !_options.removeProvisioning,
+			sha256Only: sha256Only,
 			completion: { _, error in
 				self.hadError = error
 			}
@@ -83,7 +84,7 @@ final class ZsignHandler {
 	}
 	
 
-	private func _generatedEntitlementsURLIfNeeded(for cert: CertificatePair) throws -> URL? {
+	private func _generatedEntitlementsURLIfNeeded(for cert: CertificatePair, preserveProfileKeychainGroups: Bool) throws -> URL? {
 		guard _options.appEntitlementsFile == nil,
 			let profile = Storage.shared.getProvisionFileDecoded(for: cert),
 			let profileEntitlements = profile.Entitlements,
@@ -97,7 +98,10 @@ final class ZsignHandler {
 		let wildcardGroup = "\(teamID).*"
 		let appKeychainGroup = "\(teamID).\(bundleIdentifier)"
 
-		if let groups = entitlements["keychain-access-groups"] as? [String],
+		// Preserve the profile's original keychain groups when signing
+		// Zag Store itself. Ordinary application signing is unchanged.
+		if !preserveProfileKeychainGroups,
+			let groups = entitlements["keychain-access-groups"] as? [String],
 			groups.contains(wildcardGroup) {
 			entitlements["keychain-access-groups"] = groups.map {
 				$0 == wildcardGroup ? appKeychainGroup : $0

@@ -29,6 +29,10 @@ final class SigningHandler: NSObject {
 	// throw an error
 	var appIcon: UIImage?
 	var appCertificate: CertificatePair?
+	var preserveProfileKeychainGroups = false
+
+	/// Explicitly requested only by the self-update signing path.
+    var sha256Only = false
 	
 	init(app: AppInfoPresentable, options: Options = OptionsManager.shared.options) {
 		self._app = app
@@ -111,7 +115,7 @@ final class SigningHandler: NSObject {
 			_options.signingOption == .default,
 			appCertificate != nil
 		{
-			try await handler.sign()
+			try await handler.sign(sha256Only: sha256Only, preserveProfileKeychainGroups: self.preserveProfileKeychainGroups)
 //		} else if _options.signingOption == .adhoc {
 //			try await handler.adhocSign()
 		} else if _options.signingOption == .onlyModify {

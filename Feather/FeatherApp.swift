@@ -436,8 +436,8 @@ final class ZagBackgroundUpdateRefresh {
 					Logger.misc.info("[Zag Store Background] Prepared update for \(update.app.currentName)")
 
 					if UserDefaults.standard.bool(forKey: Self.automaticInstallationKey) {
-						guard UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 2 else {
-							Logger.misc.warning("[Zag Store Background] Automatic install skipped: RPPairing installation method is not selected")
+						guard #available(iOS 17.0, *) else {
+							Logger.misc.warning("[Zag Store Background] Automatic installation requires iOS 17 or later")
 							continue
 						}
 						try await ZagUpdateTransactionManager.shared.installPreparedUpdate(signedUUID: signedUUID)

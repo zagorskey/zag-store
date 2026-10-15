@@ -212,4 +212,137 @@ enum ZagMachOSignatureInspector {
         }
     }
 
+
+    /// Extracts exact signature bytes. Does not itself authenticate them.
+    static func extractDetachedCMSInputs(
+        at executable: URL
+    ) throws -> (cms: Data, codeDirectory: Data) {
+        let data = try Data(contentsOf: executable, options: .mappedIfSafe)
+
+        func read32(_ offset: Int, bigEndian: Bool = false) throws -> Int {
+            guard offset >= 0, offset <= data.count - 4 else {
+                throw InspectionError.malformedSignature
+            }
+            let bytes = data[offset..<(offset + 4)]
+            return bytes.reduce(0) { value, byte in
+                bigEndian
+                    ? (value << 8) | Int(byte)
+                    : value
+            }
+        }
+
+        func little32(_ offset: Int) throws -> Int {
+            guard offset >= 0, offset <= data.count - 4 else {
+                throw InspectionError.malformedSignature
+            }
+            return Int(data[offset])
+                | (Int(data[offset + 1]) << 8)
+                | (Int(data[offset + 2]) << 16)
+                | (Int(data[offset + 3]) << 24)
+        }
+
+        guard try little32(0) == 0xfeedfacf else {
+            throw InspectionError.unsupportedFormat
+        }
+
+        let commandCount = try little32(16)
+        let commandSize = try little32(20)
+        guard commandCount <= 4096,
+              commandSize <= data.count - 32 else {
+            throw InspectionError.malformedSignature
+        }
+
+        let commandEnd = 32 + commandSize
+        var cursor = 32
+        var signature: (Int, Int)?
+
+        for _ in 0..<commandCount {
+            guard cursor <= commandEnd - 8 else {
+                throw InspectionError.malformedSignature
+            }
+
+            let command = try little32(cursor)
+            let size = try little32(cursor + 4)
+
+            guard size >= 8, size <= commandEnd - cursor else {
+                throw InspectionError.malformedSignature
+            }
+
+            if command == 0x1d {
+                guard size >= 16, signature == nil else {
+                    throw InspectionError.malformedSignature
+                }
+                signature = (
+                    try little32(cursor + 8),
+                    try little32(cursor + 12)
+                )
+            }
+            cursor += size
+        }
+
+        guard let (offset, length) = signature,
+              offset >= 0, length >= 12,
+              offset <= data.count - length,
+              try read32(offset, bigEndian: true) == 0xfade0cc0 else {
+            throw InspectionError.malformedSignature
+        }
+
+        let total = try read32(offset + 4, bigEndian: true)
+        let count = try read32(offset + 8, bigEndian: true)
+
+        guard total >= 12, total <= length,
+              count <= 1024,
+              count <= (total - 12) / 8 else {
+            throw InspectionError.malformedSignature
+        }
+
+        var codeDirectory: Data?
+        var cms: Data?
+
+        for index in 0..<count {
+            let entry = offset + 12 + index * 8
+            let type = try read32(entry, bigEndian: true)
+            let relative = try read32(entry + 4, bigEndian: true)
+
+            guard relative >= 12, relative <= total - 8 else {
+                throw InspectionError.malformedSignature
+            }
+
+            let blob = offset + relative
+            let blobLength = try read32(blob + 4, bigEndian: true)
+
+            guard blobLength >= 8,
+                  blobLength <= total - relative else {
+                throw InspectionError.malformedSignature
+            }
+
+            if type == 0 {
+                guard codeDirectory == nil,
+                      try read32(blob, bigEndian: true) == 0xfade0c02 else {
+                    throw InspectionError.malformedSignature
+                }
+                codeDirectory = data.subdata(
+                    in: blob..<(blob + blobLength)
+                )
+            }
+
+            if type == 0x10000 {
+                guard cms == nil,
+                      blobLength > 8,
+                      try read32(blob, bigEndian: true) == 0xfade0b01 else {
+                    throw InspectionError.malformedSignature
+                }
+                cms = data.subdata(
+                    in: (blob + 8)..<(blob + blobLength)
+                )
+            }
+        }
+
+        guard let cms, let codeDirectory else {
+            throw InspectionError.malformedSignature
+        }
+
+        return (cms, codeDirectory)
+    }
+
 }

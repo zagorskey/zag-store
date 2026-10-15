@@ -11,70 +11,26 @@ import UniformTypeIdentifiers
 
 // MARK: - View
 struct InstallationView: View {
-	@AppStorage("Feather.installationMethod") private var _installationMethod: Int = 2
-	@State private var _showMethodChangedAlert = false
+    // The legacy transport remains available for older iOS versions.
+    // The installation dispatcher must use the same platform rule.
+    private var usesLegacyTransport: Bool {
+        if #available(iOS 17.0, *) { return false }
+        return true
+    }
 
-	private let _installationMethods: [String] = [
-		.localized("Server"),
-		.localized("idevice"),
-		"RPPairing"
-	]
-	
-	// MARK: Body
-	var body: some View {
-		NBList(.localized("Installation")) {
-			Section {
-				Picker("Select Method", systemImage: "arrow.down.app", selection: $_installationMethod) {
-					ForEach([2, 1, 0], id: \.self) { index in
-						Text(_installationMethods[index]).tag(index)
-					}
-				}
-			} header: {
-				Text("Method")
-			} footer: {
-				Text(_installationMethodDescription)
-			}
-			
-			if _installationMethod == 0 {
-				ServerView()
-			} else if _installationMethod == 1 {
-				TunnelView()
-			} else if _installationMethod == 2 {
-				RPPairingView()
-			}
-		}
-		.safeAreaInset(edge: .bottom) {
-			Color.clear.frame(height: 48)
-		}
-		.onChange(of: _installationMethod) { newValue in
-			guard newValue == 1 else { return }
-			_showMethodChangedAlert = true
-		}
-		.alert(.localized("Advanced Installation Method"), isPresented: $_showMethodChangedAlert) {
-			Button(.localized("Switch Back"), role: .destructive) {
-				_installationMethod = 0
-			}
-			Button(.localized("OK"), role: .cancel) {}
-		} message: {
-			Text(.localized("idevice warning"))
-		}
-
-
-		.animation(.default, value: _installationMethod)
-	}
-
-	private var _installationMethodDescription: String {
-		switch _installationMethod {
-		case 0:
-			return "Uses a locally hosted server and itms-services:// to install applications."
-		case 1:
-			return "Uses a VPN and a pairing file. Writes to AFC and manually calls installd while monitoring install progress through a callback. It is reliable, requires no SSL certificates or externally hosted server, and works similarly to a computer."
-		default:
-			return "Pairs directly on-device using Apple's Remote Pairing protocol. No computer-generated pairing file is required. LocalDevVPN is still required for the direct device-services connection."
-		}
-	}
+    var body: some View {
+        NBList(.localized("Installation")) {
+            if usesLegacyTransport {
+                TunnelView()
+            } else {
+                RPPairingView()
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 48)
+        }
+    }
 }
-
 
 
 private struct RPPairingView: View {
@@ -788,6 +744,9 @@ struct RPPairingDiagnosticsView: View {
 		case .tunnel: return "TLS-PSK tunnel established"
 		case .rsd: return "RSD established"
 		case .installing: return "Staging and installing…"
+		case .uploading(let percent): return "Uploading signed IPA — \(percent)%"
+		case .staged: return "Signed IPA staged and verified"
+		case .upgradeSubmitted: return "Upgrade submitted to iOS"
 		case .progress(let percent): return "Installing — \(percent)%"
 		case .complete: return "Installation complete"
 		case .failed: return "Installation failed"

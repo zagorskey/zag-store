@@ -58,6 +58,26 @@ enum ZagSelfUpdateKeychainProbe {
         return marker
     }
 
+    /// Read-only: return the actual keychain access group assigned to our
+    /// disposable continuity marker. This does not inspect user credentials.
+    /// A matching group is necessary, but not sufficient, to prove an upgrade
+    /// will preserve keychain access.
+    static func markerAccessGroup() throws -> String? {
+        var attributes = query
+        attributes[kSecReturnAttributes as String] = true
+        attributes[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(attributes as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw ProbeError.keychainStatus(status) }
+        guard let values = result as? [String: Any],
+              let group = values[kSecAttrAccessGroup as String] as? String,
+              !group.isEmpty else {
+            throw ProbeError.invalidMarker
+        }
+        return group
+    }
+
     static func remove() throws {
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {

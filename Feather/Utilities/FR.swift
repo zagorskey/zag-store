@@ -47,10 +47,14 @@ enum FR {
 		icon: UIImage?,
 		certificate: CertificatePair?,
 		signedUUID: ((String) -> Void)? = nil,
-		completion: @escaping (Error?) -> Void
-	) {
+		preserveProfileKeychainGroups: Bool = false,
+		completion: @escaping (Error?) -> Void,
+        sha256Only: Bool = false
+    ) {
 		Task.detached {
 			let handler = SigningHandler(app: app, options: options)
+            handler.preserveProfileKeychainGroups = preserveProfileKeychainGroups
+            handler.sha256Only = sha256Only
 			handler.appCertificate = certificate
 			handler.appIcon = icon
 			

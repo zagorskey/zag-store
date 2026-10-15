@@ -139,12 +139,28 @@ final class ZagRPPairingCore: ObservableObject {
 		case tunnel
 		case rsd
 		case installing
+		case uploading(Int)
+		case staged
+		case upgradeSubmitted
 		case progress(Int)
 		case complete
 		case failed(String)
 	}
 
 	@Published private(set) var gate4State: Gate4State = .idle
+	@Published private(set) var gate4SelfUpdateCommandSent = false
+	@Published private(set) var gate4LastEvent = "No Gate4 activity this session"
+	private static let gate4HistoryKey = "ZagStore.Gate4LastRecordedEvent.v1"
+	var gate4PreviousEvent: String {
+		UserDefaults.standard.string(forKey: Self.gate4HistoryKey) ?? "No recorded Gate4 attempt"
+	}
+	private func recordGate4Event(_ event: String) {
+		gate4LastEvent = event
+		UserDefaults.standard.set(
+			ISO8601DateFormatter().string(from: Date()) + " | " + event,
+			forKey: Self.gate4HistoryKey
+		)
+	}
 	private var gate4Completion: ((Result<Void, Error>) -> Void)?
 	private var gate4Progress: ((Int) -> Void)?
 	private var gate4UninstallCompletion: ((Result<Void, Error>) -> Void)?
@@ -179,7 +195,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 	var isGate4Running: Bool {
 		switch gate4State {
-		case .starting, .pairVerified, .tunnel, .rsd, .installing, .progress: return true
+		case .starting, .pairVerified, .tunnel, .rsd, .installing, .uploading, .staged, .upgradeSubmitted, .progress: return true
 		default: return false
 		}
 	}
@@ -207,6 +223,7 @@ final class ZagRPPairingCore: ObservableObject {
 
 		ZagLogger.shared.info("RPPairing", "Gate4 install starting | deviceIP=\(deviceIP) | ipa=\(sourceURL.lastPathComponent)")
 		gate4State = .starting
+		recordGate4Event("IPA staged; requesting native Gate4 worker startup")
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
 				localURL.path.withCString { ipaPath in
@@ -215,24 +232,45 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			recordGate4Event("Native Gate4 worker failed to start")
+			ZagLogger.shared.error("RPPairing", gate4LastEvent)
 			let error = Gate4InstallError.couldNotStart
 			gate4State = .failed(error.localizedDescription)
-			gate4Completion?(.failure(error))
 			gate4Completion = nil
+			gate4Progress = nil
+			throw error
 		}
+		recordGate4Event("Native Gate4 worker accepted startup; awaiting callback")
+		ZagLogger.shared.info("RPPairing", gate4LastEvent)
 	}
 
 	fileprivate func receiveGate4(code: Int32, message: String) {
+		recordGate4Event("Gate4 callback \(code): \(message)")
+		// Record native installation stages for diagnostics.
+		if code == 206 {
+			ZagLogger.shared.info("RPPairing", "Gate4 install progress: \(message)%")
+		} else {
+			ZagLogger.shared.info("RPPairing", "Gate4 callback stage=\(code) detail=\(message)")
+		}
 		switch code {
 		case 201: gate4State = .starting
 		case 202: gate4State = .pairVerified
 		case 203: gate4State = .tunnel
 		case 204: gate4State = .rsd
 		case 205: gate4State = .installing
+		case 208:
+			if let percent = Int(message), (0...100).contains(percent) {
+				gate4State = .uploading(percent)
+			}
+		case 209: gate4State = .staged
+		case 210:
+			gate4SelfUpdateCommandSent = true
+			gate4State = .upgradeSubmitted
 		case 206:
-			let percent = Int(message) ?? 0
-			gate4State = .progress(percent)
-			gate4Progress?(percent)
+			if let percent = Int(message), (0...100).contains(percent) {
+				gate4State = .progress(percent)
+				gate4Progress?(percent)
+			}
 		case 207:
 			ZagLogger.shared.info("RPPairing", "Gate4 install completed")
 			gate4State = .complete
@@ -240,6 +278,7 @@ final class ZagRPPairingCore: ObservableObject {
 			gate4Completion = nil
 			gate4Progress = nil
 		case -4:
+			gate4SelfUpdateCommandSent = false
 			ZagLogger.shared.error("RPPairing", "Gate4 install failed: \(message)")
 			gate4State = .failed(message)
 			let error = Gate4InstallError.installFailed(message)
@@ -248,6 +287,15 @@ final class ZagRPPairingCore: ObservableObject {
 			gate4Progress = nil
 		default: break
 		}
+	}
+
+	/// A user-initiated exit is allowed only once the exact self-update
+	/// Upgrade request has been transmitted. It is not proof of acceptance.
+	/// Caller may terminate the process only after this record is flushed.
+	func recordConfirmedSelfUpdateClose() -> Bool {
+		guard gate4SelfUpdateCommandSent, isGate4Running else { return false }
+		recordGate4Event("User chose to close Zag Store after Upgrade transmission")
+		return UserDefaults.standard.synchronize()
 	}
 
 
