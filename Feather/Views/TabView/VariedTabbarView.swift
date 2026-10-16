@@ -382,6 +382,7 @@ struct ZagGlobalProfileAvatar: View {
 
 struct ZagAccountPopup: View {
     @ObservedObject private var updateManager = UpdateManager.shared
+    @ObservedObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
@@ -466,7 +467,12 @@ struct ZagAccountPopup: View {
                             Image(systemName: "arrow.triangle.2.circlepath.circle").foregroundStyle(themeTint)
                             Text("Zag Store Update").foregroundStyle(themeTint)
                             Spacer(minLength: 8)
-                            ZagSelfUpdateAnimatedBadge()
+                            if selfUpdateCoordinator.availableRelease != nil {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 10, height: 10)
+                                    .accessibilityLabel("Update available")
+                            }
                         }
                     }
                     NavigationLink(value: AccountDestination.settings) {
@@ -794,39 +800,5 @@ private struct ZagLocalVPNDetailsView: View {
         }
         .padding(18)
         .frame(width: 300)
-    }
-}
-
-
-// Borderless Featured-spectrum badge. The count is a visual placeholder.
-private struct ZagSelfUpdateAnimatedBadge: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let spectrum: [Color] = [
-        Color(red: 0.00, green: 0.86, blue: 1.00),
-        Color(red: 0.05, green: 0.37, blue: 1.00),
-        Color(red: 0.42, green: 0.18, blue: 1.00),
-        Color(red: 0.95, green: 0.16, blue: 0.89),
-        Color(red: 0.00, green: 0.86, blue: 1.00)
-    ]
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
-            let angle = reduceMotion ? 0.0 :
-                context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 5.0) * 72.0
-            Text("1")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 5.75)
-                .frame(minWidth: 27.5, minHeight: 26)
-                .background {
-                    Capsule().fill(AngularGradient(
-                        colors: spectrum,
-                        center: .center,
-                        angle: .degrees(angle)
-                    ))
-                }
-        }
-        .accessibilityLabel("Zag Store update")
     }
 }
