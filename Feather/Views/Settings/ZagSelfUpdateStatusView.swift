@@ -640,6 +640,30 @@ struct ZagSelfUpdateStatusView: View {
                 Text(releaseCheckStatus)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if let release = coordinator.availableRelease {
+                    Label("Update available: \\(release.version) (Build \\(release.build))", systemImage: "arrow.down.circle.fill")
+                        .foregroundStyle(.green)
+                    if let notes = release.releaseNotes, !notes.isEmpty {
+                        Text(notes).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Button("Download Update") {
+                        Task { @MainActor in
+                            releaseCheckStatus = "Downloading and verifying update…"
+                            do {
+                                _ = try await coordinator.prepare(release)
+                                releaseCheckStatus = "Download verified. Installation requires separate confirmation."
+                            } catch {
+                                releaseCheckStatus = "Download failed: " + error.localizedDescription
+                            }
+                        }
+                    }
+                }
+                Text(coordinator.automaticCheckStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("Checks automatically at launch and periodically when returning to Zag Store. Download and installation require your approval.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if shouldCelebrateVerifiedReplacement {
