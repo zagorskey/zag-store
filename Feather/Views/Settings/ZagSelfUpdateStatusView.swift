@@ -1025,7 +1025,7 @@ private struct ZagStoreUpdateAutomaticPreferencesView: View {
             Section {
                 Toggle("Automatically Check for Updates", isOn: $enabled)
                     .tint(.green)
-                    .onChange(of: enabled) { _, _ in
+                    .onChange(of: enabled) { _ in
                         ZagSelfUpdateCoordinator.shared.preferencesChanged()
                     }
             } footer: {
