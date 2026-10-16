@@ -104,9 +104,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         do {
             let channel = UpdateChannel.selected
             if let release = try await checkForSelectedChannel() {
-                automaticCheckStatus = "Update available: \\(release.version) (Build \\(release.build)) — \\(channel.rawValue.capitalized)"
+                automaticCheckStatus = "Update available: \(release.version) (Build \(release.build)) — \(channel.rawValue.capitalized)"
             } else {
-                automaticCheckStatus = "Up to date — \\(channel.rawValue.capitalized)"
+                automaticCheckStatus = "Up to date — \(channel.rawValue.capitalized)"
             }
         } catch {
             automaticCheckStatus = "Update check failed: " + error.localizedDescription
