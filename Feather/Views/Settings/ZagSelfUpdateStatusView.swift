@@ -12,8 +12,8 @@ struct ZagSelfUpdateStatusView: View {
     @ObservedObject private var coordinator = ZagSelfUpdateCoordinator.shared
     @ObservedObject private var gate4 = ZagRPPairingCore.shared
 
-    // Automatic installation remains disabled; release-channel checks are manual.
-    @AppStorage("ZagStore.updatePreferences.autoInstall.placeholder")
+    // Automatic discovery is independent from installation.
+    @AppStorage("ZagStore.updatePreferences.automaticChecks.v1")
     private var zagAutoInstallEnabled = false
     @AppStorage("ZagStore.updatePreferences.betaChannel.placeholder")
     private var zagBetaChannel = "off"
@@ -609,7 +609,7 @@ struct ZagSelfUpdateStatusView: View {
                     ZagStoreUpdateAutomaticPreferencesView()
                 } label: {
                     HStack {
-                        Text("Automatic Updates")
+                        Text("Automatic Update Checks")
                         Spacer()
                         Text(zagAutoInstallEnabled ? "On" : "Off")
                             .foregroundStyle(.secondary)
@@ -622,7 +622,7 @@ struct ZagSelfUpdateStatusView: View {
                         Text("Release Channel")
                         Spacer()
                         Text(zagBetaChannel == "beta" ? "Zag Store Beta" :
-                             zagBetaChannel == "nightly" ? "Zag Store Nightly" : "Off")
+                             zagBetaChannel == "nightly" ? "Zag Store Nightly" : "Stable")
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -1017,19 +1017,22 @@ private struct ZagSelfUpdateRainbowProgress: View {
 
 // Automatic installation is still disabled; channel selection controls manual checks.
 private struct ZagStoreUpdateAutomaticPreferencesView: View {
-    @AppStorage("ZagStore.updatePreferences.autoInstall.placeholder")
-    private var enabled = false
+    @AppStorage("ZagStore.updatePreferences.automaticChecks.v1")
+    private var enabled = true
 
     var body: some View {
         Form {
             Section {
-                Toggle("Automatically Install", isOn: $enabled)
+                Toggle("Automatically Check for Updates", isOn: $enabled)
                     .tint(.green)
+                    .onChange(of: enabled) { _, _ in
+                        ZagSelfUpdateCoordinator.shared.preferencesChanged()
+                    }
             } footer: {
-                Text("Automatic installation is not connected yet.")
+                Text("Checks for updates on launch and when returning to Zag Store. Downloads and installation require your approval.")
             }
         }
-        .navigationTitle("Automatic Updates")
+        .navigationTitle("Automatic Update Checks")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -1044,10 +1047,11 @@ private struct ZagStoreUpdateBetaPreferencesView: View {
                 ForEach(["off", "beta", "nightly"], id: \.self) { option in
                     Button {
                         channel = option
+                        ZagSelfUpdateCoordinator.shared.preferencesChanged()
                     } label: {
                         HStack {
                             Text(option == "beta" ? "Zag Store Beta" :
-                                 option == "nightly" ? "Zag Store Nightly" : "Off")
+                                 option == "nightly" ? "Zag Store Nightly" : "Stable")
                                 .foregroundStyle(.primary)
                             Spacer()
                             if channel == option {
@@ -1059,7 +1063,7 @@ private struct ZagStoreUpdateBetaPreferencesView: View {
                     }
                 }
             } footer: {
-                Text("Select which Zag Store release manifest to check. Updates are not installed automatically.")
+                Text("Select the release channel. Switching channels clears the previous update and checks the new channel when automatic checks are enabled.")
             }
         }
         .navigationTitle("Release Channel")
