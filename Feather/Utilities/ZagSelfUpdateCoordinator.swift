@@ -34,7 +34,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
 
         var manifestURL: URL {
-            URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store/main/releases/\(rawValue).json")!
+            URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store-releases/main/releases/\(rawValue).json")!
         }
     }
 
