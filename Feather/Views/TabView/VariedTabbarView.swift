@@ -464,7 +464,8 @@ struct ZagAccountPopup: View {
                 Section {
                     NavigationLink(value: AccountDestination.selfUpdate) {
                         HStack(spacing: 10) {
-                            Image(systemName: "arrow.triangle.2.circlepath.circle").foregroundStyle(themeTint)
+                            ZagSelfUpdateRotatingIcon(isAnimating: selfUpdateCoordinator.availableRelease != nil)
+                                .foregroundStyle(themeTint)
                             Text("Zag Store Update").foregroundStyle(themeTint)
                             Spacer(minLength: 8)
                             if selfUpdateCoordinator.availableRelease != nil {
@@ -800,5 +801,21 @@ private struct ZagLocalVPNDetailsView: View {
         }
         .padding(18)
         .frame(width: 300)
+    }
+}
+
+private struct ZagSelfUpdateRotatingIcon: View {
+    let isAnimating: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isAnimating || reduceMotion)) { context in
+            let angle = isAnimating && !reduceMotion
+                ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.0) * 120.0
+                : 0.0
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .rotationEffect(.degrees(angle))
+        }
+        .accessibilityHidden(true)
     }
 }
