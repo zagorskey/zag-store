@@ -1,8 +1,20 @@
 # Zag Store self-update channels
 
-Zag Store 1.0.0 defaults to **Stable**. The existing "Off" prerelease preference is interpreted as Stable. Beta and Nightly are opt-in. The app checks only when the user taps **Check for Updates**; it does not automatically download, sign, or install an update.
+Zag Store 1.0.0 defaults to **Stable**. The existing "Off" prerelease preference is interpreted as Stable. Beta and Nightly are opt-in. The app checks the selected channel at launch and when returning to the foreground (throttled to six hours). Manual checks remain available. Downloads require user action; signing and installation are not automatic.
 
 ## Publishing
+
+Use the local signed-IPA publisher after compiling and signing with `ZagStore-Package.zsh`:
+
+```zsh
+zsh scripts/publish-zag-release.zsh beta "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" 2>&1 | tee /tmp/zag-publish-beta.log
+```
+
+The command is an **example**, not an instruction to publish build 3 until it has been tested. The publisher checks the IPA signature and bundle identity, refuses a duplicate release tag or non-increasing channel version/build, uploads the release asset, downloads it back to verify SHA-256, then updates the public channel manifest last. It does not compile, sign, or install the app. Stable and Nightly remain unpublished until separately authorized.
+
+**Important:** The signed IPA contains a device-specific provisioning profile. Public distribution exposes the embedded signing metadata. Never commit private certificates, provisioning secrets, or signing keys.
+
+
 
 Publish a JSON manifest at each path on the `main` branch of the public [`zag-store-releases`](https://github.com/zagorskey/zag-store-releases) repository:
 
