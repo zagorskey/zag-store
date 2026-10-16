@@ -88,28 +88,57 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
 
     // Discovery only: never download, sign, or install without user action.
     @Published private(set) var automaticCheckStatus = "Waiting for update check"
+    static let automaticChecksKey = "ZagStore.updatePreferences.automaticChecks.v1"
     private var lastAutomaticCheck: Date?
+    private var lastCheckedChannel: UpdateChannel?
+    private var checkGeneration = 0
     private var automaticCheckInProgress = false
     private var foregroundObserver: NSObjectProtocol?
     private let automaticCheckInterval: TimeInterval = 60 * 60 * 6
 
     func checkAutomatically(force: Bool = false) async {
+        guard UserDefaults.standard.object(forKey: Self.automaticChecksKey) as? Bool ?? true else { return }
         guard !automaticCheckInProgress else { return }
-        if !force, let lastAutomaticCheck,
+        let channel = UpdateChannel.selected
+        if !force, lastCheckedChannel == channel, let lastAutomaticCheck,
            Date().timeIntervalSince(lastAutomaticCheck) < automaticCheckInterval { return }
         automaticCheckInProgress = true
+        lastCheckedChannel = channel
         lastAutomaticCheck = Date()
+        let generation = checkGeneration
         automaticCheckStatus = "Checking for updates…"
         defer { automaticCheckInProgress = false }
         do {
-            let channel = UpdateChannel.selected
-            if let release = try await checkForSelectedChannel() {
+            let release = try await fetchUpdate(manifestURL: channel.manifestURL)
+            guard generation == checkGeneration, channel == UpdateChannel.selected else { return }
+            availableRelease = release
+            if let release {
                 automaticCheckStatus = "Update available: \(release.version) (Build \(release.build)) — \(channel.rawValue.capitalized)"
             } else {
                 automaticCheckStatus = "Up to date — \(channel.rawValue.capitalized)"
             }
         } catch {
+            guard generation == checkGeneration else { return }
+            availableRelease = nil
             automaticCheckStatus = "Update check failed: " + error.localizedDescription
+        }
+    }
+
+    func preferencesChanged() {
+        checkGeneration += 1
+        availableRelease = nil
+        preparedIPA = nil
+        lastAutomaticCheck = nil
+        lastCheckedChannel = nil
+        automaticCheckStatus = "Waiting for update check"
+        if UserDefaults.standard.object(forKey: Self.automaticChecksKey) as? Bool ?? true {
+            Task { @MainActor in
+                // Let an in-flight check finish before forcing the new channel.
+                while automaticCheckInProgress {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                await checkAutomatically(force: true)
+            }
         }
     }
 
@@ -179,6 +208,14 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     }
 
     func checkForUpdate(manifestURL: URL) async throws -> Release? {
+        let generation = checkGeneration
+        let release = try await fetchUpdate(manifestURL: manifestURL)
+        guard generation == checkGeneration else { return nil }
+        availableRelease = release
+        return release
+    }
+
+    private func fetchUpdate(manifestURL: URL) async throws -> Release? {
         guard manifestURL.scheme?.lowercased() == "https" else {
             throw UpdateError.insecureDownload
         }
@@ -203,8 +240,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let buildComparison = currentBuild.compare(release.build, options: .numeric)
         let newer = installed == .orderedAscending ||
             (installed == .orderedSame && buildComparison == .orderedAscending)
-        availableRelease = newer ? release : nil
-        return availableRelease
+        return newer ? release : nil
     }
 
     private func validateMinimumIOSVersion(for release: Release) throws {
