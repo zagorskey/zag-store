@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreData
 import CryptoKit
 import AltSourceKit
@@ -28,7 +29,16 @@ struct ZagSelfUpdateStatusView: View {
     @State private var checkStatus = "Not checked"
     @State private var releaseCheckStatus = "Not checked"
     @State private var releaseCheckBusy = false
+    @State private var releaseDownloadSize: String?
     @State private var markerStatus = "Not checked"
+
+    private static var installedAppIcon: UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let names = primary["CFBundleIconFiles"] as? [String],
+              let name = names.last else { return nil }
+        return UIImage(named: name)
+    }
 
     private func createMarker() {
         do {
@@ -641,20 +651,76 @@ struct ZagSelfUpdateStatusView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if let release = coordinator.availableRelease {
-                    Label("Update available: \\(release.version) (Build \\(release.build))", systemImage: "arrow.down.circle.fill")
-                        .foregroundStyle(.green)
-                    if let notes = release.releaseNotes, !notes.isEmpty {
-                        Text(notes).font(.footnote).foregroundStyle(.secondary)
-                    }
-                    Button("Download Update") {
-                        Task { @MainActor in
-                            releaseCheckStatus = "Downloading and verifying update…"
-                            do {
-                                _ = try await coordinator.prepare(release)
-                                releaseCheckStatus = "Download verified. Installation requires separate confirmation."
-                            } catch {
-                                releaseCheckStatus = "Download failed: " + error.localizedDescription
+                    VStack(alignment: .leading, spacing: 18) {
+                        HStack(alignment: .center, spacing: 14) {
+                            if let icon = UIImage(named: "AppIcon") ?? ZagSelfUpdateStatusView.installedAppIcon {
+                                Image(uiImage: icon)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 13))
+                            } else {
+                                Image(systemName: "app.fill")
+                                    .font(.system(size: 44))
+                                    .frame(width: 60, height: 60)
                             }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Zag Store \\(release.version)")
+                                    .font(.headline)
+                                Text("Build \\(release.build)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(releaseDownloadSize ?? "Checking download size…")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        Text("Bug fixes and performance improvements.")
+                            .font(.body)
+                        Link("Learn more about this update", destination: release.ipaURL.deletingLastPathComponent().deletingLastPathComponent())
+                            .font(.subheadline)
+                        Button {
+                            Task { @MainActor in
+                                releaseCheckStatus = "Downloading and verifying update…"
+                                do {
+                                    _ = try await coordinator.prepare(release)
+                                    releaseCheckStatus = "Download verified. Installation requires separate confirmation."
+                                } catch {
+                                    releaseCheckStatus = "Download failed: " + error.localizedDescription
+                                }
+                            }
+                        } label: {
+                            Text("Update Now")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        Button {
+                            releaseCheckStatus = "Update Tonight is not available until scheduled installation is implemented."
+                        } label: {
+                            Text("Update Tonight")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .disabled(true)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
+                        Text("Update Now downloads and verifies the IPA. Installation still requires a separate confirmation.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .task(id: release.ipaURL) {
+                        releaseDownloadSize = nil
+                        var request = URLRequest(url: release.ipaURL)
+                        request.httpMethod = "HEAD"
+                        if let response = try? await URLSession.shared.data(for: request).1 as? HTTPURLResponse,
+                           response.statusCode == 200,
+                           let length = response.value(forHTTPHeaderField: "Content-Length"),
+                           let bytes = Int64(length), bytes > 0 {
+                            releaseDownloadSize = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        } else {
+                            releaseDownloadSize = "Download size unavailable"
                         }
                     }
                 }
