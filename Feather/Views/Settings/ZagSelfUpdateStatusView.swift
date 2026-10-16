@@ -647,9 +647,11 @@ struct ZagSelfUpdateStatusView: View {
                     Label("Check for Updates", systemImage: "arrow.clockwise")
                 }
                 .disabled(releaseCheckBusy)
-                Text(releaseCheckStatus)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if releaseCheckStatus != "Not checked" {
+                    Text(releaseCheckStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if let release = coordinator.availableRelease {
                     VStack(alignment: .leading, spacing: 18) {
                         HStack(alignment: .center, spacing: 14) {
@@ -665,9 +667,9 @@ struct ZagSelfUpdateStatusView: View {
                                     .frame(width: 60, height: 60)
                             }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Zag Store \\(release.version)")
+                                Text("Zag Store \(release.version)")
                                     .font(.headline)
-                                Text("Build \\(release.build)")
+                                Text("Build \(release.build)")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                 Text(releaseDownloadSize ?? "Checking download size…")
@@ -696,19 +698,13 @@ struct ZagSelfUpdateStatusView: View {
                                 .padding(.vertical, 5)
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .foregroundStyle(.white)
                         .controlSize(.large)
-                        Button {
-                            releaseCheckStatus = "Update Tonight is not available until scheduled installation is implemented."
-                        } label: {
-                            Text("Update Tonight")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .disabled(true)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.tint)
-                        Text("Update Now downloads and verifies the IPA. Installation still requires a separate confirmation.")
-                            .font(.footnote)
+                        Text("Update Tonight")
+                            .frame(maxWidth: .infinity)
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("Update Tonight — unavailable")
                     }
                     .task(id: release.ipaURL) {
                         releaseDownloadSize = nil
@@ -724,12 +720,11 @@ struct ZagSelfUpdateStatusView: View {
                         }
                     }
                 }
-                Text(coordinator.automaticCheckStatus)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("Checks automatically at launch and periodically when returning to Zag Store. Download and installation require your approval.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if coordinator.availableRelease == nil {
+                    Text(coordinator.automaticCheckStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if shouldCelebrateVerifiedReplacement {
