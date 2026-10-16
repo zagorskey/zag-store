@@ -4,13 +4,13 @@ Zag Store 1.0.0 defaults to **Stable**. The existing "Off" prerelease preference
 
 ## Publishing
 
-Publish a JSON manifest at each path on the `main` branch:
+Publish a JSON manifest at each path on the `main` branch of the public [`zag-store-releases`](https://github.com/zagorskey/zag-store-releases) repository:
 
 - `releases/stable.json`
 - `releases/beta.json`
 - `releases/nightly.json`
 
-Each manifest points to an HTTPS IPA download, preferably an asset in this repository's GitHub Releases. **Do not publish a manifest until a genuine, signed IPA exists.** A missing manifest produces a "not published" message rather than offering an imaginary update.
+Each manifest points to an HTTPS IPA download, preferably an asset in the public distribution repository's GitHub Releases. **Do not publish a manifest until a genuine, signed IPA exists.** A missing manifest produces a "not published" message rather than offering an imaginary update.
 
 Example (replace ALL placeholders with actual release values):
 
@@ -19,7 +19,7 @@ Example (replace ALL placeholders with actual release values):
   "version": "1.0.1",
   "build": "2",
   "bundleIdentifier": "com.cwd43.gu29",
-  "ipaURL": "https://github.com/zagorskey/zag-store/releases/download/v1.0.1/ZagStore.ipa",
+  "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/v1.0.1/ZagStore.ipa",
   "sha256": "<64 hexadecimal characters from shasum -a 256>",
   "minimumIOSVersion": "16.0",
   "releaseNotes": "Release notes"
