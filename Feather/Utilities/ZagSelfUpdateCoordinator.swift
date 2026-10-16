@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Combine
 import CryptoKit
 import CoreData
@@ -85,6 +86,33 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
     }
 
+    // Discovery only: never download, sign, or install without user action.
+    @Published private(set) var automaticCheckStatus = "Waiting for update check"
+    private var lastAutomaticCheck: Date?
+    private var automaticCheckInProgress = false
+    private var foregroundObserver: NSObjectProtocol?
+    private let automaticCheckInterval: TimeInterval = 60 * 60 * 6
+
+    func checkAutomatically(force: Bool = false) async {
+        guard !automaticCheckInProgress else { return }
+        if !force, let lastAutomaticCheck,
+           Date().timeIntervalSince(lastAutomaticCheck) < automaticCheckInterval { return }
+        automaticCheckInProgress = true
+        lastAutomaticCheck = Date()
+        automaticCheckStatus = "Checking for updates…"
+        defer { automaticCheckInProgress = false }
+        do {
+            let channel = UpdateChannel.selected
+            if let release = try await checkForSelectedChannel() {
+                automaticCheckStatus = "Update available: \\(release.version) (Build \\(release.build)) — \\(channel.rawValue.capitalized)"
+            } else {
+                automaticCheckStatus = "Up to date — \\(channel.rawValue.capitalized)"
+            }
+        } catch {
+            automaticCheckStatus = "Update check failed: " + error.localizedDescription
+        }
+    }
+
     @Published private(set) var preparedIPA: URL?
     @Published private(set) var availableRelease: Release?
     @Published private(set) var lastVerifiedInstallation: PendingInstallation?
@@ -97,6 +125,14 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = Self.read(PendingInstallation.self, key: pendingKey)
         lastVerifiedInstallation = Self.read(PendingInstallation.self, key: completedKey)
         reconcileOnLaunch()
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.checkAutomatically() }
+        }
+        Task { @MainActor in await checkAutomatically() }
     }
 
     private static func read<T: Decodable>(_ type: T.Type, key: String) -> T? {
