@@ -25,6 +25,8 @@ struct ZagMetadataV2SequenceStore {
     /// Test-only fault injection for the offline prototype. Never supply this
     /// hook from the live updater; it runs before publication of new state.
     var beforeRenameForTesting: (() throws -> Void)? = nil
+    /// Test-only post-rename failure injection (replacement already visible).
+    var afterRenameForTesting: (() throws -> Void)? = nil
 
     // Serialize read-modify-write operations across all instances in this process.
     // Cross-process access uses an adjacent advisory flock lock file.
@@ -142,6 +144,7 @@ struct ZagMetadataV2SequenceStore {
                        directoryFD, fileURL.lastPathComponent) == 0 else {
             throw StoreError.corruptState
         }
+        try afterRenameForTesting?()
         guard fsync(directoryFD) == 0 else { throw StoreError.corruptState }
     }
 
