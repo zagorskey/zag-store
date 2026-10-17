@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Publish a previously signed and verified Zag Store IPA.
-# Usage: zsh scripts/publish-zag-release.zsh nightly /absolute/path/to/signed.ipa --dry-run
+# Publish a canonical Zag Store IPA (validated locally before any release).
+# Usage: zsh scripts/publish-zag-release.zsh nightly /absolute/path/to/canonical.ipa --dry-run
 set -euo pipefail
 
 CHANNEL="${1:-}"
@@ -25,10 +25,12 @@ unzip -q "$IPA" -d "$TMP/unpacked"
 APP="$TMP/unpacked/Payload/Feather.app"
 [[ -f "$APP/Info.plist" ]] || { echo "Invalid IPA payload"; exit 1; }
 codesign --verify --deep --strict "$APP"
+# A canonical artifact must not embed a customer-specific provisioning profile.
+[[ ! -e "$APP/embedded.mobileprovision" ]] || { echo "Canonical IPA contains embedded.mobileprovision; refusing publication"; exit 1; }
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
 BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-[[ "$BUNDLE" == "com.cwd43.gu29" ]] || { echo "Unexpected bundle identifier: $BUNDLE"; exit 1; }
+[[ "$BUNDLE" == "app.zagstore.ios" ]] || { echo "Unexpected bundle identifier: $BUNDLE"; exit 1; }
 [[ "$BUILD" == <-> ]] || { echo "Build must be numeric"; exit 1; }
 [[ "$VERSION" == [0-9]* ]] || { echo "Invalid version"; exit 1; }
 MIN_IOS=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist")
@@ -115,13 +117,13 @@ PY
 check_channel_versions
 
 if [[ "$MODE" == "--dry-run" ]]; then
-  echo "DRY RUN PASSED: signed IPA, release identity, existing release recovery checks, and cross-channel version checks."
+  echo "DRY RUN PASSED: canonical IPA, release identity, existing release recovery checks, and cross-channel version checks."
   echo "No release, asset, or manifest was published."
   exit 0
 fi
 
 echo "=== PUBLISHING PUBLIC RELEASE ==="
-echo "The signed IPA may expose device-specific provisioning metadata."
+echo "Publishing a canonical IPA. Verify it contains no customer-specific provisioning profile."
 echo "Channel: $CHANNEL | Version: $VERSION ($BUILD) | Minimum iOS: $MIN_IOS"
 [[ "$MODE" == "--publish" ]] || { echo "Explicit --publish required"; exit 2; }
 echo "=== CREATE OR RESUME RELEASE ASSET ==="
