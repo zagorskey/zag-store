@@ -62,6 +62,7 @@ def signed_negative_cases():
         "credentialedIPAURL": {**base, "ipaURL": "https://user:pass@github.com/zagorskey/zag-store-releases/releases/download/x/ZagStore.ipa"},
         "unexpectedIPAPort": {**base, "ipaURL": "https://github.com:8443/zagorskey/zag-store-releases/releases/download/x/ZagStore.ipa"},
         "ipaURLWithFragment": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/v1.0.1-beta.build7/ZagStore.ipa#alternate"},
+        "ipaURLWithQuery": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/v1.0.1-beta.build7/ZagStore.ipa?download=1"},
         "futurePublication": {**base, "publishedAt": "2026-10-19T10:00:00Z"},
         "tooLongLifetime": {**base, "expiresAt": "2026-11-20T10:00:00Z"},
     }
