@@ -22,6 +22,10 @@ struct ZagMetadataV2SequenceStore {
 
     let fileURL: URL
 
+    /// Test-only fault injection for the offline prototype. Never supply this
+    /// hook from the live updater; it runs before publication of new state.
+    var beforeRenameForTesting: (() throws -> Void)? = nil
+
     // Serialize read-modify-write operations across all instances in this process.
     // Cross-process access uses an adjacent advisory flock lock file.
     private static let processLock = NSRecursiveLock()
@@ -132,6 +136,7 @@ struct ZagMetadataV2SequenceStore {
             }
         }
         guard fsync(temporaryFD) == 0 else { throw StoreError.corruptState }
+        try beforeRenameForTesting?()
         // Replace only through the already opened containing directory.
         guard renameat(directoryFD, temporaryName,
                        directoryFD, fileURL.lastPathComponent) == 0 else {
