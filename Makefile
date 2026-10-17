@@ -37,7 +37,7 @@ $(PLATFORMS):
 	chmod -R 0755 _build/Payload/Feather.app
 	# Legacy server-installation credentials must never ship in the IPA.
 	rm -f _build/Payload/Feather.app/server.crt _build/Payload/Feather.app/server.pem _build/Payload/Feather.app/commonName.txt
-	@if [ -d _build/Payload/Feather.app/Frameworks/OpenSSL.framework ]; then codesign --force --sign - --timestamp=none _build/Payload/Feather.app/Frameworks/OpenSSL.framework; fi
+	@if [ -d _build/Payload/Feather.app/Frameworks/OpenSSL.framework ]; then codesign --force --sign - --timestamp=none _build/Payload/Feather.app/Frameworks/OpenSSL.framework && codesign --verify --strict --verbose=2 _build/Payload/Feather.app/Frameworks/OpenSSL.framework; fi
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
 	codesign --verify --deep --strict --verbose=2 _build/Payload/Feather.app
 
