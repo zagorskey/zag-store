@@ -11,14 +11,70 @@ enum ZagUpdateV2Discovery {
 
     static let maximumEnvelopeBytes = 256 * 1024
 
-    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    /// Delegate-owned request rejects redirects and limits buffered bytes
+    /// as they arrive, including responses without Content-Length.
+    private final class LimitedTransfer: NSObject, URLSessionDataDelegate {
+        let maximumBytes: Int
+        private var received = Data()
+        private var receivedResponse: URLResponse?
+        private var terminalError: Error?
+        private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
+
+        init(maximumBytes: Int) { self.maximumBytes = maximumBytes }
+
+        func start(request: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<(Data, URLResponse), Error>) in
+                self.continuation = continuation
+                session.dataTask(with: request).resume()
+            }
+        }
+
         func urlSession(
-            _ session: URLSession,
-            task: URLSessionTask,
+            _ session: URLSession, task: URLSessionTask,
             willPerformHTTPRedirection response: HTTPURLResponse,
             newRequest request: URLRequest
         ) async -> URLRequest? {
             nil
+        }
+
+        func urlSession(
+            _ session: URLSession, dataTask: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            receivedResponse = response
+            if response.expectedContentLength > Int64(maximumBytes) {
+                terminalError = DiscoveryError.oversizedResponse
+                completionHandler(.cancel)
+            } else {
+                completionHandler(.allow)
+            }
+        }
+
+        func urlSession(
+            _ session: URLSession, dataTask: URLSessionDataTask,
+            didReceive data: Data
+        ) {
+            if data.count > maximumBytes - received.count {
+                terminalError = DiscoveryError.oversizedResponse
+                dataTask.cancel()
+            } else {
+                received.append(data)
+            }
+        }
+
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask,
+            didCompleteWithError error: Error?
+        ) {
+            guard let continuation else { return }
+            self.continuation = nil
+            if let terminalError { continuation.resume(throwing: terminalError) }
+            else if let error { continuation.resume(throwing: error) }
+            else if let receivedResponse {
+                continuation.resume(returning: (received, receivedResponse))
+            } else { continuation.resume(throwing: DiscoveryError.invalidResponse) }
         }
     }
 
@@ -31,7 +87,6 @@ enum ZagUpdateV2Discovery {
         channel: String,
         trustedKeys: [String: Data] = ZagUpdateTrustStore.productionKeys,
         store: ZagUpdateRollbackStore = .shared,
-        session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> ZagUpdateMetadataV2.Payload {
         guard ["stable", "beta", "nightly"].contains(channel) else {
@@ -50,7 +105,15 @@ enum ZagUpdateV2Discovery {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 20
-        let (data, response) = try await session.data(for: request, delegate: NoRedirects())
+        // An isolated URLSession ensures this delegate actually receives
+        // response and data callbacks; never rely on a task-only delegate.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 20
+        let delegate = LimitedTransfer(maximumBytes: maximumEnvelopeBytes)
+        let transferSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        defer { transferSession.finishTasksAndInvalidate() }
+        let (data, response) = try await delegate.start(request: request, session: transferSession)
         guard let http = response as? HTTPURLResponse else {
             throw DiscoveryError.invalidResponse
         }
