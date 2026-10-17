@@ -164,7 +164,7 @@ def main():
             parser.error("Expected Ed25519 private key")
         payload = strict_json(args.payload.read_bytes())
         envelope = sign(payload, key, args.key_id)
-        args.output.write_text(json.dumps(envelope, indent=2, ensure_ascii=False) + "\n")
+        args.output.write_bytes(json.dumps(envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii"))
         print("Signed manifest written:", args.output)
 
 
