@@ -407,7 +407,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               let bundleID = info["CFBundleIdentifier"] as? String,
               let version = info["CFBundleShortVersionString"] as? String,
               let build = info["CFBundleVersion"] as? String,
-              (bundleID == currentBundleID || bundleID == "thewonderofyou.Feather"),
+              (bundleID == currentBundleID || bundleID == "app.zagstore.ios" || bundleID == "thewonderofyou.Feather"),
               imported.identifier == bundleID,
               imported.version == version else {
             throw UpdateError.incompatibleBundleIdentifier
@@ -440,7 +440,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     ) async throws -> Signed {
         try validateMinimumIOSVersion(for: release)
         guard release.bundleIdentifier == currentBundleID,
-              (imported.identifier == currentBundleID || imported.identifier == "thewonderofyou.Feather"),
+              (imported.identifier == currentBundleID || imported.identifier == "app.zagstore.ios" || imported.identifier == "thewonderofyou.Feather"),
               imported.version == release.version else {
             throw UpdateError.incompatibleBundleIdentifier
         }
