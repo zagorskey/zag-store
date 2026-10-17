@@ -11,6 +11,7 @@ struct ZagMetadataV2VerifiedSequenceTests {
         }
         let publicKeyBase64: String
         let envelope: Envelope
+        let signedEqualSequenceConflict: Envelope
     }
 
     static func main() throws {
@@ -47,6 +48,23 @@ struct ZagMetadataV2VerifiedSequenceTests {
             throw NSError(domain: "ZagV2Test", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "\(label) accepted"])
         }
+
+        let conflictEnvelope = try JSONEncoder().encode(fixture.signedEqualSequenceConflict)
+        // Establish that the alternate envelope is independently valid before
+        // asserting that persistent equal-sequence conflict protection rejects it.
+        try ZagMetadataV2TestVerifier.verify(
+            envelopeJSON: conflictEnvelope, trustedKeys: registry,
+            expectedChannel: "beta", now: now)
+        print("PASS: Alternate equal-sequence metadata has a valid signature")
+        let stateBeforeSignedConflict = try boundary.store.read(channel: "beta")
+        try mustReject("Independently signed equal-sequence conflict") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: conflictEnvelope, expectedChannel: "beta", now: now)
+        }
+        guard try boundary.store.read(channel: "beta") == stateBeforeSignedConflict else {
+            fatalError("FAIL: Signed equal-sequence conflict modified trusted state")
+        }
+        print("PASS: Signed equal-sequence conflict preserved trusted state")
         var tamperedSignature = Data(base64Encoded: fixture.envelope.signature)!
         tamperedSignature[0] ^= 1
         let tampered = Fixture.Envelope(
