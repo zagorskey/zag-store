@@ -20,6 +20,28 @@ enum ZagUpdateMetadataV2 {
         }
 
         static func verifiedPayload(_ data: Data, trustedKeys: [String: Data]) throws -> Data {
+            // Limit untrusted input before parsing or allocating decoded payloads.
+            guard data.count <= 256 * 1024,
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  Set(object.keys) == Set(["schema", "keyId", "payload", "signature"]),
+                  object["schema"] is NSNumber,
+                  let keyId = object["keyId"] as? String,
+                  !keyId.isEmpty, keyId.utf8.count <= 64,
+                  let encodedPayload = object["payload"] as? String,
+                  encodedPayload.utf8.count <= 192 * 1024,
+                  let encodedSignature = object["signature"] as? String,
+                  encodedSignature.utf8.count <= 128 else {
+                throw ValidationError.invalidEnvelope
+            }
+            // Strict byte-level envelope canonicality rejects duplicate keys,
+            // escaped-key aliases and ambiguous spellings before JSONDecoder.
+            guard data.allSatisfy({ $0 < 128 }),
+                  let canonical = try? JSONSerialization.data(
+                      withJSONObject: object,
+                      options: [.sortedKeys, .withoutEscapingSlashes]
+                  ), canonical == data else {
+                throw ValidationError.invalidEnvelope
+            }
             let envelope = try JSONDecoder().decode(Envelope.self, from: data)
             guard envelope.schema == 2,
                   let publicKeyData = trustedKeys[envelope.keyId],
