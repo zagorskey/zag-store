@@ -40,6 +40,27 @@ Example (replace ALL placeholders with actual release values):
 
 The application requires HTTPS, a valid 64-character SHA-256, matching bundle ID, compatible iOS, and a newer version/build before offering a candidate. SHA-256 authenticates the download **against the manifest**; it does not independently authenticate the manifest publisher. Publishing permissions and signed release provenance still matter.
 
+## Cross-channel version and build policy
+
+Every newly published Stable, Beta, or Nightly release must have a **strictly newer**
+`(version, build)` pair than the latest published release in **each** channel.
+Versions use numeric dot-separated components (for example, `1.0.1`); builds
+are numeric. Compare versions first, then builds within an equal version.
+
+- Use one globally increasing build sequence for the same app version.
+- Never reuse a published version/build for a different channel.
+- A Stable promotion therefore needs its own newer signed IPA/build, rather
+  than repointing Stable to an existing Beta IPA.
+- Switching channels is opt-in and never forces an installed downgrade.
+- Missing Stable or Nightly manifests remain unpublished until a real signed
+  release is ready. Do not publish placeholders.
+
+The publisher enforces this against all manifests present in the public
+distribution repository. The app independently offers only updates newer
+than its installed version/build. This policy does **not** guarantee that
+a channel switch immediately has an available update: a selected channel
+can legitimately lag behind the installed build.
+
 ## Release safety
 
 The old upstream `.github/workflows/release.yml` is not a production Zag Store signing/publishing pipeline. It references Feather and an unsigned build process; **do not use it to publish a channel manifest or release**. Replace that workflow separately after verifying signing and protecting distribution credentials.
