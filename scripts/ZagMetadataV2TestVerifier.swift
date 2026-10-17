@@ -131,6 +131,8 @@ enum ZagMetadataV2TestVerifier {
               components.port == nil,
               components.query == nil,
               components.fragment == nil,
+              !components.percentEncodedPath.lowercased().contains("%2f"),
+              !components.percentEncodedPath.lowercased().contains("%5c"),
               components.path.hasPrefix("/zagorskey/zag-store-releases/releases/download/"),
               let url = components.url,
               url.absoluteString == string else { return false }
