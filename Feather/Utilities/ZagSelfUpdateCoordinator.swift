@@ -97,7 +97,10 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     private let automaticCheckInterval: TimeInterval = 60 * 60 * 6
 
     func checkAutomatically(force: Bool = false) async {
-        guard UserDefaults.standard.object(forKey: Self.automaticChecksKey) as? Bool ?? true else { return }
+        guard UserDefaults.standard.object(forKey: Self.automaticChecksKey) as? Bool ?? true else {
+            automaticCheckStatus = "Automatic update checks off"
+            return
+        }
         guard !automaticCheckInProgress else { return }
         let channel = UpdateChannel.selected
         if !force, lastCheckedChannel == channel, let lastAutomaticCheck,
@@ -120,7 +123,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         } catch {
             guard generation == checkGeneration else { return }
             availableRelease = nil
-            automaticCheckStatus = "Update check failed: " + error.localizedDescription
+            if case UpdateError.channelNotPublished = error {
+                automaticCheckStatus = "No release published — \(channel.rawValue.capitalized)"
+            } else {
+                automaticCheckStatus = "Update check failed: " + error.localizedDescription
+            }
         }
     }
 
@@ -210,7 +217,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     func checkForUpdate(manifestURL: URL) async throws -> Release? {
         let generation = checkGeneration
         let release = try await fetchUpdate(manifestURL: manifestURL)
-        guard generation == checkGeneration else { return nil }
+        guard generation == checkGeneration,
+              manifestURL == UpdateChannel.selected.manifestURL else { return nil }
         availableRelease = release
         return release
     }
