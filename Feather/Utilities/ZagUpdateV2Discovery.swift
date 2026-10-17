@@ -11,6 +11,17 @@ enum ZagUpdateV2Discovery {
 
     static let maximumEnvelopeBytes = 256 * 1024
 
+    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest
+        ) async -> URLRequest? {
+            nil
+        }
+    }
+
     /// Fetch only the caller-provided HTTPS endpoint, verify its signed metadata,
     /// and persist accepted rollback state through the staged pipeline.
     /// Tests can inject a disposable trust map; production uses an empty map
@@ -39,14 +50,15 @@ enum ZagUpdateV2Discovery {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 20
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: NoRedirects())
         guard let http = response as? HTTPURLResponse else {
             throw DiscoveryError.invalidResponse
         }
         guard http.statusCode == 200 else {
             throw DiscoveryError.httpStatus(http.statusCode)
         }
-        guard data.count <= maximumEnvelopeBytes else {
+        guard http.expectedContentLength <= Int64(maximumEnvelopeBytes),
+              data.count <= maximumEnvelopeBytes else {
             throw DiscoveryError.oversizedResponse
         }
 
