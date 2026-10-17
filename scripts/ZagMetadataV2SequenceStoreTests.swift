@@ -124,8 +124,13 @@ struct ZagMetadataV2SequenceStoreTests {
         let trustedBytes = try Data(contentsOf: interruptedURL)
         var failing = ZagMetadataV2SequenceStore(fileURL: interruptedURL)
         failing.beforeRenameForTesting = { throw SimulatedInterruption.beforeRename }
-        try rejects("Injected interruption before atomic rename") {
+        do {
             try failing.accept(channel: "beta", sequence: 21, signedPayload: changed)
+            fatalError("FAIL: Pre-rename injection did not fail")
+        } catch ZagMetadataV2SequenceStore.StoreError.publicationUncertain {
+            fatalError("FAIL: Pre-rename failure mislabeled as uncertain publication")
+        } catch {
+            print("PASS: Pre-rename failure distinguished from uncertain publication")
         }
         guard try Data(contentsOf: interruptedURL) == trustedBytes,
               try baseline.read(channel: "beta")?.sequence == 20 else {
@@ -144,9 +149,12 @@ struct ZagMetadataV2SequenceStoreTests {
         try priorPostRename.accept(channel: "beta", sequence: 30, signedPayload: payload)
         var failedAfterRename = ZagMetadataV2SequenceStore(fileURL: postRenameURL)
         failedAfterRename.afterRenameForTesting = { throw SimulatedInterruption.beforeRename }
-        try rejects("Injected failure after atomic rename") {
+        do {
             try failedAfterRename.accept(
                 channel: "beta", sequence: 31, signedPayload: changed)
+            fatalError("FAIL: Post-rename injection did not fail")
+        } catch ZagMetadataV2SequenceStore.StoreError.publicationUncertain {
+            print("PASS: Post-rename failure reports uncertain publication")
         }
         let observedAfterRename = try ZagMetadataV2SequenceStore(fileURL: postRenameURL)
             .read(channel: "beta")
