@@ -94,7 +94,8 @@ enum ZagMetadataV2TestVerifier {
               !payload.build.isEmpty,
               !payload.minimumIOSVersion.isEmpty,
               payload.ipaURL.hasPrefix("https://github.com/zagorskey/zag-store-releases/releases/download/"),
-              payload.sha256.count == 64 else { throw Failure.invalidPayload }
+              payload.sha256.utf8.count == 64,
+              payload.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { throw Failure.invalidPayload }
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
