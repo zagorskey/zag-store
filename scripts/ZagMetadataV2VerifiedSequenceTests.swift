@@ -68,6 +68,31 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Signed equal-sequence conflict modified trusted state")
         }
         print("PASS: Signed equal-sequence conflict preserved trusted state")
+        // Foundation can decode some alternate Base64 spellings. The verifier
+        // must reject them before they reach trusted persistence.
+        let beforeNoncanonicalBase64 = try boundary.store.read(channel: "beta")
+        let paddedSignature = Fixture.Envelope(
+            schema: fixture.envelope.schema, keyId: fixture.envelope.keyId,
+            payload: fixture.envelope.payload,
+            signature: fixture.envelope.signature + "=")
+        try mustReject("Noncanonical signature Base64") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: try JSONEncoder().encode(paddedSignature),
+                expectedChannel: "beta", now: now)
+        }
+        let paddedPayload = Fixture.Envelope(
+            schema: fixture.envelope.schema, keyId: fixture.envelope.keyId,
+            payload: fixture.envelope.payload + "=",
+            signature: fixture.envelope.signature)
+        try mustReject("Noncanonical payload Base64") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: try JSONEncoder().encode(paddedPayload),
+                expectedChannel: "beta", now: now)
+        }
+        guard try boundary.store.read(channel: "beta") == beforeNoncanonicalBase64 else {
+            fatalError("FAIL: Noncanonical Base64 changed trusted sequence state")
+        }
+        print("PASS: Noncanonical Base64 rejection preserved trusted state")
         var tamperedSignature = Data(base64Encoded: fixture.envelope.signature)!
         tamperedSignature[0] ^= 1
         let tampered = Fixture.Envelope(
