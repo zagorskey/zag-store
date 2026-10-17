@@ -56,6 +56,11 @@ struct ZagMetadataV2KeyRegistryTests {
                 .init(keyID: "same", publicKeyBase64: second.publicKey.rawRepresentation.base64EncodedString())
             ])
         }
+        expectFailure("Empty key ID") {
+            _ = try ZagMetadataV2KeyRegistry(anchors: [
+                .init(keyID: "", publicKeyBase64: first.publicKey.rawRepresentation.base64EncodedString())
+            ])
+        }
         expectFailure("Malformed public key") {
             _ = try ZagMetadataV2KeyRegistry(anchors: [
                 .init(keyID: "invalid", publicKeyBase64: "not-a-valid-key")
