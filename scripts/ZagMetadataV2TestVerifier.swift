@@ -135,6 +135,9 @@ enum ZagMetadataV2TestVerifier {
               !components.percentEncodedPath.lowercased().contains("%5c"),
               !components.path.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == "." || $0 == ".." }),
               components.path.hasPrefix("/zagorskey/zag-store-releases/releases/download/"),
+              components.path.dropFirst("/zagorskey/zag-store-releases/releases/download/".count)
+                  .split(separator: "/", omittingEmptySubsequences: false).count == 2,
+              components.path.hasSuffix(".ipa"),
               let url = components.url,
               url.absoluteString == string else { return false }
         return true
