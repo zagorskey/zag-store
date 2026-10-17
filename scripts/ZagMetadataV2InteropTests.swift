@@ -78,6 +78,31 @@ struct ZagMetadataV2InteropTests {
                 expectedChannel: "beta",
                 now: now)
         }
+        // Verify envelope schema enforcement with the existing signed fixture.
+        let extraEnvelope = try JSONSerialization.jsonObject(with: original) as! [String: Any]
+        var injectedEnvelope = extraEnvelope
+        injectedEnvelope["unexpected"] = "must reject"
+        let extraEnvelopeData = try JSONSerialization.data(withJSONObject: injectedEnvelope)
+        try requireReject("Unknown envelope field") {
+            try ZagMetadataV2TestVerifier.verify(
+                envelopeJSON: extraEnvelopeData,
+                testPublicKeyBase64: fixture.publicKeyBase64,
+                expectedChannel: "beta",
+                now: now)
+        }
+        var missingEnvelope = extraEnvelope
+        missingEnvelope.removeValue(forKey: "keyId")
+        let missingEnvelopeData = try JSONSerialization.data(withJSONObject: missingEnvelope)
+        try requireReject("Missing envelope field") {
+            try ZagMetadataV2TestVerifier.verify(
+                envelopeJSON: missingEnvelopeData,
+                testPublicKeyBase64: fixture.publicKeyBase64,
+                expectedChannel: "beta",
+                now: now)
+        }
+        // Signed payload field-set rejection requires a newly signed invalid
+        // payload fixture; do not mistake tampering (signature failure) for
+        // an actual schema-validation test.
         let digest = Data(repeating: 0x42, count: 32)
         try ZagMetadataV2TestVerifier.enforceSequence(
             sequence: 7, payloadDigest: digest, highestSequence: 7, lastDigest: digest)
