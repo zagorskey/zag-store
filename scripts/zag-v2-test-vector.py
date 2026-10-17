@@ -102,6 +102,10 @@ def main():
         now=__import__("datetime").datetime.fromisoformat("2026-10-18T00:00:00+00:00"),
     ) == vector["payload"]
     vector["signedPositiveCases"] = {
+        "emojiAndControls": signer.sign(
+            {**vector["payload"], "releaseNotes": "Update 🚀 — line one\nline two\t✓"},
+            Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID),
+
         "bulgarianNotes": signer.sign(
             {**vector["payload"], "releaseNotes": "Нова версия — подобрения"},
             Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID),
