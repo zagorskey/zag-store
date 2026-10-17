@@ -31,9 +31,24 @@ struct ZagMetadataV2VerifiedSequence {
             throw ZagMetadataV2TestVerifier.Failure.invalidPayload
         }
         let sequence = try JSONDecoder().decode(SignedSequence.self, from: payload).sequence
-        try store.accept(
-            channel: expectedChannel,
-            sequence: sequence,
-            signedPayload: payload)
+        do {
+            try store.accept(
+                channel: expectedChannel,
+                sequence: sequence,
+                signedPayload: payload)
+        } catch ZagMetadataV2SequenceStore.StoreError.publicationUncertain {
+            // Rename already occurred; an identical visible snapshot does not
+            // establish fsync durability. Preserve the uncertain outcome even
+            // when the immediate read matches, so callers cannot install on
+            // the strength of an unconfirmed state transition.
+            let digest = SHA256.hash(data: payload)
+                .map { String(format: "%02x", $0) }.joined()
+            let observed = try store.read(channel: expectedChannel)
+            guard observed?.sequence == sequence,
+                  observed?.digest == digest else {
+                throw ZagMetadataV2SequenceStore.StoreError.publicationUncertain
+            }
+            throw ZagMetadataV2SequenceStore.StoreError.publicationUncertain
+        }
     }
 }
