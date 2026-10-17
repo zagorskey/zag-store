@@ -122,6 +122,31 @@ struct ZagMetadataV2VerifiedSequenceTests {
         }
         print("PASS: Malformed envelope rejection preserved trusted state")
 
+        // Structurally invalid envelopes must be rejected before their contents
+        // can influence persistent rollback state.
+        let beforeInvalidEnvelopeShape = try boundary.store.read(channel: "beta")
+        guard let schemaField = originalJSON.range(of: #""schema":2"#) else {
+            fatalError("FAIL: Schema field not found in test envelope")
+        }
+        var stringSchemaJSON = originalJSON
+        stringSchemaJSON.replaceSubrange(schemaField, with: #""schema":"2""#)
+        try mustReject("String-valued envelope schema") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: Data(stringSchemaJSON.utf8),
+                expectedChannel: "beta", now: now)
+        }
+
+        let unexpectedFieldJSON = Data(
+            (#"{"unexpected":true,"# + originalJSON.dropFirst()).utf8)
+        try mustReject("Unexpected envelope field") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: unexpectedFieldJSON,
+                expectedChannel: "beta", now: now)
+        }
+        guard try boundary.store.read(channel: "beta") == beforeInvalidEnvelopeShape else {
+            fatalError("FAIL: Invalid envelope shape modified trusted state")
+        }
+        print("PASS: Invalid envelope shape preserved trusted state")
         var tamperedSignature = Data(base64Encoded: fixture.envelope.signature)!
         tamperedSignature[0] ^= 1
         let tampered = Fixture.Envelope(
