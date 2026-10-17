@@ -6,7 +6,7 @@ import CryptoKit
 enum ZagMetadataV2TestVerifier {
     enum Failure: Error {
         case malformedEnvelope, badKey, badSignature, wrongChannel
-        case invalidPayload, expired
+        case invalidPayload, expired, replay
     }
 
     private static let signingPrefix = Data("ZAG-STORE-UPDATE-V2\n".utf8)
@@ -32,6 +32,22 @@ enum ZagMetadataV2TestVerifier {
         let releaseNotes: String
         let publishedAt: String
         let expiresAt: String
+    }
+
+    /// Reject replayed sequence numbers without mutating persistent device state.
+    /// Production must atomically persist sequence and payload digest.
+    static func enforceSequence(
+        sequence: Int,
+        payloadDigest: Data,
+        highestSequence: Int?,
+        lastDigest: Data?
+    ) throws {
+        guard sequence > 0 else { throw Failure.invalidPayload }
+        guard let highestSequence else { return }
+        if sequence < highestSequence { throw Failure.replay }
+        if sequence == highestSequence {
+            guard let lastDigest, lastDigest == payloadDigest else { throw Failure.replay }
+        }
     }
 
     /// Call only in an offline test harness; production must use a separately
