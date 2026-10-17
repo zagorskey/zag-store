@@ -16,7 +16,7 @@ struct ZagMetadataV2SequenceStore {
 
     private struct Snapshot: Codable {
         let format: Int
-        let channels: [String: Entry]
+        var channels: [String: Entry]
     }
 
     let fileURL: URL
