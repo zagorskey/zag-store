@@ -66,6 +66,7 @@ def signed_negative_cases():
         "encodedPathSeparator": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download%2Fother/ZagStore.ipa"},
         "encodedBackslash": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/x%5Cother/ZagStore.ipa"},
         "missingReleaseAsset": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/only-tag"},
+        "emptyReleaseTag": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download//ZagStore.ipa"},
         "ipaPathTraversal": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/../other/ZagStore.ipa"},
         "encodedDotDotTraversal": {**base, "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/%2E%2E/other/ZagStore.ipa"},
         "futurePublication": {**base, "publishedAt": "2026-10-19T10:00:00Z"},
