@@ -9,7 +9,12 @@ struct ZagMetadataV2VerifiedArtifactTests {
             let payload: String
             let signature: String
         }
+        struct SignedArtifactPositive: Decodable {
+            let bytesBase64: String
+            let envelope: Envelope
+        }
         let publicKeyBase64: String
+        let signedArtifactPositive: SignedArtifactPositive
         let envelope: Envelope
     }
 
@@ -47,6 +52,28 @@ struct ZagMetadataV2VerifiedArtifactTests {
             } catch {
                 print("PASS: \(label) rejected")
             }
+        }
+
+        // Positive end-to-end offline test: a disposable signed metadata
+        // fixture authenticates the exact local file bytes, not a caller hash.
+        guard let matchingBytes = Data(
+            base64Encoded: fixture.signedArtifactPositive.bytesBase64) else {
+            fatalError("FAIL: Invalid matching artifact fixture Base64")
+        }
+        try matchingBytes.write(to: localIPA)
+        let positiveEnvelope = try JSONEncoder().encode(
+            fixture.signedArtifactPositive.envelope)
+        try boundary.verify(
+            envelopeJSON: positiveEnvelope, expectedChannel: "beta",
+            now: now, localIPA: localIPA)
+        print("PASS: Signed metadata authenticates matching local artifact bytes")
+        var altered = matchingBytes
+        altered[altered.count - 1] ^= 1
+        try altered.write(to: localIPA)
+        try rejects("Tampered file rejected against signed matching digest") {
+            try boundary.verify(
+                envelopeJSON: positiveEnvelope, expectedChannel: "beta",
+                now: now, localIPA: localIPA)
         }
 
         try Data("not the signed IPA".utf8).write(to: localIPA)
