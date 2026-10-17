@@ -14,14 +14,14 @@ struct ZagMetadataV2KeyRegistryTests {
 
     static func main() throws {
         // Deterministic public test anchors only. Never use these for releases.
-        let first = Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 1, count: 32))
-        let second = Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 2, count: 32))
+        let first = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 1, count: 32))
+        let second = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 2, count: 32))
         let registry = try ZagMetadataV2KeyRegistry(anchors: [
             .init(keyID: "test-old", publicKeyBase64: first.publicKey.rawRepresentation.base64EncodedString()),
             .init(keyID: "test-new", publicKeyBase64: second.publicKey.rawRepresentation.base64EncodedString())
         ])
-        guard registry.publicKey(for: "test-old").rawRepresentation == first.publicKey.rawRepresentation,
-              registry.publicKey(for: "test-new").rawRepresentation == second.publicKey.rawRepresentation
+        guard try registry.publicKey(for: "test-old").rawRepresentation == first.publicKey.rawRepresentation,
+              try registry.publicKey(for: "test-new").rawRepresentation == second.publicKey.rawRepresentation
         else { fatalError("FAIL: key resolution") }
         print("PASS: Two pinned test keys resolved independently")
 
