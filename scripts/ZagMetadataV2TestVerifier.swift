@@ -34,6 +34,83 @@ enum ZagMetadataV2TestVerifier {
         let expiresAt: String
     }
 
+    /// Byte-level validation of the currently specified flat v2 payload schema.
+    /// No nested values, escaped key names, number exponents or extra JSON
+    /// whitespace are needed by this protocol. Exact JCS spelling is checked
+    /// by serializing the parsed primitive values with sorted keys below.
+    private static func isCanonicalFlatPayload(_ bytes: Data) -> Bool {
+        guard let string = String(data: bytes, encoding: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              object.count == 12 else { return false }
+        // Foundation's dictionary parser can lose duplicate members. Recover
+        // key occurrences directly from the raw JSON token stream with a
+        // small lexical scanner; treat backslash escapes conservatively.
+        let chars = Array(string.utf8)
+        var i = 0
+        func skipSpace() {
+            while i < chars.count && (chars[i] == 32 || chars[i] == 9 || chars[i] == 10 || chars[i] == 13) { i += 1 }
+        }
+        func quoted() -> String? {
+            guard i < chars.count && chars[i] == 34 else { return nil }
+            let start = i
+            i += 1
+            while i < chars.count {
+                if chars[i] == 92 {
+                    i += 2
+                    continue
+                }
+                if chars[i] == 34 {
+                    i += 1
+                    let slice = Data(chars[start..<i])
+                    guard let decoded = try? JSONSerialization.jsonObject(
+                        with: Data("[\(String(data: slice, encoding: .utf8) ?? "")]".utf8)
+                    ) as? [String] else { return nil }
+                    return decoded.first
+                }
+                i += 1
+            }
+            return nil
+        }
+        skipSpace()
+        guard i < chars.count && chars[i] == 123 else { return false }
+        i += 1
+        var names = Set<String>()
+        while true {
+            skipSpace()
+            guard let name = quoted(), names.insert(name).inserted else { return false }
+            skipSpace()
+            guard i < chars.count && chars[i] == 58 else { return false }
+            i += 1
+            skipSpace()
+            if i < chars.count && chars[i] == 34 {
+                guard quoted() != nil else { return false }
+            } else {
+                let start = i
+                while i < chars.count && chars[i] != 44 && chars[i] != 125 { i += 1 }
+                let value = String(decoding: chars[start..<i], as: UTF8.self)
+                guard !value.isEmpty, value.allSatisfy({ $0.isNumber || $0 == "-" }) else { return false }
+            }
+            skipSpace()
+            guard i < chars.count else { return false }
+            if chars[i] == 125 {
+                i += 1
+                break
+            }
+            guard chars[i] == 44 else { return false }
+            i += 1
+        }
+        skipSpace()
+        guard i == chars.count, names.count == object.count else { return false }
+
+        // JCS's lexical order for these ASCII field names matches sortedKeys.
+        // Only strings and positive integral numbers are legal in v2 metadata.
+        guard JSONSerialization.isValidJSONObject(object),
+              let canonical = try? JSONSerialization.data(
+                  withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed, .withoutEscapingSlashes])
+        else { return false }
+        return canonical == bytes
+    }
+
     /// Reject replayed sequence numbers without mutating persistent device state.
     /// Production must atomically persist sequence and payload digest.
     static func enforceSequence(
@@ -85,6 +162,10 @@ enum ZagMetadataV2TestVerifier {
               let object = try JSONSerialization.jsonObject(with: payloadBytes) as? [String: Any],
               Set(object.keys) == requiredPayload
         else { throw Failure.invalidPayload }
+        // The v2 payload schema contains only flat, primitive JSON values.
+        // Scan bytes for a single unambiguous canonical representation before
+        // trusting Foundation's dictionaries (which discard duplicate keys).
+        guard isCanonicalFlatPayload(payloadBytes) else { throw Failure.invalidPayload }
         let payload = try JSONDecoder().decode(Payload.self, from: payloadBytes)
         guard payload.schema == 2,
               payload.appId == "com.cwd43.gu29",
