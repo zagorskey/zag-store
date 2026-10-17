@@ -690,14 +690,20 @@ struct ZagSelfUpdateStatusView: View {
                                 defer { releaseDownloadBusy = false }
                                 releaseCheckStatus = "Downloading and verifying update…"
                                 do {
-                                    _ = try await coordinator.prepare(release)
-                                    releaseCheckStatus = "Download verified. Installation is not available yet."
+                                    guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+                                        releaseCheckStatus = "Update cancelled — no signing certificate selected."
+                                        return
+                                    }
+                                    let signed = try await coordinator.prepareSignedUpdate(release, certificate: certificate)
+                                    preparedCandidateUUID = signed.uuid
+                                    releaseCheckStatus = "Verified and signed. Confirm installation to continue."
+                                    showInstallConfirmation = true
                                 } catch {
                                     releaseCheckStatus = "Download failed: " + error.localizedDescription
                                 }
                             }
                         } label: {
-                            Text(releaseDownloadBusy ? "Verifying Download…" : "Download Update")
+                            Text(releaseDownloadBusy ? "Preparing Update…" : "Update Now")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 5)
                         }
@@ -706,7 +712,7 @@ struct ZagSelfUpdateStatusView: View {
                         .foregroundStyle(.white)
                         .controlSize(.large)
                         .disabled(releaseDownloadBusy)
-                        Text("Installation will be enabled after the self-replacement checks pass.")
+                        Text("The update will be verified and signed before you confirm installation.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -953,7 +959,7 @@ struct ZagSelfUpdateStatusView: View {
                 }
             }
         } message: {
-            Text("Primary-device experiment: iOS may reject the replacement or terminate Zag Store; app data could be lost. No automatic uninstall or fresh-install fallback. Continue only with an external backup.")
+            Text("Zag Store will attempt an in-place upgrade using the selected signed update. iOS may close the app during replacement. No automatic uninstall or fresh-install fallback will be attempted. Continue only if you have a recovery copy.")
         }
         .navigationTitle("Zag Store Update")
         .navigationBarTitleDisplayMode(.inline)
