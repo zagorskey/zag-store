@@ -12,6 +12,7 @@ struct ZagMetadataV2VerifiedSequenceTests {
         let publicKeyBase64: String
         let envelope: Envelope
         let signedEqualSequenceConflict: Envelope
+        let signedHigherSequence: Envelope
     }
 
     static func main() throws {
@@ -123,6 +124,22 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Sequence conflict modified trusted state")
         }
         print("PASS: Conflicting equal-sequence payload preserved trusted state")
+
+        let signedUpgrade = try JSONEncoder().encode(fixture.signedHigherSequence)
+        try restartedBoundary.verifyAndRecord(
+            envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
+        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Signed higher sequence was not persisted")
+        }
+        print("PASS: Independently signed higher sequence accepted")
+        try mustReject("Older signed manifest after verified upgrade") {
+            try restartedBoundary.verifyAndRecord(
+                envelopeJSON: original, expectedChannel: "beta", now: now)
+        }
+        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Verified upgrade high-water mark changed after replay")
+        }
+        print("PASS: Verified upgrade remains trusted after old manifest replay")
 
         print("SUCCESS: Offline verified-metadata persistence integration tests passed")
     }
