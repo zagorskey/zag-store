@@ -110,6 +110,14 @@ enum ZagMetadataV2TestVerifier {
         return canonical == bytes
     }
 
+    /// Canonical RFC 4648 base64 only: no ignored bytes, extra padding or
+    /// alternate spellings of signed payload/signature fields.
+    private static func strictBase64(_ text: String) -> Data? {
+        guard let decoded = Data(base64Encoded: text),
+              decoded.base64EncodedString() == text else { return nil }
+        return decoded
+    }
+
     private static func numericDotted(_ value: String) -> Bool {
         let parts = value.split(separator: ".", omittingEmptySubsequences: false)
         return !parts.isEmpty && parts.allSatisfy {
@@ -170,8 +178,8 @@ enum ZagMetadataV2TestVerifier {
     ) throws {
         let envelope = try JSONDecoder().decode(Envelope.self, from: envelopeJSON)
         guard envelope.schema == 2,
-              let payloadBytes = Data(base64Encoded: envelope.payload),
-              let signatureBytes = Data(base64Encoded: envelope.signature),
+              let payloadBytes = strictBase64(envelope.payload),
+              let signatureBytes = strictBase64(envelope.signature),
               signatureBytes.count == 64 else { throw Failure.malformedEnvelope }
         let key: Curve25519.Signing.PublicKey
         do {
