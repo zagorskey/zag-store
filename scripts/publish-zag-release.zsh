@@ -114,9 +114,9 @@ git push origin main
 echo "=== VERIFY PUBLIC MANIFEST ==="
 PUBLIC_MANIFEST="$TMP/public-manifest.json"
 curl -fLsS --retry 3 -o "$PUBLIC_MANIFEST" "https://raw.githubusercontent.com/${REPO}/main/releases/${CHANNEL}.json"
-python3 - "$PUBLIC_MANIFEST" "$VERSION" "$BUILD" "$BUNDLE" "$URL" "$SHA" <<'PY'
+python3 - "$PUBLIC_MANIFEST" "$VERSION" "$BUILD" "$BUNDLE" "$URL" "$SHA" "$MIN_IOS" "$NOTES_FILE" <<'PY'
 import json, sys
-path, version, build, bundle, url, sha = sys.argv[1:]
+path, version, build, bundle, url, sha, min_ios, notes_file = sys.argv[1:]
 with open(path) as f:
     published = json.load(f)
 expected = {
@@ -125,10 +125,12 @@ expected = {
     "bundleIdentifier": bundle,
     "ipaURL": url,
     "sha256": sha,
+    "minimumIOSVersion": min_ios,
+    "releaseNotes": open(notes_file, encoding="utf-8").read().strip(),
 }
 for key, value in expected.items():
     if published.get(key) != value:
         raise SystemExit(f"Public manifest verification failed: {key} does not match the published release")
-print("Public manifest verified: version, build, bundle, URL and SHA-256 match")
+print("Public manifest verified: all seven release fields match")
 PY
 echo "SUCCESS: ${CHANNEL} release published"
