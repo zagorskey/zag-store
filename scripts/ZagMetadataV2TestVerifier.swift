@@ -110,6 +110,61 @@ enum ZagMetadataV2TestVerifier {
         return canonical == bytes
     }
 
+    /// Require literal, unique envelope keys with unambiguous string values.
+    /// This deliberately accepts ordinary envelope whitespace and key ordering,
+    /// but rejects duplicate keys, escaped key names and nested values.
+    private static func isStrictEnvelope(_ bytes: Data) -> Bool {
+        let input = Array(bytes)
+        var index = 0
+        func space() {
+            while index < input.count && [9, 10, 13, 32].contains(input[index]) {
+                index += 1
+            }
+        }
+        func take(_ value: UInt8) -> Bool {
+            space()
+            guard index < input.count, input[index] == value else { return false }
+            index += 1
+            return true
+        }
+        func string() -> String? {
+            guard take(34) else { return nil }
+            let start = index
+            while index < input.count {
+                if input[index] == 92 { return nil } // No escape sequences in envelope.
+                if input[index] == 34 {
+                    let part = input[start..<index]
+                    index += 1
+                    guard part.allSatisfy({ $0 >= 32 }) else { return nil }
+                    return String(bytes: part, encoding: .utf8)
+                }
+                index += 1
+            }
+            return nil
+        }
+        guard take(123) else { return false }
+        var names = Set<String>()
+        while true {
+            guard let name = string(), names.insert(name).inserted,
+                  take(58) else { return false }
+            if name == "schema" {
+                space()
+                guard index < input.count, input[index] == 50 else { return false }
+                index += 1
+            } else if ["keyId", "payload", "signature"].contains(name) {
+                guard string() != nil else { return false }
+            } else {
+                return false
+            }
+            space()
+            if take(125) { break }
+            guard take(44) else { return false }
+        }
+        space()
+        return index == input.count &&
+            names == Set(["schema", "keyId", "payload", "signature"])
+    }
+
     /// Canonical RFC 4648 base64 only: no ignored bytes, extra padding or
     /// alternate spellings of signed payload/signature fields.
     private static func strictBase64(_ text: String) -> Data? {
@@ -176,6 +231,7 @@ enum ZagMetadataV2TestVerifier {
         expectedChannel: String,
         now: Date
     ) throws {
+        guard isStrictEnvelope(envelopeJSON) else { throw Failure.malformedEnvelope }
         let envelope = try JSONDecoder().decode(Envelope.self, from: envelopeJSON)
         guard envelope.schema == 2,
               let payloadBytes = strictBase64(envelope.payload),
