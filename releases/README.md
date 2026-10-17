@@ -7,7 +7,7 @@ Zag Store 1.0.0 defaults to **Stable**. The existing "Off" prerelease preference
 Use the local signed-IPA publisher after compiling and signing with `ZagStore-Package.zsh`:
 
 ```zsh
-zsh scripts/publish-zag-release.zsh beta "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" --publish 2>&1 | tee /tmp/zag-publish-beta.log
+zsh scripts/publish-zag-release.zsh beta "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" --publish "$HOME/Documents/ZagStore-release-notes.md" 2>&1 | tee /tmp/zag-publish-beta.log
 ```
 
 Before publishing the first Nightly, validate its **actual signed IPA** without changing the public repository:
@@ -16,7 +16,7 @@ Before publishing the first Nightly, validate its **actual signed IPA** without 
 zsh scripts/publish-zag-release.zsh nightly "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" --dry-run 2>&1 | tee /tmp/zag-nightly-preflight.log
 ```
 
-This is an example filename only: use the real signed IPA path and ensure its build exceeds every published channel. A successful dry run checks the IPA, its signing structure, bundle identity, release tag availability, and cross-channel version ordering; it does **not** upload a release or create a manifest. It is not a device-installation test. After a separate on-device validation and explicit release approval, use `--publish` to publish. Omitting the third argument defaults to a dry run.
+This is an example filename only: use the real signed IPA path and ensure its build exceeds every published channel. A successful dry run checks the IPA, its signing structure, bundle identity, release tag availability, and cross-channel version ordering; it does **not** upload a release or create a manifest. It is not a device-installation test. After a separate on-device validation and explicit release approval, use `--publish` followed by a non-empty UTF-8 release-notes file to publish. The same notes appear in the GitHub release and the in-app manifest. Omitting the third argument defaults to a dry run.
 
 The command is an **example**, not an instruction to publish build 3 until it has been tested. The publisher checks the IPA signature and bundle identity, refuses a duplicate release tag or non-increasing channel version/build, uploads the release asset, downloads it back to verify SHA-256, then updates the public channel manifest last. It reads the minimum supported iOS version from the signed app payload. It does not compile, sign, or install the app. Stable and Nightly remain unpublished until separately authorized.
 
@@ -74,3 +74,7 @@ can legitimately lag behind the installed build.
 The old upstream `.github/workflows/release.yml` is not a production Zag Store signing/publishing pipeline. It references Feather and an unsigned build process; **do not use it to publish a channel manifest or release**. Replace that workflow separately after verifying signing and protecting distribution credentials.
 
 Nightly/Beta builds need monotonically increasing numeric build numbers within a version. Switching to another channel does not force a downgrade. Channel checks do not authorize self-replacement; signed candidate validation and explicit installation confirmation remain separate.
+
+## Channel promotion
+
+Promotion means building and signing a **newer** IPA from the tested source commit, not copying an old Beta or Nightly manifest to Stable. Record the tested source commit, choose a globally increasing version/build, package and validate the signed IPA, write specific release notes, run the publisher in dry-run mode, and explicitly approve publication. Publish only when the resulting signed IPA has been tested for its intended audience. Never copy a device-specific signed IPA to a broader audience without checking provisioning eligibility. If a publication fails after asset upload but before manifest push, leave the existing manifest untouched and investigate the orphan release; never silently overwrite it.
