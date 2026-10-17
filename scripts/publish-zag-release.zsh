@@ -84,6 +84,7 @@ MANIFEST="$TMP/dist/releases/${CHANNEL}.json"
 # A single increasing build sequence across all channels prevents an older
 # Stable/Beta/Nightly release from being advertised as a newer installation.
 # Version is compared first; build breaks ties within the same version.
+check_channel_versions() {
 python3 - "$TMP/dist/releases" "$VERSION" "$BUILD" <<'PY'
 import json, pathlib, re, sys
 folder, version, build = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
@@ -110,6 +111,8 @@ for channel in ("stable", "beta", "nightly"):
         )
 print("Cross-channel version/build check passed")
 PY
+}
+check_channel_versions
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "DRY RUN PASSED: signed IPA, release identity, existing release recovery checks, and cross-channel version checks."
@@ -136,6 +139,12 @@ echo "=== VERIFY PUBLIC ASSET ==="
 curl -fLsS --retry 3 -o "$TMP/remote.ipa" "$URL"
 REMOTE_SHA=$(shasum -a 256 "$TMP/remote.ipa" | awk '{print $1}')
 [[ "$REMOTE_SHA" == "$SHA" ]] || { echo "Remote IPA checksum mismatch; manifest not changed"; exit 1; }
+
+echo "=== REFRESH DISTRIBUTION BEFORE MANIFEST COMMIT ==="
+# Re-check all channel versions against the latest main. Never discard local work:
+# the manifest is not written until after this fast-forward.
+git -C "$TMP/dist" pull --ff-only origin main
+check_channel_versions
 
 echo "=== PUBLISH CHANNEL MANIFEST LAST ==="
 mkdir -p "$TMP/dist/releases"
