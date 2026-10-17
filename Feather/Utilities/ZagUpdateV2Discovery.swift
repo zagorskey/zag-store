@@ -87,6 +87,7 @@ enum ZagUpdateV2Discovery {
         channel: String,
         trustedKeys: [String: Data] = ZagUpdateTrustStore.productionKeys,
         store: ZagUpdateRollbackStore = .shared,
+        session: URLSession = .shared,
         now: Date = Date()
     ) async throws -> ZagUpdateMetadataV2.Payload {
         guard ["stable", "beta", "nightly"].contains(channel) else {
@@ -107,7 +108,7 @@ enum ZagUpdateV2Discovery {
         request.timeoutInterval = 20
         // An isolated URLSession ensures this delegate actually receives
         // response and data callbacks; never rely on a task-only delegate.
-        let configuration = URLSessionConfiguration.ephemeral
+        let configuration = session.configuration.copy() as! URLSessionConfiguration
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 20
         let delegate = LimitedTransfer(maximumBytes: maximumEnvelopeBytes)
