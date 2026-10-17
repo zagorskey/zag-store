@@ -5,7 +5,7 @@ import CryptoKit
 /// Not yet connected to the production update discovery pipeline.
     /// V2 envelope checks are staged independently of the live v1 updater.
     /// No trust anchor is supplied until the production release key is provisioned.
-    enum V2Metadata {
+enum ZagUpdateMetadataV2 {
         static let domain = Data("ZAG-STORE-UPDATE-V2\n".utf8)
 
         struct Envelope: Decodable {
