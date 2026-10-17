@@ -96,6 +96,50 @@ struct ZagMetadataV2SequenceStore {
         }
     }
 
+    /// Publish only a fully written, owner-private replacement inode.
+    /// The containing directory must be trusted and non-writable by attackers.
+    private func persist(_ bytes: Data) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        let directoryFD = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        guard directoryFD >= 0 else { throw StoreError.corruptState }
+        defer { _ = close(directoryFD) }
+        var directoryInfo = stat()
+        guard fstat(directoryFD, &directoryInfo) == 0,
+              (directoryInfo.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              directoryInfo.st_uid == geteuid(),
+              (directoryInfo.st_mode & mode_t(0o022)) == 0 else {
+            throw StoreError.corruptState
+        }
+        let temporaryName = ".zag-v2-\(UUID().uuidString).tmp"
+        let temporaryFD = openat(directoryFD, temporaryName,
+                                 O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC | O_NOFOLLOW,
+                                 mode_t(0o600))
+        guard temporaryFD >= 0 else { throw StoreError.corruptState }
+        defer { _ = unlinkat(directoryFD, temporaryName, 0) }
+        defer { _ = close(temporaryFD) }
+        guard fchmod(temporaryFD, mode_t(0o600)) == 0 else {
+            throw StoreError.corruptState
+        }
+        try bytes.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { throw StoreError.corruptState }
+            var offset = 0
+            while offset < raw.count {
+                let count = write(temporaryFD, base.advanced(by: offset),
+                                  raw.count - offset)
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw StoreError.corruptState }
+                offset += count
+            }
+        }
+        guard fsync(temporaryFD) == 0 else { throw StoreError.corruptState }
+        // Replace only through the already opened containing directory.
+        guard renameat(directoryFD, temporaryName,
+                       directoryFD, fileURL.lastPathComponent) == 0 else {
+            throw StoreError.corruptState
+        }
+        guard fsync(directoryFD) == 0 else { throw StoreError.corruptState }
+    }
+
     func read(channel: String) throws -> Entry? {
         Self.processLock.lock()
         defer { Self.processLock.unlock() }
@@ -126,15 +170,7 @@ struct ZagMetadataV2SequenceStore {
             }
             snapshot.channels[channel] = Entry(sequence: sequence, digest: digest)
             let bytes = try JSONEncoder().encode(snapshot)
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            // Foundation atomic writes use a replacement inode whose mode is
-            // not guaranteed to be private. Set owner-only permissions before
-            // any subsequent read applies the strict state-file checks.
-            try bytes.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: NSNumber(value: 0o600)],
-                ofItemAtPath: fileURL.path)
+            try persist(bytes)
         }
     }
 }
