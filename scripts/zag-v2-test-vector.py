@@ -101,6 +101,11 @@ def main():
         "beta",
         now=__import__("datetime").datetime.fromisoformat("2026-10-18T00:00:00+00:00"),
     ) == vector["payload"]
+    vector["signedPositiveCases"] = {
+        "bulgarianNotes": signer.sign(
+            {**vector["payload"], "releaseNotes": "Нова версия — подобрения"},
+            Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID),
+    }
     vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
