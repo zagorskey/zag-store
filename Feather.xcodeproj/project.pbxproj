@@ -588,9 +588,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-			isa = XCSwiftPackageProductDependency;
-			productName = Vapor;
-		};
 		330F68FB2DBF7C8600D8C35D /* NimbleExtensions */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NimbleExtensions;
