@@ -179,6 +179,21 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Future-dated signed metadata modified trusted state")
         }
         print("PASS: Future-dated signed release preserved trusted state")
+        // The signature is valid for the original pinned identity, but that
+        // identity must not be accepted by a registry that does not trust it.
+        let untrustedRegistry = ZagMetadataV2KeyRegistry.production()
+        let untrustedBoundary = ZagMetadataV2VerifiedSequence(
+            registry: untrustedRegistry, store: reopenedUpgradeStore)
+        let beforeUntrustedKey = try reopenedUpgradeStore.read(channel: "beta")
+        try mustReject("Valid signature from untrusted signing key") {
+            try untrustedBoundary.verifyAndRecord(
+                envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
+        }
+        guard try reopenedUpgradeStore.read(channel: "beta") == beforeUntrustedKey else {
+            fatalError("FAIL: Untrusted key changed trusted sequence state")
+        }
+        print("PASS: Untrusted signing key preserved trusted sequence state")
+
 
 
 
