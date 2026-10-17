@@ -93,6 +93,35 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Noncanonical Base64 changed trusted sequence state")
         }
         print("PASS: Noncanonical Base64 rejection preserved trusted state")
+        // Construct raw JSON rather than using JSONEncoder, which cannot
+        // represent duplicate keys. A valid signature must not excuse an
+        // ambiguous envelope or an escaped field name.
+        let beforeMalformedEnvelope = try boundary.store.read(channel: "beta")
+        let originalJSON = String(decoding: original, as: UTF8.self)
+        guard originalJSON.hasPrefix("{") else {
+            fatalError("FAIL: Test fixture is not a JSON object")
+        }
+        let duplicateKeyJSON = Data(
+            ("{\\"schema\\":2," + originalJSON.dropFirst()).utf8)
+        try mustReject("Duplicate envelope schema key") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: duplicateKeyJSON, expectedChannel: "beta", now: now)
+        }
+        guard let payloadKey = originalJSON.range(of: "\\"payload\\"") else {
+            fatalError("FAIL: Payload field not found in test envelope")
+        }
+        var escapedKeyJSON = originalJSON
+        escapedKeyJSON.replaceSubrange(payloadKey, with: "\\"pay\\\\u006coad\\"")
+        try mustReject("Escaped envelope field name") {
+            try boundary.verifyAndRecord(
+                envelopeJSON: Data(escapedKeyJSON.utf8),
+                expectedChannel: "beta", now: now)
+        }
+        guard try boundary.store.read(channel: "beta") == beforeMalformedEnvelope else {
+            fatalError("FAIL: Malformed envelopes changed trusted sequence state")
+        }
+        print("PASS: Malformed envelope rejection preserved trusted state")
+
         var tamperedSignature = Data(base64Encoded: fixture.envelope.signature)!
         tamperedSignature[0] ^= 1
         let tampered = Fixture.Envelope(
