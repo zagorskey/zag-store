@@ -12,7 +12,11 @@ actor ZagUpdateRollbackStore {
         case keychain(OSStatus), rollback, conflictingSequence
     }
 
-    private let service = "app.zagstore.ios.update-metadata-v2.rollback"
+    private let service: String
+
+    init(service: String = "app.zagstore.ios.update-metadata-v2.rollback") {
+        self.service = service
+    }
 
     private func account(for channel: String) throws -> String {
         guard ["stable", "beta", "nightly"].contains(channel) else {
