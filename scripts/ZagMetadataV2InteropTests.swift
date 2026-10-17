@@ -78,6 +78,22 @@ struct ZagMetadataV2InteropTests {
                 expectedChannel: "beta",
                 now: now)
         }
-        print("SUCCESS: Python-to-Swift signing interoperability tests passed")
+        let digest = Data(repeating: 0x42, count: 32)
+        try ZagMetadataV2TestVerifier.enforceSequence(
+            sequence: 7, payloadDigest: digest, highestSequence: 7, lastDigest: digest)
+        print("PASS: Identical sequence and payload accepted")
+        try ZagMetadataV2TestVerifier.enforceSequence(
+            sequence: 8, payloadDigest: digest, highestSequence: 7, lastDigest: digest)
+        print("PASS: Higher sequence accepted")
+        try requireReject("Lower sequence replay") {
+            try ZagMetadataV2TestVerifier.enforceSequence(
+                sequence: 6, payloadDigest: digest, highestSequence: 7, lastDigest: digest)
+        }
+        try requireReject("Conflicting equal sequence") {
+            try ZagMetadataV2TestVerifier.enforceSequence(
+                sequence: 7, payloadDigest: Data(repeating: 0x24, count: 32),
+                highestSequence: 7, lastDigest: digest)
+        }
+        print("SUCCESS: Python-to-Swift signing interoperability and replay tests passed")
     }
 }
