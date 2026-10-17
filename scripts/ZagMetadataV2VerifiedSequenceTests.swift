@@ -102,16 +102,16 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Test fixture is not a JSON object")
         }
         let duplicateKeyJSON = Data(
-            ("{\\"schema\\":2," + originalJSON.dropFirst()).utf8)
+            ("{\"schema\":2," + originalJSON.dropFirst()).utf8)
         try mustReject("Duplicate envelope schema key") {
             try boundary.verifyAndRecord(
                 envelopeJSON: duplicateKeyJSON, expectedChannel: "beta", now: now)
         }
-        guard let payloadKey = originalJSON.range(of: "\\"payload\\"") else {
+        guard let payloadKey = originalJSON.range(of: "\"payload\"") else {
             fatalError("FAIL: Payload field not found in test envelope")
         }
         var escapedKeyJSON = originalJSON
-        escapedKeyJSON.replaceSubrange(payloadKey, with: "\\"pay\\\\u006coad\\"")
+        escapedKeyJSON.replaceSubrange(payloadKey, with: "\"pay\\u006coad\"")
         try mustReject("Escaped envelope field name") {
             try boundary.verifyAndRecord(
                 envelopeJSON: Data(escapedKeyJSON.utf8),
