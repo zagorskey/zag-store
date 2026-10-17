@@ -104,6 +104,20 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: New state starts empty and persists its first high-water mark")
 
+        // A failed persistence attempt must not replace an already trusted
+        // high-water mark. Simulate a directory where a file should be written.
+        let blockedURL = directory.appendingPathComponent("blocked-sequence.json", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: blockedURL, withIntermediateDirectories: true)
+        let blocked = ZagMetadataV2SequenceStore(fileURL: blockedURL)
+        try rejects("Unwritable state destination") {
+            try blocked.accept(channel: "beta", sequence: 13, signedPayload: payload)
+        }
+        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Failed persistence changed trusted high-water mark")
+        }
+        print("PASS: Failed persistence leaves existing trusted state unchanged")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
