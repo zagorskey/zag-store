@@ -139,6 +139,47 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Lock-file symlink rejection leaves target and state untouched")
 
+        // Symlinks at the state path must fail closed, including dangling
+        // symlinks (which fileExists incorrectly treats as absent).
+        let linkedStateURL = directory.appendingPathComponent("linked-state.json")
+        let linkedTargetURL = directory.appendingPathComponent("linked-target.txt")
+        let linkedMarker = Data("DO NOT MODIFY STATE LINK TARGET".utf8)
+        try linkedMarker.write(to: linkedTargetURL)
+        try FileManager.default.createSymbolicLink(
+            atPath: linkedStateURL.path, withDestinationPath: linkedTargetURL.path)
+        let linkedStore = ZagMetadataV2SequenceStore(fileURL: linkedStateURL)
+        try rejects("Symbolic-link state file on read") {
+            _ = try linkedStore.read(channel: "beta")
+        }
+        try rejects("Symbolic-link state file on write") {
+            try linkedStore.accept(channel: "beta", sequence: 1, signedPayload: payload)
+        }
+        guard try Data(contentsOf: linkedTargetURL) == linkedMarker,
+              (try FileManager.default.destinationOfSymbolicLink(
+                  atPath: linkedStateURL.path)) == linkedTargetURL.path else {
+            fatalError("FAIL: State symlink rejection changed the target")
+        }
+        print("PASS: State-file symlink rejection preserves target")
+
+        let danglingStateURL = directory.appendingPathComponent("dangling-state.json")
+        let nonexistentTargetURL = directory.appendingPathComponent("not-created-state.json")
+        try FileManager.default.createSymbolicLink(
+            atPath: danglingStateURL.path,
+            withDestinationPath: nonexistentTargetURL.path)
+        let danglingStore = ZagMetadataV2SequenceStore(fileURL: danglingStateURL)
+        try rejects("Dangling symbolic-link state on read") {
+            _ = try danglingStore.read(channel: "beta")
+        }
+        try rejects("Dangling symbolic-link state on write") {
+            try danglingStore.accept(channel: "beta", sequence: 1, signedPayload: payload)
+        }
+        guard !FileManager.default.fileExists(atPath: nonexistentTargetURL.path),
+              (try FileManager.default.destinationOfSymbolicLink(
+                  atPath: danglingStateURL.path)) == nonexistentTargetURL.path else {
+            fatalError("FAIL: Dangling state symlink modified destination")
+        }
+        print("PASS: Dangling state symlink leaves destination untouched")
+
         // Interrupted or truncated state must fail closed rather than initialize
         // a new empty snapshot and discard the previous rollback watermark.
         let truncatedURL = directory.appendingPathComponent("truncated-state.json")
