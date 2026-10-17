@@ -181,7 +181,7 @@ struct ZagMetadataV2VerifiedSequenceTests {
         print("PASS: Future-dated signed release preserved trusted state")
         // The signature is valid for the original pinned identity, but that
         // identity must not be accepted by a registry that does not trust it.
-        let untrustedRegistry = ZagMetadataV2KeyRegistry.production()
+        let untrustedRegistry = try ZagMetadataV2KeyRegistry.production()
         let untrustedBoundary = ZagMetadataV2VerifiedSequence(
             registry: untrustedRegistry, store: reopenedUpgradeStore)
         let beforeUntrustedKey = try reopenedUpgradeStore.read(channel: "beta")
