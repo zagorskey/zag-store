@@ -148,6 +148,27 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Verified upgrade high-water mark changed after replay")
         }
         print("PASS: Verified upgrade remains trusted after old manifest replay")
+        // Reopen the upgraded state and exercise the signed verifier boundary
+        // again, rather than relying only on the previous store instance.
+        let reopenedUpgradeStore = ZagMetadataV2SequenceStore(fileURL: upgradeURL)
+        let reopenedUpgradeBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: reopenedUpgradeStore)
+        guard try reopenedUpgradeStore.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Verified upgrade was not preserved across restart")
+        }
+        print("PASS: Verified upgrade high-water mark survives restart")
+        try reopenedUpgradeBoundary.verifyAndRecord(
+            envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
+        print("PASS: Identical signed upgraded manifest accepted after restart")
+        try mustReject("Older signed manifest after upgraded-state restart") {
+            try reopenedUpgradeBoundary.verifyAndRecord(
+                envelopeJSON: original, expectedChannel: "beta", now: now)
+        }
+        guard try reopenedUpgradeStore.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Replayed old manifest changed restarted upgrade state")
+        }
+        print("PASS: Restarted upgraded state unchanged after rollback rejection")
+
 
         print("SUCCESS: Offline verified-metadata persistence integration tests passed")
     }
