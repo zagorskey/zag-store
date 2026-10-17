@@ -46,7 +46,7 @@ struct VerifiedPipelineTests {
                 "payload": raw.base64EncodedString(),
                 "signature": signature.base64EncodedString()
             ]
-            return try JSONSerialization.data(withJSONObject: wrapper, options: [.sortedKeys])
+            return try JSONSerialization.data(withJSONObject: wrapper, options: [.sortedKeys, .withoutEscapingSlashes])
         }
 
         func accept(_ data: Data) async throws {
