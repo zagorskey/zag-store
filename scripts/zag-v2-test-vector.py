@@ -125,6 +125,9 @@ def main():
     vector["signedEqualSequenceConflict"] = signer.sign(
         {**vector["payload"], "releaseNotes": "Different authenticated release at sequence seven"},
         Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID)
+    vector["signedHigherSequence"] = signer.sign(
+        {**vector["payload"], "sequence": 8, "build": "8"},
+        Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID)
     vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
