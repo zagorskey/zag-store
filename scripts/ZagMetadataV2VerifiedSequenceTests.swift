@@ -77,6 +77,25 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Verified sequence not preserved across restart")
         }
         print("PASS: Verified sequence survives process-level store restart")
+        let restartedBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: restarted)
+        try restartedBoundary.verifyAndRecord(
+            envelopeJSON: original, expectedChannel: "beta", now: now)
+        print("PASS: Identical verified payload accepted after restart")
+        guard let originalPayload = Data(base64Encoded: fixture.envelope.payload) else {
+            fatalError("FAIL: Invalid fixture payload")
+        }
+        let alternatePayload = Data("different verified payload bytes".utf8)
+        try restarted.accept(channel: "beta", sequence: 8, signedPayload: alternatePayload)
+        try mustReject("Replayed signed sequence after restart") {
+            try restartedBoundary.verifyAndRecord(
+                envelopeJSON: original, expectedChannel: "beta", now: now)
+        }
+        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Rejected replay changed persisted high-water mark")
+        }
+        print("PASS: Replayed verified payload preserved high-water mark")
+
         print("SUCCESS: Offline verified-metadata persistence integration tests passed")
     }
 }
