@@ -128,7 +128,13 @@ struct ZagMetadataV2SequenceStore {
             let bytes = try JSONEncoder().encode(snapshot)
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Foundation atomic writes use a replacement inode whose mode is
+            // not guaranteed to be private. Set owner-only permissions before
+            // any subsequent read applies the strict state-file checks.
             try bytes.write(to: fileURL, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: fileURL.path)
         }
     }
 }
