@@ -64,12 +64,30 @@ struct ZagMetadataV2SequenceStore {
     }
 
     private func load() throws -> Snapshot {
-        // Distinguish absent state from unreadable/corrupt state.
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return Snapshot(format: 1, channels: [:])
+        // Open the state file itself with no symlink following. Only ENOENT
+        // represents a fresh installation; a dangling link must fail closed.
+        let fd = open(fileURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+        if fd < 0 {
+            if errno == ENOENT {
+                return Snapshot(format: 1, channels: [:])
+            }
+            throw StoreError.corruptState
+        }
+        defer { _ = close(fd) }
+        var metadata = stat()
+        guard fstat(fd, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              metadata.st_uid == geteuid(),
+              metadata.st_nlink == 1,
+              (metadata.st_mode & mode_t(0o077)) == 0,
+              metadata.st_size >= 0,
+              metadata.st_size <= 1024 * 1024 else {
+            throw StoreError.corruptState
         }
         do {
-            let bytes = try Data(contentsOf: fileURL)
+            let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: false)
+            let bytes = handle.readDataToEndOfFile()
+            guard bytes.count <= 1024 * 1024 else { throw StoreError.corruptState }
             let snapshot = try JSONDecoder().decode(Snapshot.self, from: bytes)
             try validate(snapshot)
             return snapshot
