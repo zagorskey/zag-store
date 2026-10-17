@@ -21,6 +21,11 @@ struct ZagMetadataV2SequenceStore {
 
     let fileURL: URL
 
+    // Serialize read-modify-write operations across all instances in this process.
+    // Cross-process writers still require a separate OS-level locking strategy.
+    private static let processLock = NSRecursiveLock()
+
+
     private func validate(_ snapshot: Snapshot) throws {
         guard snapshot.format == 1 else { throw StoreError.corruptState }
         for (channel, entry) in snapshot.channels {
@@ -48,15 +53,19 @@ struct ZagMetadataV2SequenceStore {
     }
 
     func read(channel: String) throws -> Entry? {
+        Self.processLock.lock()
+        defer { Self.processLock.unlock() }
         guard ["stable", "beta", "nightly"].contains(channel) else {
             throw StoreError.invalidChannel
         }
         return try load().channels[channel]
     }
 
-    /// Caller must serialize operations across tasks/processes; atomic file
-    /// replacement protects interrupted writes, NOT concurrent read-modify-write.
+    /// In-process access is serialized across instances. Cross-process callers
+    /// still require coordination; atomic replacement alone is insufficient.
     func accept(channel: String, sequence: Int, signedPayload: Data) throws {
+        Self.processLock.lock()
+        defer { Self.processLock.unlock() }
         guard ["stable", "beta", "nightly"].contains(channel), sequence > 0 else {
             throw StoreError.invalidChannel
         }
