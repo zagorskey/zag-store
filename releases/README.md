@@ -7,7 +7,7 @@ Zag Store 1.0.0 defaults to **Stable**. The existing "Off" prerelease preference
 Use the local signed-IPA publisher after compiling and signing with `ZagStore-Package.zsh`:
 
 ```zsh
-zsh scripts/publish-zag-release.zsh beta "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" 2>&1 | tee /tmp/zag-publish-beta.log
+zsh scripts/publish-zag-release.zsh beta "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" --publish 2>&1 | tee /tmp/zag-publish-beta.log
 ```
 
 Before publishing the first Nightly, validate its **actual signed IPA** without changing the public repository:
@@ -16,9 +16,9 @@ Before publishing the first Nightly, validate its **actual signed IPA** without 
 zsh scripts/publish-zag-release.zsh nightly "$HOME/Documents/ZagStore-v1.0.0-build3-iOS-AppTesters.ipa" --dry-run 2>&1 | tee /tmp/zag-nightly-preflight.log
 ```
 
-This is an example filename only: use the real signed IPA path and ensure its build exceeds every published channel. A successful dry run checks the IPA, its signing structure, bundle identity, release tag availability, and cross-channel version ordering; it does **not** upload a release or create a manifest. It is not a device-installation test. After a separate on-device validation and explicit release approval, omit `--dry-run` to publish.
+This is an example filename only: use the real signed IPA path and ensure its build exceeds every published channel. A successful dry run checks the IPA, its signing structure, bundle identity, release tag availability, and cross-channel version ordering; it does **not** upload a release or create a manifest. It is not a device-installation test. After a separate on-device validation and explicit release approval, use `--publish` to publish. Omitting the third argument defaults to a dry run.
 
-The command is an **example**, not an instruction to publish build 3 until it has been tested. The publisher checks the IPA signature and bundle identity, refuses a duplicate release tag or non-increasing channel version/build, uploads the release asset, downloads it back to verify SHA-256, then updates the public channel manifest last. It does not compile, sign, or install the app. Stable and Nightly remain unpublished until separately authorized.
+The command is an **example**, not an instruction to publish build 3 until it has been tested. The publisher checks the IPA signature and bundle identity, refuses a duplicate release tag or non-increasing channel version/build, uploads the release asset, downloads it back to verify SHA-256, then updates the public channel manifest last. It reads the minimum supported iOS version from the signed app payload. It does not compile, sign, or install the app. Stable and Nightly remain unpublished until separately authorized.
 
 **Important:** The signed IPA contains a device-specific provisioning profile. Public distribution exposes the embedded signing metadata. Never commit private certificates, provisioning secrets, or signing keys.
 
