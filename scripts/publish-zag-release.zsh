@@ -37,20 +37,35 @@ gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 && { echo "Release tag alr
 
 git clone --quiet --depth 1 "https://github.com/${REPO}.git" "$TMP/dist"
 MANIFEST="$TMP/dist/releases/${CHANNEL}.json"
-if [[ -f "$MANIFEST" ]]; then
-  CURRENT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$MANIFEST")
-  CURRENT_VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$MANIFEST")
-  python3 - "$VERSION" "$BUILD" "$CURRENT_VERSION" "$CURRENT" <<'PY'
-import sys
-from itertools import zip_longest
-def version(s):
-    return tuple(int(x) for x in s.split('.'))
-new=(version(sys.argv[1]),int(sys.argv[2]))
-old=(version(sys.argv[3]),int(sys.argv[4]))
-if new <= old:
-    raise SystemExit("Refusing to publish non-increasing version/build")
+# A single increasing build sequence across all channels prevents an older
+# Stable/Beta/Nightly release from being advertised as a newer installation.
+# Version is compared first; build breaks ties within the same version.
+python3 - "$TMP/dist/releases" "$VERSION" "$BUILD" <<'PY'
+import json, pathlib, re, sys
+folder, version, build = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+if not re.fullmatch(r"[0-9]+(?:\\.[0-9]+)*", version):
+    raise SystemExit("Version must contain only numeric dot-separated components")
+if not re.fullmatch(r"[0-9]+", build):
+    raise SystemExit("Build must be a non-negative integer")
+def key(v, b):
+    parts = tuple(map(int, v.split(".")))
+    return parts, int(b)
+new = key(version, build)
+for channel in ("stable", "beta", "nightly"):
+    manifest = folder / (channel + ".json")
+    if not manifest.exists():
+        continue
+    with manifest.open() as handle:
+        current = json.load(handle)
+    previous = key(str(current["version"]), str(current["build"]))
+    if new <= previous:
+        raise SystemExit(
+            f"Refusing release: {version} ({build}) is not newer than "
+            f"{channel} {current['version']} ({current['build']}). "
+            "Use a globally increasing version/build."
+        )
+print("Cross-channel version/build check passed")
 PY
-fi
 
 echo "=== CREATE RELEASE ASSET ==="
 if [[ "$CHANNEL" == "stable" ]]; then
