@@ -36,6 +36,18 @@ struct ZagMetadataV2KeyRegistryTests {
         else { fatalError("FAIL: Cross-key signature accepted") }
         print("PASS: Cross-key signatures rejected")
 
+        // Rotation completes by shipping a registry containing only the new anchor.
+        let retiredRegistry = try ZagMetadataV2KeyRegistry(anchors: [
+            .init(keyID: "test-new", publicKeyBase64: second.publicKey.rawRepresentation.base64EncodedString())
+        ])
+        guard try retiredRegistry.publicKey(for: "test-new").isValidSignature(newSignature, for: message)
+        else { fatalError("FAIL: New signature after retirement") }
+        print("PASS: New signing key remains trusted after retirement")
+        expectFailure("Retired signing key ID") {
+            _ = try retiredRegistry.publicKey(for: "test-old")
+        }
+
+
 
         expectFailure("Unknown key ID") { _ = try registry.publicKey(for: "test-unknown") }
         expectFailure("Duplicate key ID") {
