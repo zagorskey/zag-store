@@ -43,6 +43,20 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Independent channel sequences persisted")
 
+        try rejects("Unknown channel cannot be recorded") {
+            try restarted.accept(channel: "preview", sequence: 9, signedPayload: payload)
+        }
+        try rejects("Unknown channel cannot be read") {
+            _ = try restarted.read(channel: "preview")
+        }
+        try rejects("Zero sequence cannot be recorded") {
+            try restarted.accept(channel: "beta", sequence: 0, signedPayload: payload)
+        }
+        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Rejected inputs changed persisted sequence")
+        }
+        print("PASS: Rejected inputs leave trusted sequence intact")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
