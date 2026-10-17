@@ -5,18 +5,32 @@ import Foundation
 final class FixtureURLProtocol: URLProtocol {
     static var responseData = Data()
     static var responseStatus = 200
+    static var redirectLocation: String? = nil
+    static var chunksDelivered = 0
+    static var wasStopped = false
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        var headers = ["Content-Type": "application/json"]
+        if let location = Self.redirectLocation { headers["Location"] = location }
         let response = HTTPURLResponse(
             url: request.url!, statusCode: Self.responseStatus,
-            httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]
+            httpVersion: "HTTP/1.1", headerFields: headers
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Self.responseData)
+        guard Self.redirectLocation == nil else {
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        for offset in stride(from: 0, to: Self.responseData.count, by: 16 * 1024) {
+            Self.chunksDelivered += 1
+            let end = min(offset + 16 * 1024, Self.responseData.count)
+            client?.urlProtocol(self, didLoad: Self.responseData.subdata(in: offset..<end))
+            if Self.wasStopped { return }
+        }
         client?.urlProtocolDidFinishLoading(self)
     }
-    override func stopLoading() {}
+    override func stopLoading() { Self.wasStopped = true }
 }
 
 @main
@@ -78,6 +92,18 @@ struct V2DiscoveryIntegrationTests {
         } catch ZagUpdateV2Discovery.DiscoveryError.oversizedResponse {
             print("PASS: oversized response rejected")
         }
+        FixtureURLProtocol.responseData = signed
+        FixtureURLProtocol.responseStatus = 302
+        FixtureURLProtocol.redirectLocation = "https://example.com/redirected.json"
+        do {
+            _ = try await fetch()
+            print("FAIL: redirect accepted")
+            exit(1)
+        } catch ZagUpdateV2Discovery.DiscoveryError.httpStatus(302) {
+            print("PASS: redirect response rejected")
+        }
+        FixtureURLProtocol.redirectLocation = nil
+        FixtureURLProtocol.responseStatus = 200
         guard try await store.highestAccepted(channel: "beta") == 11 else {
             fatalError("Rejected responses modified rollback state")
         }
