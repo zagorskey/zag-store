@@ -6,6 +6,12 @@ final class FixtureURLProtocol: URLProtocol {
     static var responseData = Data()
     static var responseStatus = 200
     static var redirectLocation: String? = nil
+    static var pacedChunks = false
+    static let metricsLock = NSLock()
+    static var bytesDelivered = 0
+    static var stoppedByClient = false
+    private let stateLock = NSLock()
+    private var stopped = false
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -20,13 +26,39 @@ final class FixtureURLProtocol: URLProtocol {
             client?.urlProtocolDidFinishLoading(self)
             return
         }
-        for offset in stride(from: 0, to: Self.responseData.count, by: 16 * 1024) {
-            let end = min(offset + 16 * 1024, Self.responseData.count)
-            client?.urlProtocol(self, didLoad: Self.responseData.subdata(in: offset..<end))
+        if Self.pacedChunks {
+            sendChunk(at: 0)
+        } else {
+            client?.urlProtocol(self, didLoad: Self.responseData)
+            client?.urlProtocolDidFinishLoading(self)
         }
-        client?.urlProtocolDidFinishLoading(self)
     }
-    override func stopLoading() {}
+    private func sendChunk(at offset: Int) {
+        stateLock.lock()
+        let cancelled = stopped
+        stateLock.unlock()
+        guard !cancelled else { return }
+        if offset >= Self.responseData.count {
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        let end = min(offset + 16 * 1024, Self.responseData.count)
+        Self.metricsLock.lock()
+        Self.bytesDelivered += end - offset
+        Self.metricsLock.unlock()
+        client?.urlProtocol(self, didLoad: Self.responseData.subdata(in: offset..<end))
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(5)) { [weak self] in
+            self?.sendChunk(at: end)
+        }
+    }
+    override func stopLoading() {
+        stateLock.lock()
+        stopped = true
+        stateLock.unlock()
+        Self.metricsLock.lock()
+        Self.stoppedByClient = true
+        Self.metricsLock.unlock()
+    }
 }
 
 @main
@@ -88,6 +120,31 @@ struct V2DiscoveryIntegrationTests {
         } catch ZagUpdateV2Discovery.DiscoveryError.oversizedResponse {
             print("PASS: oversized response rejected")
         }
+        // Pace an unadvertised 4 MiB response to verify cancellation
+        // before the complete response can be delivered.
+        FixtureURLProtocol.pacedChunks = true
+        FixtureURLProtocol.metricsLock.lock()
+        FixtureURLProtocol.bytesDelivered = 0
+        FixtureURLProtocol.stoppedByClient = false
+        FixtureURLProtocol.metricsLock.unlock()
+        let hugeSize = 4 * 1024 * 1024
+        FixtureURLProtocol.responseData = Data(repeating: 0x41, count: hugeSize)
+        do {
+            _ = try await fetch()
+            print("FAIL: oversized streaming response accepted")
+            exit(1)
+        } catch ZagUpdateV2Discovery.DiscoveryError.oversizedResponse {
+            FixtureURLProtocol.metricsLock.lock()
+            let delivered = FixtureURLProtocol.bytesDelivered
+            let stopped = FixtureURLProtocol.stoppedByClient
+            FixtureURLProtocol.metricsLock.unlock()
+            guard delivered < hugeSize, stopped else {
+                print("FAIL: cancellation was not early")
+                exit(1)
+            }
+            print("PASS: streaming response cancelled before all bytes delivered")
+        }
+        FixtureURLProtocol.pacedChunks = false
         FixtureURLProtocol.responseData = signed
         FixtureURLProtocol.responseStatus = 302
         FixtureURLProtocol.redirectLocation = "https://example.com/redirected.json"
