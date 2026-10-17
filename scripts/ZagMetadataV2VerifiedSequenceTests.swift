@@ -100,6 +100,25 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Conflicting retry changed recovered trusted state")
         }
         print("PASS: Conflicting retry preserves recovered high-water mark")
+        // Reopen the state after uncertain publication and a conflicting
+        // retry. Recovery must not re-admit a conflicting same-sequence
+        // manifest, and an older signed sequence must remain a rollback.
+        let recoveredAgain = ZagMetadataV2SequenceStore(fileURL: uncertaintyURL)
+        let recoveredAgainBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: recoveredAgain)
+        guard try recoveredAgain.read(channel: "beta") == recoveredBeforeConflict else {
+            fatalError("FAIL: Recovered uncertain state changed across restart")
+        }
+        print("PASS: Uncertain-publication state survives coordinator restart")
+        try mustReject("Conflicting signed retry after coordinator restart") {
+            try recoveredAgainBoundary.verifyAndRecord(
+                envelopeJSON: conflictEnvelope, expectedChannel: "beta", now: now)
+        }
+        guard try recoveredAgain.read(channel: "beta") == recoveredBeforeConflict else {
+            fatalError("FAIL: Restarted conflict retry changed trusted digest")
+        }
+        print("PASS: Restarted conflicting retry preserves trusted digest")
+
         // Establish that the alternate envelope is independently valid before
         // asserting that persistent equal-sequence conflict protection rejects it.
         try ZagMetadataV2TestVerifier.verify(
