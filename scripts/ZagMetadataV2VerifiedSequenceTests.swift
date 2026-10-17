@@ -230,6 +230,29 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Retired signing key modified sequence state")
         }
         print("PASS: Retired signing key preserved trusted state")
+        // Retirement policy is supplied by the app-bundled registry, not
+        // persisted release metadata. Reopening the store must not restore
+        // authority to a key excluded from the current registry.
+        let reopenedRotatedStore = ZagMetadataV2SequenceStore(fileURL: upgradeURL)
+        let reopenedRetiredBoundary = ZagMetadataV2VerifiedSequence(
+            registry: retiredRegistry, store: reopenedRotatedStore)
+        guard try reopenedRotatedStore.read(channel: "beta")?.sequence == 9 else {
+            fatalError("FAIL: Rotated sequence was not persisted across restart")
+        }
+        print("PASS: Rotated signing-key sequence survives restart")
+        try reopenedRetiredBoundary.verifyAndRecord(
+            envelopeJSON: rotatedEnvelope, expectedChannel: "beta", now: now)
+        print("PASS: Rotated signing key remains valid after restart")
+        let beforeRestartedRetirement = try reopenedRotatedStore.read(channel: "beta")
+        try mustReject("Retired signing key after store restart") {
+            try reopenedRetiredBoundary.verifyAndRecord(
+                envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
+        }
+        guard try reopenedRotatedStore.read(channel: "beta") == beforeRestartedRetirement else {
+            fatalError("FAIL: Retired key changed restarted trusted sequence")
+        }
+        print("PASS: Retired key rejection preserved state after restart")
+
 
 
 
