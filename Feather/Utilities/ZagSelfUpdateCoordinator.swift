@@ -25,7 +25,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     /// V2 envelope checks are staged independently of the live v1 updater.
     /// No trust anchor is supplied until the production release key is provisioned.
     private enum V2Metadata {
-        static let domain = Data("ZAG-STORE-UPDATE-V2\\n".utf8)
+        static let domain = Data("ZAG-STORE-UPDATE-V2\n".utf8)
 
         struct Envelope: Decodable {
             let schema: Int
@@ -53,6 +53,59 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: publicKeyData)
             guard publicKey.isValidSignature(signature, for: domain + payload) else {
                 throw ValidationError.invalidSignature
+            }
+            return payload
+        }
+
+        struct Payload: Decodable {
+            let schema: Int
+            let appId: String
+            let channel: String
+            let sequence: Int
+            let version: String
+            let build: String
+            let minimumIOSVersion: String
+            let ipaURL: String
+            let sha256: String
+            let releaseNotes: String
+            let publishedAt: String
+            let expiresAt: String
+        }
+
+        static func validatePayload(_ bytes: Data, channel: String, now: Date = Date()) throws -> Payload {
+            guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                  Set(object.keys) == Set([
+                    "schema", "appId", "channel", "sequence", "version", "build",
+                    "minimumIOSVersion", "ipaURL", "sha256", "releaseNotes", "publishedAt", "expiresAt"
+                  ]) else { throw ValidationError.invalidPayload }
+            let payload = try JSONDecoder().decode(Payload.self, from: bytes)
+            guard payload.schema == 2,
+                  payload.appId == "app.zagstore.ios",
+                  payload.channel == channel,
+                  ["stable", "beta", "nightly"].contains(channel),
+                  payload.sequence > 0,
+                  !payload.version.isEmpty,
+                  payload.version.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({ !$0.isEmpty && $0.allSatisfy(\\.isNumber) }),
+                  !payload.build.isEmpty && payload.build.allSatisfy(\\.isNumber),
+                  !payload.minimumIOSVersion.isEmpty,
+                  !payload.releaseNotes.isEmpty,
+                  let url = URL(string: payload.ipaURL),
+                  url.scheme == "https",
+                  url.host == "github.com",
+                  url.path.hasPrefix("/zagorskey/zag-store-releases/releases/download/"),
+                  payload.sha256.count == 64,
+                  payload.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+                throw ValidationError.invalidPayload
+            }
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            guard let published = formatter.date(from: payload.publishedAt),
+                  let expires = formatter.date(from: payload.expiresAt),
+                  payload.publishedAt.hasSuffix("Z"), payload.expiresAt.hasSuffix("Z"),
+                  published < expires,
+                  expires.timeIntervalSince(published) <= 7 * 24 * 3600,
+                  published <= now, now < expires else {
+                throw ValidationError.invalidPayload
             }
             return payload
         }
