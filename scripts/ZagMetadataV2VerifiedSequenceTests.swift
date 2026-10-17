@@ -75,6 +75,19 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Post-rename signed state not visible for reconciliation")
         }
         print("PASS: Uncertain signed publication re-read confirms visible high-water mark")
+        // A fresh coordinator may safely retry exactly the same verified
+        // manifest after the earlier publication reported uncertainty.
+        let retryStore = ZagMetadataV2SequenceStore(fileURL: uncertaintyURL)
+        let retryBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: retryStore)
+        try retryBoundary.verifyAndRecord(
+            envelopeJSON: original, expectedChannel: "beta", now: now)
+        print("PASS: Identical signed manifest retries after uncertain publication")
+        guard try retryStore.read(channel: "beta")?.sequence == 7 else {
+            fatalError("FAIL: Identical retry lost the uncertain high-water mark")
+        }
+        print("PASS: Identical retry preserves high-water mark")
+
         let conflictEnvelope = try JSONEncoder().encode(fixture.signedEqualSequenceConflict)
         // Establish that the alternate envelope is independently valid before
         // asserting that persistent equal-sequence conflict protection rejects it.
