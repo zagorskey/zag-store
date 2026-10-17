@@ -64,6 +64,20 @@ def signed_negative_cases():
             "signature": base64.b64encode(
                 private.sign(signer.PREFIX + raw)).decode("ascii"),
         }
+    # These payloads have valid signatures over deliberately noncanonical JSON.
+    # They must be rejected even though their decoded values look acceptable.
+    raw_cases = {
+        "noncanonicalWhitespace": json.dumps(base, ensure_ascii=False, indent=2).encode("utf-8"),
+        "duplicatePayloadKey": jcs.canonicalize(base)[:-1] + b',"sequence":7}',
+    }
+    for name, raw in raw_cases.items():
+        cases[name] = {
+            "schema": 2,
+            "keyId": TEST_KEY_ID,
+            "payload": base64.b64encode(raw).decode("ascii"),
+            "signature": base64.b64encode(
+                private.sign(signer.PREFIX + raw)).decode("ascii"),
+        }
     return cases
 
 
