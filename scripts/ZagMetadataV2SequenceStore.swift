@@ -34,8 +34,18 @@ struct ZagMetadataV2SequenceStore {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
         let lockPath = fileURL.path + ".lock"
-        let descriptor = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, mode_t(0o600))
+        // Refuse a pre-planted symlink and enforce a private regular lock file.
+        let descriptor = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, mode_t(0o600))
         guard descriptor >= 0 else { throw StoreError.lockUnavailable }
+        var metadata = stat()
+        guard fstat(descriptor, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              metadata.st_uid == geteuid(),
+              metadata.st_nlink == 1,
+              (metadata.st_mode & mode_t(0o077)) == 0 else {
+            _ = close(descriptor)
+            throw StoreError.lockUnavailable
+        }
         defer { _ = close(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else { throw StoreError.lockUnavailable }
         defer { _ = flock(descriptor, LOCK_UN) }
