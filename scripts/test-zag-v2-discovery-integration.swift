@@ -6,8 +6,6 @@ final class FixtureURLProtocol: URLProtocol {
     static var responseData = Data()
     static var responseStatus = 200
     static var redirectLocation: String? = nil
-    static var chunksDelivered = 0
-    static var wasStopped = false
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -23,14 +21,12 @@ final class FixtureURLProtocol: URLProtocol {
             return
         }
         for offset in stride(from: 0, to: Self.responseData.count, by: 16 * 1024) {
-            Self.chunksDelivered += 1
             let end = min(offset + 16 * 1024, Self.responseData.count)
             client?.urlProtocol(self, didLoad: Self.responseData.subdata(in: offset..<end))
-            if Self.wasStopped { return }
         }
         client?.urlProtocolDidFinishLoading(self)
     }
-    override func stopLoading() { Self.wasStopped = true }
+    override func stopLoading() {}
 }
 
 @main
