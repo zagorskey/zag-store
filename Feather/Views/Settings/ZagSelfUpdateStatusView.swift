@@ -30,6 +30,7 @@ struct ZagSelfUpdateStatusView: View {
     @State private var releaseCheckStatus = "Not checked"
     @State private var releaseCheckBusy = false
     @State private var releaseDownloadSize: String?
+    @State private var releaseDownloadBusy = false
     @State private var markerStatus = "Not checked"
 
     private static var installedAppIcon: UIImage? {
@@ -678,22 +679,25 @@ struct ZagSelfUpdateStatusView: View {
                             }
                             Spacer(minLength: 0)
                         }
-                        Text("Bug fixes and performance improvements.")
+                        Text(release.releaseNotes ?? "Release notes are not available for this update.")
                             .font(.body)
-                        Link("Learn more about this update", destination: release.ipaURL.deletingLastPathComponent().deletingLastPathComponent())
+                        Link("Learn more about this update", destination: URL(string: "https://github.com/zagorskey/zag-store-releases/releases")!)
                             .font(.subheadline)
                         Button {
+                            guard !releaseDownloadBusy else { return }
+                            releaseDownloadBusy = true
                             Task { @MainActor in
+                                defer { releaseDownloadBusy = false }
                                 releaseCheckStatus = "Downloading and verifying update…"
                                 do {
                                     _ = try await coordinator.prepare(release)
-                                    releaseCheckStatus = "Download verified. Installation requires separate confirmation."
+                                    releaseCheckStatus = "Download verified. Installation is not available yet."
                                 } catch {
                                     releaseCheckStatus = "Download failed: " + error.localizedDescription
                                 }
                             }
                         } label: {
-                            Text("Update Now")
+                            Text(releaseDownloadBusy ? "Verifying Download…" : "Download Update")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 5)
                         }
@@ -701,10 +705,10 @@ struct ZagSelfUpdateStatusView: View {
                         .tint(.blue)
                         .foregroundStyle(.white)
                         .controlSize(.large)
-                        Text("Update Tonight")
-                            .frame(maxWidth: .infinity)
+                        .disabled(releaseDownloadBusy)
+                        Text("Installation will be enabled after the self-replacement checks pass.")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel("Update Tonight — unavailable")
                     }
                     .task(id: release.ipaURL) {
                         releaseDownloadSize = nil
