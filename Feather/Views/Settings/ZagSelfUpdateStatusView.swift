@@ -14,7 +14,7 @@ struct ZagSelfUpdateStatusView: View {
 
     // Automatic discovery is independent from installation.
     @AppStorage("ZagStore.updatePreferences.automaticChecks.v1")
-    private var zagAutoInstallEnabled = false
+    private var zagAutoCheckEnabled = true
     @AppStorage("ZagStore.updatePreferences.betaChannel.placeholder")
     private var zagBetaChannel = "off"
 
@@ -612,7 +612,7 @@ struct ZagSelfUpdateStatusView: View {
                     HStack {
                         Text("Automatic Update Checks")
                         Spacer()
-                        Text(zagAutoInstallEnabled ? "On" : "Off")
+                        Text(zagAutoCheckEnabled ? "On" : "Off")
                             .foregroundStyle(.secondary)
                     }
                 }
