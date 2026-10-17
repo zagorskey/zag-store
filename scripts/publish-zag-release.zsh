@@ -5,8 +5,8 @@ set -euo pipefail
 
 CHANNEL="${1:-}"
 IPA="${2:-}"
-MODE="${3:-}"
-[[ -z "$MODE" || "$MODE" == "--dry-run" ]] || { echo "Third argument must be --dry-run"; exit 2; }
+MODE="${3:---dry-run}"
+[[ "$MODE" == "--dry-run" || "$MODE" == "--publish" ]] || { echo "Third argument must be --dry-run or --publish"; exit 2; }
 case "$CHANNEL" in stable|beta|nightly) ;; *) echo "Usage: $0 stable|beta|nightly /absolute/path/to/signed.ipa"; exit 2 ;; esac
 [[ -f "$IPA" ]] || { echo "IPA not found: $IPA"; exit 2; }
 command -v gh >/dev/null || { echo "GitHub CLI is required"; exit 2; }
@@ -27,6 +27,8 @@ BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist
 [[ "$BUNDLE" == "com.cwd43.gu29" ]] || { echo "Unexpected bundle identifier: $BUNDLE"; exit 1; }
 [[ "$BUILD" == <-> ]] || { echo "Build must be numeric"; exit 1; }
 [[ "$VERSION" == [0-9]* ]] || { echo "Invalid version"; exit 1; }
+MIN_IOS=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist")
+[[ -n "$MIN_IOS" ]] || { echo "Missing MinimumOSVersion"; exit 1; }
 SHA=$(shasum -a 256 "$IPA" | awk '{print $1}')
 ASSET="${IPA:t}"
 TAG="v${VERSION}-${CHANNEL}.build${BUILD}"
@@ -75,6 +77,10 @@ if [[ "$MODE" == "--dry-run" ]]; then
   exit 0
 fi
 
+echo "=== PUBLISHING PUBLIC RELEASE ==="
+echo "The signed IPA may expose device-specific provisioning metadata."
+echo "Channel: $CHANNEL | Version: $VERSION ($BUILD) | Minimum iOS: $MIN_IOS"
+[[ "$MODE" == "--publish" ]] || { echo "Explicit --publish required"; exit 2; }
 echo "=== CREATE RELEASE ASSET ==="
 if [[ "$CHANNEL" == "stable" ]]; then
   gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD)" --notes "Zag Store $VERSION, build $BUILD."
@@ -89,10 +95,10 @@ REMOTE_SHA=$(shasum -a 256 "$TMP/remote.ipa" | awk '{print $1}')
 
 echo "=== PUBLISH CHANNEL MANIFEST LAST ==="
 mkdir -p "$TMP/dist/releases"
-python3 - "$MANIFEST" "$VERSION" "$BUILD" "$BUNDLE" "$URL" "$SHA" <<'PY'
+python3 - "$MANIFEST" "$VERSION" "$BUILD" "$BUNDLE" "$URL" "$SHA" "$MIN_IOS" <<'PY'
 import json,sys
-path,version,build,bundle,url,sha=sys.argv[1:]
-data={"version":version,"build":build,"bundleIdentifier":bundle,"ipaURL":url,"sha256":sha,"minimumIOSVersion":"16.0","releaseNotes":"Bug fixes and performance improvements."}
+path,version,build,bundle,url,sha,min_ios=sys.argv[1:]
+data={"version":version,"build":build,"bundleIdentifier":bundle,"ipaURL":url,"sha256":sha,"minimumIOSVersion":min_ios,"releaseNotes":"Bug fixes and performance improvements."}
 with open(path,"w") as f: json.dump(data,f,indent=2); f.write("\n")
 PY
 cd "$TMP/dist"
