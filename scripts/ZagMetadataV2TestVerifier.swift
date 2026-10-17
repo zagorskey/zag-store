@@ -131,7 +131,15 @@ enum ZagMetadataV2TestVerifier {
             guard take(34) else { return nil }
             let start = index
             while index < input.count {
-                if input[index] == 92 { return nil } // No escape sequences in envelope.
+                if input[index] == 92 {
+                    // JSONEncoder may escape solidus as \\/; decode that
+                    // spelling, but keep escaped keys and other escapes invalid.
+                    guard index + 1 < input.count, input[index + 1] == 47 else {
+                        return nil
+                    }
+                    index += 2
+                    continue
+                }
                 if input[index] == 34 {
                     let part = input[start..<index]
                     index += 1
