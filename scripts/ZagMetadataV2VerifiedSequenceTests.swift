@@ -53,6 +53,28 @@ struct ZagMetadataV2VerifiedSequenceTests {
                           userInfo: [NSLocalizedDescriptionKey: "\(label) accepted"])
         }
 
+        // Even when the renamed signed snapshot is visible, a failed
+        // directory fsync must not be reported as durable acceptance.
+        let uncertaintyURL = dir.appendingPathComponent("uncertain-signed-state.json")
+        var uncertainStore = ZagMetadataV2SequenceStore(fileURL: uncertaintyURL)
+        uncertainStore.afterRenameForTesting = {
+            throw ZagMetadataV2SequenceStore.StoreError.publicationUncertain
+        }
+        let uncertainBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: uncertainStore)
+        do {
+            try uncertainBoundary.verifyAndRecord(
+                envelopeJSON: original, expectedChannel: "beta", now: now)
+            fatalError("FAIL: Uncertain signed metadata was accepted as durable")
+        } catch ZagMetadataV2SequenceStore.StoreError.publicationUncertain {
+            print("PASS: Uncertain signed metadata never reported as durable acceptance")
+        }
+        let observedUncertain = try ZagMetadataV2SequenceStore(fileURL: uncertaintyURL)
+            .read(channel: "beta")
+        guard observedUncertain?.sequence == 7 else {
+            fatalError("FAIL: Post-rename signed state not visible for reconciliation")
+        }
+        print("PASS: Uncertain signed publication re-read confirms visible high-water mark")
         let conflictEnvelope = try JSONEncoder().encode(fixture.signedEqualSequenceConflict)
         // Establish that the alternate envelope is independently valid before
         // asserting that persistent equal-sequence conflict protection rejects it.
