@@ -120,6 +120,11 @@ def main():
             {**vector["payload"], "releaseNotes": "Нова версия — подобрения"},
             Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID),
     }
+    # A second valid signature over different content at the same sequence.
+    # Verification must succeed, but persistence must reject the conflict.
+    vector["signedEqualSequenceConflict"] = signer.sign(
+        {**vector["payload"], "releaseNotes": "Different authenticated release at sequence seven"},
+        Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID)
     vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
