@@ -1,12 +1,13 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 /// Offline prototype only. Not connected to the running Zag Store updater.
 /// Production will use a protected Application Support location and a defined
 /// backup/restore policy. Deleting all local app state defeats local rollback memory.
 struct ZagMetadataV2SequenceStore {
     enum StoreError: Error {
-        case invalidChannel, corruptState, conflictingSequence, rollback
+        case invalidChannel, corruptState, conflictingSequence, rollback, lockUnavailable
     }
 
     struct Entry: Codable, Equatable {
@@ -22,9 +23,24 @@ struct ZagMetadataV2SequenceStore {
     let fileURL: URL
 
     // Serialize read-modify-write operations across all instances in this process.
-    // Cross-process writers still require a separate OS-level locking strategy.
+    // Cross-process access uses an adjacent advisory flock lock file.
     private static let processLock = NSRecursiveLock()
 
+
+    /// Use a stable adjacent lock file, not the atomically replaced state inode.
+    /// All cooperating processes must use this protocol for the same file URL.
+    private func withFileLock<T>(_ body: () throws -> T) throws -> T {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        let lockPath = fileURL.path + ".lock"
+        let descriptor = open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, mode_t(0o600))
+        guard descriptor >= 0 else { throw StoreError.lockUnavailable }
+        defer { _ = close(descriptor) }
+        guard flock(descriptor, LOCK_EX) == 0 else { throw StoreError.lockUnavailable }
+        defer { _ = flock(descriptor, LOCK_UN) }
+        return try body()
+    }
 
     private func validate(_ snapshot: Snapshot) throws {
         guard snapshot.format == 1 else { throw StoreError.corruptState }
@@ -58,31 +74,33 @@ struct ZagMetadataV2SequenceStore {
         guard ["stable", "beta", "nightly"].contains(channel) else {
             throw StoreError.invalidChannel
         }
-        return try load().channels[channel]
+        return try withFileLock { try load().channels[channel] }
     }
 
-    /// In-process access is serialized across instances. Cross-process callers
-    /// still require coordination; atomic replacement alone is insufficient.
+    /// Both threads and cooperating processes serialize the complete read-modify-write.
+    /// Do not delete the adjacent .lock file while another process may use it.
     func accept(channel: String, sequence: Int, signedPayload: Data) throws {
         Self.processLock.lock()
         defer { Self.processLock.unlock() }
         guard ["stable", "beta", "nightly"].contains(channel), sequence > 0 else {
             throw StoreError.invalidChannel
         }
-        let digest = SHA256.hash(data: signedPayload)
-            .map { String(format: "%02x", $0) }.joined()
-        var snapshot = try load()
-        if let prior = snapshot.channels[channel] {
-            if sequence < prior.sequence { throw StoreError.rollback }
-            if sequence == prior.sequence {
-                guard digest == prior.digest else { throw StoreError.conflictingSequence }
-                return
+        try withFileLock {
+            let digest = SHA256.hash(data: signedPayload)
+                .map { String(format: "%02x", $0) }.joined()
+            var snapshot = try load()
+            if let prior = snapshot.channels[channel] {
+                if sequence < prior.sequence { throw StoreError.rollback }
+                if sequence == prior.sequence {
+                    guard digest == prior.digest else { throw StoreError.conflictingSequence }
+                    return
+                }
             }
+            snapshot.channels[channel] = Entry(sequence: sequence, digest: digest)
+            let bytes = try JSONEncoder().encode(snapshot)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try bytes.write(to: fileURL, options: .atomic)
         }
-        snapshot.channels[channel] = Entry(sequence: sequence, digest: digest)
-        let bytes = try JSONEncoder().encode(snapshot)
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try bytes.write(to: fileURL, options: .atomic)
     }
 }
