@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-/// Standalone compatibility verifier for the **public test key only**.
+/// Standalone compatibility verifier using an explicitly pinned public-key registry.
 /// This verifier is NOT connected to Zag Store's live update path.
 enum ZagMetadataV2TestVerifier {
     enum Failure: Error {
@@ -10,7 +10,6 @@ enum ZagMetadataV2TestVerifier {
     }
 
     private static let signingPrefix = Data("ZAG-STORE-UPDATE-V2\n".utf8)
-    private static let publicTestKeyId = "zag-v2-test-only"
 
     private struct Envelope: Decodable {
         let schema: Int
@@ -161,24 +160,25 @@ enum ZagMetadataV2TestVerifier {
         }
     }
 
-    /// Call only in an offline test harness; production must use a separately
-    /// provisioned public-key trust store, strict JSON schema and rollback guard.
+    /// Offline verification with an immutable registry provided by the caller.
+    /// Not integrated with the production updater or persistent rollback state.
     static func verify(
         envelopeJSON: Data,
-        testPublicKeyBase64: String,
+        trustedKeys: ZagMetadataV2KeyRegistry,
         expectedChannel: String,
         now: Date
     ) throws {
         let envelope = try JSONDecoder().decode(Envelope.self, from: envelopeJSON)
         guard envelope.schema == 2,
-              envelope.keyId == publicTestKeyId,
               let payloadBytes = Data(base64Encoded: envelope.payload),
               let signatureBytes = Data(base64Encoded: envelope.signature),
               signatureBytes.count == 64 else { throw Failure.malformedEnvelope }
-        guard let keyBytes = Data(base64Encoded: testPublicKeyBase64),
-              keyBytes.count == 32,
-              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyBytes)
-        else { throw Failure.badKey }
+        let key: Curve25519.Signing.PublicKey
+        do {
+            key = try trustedKeys.publicKey(for: envelope.keyId)
+        } catch {
+            throw Failure.badKey
+        }
         var signedBytes = signingPrefix
         signedBytes.append(payloadBytes)
         guard key.isValidSignature(signatureBytes, for: signedBytes) else {
