@@ -90,6 +90,14 @@ def signed_negative_cases():
         "escapedSlash": jcs.canonicalize(base).replace(b"https://", b"https:" + bytes([92, 47, 92, 47])),
         "escapedUnicode": jcs.canonicalize({**base, "releaseNotes": "café"}).replace(bytes([195, 169]), bytes([92]) + b"u00e9"),
     }
+    # Signed malformed UTF-8 and an integer outside Swift's Int range.
+    # These inputs bypass the publisher deliberately to exercise the verifier.
+    raw_cases["invalidUTF8"] = (
+        jcs.canonicalize(base).replace(b"Offline test vector", b"Offline " + bytes([0xff]) + b" test vector")
+    )
+    raw_cases["oversizedSequence"] = (
+        jcs.canonicalize(base).replace(b'"sequence":7', b'"sequence":9223372036854775808')
+    )
     for name, raw in raw_cases.items():
         cases[name] = {
             "schema": 2,
