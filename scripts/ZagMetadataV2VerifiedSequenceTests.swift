@@ -13,6 +13,8 @@ struct ZagMetadataV2VerifiedSequenceTests {
         let envelope: Envelope
         let signedEqualSequenceConflict: Envelope
         let signedHigherSequence: Envelope
+        let rotatedPublicKeyBase64: String
+        let signedRotatedKeyUpgrade: Envelope
     }
 
     static func main() throws {
@@ -193,6 +195,42 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Untrusted key changed trusted sequence state")
         }
         print("PASS: Untrusted signing key preserved trusted sequence state")
+        // Rotate through an overlap registry, then retire the original key.
+        // Both manifests are independently signed with deterministic test keys.
+        let rotatedEnvelope = try JSONEncoder().encode(fixture.signedRotatedKeyUpgrade)
+        let overlapRegistry = try ZagMetadataV2KeyRegistry(anchors: [
+            .init(keyID: fixture.envelope.keyId, publicKeyBase64: fixture.publicKeyBase64),
+            .init(keyID: fixture.signedRotatedKeyUpgrade.keyId,
+                  publicKeyBase64: fixture.rotatedPublicKeyBase64)
+        ])
+        let overlapBoundary = ZagMetadataV2VerifiedSequence(
+            registry: overlapRegistry, store: reopenedUpgradeStore)
+        try overlapBoundary.verifyAndRecord(
+            envelopeJSON: rotatedEnvelope, expectedChannel: "beta", now: now)
+        guard try reopenedUpgradeStore.read(channel: "beta")?.sequence == 9 else {
+            fatalError("FAIL: Rotated signing key did not advance trusted sequence")
+        }
+        print("PASS: Rotated signing key advanced sequence during trust overlap")
+
+        let retiredRegistry = try ZagMetadataV2KeyRegistry(anchors: [
+            .init(keyID: fixture.signedRotatedKeyUpgrade.keyId,
+                  publicKeyBase64: fixture.rotatedPublicKeyBase64)
+        ])
+        let retiredBoundary = ZagMetadataV2VerifiedSequence(
+            registry: retiredRegistry, store: reopenedUpgradeStore)
+        try retiredBoundary.verifyAndRecord(
+            envelopeJSON: rotatedEnvelope, expectedChannel: "beta", now: now)
+        print("PASS: Rotated key remains trusted after old key retirement")
+        let beforeRetiredReplay = try reopenedUpgradeStore.read(channel: "beta")
+        try mustReject("Retired signing key after trust rotation") {
+            try retiredBoundary.verifyAndRecord(
+                envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
+        }
+        guard try reopenedUpgradeStore.read(channel: "beta") == beforeRetiredReplay else {
+            fatalError("FAIL: Retired signing key modified sequence state")
+        }
+        print("PASS: Retired signing key preserved trusted state")
+
 
 
 
