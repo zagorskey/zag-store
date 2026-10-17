@@ -90,6 +90,31 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Concurrent writes preserve highest accepted sequence")
 
+        // A replacement state inode must have owner-only permissions at the
+        // time it becomes visible, not only after the rename completes.
+        let secureURL = directory.appendingPathComponent("private-atomic-state.json")
+        let secureStore = ZagMetadataV2SequenceStore(fileURL: secureURL)
+        try secureStore.accept(channel: "beta", sequence: 1, signedPayload: payload)
+        let initialAttributes = try FileManager.default.attributesOfItem(atPath: secureURL.path)
+        guard let initialMode = initialAttributes[.posixPermissions] as? NSNumber,
+              initialMode.intValue & 0o777 == 0o600 else {
+            fatalError("FAIL: New atomic state file is not owner-private")
+        }
+        print("PASS: Newly persisted state file has private permissions")
+        try secureStore.accept(channel: "beta", sequence: 2, signedPayload: changed)
+        let replacementAttributes = try FileManager.default.attributesOfItem(atPath: secureURL.path)
+        guard let replacementMode = replacementAttributes[.posixPermissions] as? NSNumber,
+              replacementMode.intValue & 0o777 == 0o600,
+              try secureStore.read(channel: "beta")?.sequence == 2 else {
+            fatalError("FAIL: Atomic replacement lost private permissions or sequence")
+        }
+        print("PASS: Replaced state file remains private and preserves sequence")
+        let temporaryEntries = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        guard !temporaryEntries.contains(where: { $0.hasPrefix(".zag-v2-") && $0.hasSuffix(".tmp") }) else {
+            fatalError("FAIL: Atomic write left temporary state files behind")
+        }
+        print("PASS: Successful atomic writes leave no temporary files")
+
         // A missing state file is a valid first-run condition, but must not
         // silently discard an existing high-water mark.
         let freshURL = directory.appendingPathComponent("fresh-state.json")
