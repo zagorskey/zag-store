@@ -119,6 +119,26 @@ struct ZagMetadataV2VerifiedSequenceTests {
         }
         print("PASS: Restarted conflicting retry preserves trusted digest")
 
+        // A recovered coordinator must also reject genuinely older signed
+        // metadata, not just same-sequence conflicts. Advance this isolated
+        // recovery history with the independently signed sequence-eight fixture.
+        let recoveredUpgrade = try JSONEncoder().encode(fixture.signedHigherSequence)
+        try recoveredAgainBoundary.verifyAndRecord(
+            envelopeJSON: recoveredUpgrade, expectedChannel: "beta", now: now)
+        guard try recoveredAgain.read(channel: "beta")?.sequence == 8 else {
+            fatalError("FAIL: Recovered state did not advance to sequence eight")
+        }
+        print("PASS: Recovered uncertain state accepts independently signed upgrade")
+        let afterRecoveredUpgrade = try recoveredAgain.read(channel: "beta")
+        try mustReject("Older signed sequence after uncertain-publication restart") {
+            try recoveredAgainBoundary.verifyAndRecord(
+                envelopeJSON: original, expectedChannel: "beta", now: now)
+        }
+        guard try recoveredAgain.read(channel: "beta") == afterRecoveredUpgrade else {
+            fatalError("FAIL: Recovered old-manifest replay changed high-water mark")
+        }
+        print("PASS: Recovered state preserves upgraded high-water mark after replay")
+
         // Establish that the alternate envelope is independently valid before
         // asserting that persistent equal-sequence conflict protection rejects it.
         try ZagMetadataV2TestVerifier.verify(
