@@ -45,7 +45,7 @@ MANIFEST="$TMP/dist/releases/${CHANNEL}.json"
 python3 - "$TMP/dist/releases" "$VERSION" "$BUILD" <<'PY'
 import json, pathlib, re, sys
 folder, version, build = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-if not re.fullmatch(r"[0-9]+(?:\\.[0-9]+)*", version):
+if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version):
     raise SystemExit("Version must contain only numeric dot-separated components")
 if not re.fullmatch(r"[0-9]+", build):
     raise SystemExit("Build must be a non-negative integer")
