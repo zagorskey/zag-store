@@ -41,7 +41,43 @@ URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 echo "=== RELEASE PREVIEW ==="
 printf 'Channel: %s\nVersion: %s\nBuild: %s\nBundle: %s\nSHA-256: %s\nIPA: %s\nTag: %s\n' "$CHANNEL" "$VERSION" "$BUILD" "$BUNDLE" "$SHA" "$IPA" "$TAG"
 gh repo view "$REPO" --json visibility --jq '.visibility' | grep -qx PUBLIC || { echo "Distribution repo must be public"; exit 1; }
-gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 && { echo "Release tag already exists; refusing overwrite"; exit 1; }
+# A previously uploaded release can be resumed, but never overwritten.
+# Treat lookup failures other than HTTP 404 as fatal (e.g. auth/network errors).
+RELEASE_JSON="$TMP/existing-release.json"
+RELEASE_STATUS=0
+gh api "repos/${REPO}/releases/tags/${TAG}" >"$RELEASE_JSON" 2>"$TMP/release-lookup-error" || RELEASE_STATUS=$?
+if (( RELEASE_STATUS != 0 )); then
+  if grep -q 'HTTP 404' "$TMP/release-lookup-error"; then
+    rm -f "$RELEASE_JSON"
+  else
+    cat "$TMP/release-lookup-error" >&2
+    echo "Release lookup failed; refusing publication" >&2
+    exit 1
+  fi
+fi
+if [[ -f "$RELEASE_JSON" ]]; then
+  echo "=== VERIFY EXISTING RELEASE FOR RECOVERY ==="
+  python3 - "$RELEASE_JSON" "$ASSET" "$CHANNEL" "$NOTES_FILE" <<'PY'
+import json, pathlib, sys
+path, asset, channel, notes_file = sys.argv[1:]
+release = json.loads(pathlib.Path(path).read_text())
+assets = release.get("assets", [])
+if release.get("draft") or release.get("prerelease") != (channel != "stable"):
+    raise SystemExit("Existing release status/channel mismatch; refusing recovery")
+if len(assets) != 1 or assets[0].get("name") != asset or assets[0].get("state") != "uploaded":
+    raise SystemExit("Existing release asset mismatch; refusing recovery")
+if notes_file:
+    notes = pathlib.Path(notes_file).read_text(encoding="utf-8").strip()
+    if release.get("body", "").strip() != notes:
+        raise SystemExit("Existing release notes mismatch; refusing recovery")
+print("Existing release metadata matches")
+PY
+  mkdir -p "$TMP/existing"
+  gh release download "$TAG" --repo "$REPO" --pattern "$ASSET" --dir "$TMP/existing"
+  EXISTING_SHA=$(shasum -a 256 "$TMP/existing/$ASSET" | awk '{print $1}')
+  [[ "$EXISTING_SHA" == "$SHA" ]] || { echo "Existing IPA checksum mismatch; refusing recovery"; exit 1; }
+  echo "PASS: Existing release IPA matches exactly"
+fi
 
 git clone --quiet --depth 1 "https://github.com/${REPO}.git" "$TMP/dist"
 MANIFEST="$TMP/dist/releases/${CHANNEL}.json"
@@ -76,7 +112,7 @@ print("Cross-channel version/build check passed")
 PY
 
 if [[ "$MODE" == "--dry-run" ]]; then
-  echo "DRY RUN PASSED: signed IPA, release identity, existing tag, and cross-channel version checks."
+  echo "DRY RUN PASSED: signed IPA, release identity, existing release recovery checks, and cross-channel version checks."
   echo "No release, asset, or manifest was published."
   exit 0
 fi
@@ -85,10 +121,12 @@ echo "=== PUBLISHING PUBLIC RELEASE ==="
 echo "The signed IPA may expose device-specific provisioning metadata."
 echo "Channel: $CHANNEL | Version: $VERSION ($BUILD) | Minimum iOS: $MIN_IOS"
 [[ "$MODE" == "--publish" ]] || { echo "Explicit --publish required"; exit 2; }
-echo "=== CREATE RELEASE ASSET ==="
+echo "=== CREATE OR RESUME RELEASE ASSET ==="
 NOTES=$(cat "$NOTES_FILE")
 [[ -n "${NOTES//[[:space:]]/}" && ${#NOTES} -le 12000 ]] || { echo "Release notes must contain 1–12000 characters"; exit 2; }
-if [[ "$CHANNEL" == "stable" ]]; then
+if [[ -f "$RELEASE_JSON" ]]; then
+  echo "RECOVERY: Reusing verified existing release; no upload or replacement"
+elif [[ "$CHANNEL" == "stable" ]]; then
   gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD)" --notes-file "$NOTES_FILE"
 else
   gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD) — ${CHANNEL:u}" --prerelease --notes-file "$NOTES_FILE"
