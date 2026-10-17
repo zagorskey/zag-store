@@ -237,7 +237,8 @@ enum ZagMetadataV2TestVerifier {
         envelopeJSON: Data,
         trustedKeys: ZagMetadataV2KeyRegistry,
         expectedChannel: String,
-        now: Date
+        now: Date,
+        expectedAppID: String = "com.cwd43.gu29"
     ) throws {
         guard isStrictEnvelope(envelopeJSON) else { throw Failure.malformedEnvelope }
         let envelope = try JSONDecoder().decode(Envelope.self, from: envelopeJSON)
@@ -274,7 +275,7 @@ enum ZagMetadataV2TestVerifier {
         guard isCanonicalFlatPayload(payloadBytes) else { throw Failure.invalidPayload }
         let payload = try JSONDecoder().decode(Payload.self, from: payloadBytes)
         guard payload.schema == 2,
-              payload.appId == "com.cwd43.gu29",
+              payload.appId == expectedAppID,
               payload.channel == expectedChannel,
               payload.sequence > 0,
               numericDotted(payload.version),
