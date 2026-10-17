@@ -43,6 +43,30 @@ def fixture():
         "payload": payload,
     }
 
+def signed_negative_cases():
+    """Deliberately bypass publisher validation to test the client independently."""
+    private = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
+    base = fixture()["payload"]
+    cases = {}
+    mutations = {
+        "unknownPayloadField": {**base, "unexpected": "reject"},
+        "missingPayloadField": {k: v for k, v in base.items() if k != "releaseNotes"},
+        "invalidChecksum": {**base, "sha256": "z" * 64},
+        "zeroSequence": {**base, "sequence": 0},
+        "wrongAppId": {**base, "appId": "com.example.other"},
+    }
+    for name, payload in mutations.items():
+        raw = jcs.canonicalize(payload)
+        cases[name] = {
+            "schema": 2,
+            "keyId": TEST_KEY_ID,
+            "payload": base64.b64encode(raw).decode("ascii"),
+            "signature": base64.b64encode(
+                private.sign(signer.PREFIX + raw)).decode("ascii"),
+        }
+    return cases
+
+
 def main():
     vector = fixture()
     canonical = jcs.canonicalize(vector["payload"])
@@ -53,6 +77,7 @@ def main():
         "beta",
         now=__import__("datetime").datetime.fromisoformat("2026-10-18T00:00:00+00:00"),
     ) == vector["payload"]
+    vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
 if __name__ == "__main__":
