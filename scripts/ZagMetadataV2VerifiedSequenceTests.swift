@@ -153,7 +153,8 @@ struct ZagMetadataV2VerifiedSequenceTests {
         let beforeMalformedSignedPayloads = try boundary.store.read(channel: "beta")
         for (fixtureName, label) in [
             ("invalidUTF8", "Signed invalid UTF-8 payload"),
-            ("oversizedSequence", "Signed oversized sequence")
+            ("oversizedSequence", "Signed oversized sequence"),
+            ("duplicatePayloadKey", "Signed duplicate JSON payload key")
         ] {
             guard let signedCase = fixture.signedNegativeCases[fixtureName] else {
                 fatalError("FAIL: Missing negative fixture: \\(fixtureName)")
