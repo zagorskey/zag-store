@@ -20,3 +20,26 @@
 ## Gate to resume live integration
 
 A reviewed production verifier + trust registry, signed artifact hash and identity verification, durable replay guarantees, explicit migration policy, reproducible builds and adversarial tests must all be demonstrated. Until then, keep v2 isolated in `scripts/` and preserve the live updater.
+
+
+## Security checkpoint — 2026-10-17 (after `60e1f7c`)
+
+**Evidence from the macOS test runs:** the signed-metadata integration suite passes after uncertain-publication recovery, restart, signed sequence-eight upgrade and rejection of replayed sequence seven. The 40-case JCS differential corpus matched the Python reference (15 canonical accepted, 25 noncanonical rejected). Persistence tests passed with no-follow state and lock files, private 0600 replacement inodes, atomic rename, pre/post-rename fault injection, and cleanup checks. These are process-level tests; they **do not** establish power-loss durability, protection against deleting the entire application container, or production installation security.
+
+### High-priority next implementation: authenticated IPA binding
+
+1. **Separate verification from acceptance.** The current `ZagMetadataV2VerifiedSequence.verifyAndRecord` advances the sequence based solely on an authenticated manifest. This is intentionally offline, but it must never become a production install gate as-is.
+2. **Verify downloaded bytes before recording acceptance.** Design an isolated offline artifact-verifier taking a previously authenticated payload and a locally downloaded IPA. Stream SHA-256 from the actual IPA bytes, compare to the authenticated `sha256`, enforce size limits, and reject substitution/partial downloads. Avoid network access and avoid publishing releases in this phase.
+3. **Enforce signing identity and package policy.** Before installation, inspect the IPA's bundle identifier, signature/team identity, entitlements, embedded frameworks/extensions and provisioning constraints; do not treat a matching digest or bundle ID alone as sufficient installation authorization.
+4. **Define the transition boundary.** Specify precisely whether rollback state advances after verified download, validated package, or confirmed install, and define recovery for cancellation/failure/uncertain persistence. The existing immediate manifest-based persistence must be refactored, not reused unmodified.
+5. **Keep current runtime isolated.** Do not wire v2 into `Feather/`, enable v2 channels, provision live trust anchors, or change the existing v1 release publisher until the end-to-end security design is reviewed.
+
+### Remaining independent blockers
+
+- The flat-payload Swift canonical JSON verifier remains custom and requires formal scope constraints/audit or replacement, further adversarial/fuzz testing, and independent review.
+- Trust-root provisioning, key rotation/revocation policy, and production key custody are unresolved; the production registry still intentionally fails closed.
+- Persistence still allows rollback-memory reset via deletion/restore of the entire app state; directory/path aliasing and real power-loss/disk-full behavior remain unproven.
+- Cross-channel downgrade rules, v1-to-v2 migration/fallback policy, and publisher/signer URL-validation parity remain undefined.
+- An identical retry after a post-rename error proves only that a matching state was visible. It must not be treated as proof that the previous directory `fsync` succeeded.
+
+**Decision:** Close the small-fixture retry test phase. Next work should be a reviewed, offline artifact verification boundary, not more incremental sequence-retry fixtures. **Production gate remains CLOSED.**
