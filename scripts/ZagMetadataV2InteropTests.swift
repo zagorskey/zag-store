@@ -6,6 +6,7 @@ struct ZagMetadataV2InteropTests {
         let publicKeyBase64: String
         let envelope: Envelope
         let signedNegativeCases: [String: Envelope]
+        let signedPositiveCases: [String: Envelope]
     }
     struct Envelope: Codable {
         let schema: Int
@@ -47,6 +48,17 @@ struct ZagMetadataV2InteropTests {
             expectedChannel: "beta",
             now: now)
         print("PASS: Swift verified Python-signed Ed25519 payload")
+        for name in fixture.signedPositiveCases.keys.sorted() {
+            guard let candidate = fixture.signedPositiveCases[name] else {
+                throw TestFailure.accepted("Missing positive case: \(name)")
+            }
+            try ZagMetadataV2TestVerifier.verify(
+                envelopeJSON: try encode(candidate),
+                testPublicKeyBase64: fixture.publicKeyBase64,
+                expectedChannel: "beta",
+                now: now)
+            print("PASS: Canonical signed positive payload: \(name)")
+        }
 
         try requireReject("Wrong channel") {
             try ZagMetadataV2TestVerifier.verify(
