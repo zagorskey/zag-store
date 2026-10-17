@@ -77,6 +77,23 @@ git add "releases/${CHANNEL}.json"
 git -c user.name=ZAGORSKI -c user.email=zagorskey@users.noreply.github.com commit -m "Publish ${CHANNEL} ${VERSION} build ${BUILD}"
 git push origin main
 echo "=== VERIFY PUBLIC MANIFEST ==="
-curl -fLsS --retry 3 "https://raw.githubusercontent.com/${REPO}/main/releases/${CHANNEL}.json"
-echo
+PUBLIC_MANIFEST="$TMP/public-manifest.json"
+curl -fLsS --retry 3 -o "$PUBLIC_MANIFEST" "https://raw.githubusercontent.com/${REPO}/main/releases/${CHANNEL}.json"
+python3 - "$PUBLIC_MANIFEST" "$VERSION" "$BUILD" "$BUNDLE" "$URL" "$SHA" <<'PY'
+import json, sys
+path, version, build, bundle, url, sha = sys.argv[1:]
+with open(path) as f:
+    published = json.load(f)
+expected = {
+    "version": version,
+    "build": build,
+    "bundleIdentifier": bundle,
+    "ipaURL": url,
+    "sha256": sha,
+}
+for key, value in expected.items():
+    if published.get(key) != value:
+        raise SystemExit(f"Public manifest verification failed: {key} does not match the published release")
+print("Public manifest verified: version, build, bundle, URL and SHA-256 match")
+PY
 echo "SUCCESS: ${CHANNEL} release published"
