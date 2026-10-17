@@ -34,10 +34,10 @@ guard key.count == 32 else { fatalError("Invalid test public key") }
 let object = try JSONSerialization.jsonObject(with: raw) as! [String: Any]
 let payload = Data(base64Encoded: object["payload"] as! String)!
 let signature = Data(base64Encoded: object["signature"] as! String)!
-let domain = Data("ZAG-STORE-UPDATE-V2\\n".utf8)
+let domain = Data("ZAG-STORE-UPDATE-V2\n".utf8)
 let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: key)
 guard publicKey.isValidSignature(signature, for: domain + payload) else {
-    fputs("FAIL: CryptoKit rejected Python signature\\n", stderr)
+    fputs("FAIL: CryptoKit rejected Python signature\n", stderr)
     exit(1)
 }
 print("PASS: CryptoKit accepted Python-generated Ed25519 signature")
