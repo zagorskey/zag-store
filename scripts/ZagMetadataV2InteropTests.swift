@@ -38,13 +38,16 @@ struct ZagMetadataV2InteropTests {
         let fixtureData = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
         let fixture = try JSONDecoder().decode(Fixture.self, from: fixtureData)
         let now = ISO8601DateFormatter().date(from: "2026-10-18T00:00:00Z")!
+        let trustedKeys = try ZagMetadataV2KeyRegistry(anchors: [
+            .init(keyID: fixture.envelope.keyId, publicKeyBase64: fixture.publicKeyBase64)
+        ])
         func encode(_ envelope: Envelope) throws -> Data {
             try JSONEncoder().encode(envelope)
         }
         let original = try encode(fixture.envelope)
         try ZagMetadataV2TestVerifier.verify(
             envelopeJSON: original,
-            testPublicKeyBase64: fixture.publicKeyBase64,
+            trustedKeys: trustedKeys,
             expectedChannel: "beta",
             now: now)
         print("PASS: Swift verified Python-signed Ed25519 payload")
@@ -54,7 +57,7 @@ struct ZagMetadataV2InteropTests {
             }
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: try encode(candidate),
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
                 expectedChannel: "beta",
                 now: now)
             print("PASS: Canonical signed positive payload: \(name)")
@@ -63,7 +66,7 @@ struct ZagMetadataV2InteropTests {
         try requireReject("Wrong channel") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: original,
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
                 expectedChannel: "stable",
                 now: now)
         }
@@ -71,7 +74,7 @@ struct ZagMetadataV2InteropTests {
         try requireReject("Expired metadata") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: original,
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
                 expectedChannel: "beta",
                 now: expired)
         }
@@ -87,7 +90,15 @@ struct ZagMetadataV2InteropTests {
         try requireReject("Tampered signature") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: tampered,
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
+                expectedChannel: "beta",
+                now: now)
+        }
+        let unknownTrust = try ZagMetadataV2KeyRegistry(anchors: [])
+        try requireReject("Untrusted signing key ID") {
+            try ZagMetadataV2TestVerifier.verify(
+                envelopeJSON: original,
+                trustedKeys: unknownTrust,
                 expectedChannel: "beta",
                 now: now)
         }
@@ -99,7 +110,7 @@ struct ZagMetadataV2InteropTests {
         try requireReject("Unknown envelope field") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: extraEnvelopeData,
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
                 expectedChannel: "beta",
                 now: now)
         }
@@ -109,7 +120,7 @@ struct ZagMetadataV2InteropTests {
         try requireReject("Missing envelope field") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: missingEnvelopeData,
-                testPublicKeyBase64: fixture.publicKeyBase64,
+                trustedKeys: trustedKeys,
                 expectedChannel: "beta",
                 now: now)
         }
@@ -124,7 +135,7 @@ struct ZagMetadataV2InteropTests {
             try requireReject("Valid-signature malformed payload: \(name)") {
                 try ZagMetadataV2TestVerifier.verify(
                     envelopeJSON: candidate,
-                    testPublicKeyBase64: fixture.publicKeyBase64,
+                    trustedKeys: trustedKeys,
                     expectedChannel: "beta",
                     now: now)
             }
