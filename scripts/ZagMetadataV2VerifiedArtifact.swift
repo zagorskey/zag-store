@@ -10,7 +10,8 @@ struct ZagMetadataV2VerifiedArtifact {
         envelopeJSON: Data,
         expectedChannel: String,
         now: Date,
-        localIPA: URL
+        localIPA: URL,
+        expectedAppID: String = "com.cwd43.gu29"
     ) throws {
         // The digest must come from this validated signed payload, never from
         // a caller-supplied checksum or unauthenticated JSON field.
@@ -18,7 +19,8 @@ struct ZagMetadataV2VerifiedArtifact {
             envelopeJSON: envelopeJSON,
             trustedKeys: registry,
             expectedChannel: expectedChannel,
-            now: now
+            now: now,
+            expectedAppID: expectedAppID
         )
         struct Envelope: Decodable { let payload: String }
         struct SignedDigest: Decodable { let sha256: String }
