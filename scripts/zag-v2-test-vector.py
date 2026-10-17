@@ -76,6 +76,7 @@ def signed_negative_cases():
     raw_cases = {
         "noncanonicalWhitespace": json.dumps(base, ensure_ascii=False, indent=2).encode("utf-8"),
         "duplicatePayloadKey": jcs.canonicalize(base)[:-1] + b',"sequence":7}',
+        "reorderedKeys": json.dumps(base, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
     }
     for name, raw in raw_cases.items():
         cases[name] = {
