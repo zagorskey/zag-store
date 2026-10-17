@@ -55,6 +55,64 @@ struct RollbackBehaviorTests {
         } catch ZagUpdateRollbackStore.StoreError.invalidChannel {
             check("invalid channel rejected", true)
         }
+        // Concurrent callers share one actor, so a lower sequence must not
+        // overwrite a higher accepted sequence even when scheduling varies.
+        let concurrent = ZagUpdateRollbackStore(service: service)
+        let concurrentChannel = "nightly"
+        await withTaskGroup(of: Bool.self) { group in
+            for sequence in 3...40 {
+                group.addTask {
+                    do {
+                        try await concurrent.recordAccepted(
+                            sequence: sequence,
+                            payload: Data("sequence-\(sequence)".utf8),
+                            channel: concurrentChannel
+                        )
+                        return true
+                    } catch ZagUpdateRollbackStore.StoreError.rollback {
+                        return true
+                    } catch {
+                        return false
+                    }
+                }
+            }
+            for await result in group {
+                check("concurrent operation completed safely", result)
+            }
+        }
+        check("concurrent highest sequence preserved",
+              try await store.highestAccepted(channel: "nightly") == 40)
+
+        // Corrupt a disposable record directly and ensure the store fails
+        // closed on both reads and subsequent writes.
+        let corruptQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "highest-sequence.stable"
+        ]
+        let corruptUpdate: [String: Any] = [
+            kSecValueData as String: Data("invalid-record".utf8)
+        ]
+        let corruptStatus = SecItemUpdate(corruptQuery as CFDictionary, corruptUpdate as CFDictionary)
+        check("test fixture corruption succeeded", corruptStatus == errSecSuccess)
+        if corruptStatus == errSecSuccess {
+            do {
+                _ = try await store.highestAccepted(channel: "stable")
+                check("corrupt record read rejected", false)
+            } catch ZagUpdateRollbackStore.StoreError.invalidStoredValue {
+                check("corrupt record read rejected", true)
+            } catch {
+                check("corrupt record read rejected", false)
+            }
+            do {
+                try await store.recordAccepted(sequence: 100, payload: a, channel: "stable")
+                check("corrupt record overwrite rejected", false)
+            } catch ZagUpdateRollbackStore.StoreError.invalidStoredValue {
+                check("corrupt record overwrite rejected", true)
+            } catch {
+                check("corrupt record overwrite rejected", false)
+            }
+        }
         guard failures == 0 else { exit(1) }
         print("SUCCESS: Keychain-backed rollback behavior tests passed")
     }
