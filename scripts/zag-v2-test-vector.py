@@ -59,6 +59,7 @@ def signed_negative_cases():
         "invalidMinimumIOS": {**base, "minimumIOSVersion": "iOS16"},
         "insecureIPAURL": {**base, "ipaURL": "http://github.com/zagorskey/zag-store-releases/releases/download/x/ZagStore.ipa"},
         "wrongIPAHost": {**base, "ipaURL": "https://github.com.evil.example/releases/download/x/ZagStore.ipa"},
+        "credentialedIPAURL": {**base, "ipaURL": "https://user:pass@github.com/zagorskey/zag-store-releases/releases/download/x/ZagStore.ipa"},
         "futurePublication": {**base, "publishedAt": "2026-10-19T10:00:00Z"},
         "tooLongLifetime": {**base, "expiresAt": "2026-11-20T10:00:00Z"},
     }
