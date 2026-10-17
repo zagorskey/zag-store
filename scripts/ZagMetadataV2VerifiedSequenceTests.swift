@@ -82,9 +82,6 @@ struct ZagMetadataV2VerifiedSequenceTests {
         try restartedBoundary.verifyAndRecord(
             envelopeJSON: original, expectedChannel: "beta", now: now)
         print("PASS: Identical verified payload accepted after restart")
-        guard let originalPayload = Data(base64Encoded: fixture.envelope.payload) else {
-            fatalError("FAIL: Invalid fixture payload")
-        }
         let alternatePayload = Data("different verified payload bytes".utf8)
         try restarted.accept(channel: "beta", sequence: 8, signedPayload: alternatePayload)
         try mustReject("Replayed signed sequence after restart") {
