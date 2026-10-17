@@ -10,6 +10,15 @@ final class FixtureURLProtocol: URLProtocol {
     static let metricsLock = NSLock()
     static var bytesDelivered = 0
     static var stoppedByClient = false
+    static func resetMetrics() {
+        metricsLock.withLock {
+            bytesDelivered = 0
+            stoppedByClient = false
+        }
+    }
+    static func metrics() -> (Int, Bool) {
+        metricsLock.withLock { (bytesDelivered, stoppedByClient) }
+    }
     private let stateLock = NSLock()
     private var stopped = false
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -123,10 +132,7 @@ struct V2DiscoveryIntegrationTests {
         // Pace an unadvertised 4 MiB response to verify cancellation
         // before the complete response can be delivered.
         FixtureURLProtocol.pacedChunks = true
-        FixtureURLProtocol.metricsLock.lock()
-        FixtureURLProtocol.bytesDelivered = 0
-        FixtureURLProtocol.stoppedByClient = false
-        FixtureURLProtocol.metricsLock.unlock()
+        FixtureURLProtocol.resetMetrics()
         let hugeSize = 4 * 1024 * 1024
         FixtureURLProtocol.responseData = Data(repeating: 0x41, count: hugeSize)
         do {
@@ -134,12 +140,9 @@ struct V2DiscoveryIntegrationTests {
             print("FAIL: oversized streaming response accepted")
             exit(1)
         } catch ZagUpdateV2Discovery.DiscoveryError.oversizedResponse {
-            FixtureURLProtocol.metricsLock.lock()
-            let delivered = FixtureURLProtocol.bytesDelivered
-            let stopped = FixtureURLProtocol.stoppedByClient
-            FixtureURLProtocol.metricsLock.unlock()
+            let (delivered, stopped) = FixtureURLProtocol.metrics()
             guard delivered < hugeSize, stopped else {
-                print("FAIL: cancellation was not early")
+                print("FAIL: cancellation was not early (delivered=\(delivered)/\(hugeSize), stopLoading=\(stopped))")
                 exit(1)
             }
             print("PASS: streaming response cancelled before all bytes delivered")
