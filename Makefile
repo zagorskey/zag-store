@@ -43,8 +43,10 @@ $(PLATFORMS): deps
 	mkdir -p _build/Payload
 	cp -R _build/Applications/*.app _build/Payload/Feather.app
 	chmod -R 0755 _build/Payload/Feather.app
+	# Embed required TLS resources before sealing the application bundle.
+	cp deps/server.crt deps/server.pem deps/commonName.txt _build/Payload/Feather.app/
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
-	cp deps/* _build/Payload/Feather.app/ || true
+	codesign --verify --deep --strict --verbose=2 _build/Payload/Feather.app
 
 	mkdir -p packages
 
