@@ -118,6 +118,27 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Failed persistence leaves existing trusted state unchanged")
 
+        // A pre-planted symlink at the adjacent lock path must never be
+        // followed or used to coordinate a trusted state transition.
+        let symlinkURL = directory.appendingPathComponent("symlink-state.json")
+        let symlinkTarget = directory.appendingPathComponent("symlink-lock-target.txt")
+        let markerBytes = Data("DO NOT MODIFY LOCK TARGET".utf8)
+        try markerBytes.write(to: symlinkTarget)
+        try FileManager.default.createSymbolicLink(
+            atPath: symlinkURL.path + ".lock", withDestinationPath: symlinkTarget.path)
+        let symlinkStore = ZagMetadataV2SequenceStore(fileURL: symlinkURL)
+        try rejects("Symbolic-link lock file on read") {
+            _ = try symlinkStore.read(channel: "beta")
+        }
+        try rejects("Symbolic-link lock file on write") {
+            try symlinkStore.accept(channel: "beta", sequence: 1, signedPayload: payload)
+        }
+        guard try Data(contentsOf: symlinkTarget) == markerBytes,
+              !FileManager.default.fileExists(atPath: symlinkURL.path) else {
+            fatalError("FAIL: Lock-file symlink rejection changed the target or persisted state")
+        }
+        print("PASS: Lock-file symlink rejection leaves target and state untouched")
+
         // Interrupted or truncated state must fail closed rather than initialize
         // a new empty snapshot and discard the previous rollback watermark.
         let truncatedURL = directory.appendingPathComponent("truncated-state.json")
