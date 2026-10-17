@@ -38,7 +38,7 @@ struct ZagMetadataV2SequenceStoreTests {
         try restarted.accept(channel: "stable", sequence: 2, signedPayload: changed)
         try restarted.accept(channel: "beta", sequence: 8, signedPayload: changed)
         guard try restarted.read(channel: "stable")?.sequence == 2,
-              restarted.read(channel: "beta")?.sequence == 8 else {
+              try restarted.read(channel: "beta")?.sequence == 8 else {
             fatalError("FAIL: Independent channel state lost")
         }
         print("PASS: Independent channel sequences persisted")
