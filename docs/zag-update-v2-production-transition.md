@@ -35,3 +35,29 @@ Status: **staged / not enabled**. This document does not install keys, publish m
 5. Enable one channel under a one-way authenticated migration marker, then evaluate before widening rollout.
 
 **Never flip live v1 discovery to v2 or add a v1 fallback after authenticated migration simply because a test passes.**
+
+## Production key ceremony and rotation checklist (staged)
+
+The application trust store remains **empty** until an independently verified public key is reviewed. Keep private signing material entirely outside the app, source control, build artifacts and GitHub Actions.
+
+### Offline generation and custody
+
+1. On a trusted, offline machine, generate the production Ed25519 signing key with audited tooling. Use a non-exportable hardware-backed key if the chosen signing workflow supports Ed25519; otherwise use encrypted storage with restricted access.
+2. Produce the **32-byte raw Ed25519 public key** and publish its SHA-256 fingerprint through a separate, independently verified channel. Record generation date, custodian, allowed channels, backup location, and a non-secret key ID (64 UTF-8 bytes maximum).
+3. Have two maintainers independently check the public key bytes, fingerprint and key ID before proposing an app trust-store change. Never copy the private key into a repository, CI environment, IPA or chat.
+4. Store recovery material separately; rehearse restoring it without uploading private material. Log authorisation and sign-offs outside the release artifacts.
+
+### Rotation without silent downgrade
+
+1. Pre-provision the successor public key in a released app version before publishing any manifest signed by it. Maintain a defined overlap period for the old and new keys.
+2. Sign a fresh, strictly canonical v2 envelope with the successor key; validate its key ID, channel, expiry, monotonic sequence, payload SHA and associated immutable IPA before publishing.
+3. After confirmed rollout, retire the previous key in a subsequent app update. An app that still trusts an old key cannot be protected against a compromise merely by publishing a new manifest; document recovery and forced-upgrade limitations.
+4. Keep signed v2 acceptance one-way per channel. Missing, expired or invalid v2 metadata must fail closed, never select an unsigned v1 manifest as fallback.
+5. Test recovery, rollback and key overlap on all Stable/Beta/Nightly channels independently, including stale clients, missing manifests and compromised-key assumptions.
+
+### Verification gates before any production activation
+
+- Independently verify the exact release bytes, raw public-key fingerprint, canonical envelope, expiry horizon (seven days maximum), channel and sequence. Use two separate implementations where practical.
+- Validate that the manifest points to an immutable canonical IPA with the expected publisher ID `app.zagstore.ios`; confirm the device-specific resigning preserves the user's actual installed bundle identifier.
+- Test a real device with a disposable *nonproduction* signing key and v2 test endpoint, retaining the live v1 endpoints unchanged.
+- Obtain explicit approval for shipping reviewed public keys and, separately, for enabling the irreversible per-channel migration gate. No stage is enabled simply because these checks are documented.
