@@ -57,6 +57,39 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Rejected inputs leave trusted sequence intact")
 
+        // Exercise simultaneous writers against an independent on-disk snapshot.
+        // Each writer has its own store instance, as separate update tasks would.
+        let concurrentURL = directory.appendingPathComponent("concurrent-sequence.json")
+        let workerCount = 8
+        let gate = DispatchSemaphore(value: 0)
+        let finished = DispatchGroup()
+        let outcomes = DispatchQueue(label: "zag-v2-sequence-test-outcomes")
+        var succeeded = 0
+        var failures: [String] = []
+        for sequence in 1...workerCount {
+            finished.enter()
+            DispatchQueue.global().async {
+                gate.wait()
+                do {
+                    try ZagMetadataV2SequenceStore(fileURL: concurrentURL).accept(
+                        channel: "beta",
+                        sequence: sequence,
+                        signedPayload: Data("sequence-\(sequence)".utf8))
+                    outcomes.sync { succeeded += 1 }
+                } catch {
+                    outcomes.sync { failures.append("\(sequence): \(error)") }
+                }
+                finished.leave()
+            }
+        }
+        for _ in 1...workerCount { gate.signal() }
+        finished.wait()
+        let concurrentResult = try ZagMetadataV2SequenceStore(fileURL: concurrentURL).read(channel: "beta")
+        guard concurrentResult?.sequence == workerCount else {
+            fatalError("FAIL: Concurrent sequence writers left stale state (final \(concurrentResult?.sequence.description ?? "nil"), successes \(succeeded), failures \(failures))")
+        }
+        print("PASS: Concurrent writes preserve highest accepted sequence")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
