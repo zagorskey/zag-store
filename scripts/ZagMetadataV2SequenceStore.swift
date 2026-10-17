@@ -8,6 +8,8 @@ import Darwin
 struct ZagMetadataV2SequenceStore {
     enum StoreError: Error {
         case invalidChannel, corruptState, conflictingSequence, rollback, lockUnavailable
+        /// Rename succeeded, but directory durability was not confirmed.
+        case publicationUncertain
     }
 
     struct Entry: Codable, Equatable {
@@ -144,8 +146,16 @@ struct ZagMetadataV2SequenceStore {
                        directoryFD, fileURL.lastPathComponent) == 0 else {
             throw StoreError.corruptState
         }
-        try afterRenameForTesting?()
-        guard fsync(directoryFD) == 0 else { throw StoreError.corruptState }
+        // A failure after rename does not mean the old state is still active.
+        // Require the caller to re-read state before deciding on a retry.
+        do {
+            try afterRenameForTesting?()
+        } catch {
+            throw StoreError.publicationUncertain
+        }
+        guard fsync(directoryFD) == 0 else {
+            throw StoreError.publicationUncertain
+        }
     }
 
     func read(channel: String) throws -> Entry? {
