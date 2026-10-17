@@ -143,6 +143,36 @@ def main():
     vector["signedRotatedKeyUpgrade"] = signer.sign(
         {**vector["payload"], "sequence": 9, "build": "9"},
         rotated_private, "zag-v2-rotated-test-only")
+    # Differential corpus: the reference JCS serializer defines the accepted
+    # bytes. Mutations are signed independently so Swift cannot reject them
+    # merely because a signature is invalid. Stable, reproducible corpus.
+    differentials = {}
+    private = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
+    for index, notes in enumerate([
+        "", "ASCII release", "café", "Нова версия", "🚀 launch",
+        "line one\\nline two", "slash / and backslash \\\\",
+        "quote \\" and tab\\t", "accent e\\u0301", "控制字符"
+    ]):
+        candidate = {**vector["payload"], "releaseNotes": notes}
+        canonical = jcs.canonicalize(candidate)
+        variants = {
+            "canonical": canonical,
+            "spaced": json.dumps(candidate, ensure_ascii=False, indent=1).encode("utf-8"),
+            "unsorted": json.dumps(candidate, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            "asciiEscaped": json.dumps(candidate, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        }
+        for variant, raw in variants.items():
+            key = f"{index:02d}-{variant}"
+            differentials[key] = {
+                "expectedAccepted": raw == canonical,
+                "envelope": {
+                    "schema": 2,
+                    "keyId": TEST_KEY_ID,
+                    "payload": base64.b64encode(raw).decode("ascii"),
+                    "signature": base64.b64encode(private.sign(signer.PREFIX + raw)).decode("ascii"),
+                },
+            }
+    vector["canonicalDifferentialCases"] = differentials
     vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
