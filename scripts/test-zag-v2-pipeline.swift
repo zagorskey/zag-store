@@ -100,6 +100,38 @@ struct VerifiedPipelineTests {
         check("higher valid signed sequence accepted",
               try await store.highestAccepted(channel: "beta") == 5)
 
+        // Exercise input boundaries against the real verifier. None may
+        // modify persisted rollback state.
+        let validEnvelope = try envelope(sequence: 6)
+        let validText = String(data: validEnvelope, encoding: .utf8)!
+        let malformed: [(String, Data)] = [
+            ("duplicate envelope key", Data(validText.replacingOccurrences(
+                of: "\"schema\":2,", with: "\"schema\":2,\"schema\":2,"
+            ).utf8)),
+            ("unexpected envelope field", Data(validText.replacingOccurrences(
+                of: "\"schema\":2", with: "\"extra\":true,\"schema\":2"
+            ).utf8)),
+            ("noncanonical envelope whitespace", Data((" " + validText).utf8)),
+            ("oversized envelope", Data(repeating: 32, count: 256 * 1024 + 1)),
+            ("malformed envelope JSON", Data("{".utf8)),
+            ("Unicode envelope value", Data(validText.replacingOccurrences(
+                of: "\"keyId\":\"test-key\"", with: "\"keyId\":\"tést-key\""
+            ).utf8)),
+            ("wrong envelope schema type", Data(validText.replacingOccurrences(
+                of: "\"schema\":2", with: "\"schema\":\"2\""
+            ).utf8))
+        ]
+        for (name, input) in malformed {
+            do {
+                try await accept(input)
+                check("\(name) rejected", false)
+            } catch {
+                check("\(name) rejected", true)
+            }
+        }
+        check("malformed envelopes did not advance rollback state",
+              try await store.highestAccepted(channel: "beta") == 5)
+
         guard failures == 0 else { exit(1) }
         print("SUCCESS: authenticated v2 pipeline integration tests passed")
     }
