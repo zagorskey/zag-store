@@ -76,14 +76,20 @@ enum ZagUpdateMetadataV2 {
         }
 
         static func validatePayload(_ bytes: Data, channel: String, now: Date = Date()) throws -> Payload {
-            // Fail closed on non-ASCII payloads until a full RFC 8785 canonicalizer
-            // is available. Our current publisher's ASCII fixtures use the same
-            // sorted-key compact encoding as Foundation's serializer.
-            // Byte equality also rejects duplicate keys (including escaped-key
-            // aliases), noncanonical whitespace and alternate numeric encodings.
-            guard bytes.allSatisfy({ $0 < 128 }),
-                  let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+            // Schema-constrained canonical JSON: payloads contain only strings
+            // and the two integer fields (schema, sequence), never floats.
+            // Compare exact bytes to reject duplicate keys, escaped-key aliases,
+            // whitespace and alternate encodings. This is not general RFC 8785.
+            guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
                   JSONSerialization.isValidJSONObject(object),
+                  let schemaNumber = object["schema"] as? NSNumber,
+                  let sequenceNumber = object["sequence"] as? NSNumber,
+                  CFGetTypeID(schemaNumber) != CFBooleanGetTypeID(),
+                  CFGetTypeID(sequenceNumber) != CFBooleanGetTypeID(),
+                  String(cString: schemaNumber.objCType) != "d",
+                  String(cString: schemaNumber.objCType) != "f",
+                  String(cString: sequenceNumber.objCType) != "d",
+                  String(cString: sequenceNumber.objCType) != "f",
                   let canonical = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
                   canonical == bytes,
                   Set(object.keys) == Set([
