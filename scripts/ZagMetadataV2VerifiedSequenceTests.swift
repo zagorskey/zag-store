@@ -168,6 +168,18 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Replayed old manifest changed restarted upgrade state")
         }
         print("PASS: Restarted upgraded state unchanged after rollback rejection")
+        // A valid signature is insufficient before the signed publication time.
+        let beforeFuturePublication = try reopenedUpgradeStore.read(channel: "beta")
+        try mustReject("Not-yet-published signed release") {
+            try reopenedUpgradeBoundary.verifyAndRecord(
+                envelopeJSON: signedUpgrade, expectedChannel: "beta",
+                now: ISO8601DateFormatter().date(from: "2026-10-17T09:59:59Z")!)
+        }
+        guard try reopenedUpgradeStore.read(channel: "beta") == beforeFuturePublication else {
+            fatalError("FAIL: Future-dated signed metadata modified trusted state")
+        }
+        print("PASS: Future-dated signed release preserved trusted state")
+
 
 
         print("SUCCESS: Offline verified-metadata persistence integration tests passed")
