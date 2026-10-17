@@ -125,18 +125,26 @@ struct ZagMetadataV2VerifiedSequenceTests {
         }
         print("PASS: Conflicting equal-sequence payload preserved trusted state")
 
+        // Exercise a genuine signed upgrade in its own trusted-state history.
+        // The replay tests above deliberately wrote unrelated bytes at sequence 8.
+        let upgradeURL = dir.appendingPathComponent("signed-upgrade-sequence.json")
+        let upgradeStore = ZagMetadataV2SequenceStore(fileURL: upgradeURL)
+        let upgradeBoundary = ZagMetadataV2VerifiedSequence(
+            registry: registry, store: upgradeStore)
+        try upgradeBoundary.verifyAndRecord(
+            envelopeJSON: original, expectedChannel: "beta", now: now)
         let signedUpgrade = try JSONEncoder().encode(fixture.signedHigherSequence)
-        try restartedBoundary.verifyAndRecord(
+        try upgradeBoundary.verifyAndRecord(
             envelopeJSON: signedUpgrade, expectedChannel: "beta", now: now)
-        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+        guard try upgradeStore.read(channel: "beta")?.sequence == 8 else {
             fatalError("FAIL: Signed higher sequence was not persisted")
         }
         print("PASS: Independently signed higher sequence accepted")
         try mustReject("Older signed manifest after verified upgrade") {
-            try restartedBoundary.verifyAndRecord(
+            try upgradeBoundary.verifyAndRecord(
                 envelopeJSON: original, expectedChannel: "beta", now: now)
         }
-        guard try restarted.read(channel: "beta")?.sequence == 8 else {
+        guard try upgradeStore.read(channel: "beta")?.sequence == 8 else {
             fatalError("FAIL: Verified upgrade high-water mark changed after replay")
         }
         print("PASS: Verified upgrade remains trusted after old manifest replay")
