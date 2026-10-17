@@ -73,7 +73,16 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
 
         static func validatePayload(_ bytes: Data, channel: String, now: Date = Date()) throws -> Payload {
-            guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+            // Fail closed on non-ASCII payloads until a full RFC 8785 canonicalizer
+            // is available. Our current publisher's ASCII fixtures use the same
+            // sorted-key compact encoding as Foundation's serializer.
+            // Byte equality also rejects duplicate keys (including escaped-key
+            // aliases), noncanonical whitespace and alternate numeric encodings.
+            guard bytes.allSatisfy({ $0 < 128 }),
+                  let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                  JSONSerialization.isValidJSONObject(object),
+                  let canonical = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
+                  canonical == bytes,
                   Set(object.keys) == Set([
                     "schema", "appId", "channel", "sequence", "version", "build",
                     "minimumIOSVersion", "ipaURL", "sha256", "releaseNotes", "publishedAt", "expiresAt"
