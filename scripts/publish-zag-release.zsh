@@ -1,10 +1,12 @@
 #!/bin/zsh
 # Publish a previously signed and verified Zag Store IPA.
-# Usage: zsh scripts/publish-zag-release.zsh beta /absolute/path/to/signed.ipa
+# Usage: zsh scripts/publish-zag-release.zsh nightly /absolute/path/to/signed.ipa --dry-run
 set -euo pipefail
 
 CHANNEL="${1:-}"
 IPA="${2:-}"
+MODE="${3:-}"
+[[ -z "$MODE" || "$MODE" == "--dry-run" ]] || { echo "Third argument must be --dry-run"; exit 2; }
 case "$CHANNEL" in stable|beta|nightly) ;; *) echo "Usage: $0 stable|beta|nightly /absolute/path/to/signed.ipa"; exit 2 ;; esac
 [[ -f "$IPA" ]] || { echo "IPA not found: $IPA"; exit 2; }
 command -v gh >/dev/null || { echo "GitHub CLI is required"; exit 2; }
@@ -66,6 +68,12 @@ for channel in ("stable", "beta", "nightly"):
         )
 print("Cross-channel version/build check passed")
 PY
+
+if [[ "$MODE" == "--dry-run" ]]; then
+  echo "DRY RUN PASSED: signed IPA, release identity, existing tag, and cross-channel version checks."
+  echo "No release, asset, or manifest was published."
+  exit 0
+fi
 
 echo "=== CREATE RELEASE ASSET ==="
 if [[ "$CHANNEL" == "stable" ]]; then
