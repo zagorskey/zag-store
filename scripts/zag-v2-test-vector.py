@@ -119,6 +119,15 @@ def main():
         "beta",
         now=__import__("datetime").datetime.fromisoformat("2026-10-18T00:00:00+00:00"),
     ) == vector["payload"]
+    # Deterministic local artifact bytes with a matching authenticated digest.
+    # This is NOT a ZIP/IPA and must never be considered installable.
+    artifact_bytes = b"ZAG-V2-DISPOSABLE-ARTIFACT-TEST\\n" + bytes(range(256)) * 4
+    vector["signedArtifactPositive"] = {
+        "bytesBase64": base64.b64encode(artifact_bytes).decode("ascii"),
+        "envelope": signer.sign(
+            {**vector["payload"], "sha256": hashlib.sha256(artifact_bytes).hexdigest()},
+            Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID),
+    }
     vector["signedPositiveCases"] = {
         "emojiAndControls": signer.sign(
             {**vector["payload"], "releaseNotes": "Update 🚀 — line one\nline two\t✓"},
