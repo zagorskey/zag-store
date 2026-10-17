@@ -1,0 +1,1 @@
+cryptography>=43,<47\njcs>=0.2.1,<1\n
