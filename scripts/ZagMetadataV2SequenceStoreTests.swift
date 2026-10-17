@@ -115,6 +115,28 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Successful atomic writes leave no temporary files")
 
+        // Simulate a failure after the replacement inode was synced but
+        // before rename. Trusted bytes and the high-water mark must survive.
+        enum SimulatedInterruption: Error { case beforeRename }
+        let interruptedURL = directory.appendingPathComponent("interrupted-rename.json")
+        let baseline = ZagMetadataV2SequenceStore(fileURL: interruptedURL)
+        try baseline.accept(channel: "beta", sequence: 20, signedPayload: payload)
+        let trustedBytes = try Data(contentsOf: interruptedURL)
+        var failing = ZagMetadataV2SequenceStore(fileURL: interruptedURL)
+        failing.beforeRenameForTesting = { throw SimulatedInterruption.beforeRename }
+        try rejects("Injected interruption before atomic rename") {
+            try failing.accept(channel: "beta", sequence: 21, signedPayload: changed)
+        }
+        guard try Data(contentsOf: interruptedURL) == trustedBytes,
+              try baseline.read(channel: "beta")?.sequence == 20 else {
+            fatalError("FAIL: Pre-rename interruption changed trusted state")
+        }
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        guard !remaining.contains(where: { $0.hasPrefix(".zag-v2-") && $0.hasSuffix(".tmp") }) else {
+            fatalError("FAIL: Pre-rename interruption left a temporary file")
+        }
+        print("PASS: Pre-rename failure retains high-water mark and cleans temporary file")
+
         // A missing state file is a valid first-run condition, but must not
         // silently discard an existing high-water mark.
         let freshURL = directory.appendingPathComponent("fresh-state.json")
