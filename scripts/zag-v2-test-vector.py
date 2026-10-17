@@ -150,8 +150,10 @@ def main():
     private = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
     for index, notes in enumerate([
         "", "ASCII release", "café", "Нова версия", "🚀 launch",
-        "line one\\nline two", "slash / and backslash \\\\",
-        "quote \\" and tab\\t", "accent e\\u0301", "控制字符"
+        "line one" + chr(10) + "line two",
+        "slash / and backslash " + chr(92),
+        "quote " + chr(34) + " and tab" + chr(9),
+        "accent e" + chr(0x0301), "控制字符",
     ]):
         candidate = {**vector["payload"], "releaseNotes": notes}
         canonical = jcs.canonicalize(candidate)
