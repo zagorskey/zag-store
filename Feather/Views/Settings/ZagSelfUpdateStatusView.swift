@@ -543,6 +543,7 @@ struct ZagSelfUpdateStatusView: View {
     @State private var handoffReadiness: [String] = []
 
     @State private var preparedCandidateUUID: String?
+    @State private var preparedOfficialRelease: ZagSelfUpdateCoordinator.Release?
     @State private var showInstallConfirmation = false
     @State private var installBusy = false
     @State private var installStatus = "No installation attempted"
@@ -671,6 +672,7 @@ struct ZagSelfUpdateStatusView: View {
                                     }
                                     let signed = try await coordinator.prepareSignedUpdate(release, certificate: certificate)
                                     preparedCandidateUUID = signed.uuid
+                                    preparedOfficialRelease = release
                                     releaseCheckStatus = "Verified and signed. Confirm installation to continue."
                                     showInstallConfirmation = true
                                 } catch {
@@ -886,7 +888,9 @@ struct ZagSelfUpdateStatusView: View {
         }
         .confirmationDialog("Replace the installed Zag Store?", isPresented: $showInstallConfirmation, titleVisibility: .visible) {
             Button("Attempt In-Place Replacement", role: .destructive) {
-                guard let uuid = preparedCandidateUUID, !installBusy, !gate4.isGate4Running else { return }
+                guard let uuid = preparedCandidateUUID,
+                      let release = preparedOfficialRelease,
+                      !installBusy, !gate4.isGate4Running else { return }
                 installBusy = true
                 installStatus = "Submitting upgrade-only installation; app may close"
                 Task { @MainActor in
@@ -899,7 +903,7 @@ struct ZagSelfUpdateStatusView: View {
                             installStatus = "FAILED — selected candidate missing"
                             return
                         }
-                        try await coordinator.installSelectedLocalCandidate(candidate, userConfirmedSelfReplacement: true)
+                        try await coordinator.installVerifiedSignedUpdate(candidate, release: release, userConfirmedSelfReplacement: true)
                         installStatus = "Installer returned; reopen to verify actual replacement"
                     } catch {
                         installStatus = "UNVERIFIED — " + error.localizedDescription
