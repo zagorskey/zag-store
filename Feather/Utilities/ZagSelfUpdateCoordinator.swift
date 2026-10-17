@@ -223,6 +223,13 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         return release
     }
 
+    private let canonicalReleaseBundleID = "app.zagstore.ios"
+
+    // Legacy channel manifests remain valid until their canonical replacements ship.
+    private func isSupportedReleaseIdentity(_ id: String) -> Bool {
+        id == canonicalReleaseBundleID || id == currentBundleID
+    }
+
     private func fetchUpdate(manifestURL: URL) async throws -> Release? {
         guard manifestURL.scheme?.lowercased() == "https" else {
             throw UpdateError.insecureDownload
@@ -235,7 +242,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         guard http.statusCode == 200 else { throw UpdateError.invalidRelease }
         let release = try JSONDecoder().decode(Release.self, from: data)
         guard !release.version.isEmpty, !release.build.isEmpty,
-              release.bundleIdentifier == currentBundleID else {
+              isSupportedReleaseIdentity(release.bundleIdentifier) else {
             throw UpdateError.incompatibleBundleIdentifier
         }
         guard release.ipaURL.scheme?.lowercased() == "https",
@@ -269,7 +276,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     }
 
     func prepare(_ release: Release) async throws -> URL {
-        guard release.bundleIdentifier == currentBundleID else {
+        guard isSupportedReleaseIdentity(release.bundleIdentifier) else {
             throw UpdateError.incompatibleBundleIdentifier
         }
         try validateMinimumIOSVersion(for: release)
@@ -300,7 +307,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     /// Call immediately before handing a signed, identity-validated IPA to
     /// the device installer. A callback from the old process is not required.
     func recordInstallationHandoff(for release: Release, signed: Signed) throws {
-        guard release.bundleIdentifier == currentBundleID,
+        guard isSupportedReleaseIdentity(release.bundleIdentifier),
               let appURL = Storage.shared.getAppDirectory(for: signed),
               let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
               let executableName = info["CFBundleExecutable"] as? String else {
@@ -317,7 +324,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let pending = PendingInstallation(
             version: release.version,
             build: release.build,
-            bundleIdentifier: release.bundleIdentifier,
+            bundleIdentifier: currentBundleID,
             startedAt: Date(),
             originatingBuild: currentBuild,
             expectedExecutableSHA256: candidateHash,
@@ -331,7 +338,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     /// Import a checksum-verified IPA through the same handler used by
     /// repository downloads. Never download the IPA again after verification.
     func importPreparedRelease(_ release: Release) async throws -> Imported {
-        guard release.bundleIdentifier == currentBundleID,
+        guard isSupportedReleaseIdentity(release.bundleIdentifier),
               let ipa = preparedIPA,
               FileManager.default.fileExists(atPath: ipa.path) else {
             throw UpdateError.invalidRelease
@@ -356,7 +363,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         request.fetchLimit = 1
         request.predicate = NSPredicate(format: "uuid == %@", uuid)
         guard let imported = try Storage.shared.context.fetch(request).first,
-              imported.identifier == currentBundleID,
+              imported.identifier == release.bundleIdentifier,
               imported.version == release.version else {
             throw UpdateError.incompatibleBundleIdentifier
         }
@@ -439,8 +446,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         certificate: CertificatePair
     ) async throws -> Signed {
         try validateMinimumIOSVersion(for: release)
-        guard release.bundleIdentifier == currentBundleID,
-              (imported.identifier == currentBundleID || imported.identifier == "app.zagstore.ios" || imported.identifier == "thewonderofyou.Feather"),
+        guard isSupportedReleaseIdentity(release.bundleIdentifier),
+              imported.identifier == release.bundleIdentifier,
               imported.version == release.version else {
             throw UpdateError.incompatibleBundleIdentifier
         }
@@ -490,7 +497,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     /// Check the signed app on disk, not just its Core Data metadata.
     /// Reject a different application identifier or build before handoff.
     func validateSignedApp(_ signed: Signed, release: Release) throws {
-        guard release.bundleIdentifier == currentBundleID,
+        guard isSupportedReleaseIdentity(release.bundleIdentifier),
               let appURL = Storage.shared.getAppDirectory(for: signed),
               let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
               let identifier = info["CFBundleIdentifier"] as? String,
@@ -817,7 +824,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     /// call while installation authorization is locked: no installer is invoked.
     func stageSignedSelfUpdate(_ signed: Signed, release: Release) async throws -> URL {
         try validateMinimumIOSVersion(for: release)
-        guard release.bundleIdentifier == currentBundleID,
+        guard isSupportedReleaseIdentity(release.bundleIdentifier),
               signed.identifier == currentBundleID,
               signed.version == release.version else {
             throw UpdateError.signedIdentityMismatch
