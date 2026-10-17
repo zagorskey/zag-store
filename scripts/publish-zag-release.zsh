@@ -91,7 +91,7 @@ NOTES=$(cat "$NOTES_FILE")
 if [[ "$CHANNEL" == "stable" ]]; then
   gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD)" --notes-file "$NOTES_FILE"
 else
-  gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD) — ${CHANNEL:u}" --prerelease --notes "Zag Store $VERSION, build $BUILD."
+  gh release create "$TAG" "$IPA" --repo "$REPO" --target main --title "Zag Store $VERSION ($BUILD) — ${CHANNEL:u}" --prerelease --notes-file "$NOTES_FILE"
 fi
 
 echo "=== VERIFY PUBLIC ASSET ==="
