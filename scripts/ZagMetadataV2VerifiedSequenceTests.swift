@@ -89,6 +89,17 @@ struct ZagMetadataV2VerifiedSequenceTests {
         print("PASS: Identical retry preserves high-water mark")
 
         let conflictEnvelope = try JSONEncoder().encode(fixture.signedEqualSequenceConflict)
+        // A different validly signed manifest at the same sequence must not
+        // replace state recovered after an uncertain publication.
+        let recoveredBeforeConflict = try retryStore.read(channel: "beta")
+        try mustReject("Conflicting signed manifest after uncertain publication") {
+            try retryBoundary.verifyAndRecord(
+                envelopeJSON: conflictEnvelope, expectedChannel: "beta", now: now)
+        }
+        guard try retryStore.read(channel: "beta") == recoveredBeforeConflict else {
+            fatalError("FAIL: Conflicting retry changed recovered trusted state")
+        }
+        print("PASS: Conflicting retry preserves recovered high-water mark")
         // Establish that the alternate envelope is independently valid before
         // asserting that persistent equal-sequence conflict protection rejects it.
         try ZagMetadataV2TestVerifier.verify(
