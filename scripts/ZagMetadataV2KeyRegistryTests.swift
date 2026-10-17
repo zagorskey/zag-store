@@ -24,6 +24,18 @@ struct ZagMetadataV2KeyRegistryTests {
               try registry.publicKey(for: "test-new").rawRepresentation == second.publicKey.rawRepresentation
         else { fatalError("FAIL: key resolution") }
         print("PASS: Two pinned test keys resolved independently")
+        let message = Data("ZAG-STORE-UPDATE-V2\\nrotation-test".utf8)
+        let oldSignature = try first.signature(for: message)
+        let newSignature = try second.signature(for: message)
+        guard try registry.publicKey(for: "test-old").isValidSignature(oldSignature, for: message),
+              try registry.publicKey(for: "test-new").isValidSignature(newSignature, for: message)
+        else { fatalError("FAIL: Valid rotation signatures") }
+        print("PASS: Old and new signing keys accepted during rotation")
+        guard try !registry.publicKey(for: "test-old").isValidSignature(newSignature, for: message),
+              try !registry.publicKey(for: "test-new").isValidSignature(oldSignature, for: message)
+        else { fatalError("FAIL: Cross-key signature accepted") }
+        print("PASS: Cross-key signatures rejected")
+
 
         expectFailure("Unknown key ID") { _ = try registry.publicKey(for: "test-unknown") }
         expectFailure("Duplicate key ID") {
