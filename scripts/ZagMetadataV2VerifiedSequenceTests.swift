@@ -93,6 +93,19 @@ struct ZagMetadataV2VerifiedSequenceTests {
         }
         print("PASS: Replayed verified payload preserved high-water mark")
 
+        // Equal sequence with different bytes must be rejected without changing
+        // the trusted digest or high-water mark, including after store restart.
+        let beforeConflict = try restarted.read(channel: "beta")
+        try mustReject("Conflicting payload at an accepted sequence") {
+            try restarted.accept(
+                channel: "beta", sequence: 8,
+                signedPayload: Data("conflicting sequence-eight bytes".utf8))
+        }
+        guard try restarted.read(channel: "beta") == beforeConflict else {
+            fatalError("FAIL: Sequence conflict modified trusted state")
+        }
+        print("PASS: Conflicting equal-sequence payload preserved trusted state")
+
         print("SUCCESS: Offline verified-metadata persistence integration tests passed")
     }
 }
