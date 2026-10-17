@@ -5,6 +5,7 @@ struct ZagMetadataV2InteropTests {
     struct Fixture: Decodable {
         let publicKeyBase64: String
         let envelope: Envelope
+        let signedNegativeCases: [String: Envelope]
     }
     struct Envelope: Codable {
         let schema: Int
@@ -103,6 +104,19 @@ struct ZagMetadataV2InteropTests {
         // Signed payload field-set rejection requires a newly signed invalid
         // payload fixture; do not mistake tampering (signature failure) for
         // an actual schema-validation test.
+        for name in fixture.signedNegativeCases.keys.sorted() {
+            guard let invalidEnvelope = fixture.signedNegativeCases[name] else {
+                fatalError("FAIL: Missing negative case \(name)")
+            }
+            let candidate = try encode(invalidEnvelope)
+            try requireReject("Valid-signature malformed payload: \(name)") {
+                try ZagMetadataV2TestVerifier.verify(
+                    envelopeJSON: candidate,
+                    testPublicKeyBase64: fixture.publicKeyBase64,
+                    expectedChannel: "beta",
+                    now: now)
+            }
+        }
         let digest = Data(repeating: 0x42, count: 32)
         try ZagMetadataV2TestVerifier.enforceSequence(
             sequence: 7, payloadDigest: digest, highestSequence: 7, lastDigest: digest)
