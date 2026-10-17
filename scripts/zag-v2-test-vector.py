@@ -78,6 +78,7 @@ def signed_negative_cases():
         "duplicatePayloadKey": jcs.canonicalize(base)[:-1] + b',"sequence":7}',
         "reorderedKeys": json.dumps(base, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         "escapedSlash": jcs.canonicalize(base).replace(b"https://", b"https:" + bytes([92, 47, 92, 47])),
+        "escapedUnicode": jcs.canonicalize({**base, "releaseNotes": "café"}).replace(bytes([195, 169]), bytes([92]) + b"u00e9"),
     }
     for name, raw in raw_cases.items():
         cases[name] = {
