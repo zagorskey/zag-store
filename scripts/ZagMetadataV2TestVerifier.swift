@@ -73,6 +73,18 @@ enum ZagMetadataV2TestVerifier {
         guard key.isValidSignature(signatureBytes, for: signedBytes) else {
             throw Failure.badSignature
         }
+        // Enforce exact field sets and JSON types. Codable alone ignores unknown keys.
+        let requiredEnvelope = Set(["schema", "keyId", "payload", "signature"])
+        let requiredPayload = Set([
+            "schema", "appId", "channel", "sequence", "version", "build",
+            "minimumIOSVersion", "ipaURL", "sha256", "releaseNotes",
+            "publishedAt", "expiresAt"
+        ])
+        guard let envelopeObject = try JSONSerialization.jsonObject(with: envelopeJSON) as? [String: Any],
+              Set(envelopeObject.keys) == requiredEnvelope,
+              let object = try JSONSerialization.jsonObject(with: payloadBytes) as? [String: Any],
+              Set(object.keys) == requiredPayload
+        else { throw Failure.invalidPayload }
         let payload = try JSONDecoder().decode(Payload.self, from: payloadBytes)
         guard payload.schema == 2,
               payload.appId == "com.cwd43.gu29",
