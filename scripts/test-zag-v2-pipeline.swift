@@ -132,6 +132,10 @@ struct VerifiedPipelineTests {
         check("malformed envelopes did not advance rollback state",
               try await store.highestAccepted(channel: "beta") == 5)
 
+        try await accept(envelope(sequence: 6, notes: "Обновяване — Café ☕ 日本語 🔐"))
+        check("signed Unicode release notes accepted",
+              try await store.highestAccepted(channel: "beta") == 6)
+
         guard failures == 0 else { exit(1) }
         print("SUCCESS: authenticated v2 pipeline integration tests passed")
     }
