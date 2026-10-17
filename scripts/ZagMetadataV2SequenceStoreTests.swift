@@ -137,6 +137,27 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Pre-rename failure retains high-water mark and cleans temporary file")
 
+        // A post-rename error is fundamentally different from a pre-rename
+        // failure: the replacement can already be visible on disk.
+        let postRenameURL = directory.appendingPathComponent("post-rename-state.json")
+        let priorPostRename = ZagMetadataV2SequenceStore(fileURL: postRenameURL)
+        try priorPostRename.accept(channel: "beta", sequence: 30, signedPayload: payload)
+        var failedAfterRename = ZagMetadataV2SequenceStore(fileURL: postRenameURL)
+        failedAfterRename.afterRenameForTesting = { throw SimulatedInterruption.beforeRename }
+        try rejects("Injected failure after atomic rename") {
+            try failedAfterRename.accept(
+                channel: "beta", sequence: 31, signedPayload: changed)
+        }
+        let observedAfterRename = try ZagMetadataV2SequenceStore(fileURL: postRenameURL)
+            .read(channel: "beta")
+        guard observedAfterRename?.sequence == 31 else {
+            fatalError("FAIL: Post-rename failure was wrongly assumed to preserve old state")
+        }
+        print("PASS: Post-rename failure may leave upgraded sequence visible")
+        try rejects("Old sequence rejected after post-rename failure") {
+            try priorPostRename.accept(channel: "beta", sequence: 30, signedPayload: payload)
+        }
+
         // A missing state file is a valid first-run condition, but must not
         // silently discard an existing high-water mark.
         let freshURL = directory.appendingPathComponent("fresh-state.json")
