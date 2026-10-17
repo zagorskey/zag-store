@@ -363,8 +363,16 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         request.fetchLimit = 1
         request.predicate = NSPredicate(format: "uuid == %@", uuid)
         guard let imported = try Storage.shared.context.fetch(request).first,
-              imported.identifier == release.bundleIdentifier,
-              imported.version == release.version else {
+              let appURL = Storage.shared.getAppDirectory(for: imported),
+              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
+              let actualIdentifier = info["CFBundleIdentifier"] as? String,
+              let actualVersion = info["CFBundleShortVersionString"] as? String,
+              let actualBuild = info["CFBundleVersion"] as? String,
+              actualIdentifier == release.bundleIdentifier,
+              actualVersion == release.version,
+              actualBuild == release.build,
+              imported.identifier == actualIdentifier,
+              imported.version == actualVersion else {
             throw UpdateError.incompatibleBundleIdentifier
         }
         return imported
