@@ -128,6 +128,13 @@ def main():
     vector["signedHigherSequence"] = signer.sign(
         {**vector["payload"], "sequence": 8, "build": "8"},
         Ed25519PrivateKey.from_private_bytes(TEST_SEED), TEST_KEY_ID)
+    ROTATED_TEST_SEED = bytes(reversed(range(32)))
+    rotated_private = Ed25519PrivateKey.from_private_bytes(ROTATED_TEST_SEED)
+    vector["rotatedPublicKeyBase64"] = base64.b64encode(
+        rotated_private.public_key().public_bytes_raw()).decode("ascii")
+    vector["signedRotatedKeyUpgrade"] = signer.sign(
+        {**vector["payload"], "sequence": 9, "build": "9"},
+        rotated_private, "zag-v2-rotated-test-only")
     vector["signedNegativeCases"] = signed_negative_cases()
     print(json.dumps(vector, ensure_ascii=False, sort_keys=True, indent=2))
 
