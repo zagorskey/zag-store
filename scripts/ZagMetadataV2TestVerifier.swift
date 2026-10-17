@@ -111,6 +111,17 @@ enum ZagMetadataV2TestVerifier {
         return canonical == bytes
     }
 
+    private static func numericDotted(_ value: String) -> Bool {
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        return !parts.isEmpty && parts.allSatisfy {
+            !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) }
+        }
+    }
+
+    private static func numericBuild(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.allSatisfy { (48...57).contains($0) }
+    }
+
     /// Reject replayed sequence numbers without mutating persistent device state.
     /// Production must atomically persist sequence and payload digest.
     static func enforceSequence(
@@ -171,9 +182,9 @@ enum ZagMetadataV2TestVerifier {
               payload.appId == "com.cwd43.gu29",
               payload.channel == expectedChannel,
               payload.sequence > 0,
-              !payload.version.isEmpty,
-              !payload.build.isEmpty,
-              !payload.minimumIOSVersion.isEmpty,
+              numericDotted(payload.version),
+              numericBuild(payload.build),
+              numericDotted(payload.minimumIOSVersion),
               payload.ipaURL.hasPrefix("https://github.com/zagorskey/zag-store-releases/releases/download/"),
               payload.sha256.utf8.count == 64,
               payload.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { throw Failure.invalidPayload }
@@ -184,6 +195,7 @@ enum ZagMetadataV2TestVerifier {
               let expires = formatter.date(from: payload.expiresAt),
               expires > published,
               expires.timeIntervalSince(published) <= 7 * 24 * 60 * 60,
+              published <= now,
               now < expires else { throw Failure.expired }
     }
 }
