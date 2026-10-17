@@ -118,6 +118,22 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Failed persistence leaves existing trusted state unchanged")
 
+        // Interrupted or truncated state must fail closed rather than initialize
+        // a new empty snapshot and discard the previous rollback watermark.
+        let truncatedURL = directory.appendingPathComponent("truncated-state.json")
+        let truncatedStore = ZagMetadataV2SequenceStore(fileURL: truncatedURL)
+        try truncatedStore.accept(channel: "beta", sequence: 15, signedPayload: payload)
+        let originalBytes = try Data(contentsOf: truncatedURL)
+        let truncatedBytes = Data(originalBytes.prefix(max(1, originalBytes.count / 2)))
+        try truncatedBytes.write(to: truncatedURL, options: .atomic)
+        try rejects("Truncated persisted state") {
+            try truncatedStore.accept(channel: "beta", sequence: 16, signedPayload: changed)
+        }
+        guard try Data(contentsOf: truncatedURL) == truncatedBytes else {
+            fatalError("FAIL: Rejected truncated state was overwritten")
+        }
+        print("PASS: Truncated state remains untouched after rejection")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
