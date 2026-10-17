@@ -41,7 +41,7 @@ def validate_payload(payload):
         raise ValueError("Unexpected or missing payload fields")
     if type(payload["schema"]) is not int or payload["schema"] != 2:
         raise ValueError("Invalid schema")
-    if payload["appId"] != "com.cwd43.gu29" or payload["channel"] not in ("stable", "beta", "nightly"):
+    if payload["appId"] != "app.zagstore.ios" or payload["channel"] not in ("stable", "beta", "nightly"):
         raise ValueError("Invalid app or channel")
     if type(payload["sequence"]) is not int or payload["sequence"] < 1:
         raise ValueError("Invalid sequence")
@@ -110,7 +110,7 @@ def self_test():
     public = private.public_key()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     payload = {
-        "schema": 2, "appId": "com.cwd43.gu29", "channel": "beta",
+        "schema": 2, "appId": "app.zagstore.ios", "channel": "beta",
         "sequence": 1, "version": "1.0.0", "build": "3",
         "minimumIOSVersion": "16.0",
         "ipaURL": "https://github.com/zagorskey/zag-store-releases/releases/download/test/ZagStore.ipa",
