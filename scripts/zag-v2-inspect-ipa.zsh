@@ -39,6 +39,25 @@ with zipfile.ZipFile(source) as archive:
             name.split("/")[1].endswith(".app")}
     if len(apps) != 1:
         raise SystemExit("ERROR: Expected exactly one Payload/*.app")
+    # Reject file/directory prefix collisions and macOS normalization aliases.
+    import unicodedata
+    normalized = set()
+    for name in seen:
+        canonical = unicodedata.normalize("NFC", name.rstrip("/")).casefold()
+        if canonical in normalized:
+            raise SystemExit("ERROR: Case/Unicode-colliding archive members")
+        normalized.add(canonical)
+        parents = pathlib.PurePosixPath(name.rstrip("/")).parents
+        if any(str(parent).casefold() in normalized for parent in parents
+               if str(parent) != "."):
+            # Directories are allowed as prefixes; check the archive types below.
+            pass
+    # Extract only after all members have been validated. Prevent a malicious
+    # entry from replacing an intermediate directory with a file.
+    for info in infos:
+        destination = root.joinpath(*pathlib.PurePosixPath(info.filename).parts)
+        if not destination.resolve().is_relative_to(root):
+            raise SystemExit("ERROR: Archive member escapes extraction root")
     archive.extractall(root)
     print("PASS: IPA archive extracted for offline inspection")
 PY
@@ -54,5 +73,12 @@ codesign -dv --verbose=4 "$APP[1]" 2>&1
 print "=== MAIN ENTITLEMENTS ==="
 codesign -d --entitlements :- "$APP[1]" 2>&1 || true
 print "=== NESTED COMPONENTS ==="
-find "$APP[1]" -type d \( -name '*.appex' -o -name '*.framework' -o -name '*.app' \) -print
+while IFS= read -r -d '' nested; do
+  print -- "--- ${nested#"$WORK"/} ---"
+  codesign --verify --strict --verbose=2 "$nested" 2>&1 || {
+    print -u2 "ERROR: Nested code signature failed"; exit 1
+  }
+  codesign -dv --verbose=4 "$nested" 2>&1
+  codesign -d --entitlements :- "$nested" 2>&1 || true
+done < <(find "$APP[1]" -type d \( -name '*.appex' -o -name '*.framework' -o -name '*.app' \) ! -path "$APP[1]" -print0)
 print "SUCCESS: Diagnostic inspection completed; no installation was authorized"
