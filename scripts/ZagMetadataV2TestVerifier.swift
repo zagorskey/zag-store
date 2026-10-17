@@ -122,6 +122,21 @@ enum ZagMetadataV2TestVerifier {
         !value.isEmpty && value.utf8.allSatisfy { (48...57).contains($0) }
     }
 
+    private static func trustedIPAURL(_ string: String) -> Bool {
+        guard let components = URLComponents(string: string),
+              components.scheme == "https",
+              components.host == "github.com",
+              components.user == nil,
+              components.password == nil,
+              components.port == nil,
+              components.query == nil,
+              components.fragment == nil,
+              components.path.hasPrefix("/zagorskey/zag-store-releases/releases/download/"),
+              let url = components.url,
+              url.absoluteString == string else { return false }
+        return true
+    }
+
     /// Reject replayed sequence numbers without mutating persistent device state.
     /// Production must atomically persist sequence and payload digest.
     static func enforceSequence(
@@ -185,7 +200,7 @@ enum ZagMetadataV2TestVerifier {
               numericDotted(payload.version),
               numericBuild(payload.build),
               numericDotted(payload.minimumIOSVersion),
-              payload.ipaURL.hasPrefix("https://github.com/zagorskey/zag-store-releases/releases/download/"),
+              trustedIPAURL(payload.ipaURL),
               payload.sha256.utf8.count == 64,
               payload.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { throw Failure.invalidPayload }
 
