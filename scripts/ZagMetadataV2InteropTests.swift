@@ -80,7 +80,7 @@ struct ZagMetadataV2InteropTests {
                     trustedKeys: trustedKeys, expectedChannel: "beta", now: now)
                 canonicalAccepted += 1
             } else {
-                try requireReject("Noncanonical differential: \\(name)") {
+                try requireReject("Noncanonical differential: \(name)") {
                     try ZagMetadataV2TestVerifier.verify(
                         envelopeJSON: try encode(test.envelope),
                         trustedKeys: trustedKeys, expectedChannel: "beta", now: now)
@@ -88,7 +88,13 @@ struct ZagMetadataV2InteropTests {
                 canonicalRejected += 1
             }
         }
-        print("PASS: Canonical differential matches JCS reference (\\(canonicalAccepted) accepted, \\(canonicalRejected) rejected)")
+        guard fixture.canonicalDifferentialCases.count == 40,
+              canonicalAccepted + canonicalRejected == 40,
+              canonicalAccepted > 0,
+              canonicalRejected > 0 else {
+            throw TestFailure.accepted("Incomplete canonical differential corpus")
+        }
+        print("PASS: Canonical differential matches JCS reference (\(canonicalAccepted) accepted, \(canonicalRejected) rejected)")
         try requireReject("Wrong channel") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: original,
