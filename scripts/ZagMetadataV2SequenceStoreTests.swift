@@ -134,6 +134,20 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Truncated state remains untouched after rejection")
 
+        // Valid JSON with an unsupported format must not be interpreted as
+        // a fresh state file or overwritten by a subsequent update.
+        let futureFormatURL = directory.appendingPathComponent("future-format-state.json")
+        let futureFormatBytes = Data(#"{"format":2,"channels":{}}"#.utf8)
+        try futureFormatBytes.write(to: futureFormatURL, options: .atomic)
+        let futureFormatStore = ZagMetadataV2SequenceStore(fileURL: futureFormatURL)
+        try rejects("Unsupported persisted state format") {
+            try futureFormatStore.accept(channel: "beta", sequence: 16, signedPayload: payload)
+        }
+        guard try Data(contentsOf: futureFormatURL) == futureFormatBytes else {
+            fatalError("FAIL: Unsupported state format was overwritten")
+        }
+        print("PASS: Unsupported state format remains untouched after rejection")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
