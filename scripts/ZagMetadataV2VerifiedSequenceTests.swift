@@ -15,6 +15,7 @@ struct ZagMetadataV2VerifiedSequenceTests {
         let signedHigherSequence: Envelope
         let rotatedPublicKeyBase64: String
         let signedRotatedKeyUpgrade: Envelope
+        let signedNegativeCases: [String: Envelope]
     }
 
     static func main() throws {
@@ -147,6 +148,26 @@ struct ZagMetadataV2VerifiedSequenceTests {
             fatalError("FAIL: Invalid envelope shape modified trusted state")
         }
         print("PASS: Invalid envelope shape preserved trusted state")
+        // These malformed payloads carry real test-key signatures. The
+        // verifier must reject their contents, not merely bad signatures.
+        let beforeMalformedSignedPayloads = try boundary.store.read(channel: "beta")
+        for (fixtureName, label) in [
+            ("invalidUTF8", "Signed invalid UTF-8 payload"),
+            ("oversizedSequence", "Signed oversized sequence")
+        ] {
+            guard let signedCase = fixture.signedNegativeCases[fixtureName] else {
+                fatalError("FAIL: Missing negative fixture: \\(fixtureName)")
+            }
+            try mustReject(label) {
+                try boundary.verifyAndRecord(
+                    envelopeJSON: try JSONEncoder().encode(signedCase),
+                    expectedChannel: "beta", now: now)
+            }
+        }
+        guard try boundary.store.read(channel: "beta") == beforeMalformedSignedPayloads else {
+            fatalError("FAIL: Malformed signed payloads changed trusted state")
+        }
+        print("PASS: Malformed signed payload rejection preserved trusted state")
         var tamperedSignature = Data(base64Encoded: fixture.envelope.signature)!
         tamperedSignature[0] ^= 1
         let tampered = Fixture.Envelope(
