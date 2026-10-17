@@ -470,7 +470,7 @@ struct ZagAccountPopup: View {
                             Spacer(minLength: 8)
                             if selfUpdateCoordinator.availableRelease != nil {
                                 Circle()
-                                    .fill(Color.blue)
+                                    .fill(themeTint)
                                     .frame(width: 10, height: 10)
                                     .accessibilityLabel("Update available")
                             }
