@@ -542,45 +542,10 @@ struct ZagSelfUpdateStatusView: View {
     @State private var showClearPendingConfirmation = false
     @State private var handoffReadiness: [String] = []
 
-    @State private var showLocalIPAPicker = false
-    @State private var localIPABusy = false
-    @State private var localIPAStatus = "No local IPA prepared"
     @State private var preparedCandidateUUID: String?
     @State private var showInstallConfirmation = false
     @State private var installBusy = false
     @State private var installStatus = "No installation attempted"
-
-    private func prepareLocalIPA(_ result: Result<URL, Error>) {
-        guard !localIPABusy else { return }
-        switch result {
-        case .failure(let error):
-            localIPAStatus = "File selection failed — " + error.localizedDescription
-        case .success(let url):
-            localIPABusy = true
-            localIPAStatus = "Preparing and signing local IPA — installation disabled"
-            Task { @MainActor in
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                    localIPABusy = false
-                }
-                do {
-                    guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
-                        localIPAStatus = "No signing certificate selected"
-                        return
-                    }
-                    let signed = try await coordinator.prepareLocalIPA(url, certificate: certificate)
-                    preparedCandidateUUID = signed.uuid
-                    report = []
-                    checkStatus = "New candidate prepared — run comparison"
-                    localIPAStatus = "Signed candidate prepared. Run Compare Installed and Signed Candidate."
-                } catch {
-                    localIPAStatus = "Preparation failed — " + error.localizedDescription
-                }
-            }
-        }
-    }
-
 
     private var candidateSummary: String {
         let request: NSFetchRequest<Signed> = Signed.fetchRequest()
@@ -863,30 +828,6 @@ struct ZagSelfUpdateStatusView: View {
             }
 
             Section("Self-Update") {
-                if coordinator.pendingInstallation == nil && !gate4.isGate4Running {
-                    Button("Choose Update IPA") {
-                        showLocalIPAPicker = true
-                    }
-                    .disabled(localIPABusy)
-
-                    if localIPABusy {
-                        Label("Preparing signed update…", systemImage: "hourglass")
-                            .foregroundStyle(.secondary)
-                    } else if preparedCandidateUUID != nil {
-                        Label("Signed update ready", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    } else {
-                        Text("Choose an update package to prepare it for installation.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button("Install Update") {
-                        showInstallConfirmation = true
-                    }
-                    .disabled(preparedCandidateUUID == nil || installBusy || coordinator.pendingInstallation != nil || gate4.isGate4Running)
-                }
-
                 gate4ProgressDisplay
 
                 if coordinator.pendingInstallation != nil && !gate4.isGate4Running {
@@ -910,9 +851,6 @@ struct ZagSelfUpdateStatusView: View {
                 }
             }
 
-        }
-        .fileImporter(isPresented: $showLocalIPAPicker, allowedContentTypes: [.data]) { result in
-            prepareLocalIPA(result)
         }
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             inspectRecoveryFile(result)
