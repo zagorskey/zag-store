@@ -635,13 +635,23 @@ struct ZagSelfUpdateStatusView: View {
                     Task { @MainActor in
                         defer { releaseCheckBusy = false }
                         do {
-                            if let release = try await coordinator.checkForSelectedChannel() {
+                            let selectedChannel = ZagSelfUpdateCoordinator.UpdateChannel.selected
+                            let release = try await coordinator.checkForSelectedChannel()
+                            guard selectedChannel == ZagSelfUpdateCoordinator.UpdateChannel.selected else {
+                                releaseCheckStatus = "Channel changed — check the selected channel again"
+                                return
+                            }
+                            if let release {
                                 releaseCheckStatus = "Available: " + release.version + " (Build " + release.build + ")"
                             } else {
                                 releaseCheckStatus = "No newer release on this channel"
                             }
                         } catch {
-                            releaseCheckStatus = "Check failed: " + error.localizedDescription
+                            if case ZagSelfUpdateCoordinator.UpdateError.channelNotPublished = error {
+                                releaseCheckStatus = "No releases published for this channel yet"
+                            } else {
+                                releaseCheckStatus = "Check failed: " + error.localizedDescription
+                            }
                         }
                     }
                 } label: {
