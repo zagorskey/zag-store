@@ -90,6 +90,20 @@ struct ZagMetadataV2SequenceStoreTests {
         }
         print("PASS: Concurrent writes preserve highest accepted sequence")
 
+        // A missing state file is a valid first-run condition, but must not
+        // silently discard an existing high-water mark.
+        let freshURL = directory.appendingPathComponent("fresh-state.json")
+        let fresh = ZagMetadataV2SequenceStore(fileURL: freshURL)
+        guard try fresh.read(channel: "beta") == nil else {
+            fatalError("FAIL: First-run state was not empty")
+        }
+        try fresh.accept(channel: "beta", sequence: 12, signedPayload: payload)
+        guard try ZagMetadataV2SequenceStore(fileURL: freshURL)
+            .read(channel: "beta")?.sequence == 12 else {
+            fatalError("FAIL: Fresh state high-water mark was not persisted")
+        }
+        print("PASS: New state starts empty and persists its first high-water mark")
+
         try Data("{invalid json".utf8).write(to: url, options: .atomic)
         try rejects("Corrupted state") {
             try restarted.accept(channel: "beta", sequence: 9, signedPayload: payload)
