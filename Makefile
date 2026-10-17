@@ -5,7 +5,7 @@ PLATFORMS := iphoneos maccatalyst
 TMP := $(TMPDIR)/$(NAME)
 CERT_JSON_URL := https://backloop.dev/pack.json
 
-.PHONY: all clean deps $(PLATFORMS)
+.PHONY: all clean $(PLATFORMS)
 
 all: $(PLATFORMS)
 
@@ -14,15 +14,7 @@ clean:
 	rm -rf packages
 	rm -rf Payload
 
-deps:
-	@test -f deps/server.crt || (echo "Missing deps/server.crt" && exit 1)
-	@test -f deps/server.pem || (echo "Missing deps/server.pem" && exit 1)
-	@test -f deps/commonName.txt || (echo "Missing deps/commonName.txt" && exit 1)
-	@echo "Using Petar Feather private TLS certificate"
-	@echo "Hostname: $$(cat deps/commonName.txt)"
-
-
-$(PLATFORMS): deps
+$(PLATFORMS):
 	rm -rf _build
 
 	@if [ "$@" = "iphoneos" ]; then \
@@ -43,8 +35,8 @@ $(PLATFORMS): deps
 	mkdir -p _build/Payload
 	cp -R _build/Applications/*.app _build/Payload/Feather.app
 	chmod -R 0755 _build/Payload/Feather.app
-	# Embed required TLS resources before sealing the application bundle.
-	cp deps/server.crt deps/server.pem deps/commonName.txt _build/Payload/Feather.app/
+	# Legacy server-installation credentials must never ship in the IPA.
+	rm -f _build/Payload/Feather.app/server.crt _build/Payload/Feather.app/server.pem _build/Payload/Feather.app/commonName.txt
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
 	codesign --verify --deep --strict --verbose=2 _build/Payload/Feather.app
 
