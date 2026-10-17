@@ -54,6 +54,13 @@ def signed_negative_cases():
         "invalidChecksum": {**base, "sha256": "z" * 64},
         "zeroSequence": {**base, "sequence": 0},
         "wrongAppId": {**base, "appId": "com.example.other"},
+        "invalidVersion": {**base, "version": "1.0.beta"},
+        "invalidBuild": {**base, "build": "7beta"},
+        "invalidMinimumIOS": {**base, "minimumIOSVersion": "iOS16"},
+        "insecureIPAURL": {**base, "ipaURL": "http://github.com/zagorskey/zag-store-releases/releases/download/x/ZagStore.ipa"},
+        "wrongIPAHost": {**base, "ipaURL": "https://github.com.evil.example/releases/download/x/ZagStore.ipa"},
+        "futurePublication": {**base, "publishedAt": "2026-10-19T10:00:00Z"},
+        "tooLongLifetime": {**base, "expiresAt": "2026-11-20T10:00:00Z"},
     }
     for name, payload in mutations.items():
         raw = jcs.canonicalize(payload)
