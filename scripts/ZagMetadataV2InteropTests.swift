@@ -7,6 +7,11 @@ struct ZagMetadataV2InteropTests {
         let envelope: Envelope
         let signedNegativeCases: [String: Envelope]
         let signedPositiveCases: [String: Envelope]
+        let canonicalDifferentialCases: [String: DifferentialCase]
+    }
+    struct DifferentialCase: Decodable {
+        let expectedAccepted: Bool
+        let envelope: Envelope
     }
     struct Envelope: Codable {
         let schema: Int
@@ -63,6 +68,27 @@ struct ZagMetadataV2InteropTests {
             print("PASS: Canonical signed positive payload: \(name)")
         }
 
+        var canonicalAccepted = 0
+        var canonicalRejected = 0
+        for name in fixture.canonicalDifferentialCases.keys.sorted() {
+            guard let test = fixture.canonicalDifferentialCases[name] else {
+                throw TestFailure.accepted("Missing differential case: \\(name)")
+            }
+            if test.expectedAccepted {
+                try ZagMetadataV2TestVerifier.verify(
+                    envelopeJSON: try encode(test.envelope),
+                    trustedKeys: trustedKeys, expectedChannel: "beta", now: now)
+                canonicalAccepted += 1
+            } else {
+                try requireReject("Noncanonical differential: \\(name)") {
+                    try ZagMetadataV2TestVerifier.verify(
+                        envelopeJSON: try encode(test.envelope),
+                        trustedKeys: trustedKeys, expectedChannel: "beta", now: now)
+                }
+                canonicalRejected += 1
+            }
+        }
+        print("PASS: Canonical differential matches JCS reference (\\(canonicalAccepted) accepted, \\(canonicalRejected) rejected)")
         try requireReject("Wrong channel") {
             try ZagMetadataV2TestVerifier.verify(
                 envelopeJSON: original,
