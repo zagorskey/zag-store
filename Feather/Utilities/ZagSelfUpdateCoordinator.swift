@@ -43,6 +43,37 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         try await checkForUpdate(manifestURL: UpdateChannel.selected.manifestURL)
     }
 
+    /// Authenticated discovery for a future v2 channel cutover. This method
+    /// does not alter the current v1 discovery path or authorize installation.
+    func checkAuthenticatedV2Channel(
+        endpoint: URL,
+        channel: UpdateChannel,
+        rollbackStore: ZagUpdateRollbackStore
+    ) async throws -> Release? {
+        let payload = try await ZagUpdateV2Discovery.fetchVerified(
+            from: endpoint,
+            channel: channel.rawValue,
+            trustedKeys: ZagUpdateTrustStore.productionKeys,
+            store: rollbackStore
+        )
+        guard let ipaURL = URL(string: payload.ipaURL) else {
+            throw UpdateError.invalidRelease
+        }
+        let release = Release(
+            version: payload.version,
+            build: payload.build,
+            bundleIdentifier: canonicalReleaseBundleID,
+            ipaURL: ipaURL,
+            sha256: payload.sha256,
+            minimumIOSVersion: payload.minimumIOSVersion,
+            releaseNotes: payload.releaseNotes
+        )
+        let versionOrder = currentVersion.compare(release.version, options: .numeric)
+        let buildOrder = currentBuild.compare(release.build, options: .numeric)
+        return versionOrder == .orderedAscending ||
+            (versionOrder == .orderedSame && buildOrder == .orderedAscending) ? release : nil
+    }
+
     struct PendingInstallation: Codable {
         let version: String
         let build: String
