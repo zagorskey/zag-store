@@ -37,6 +37,16 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         var manifestURL: URL {
             URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store-releases/main/releases/\(rawValue).json")!
         }
+
+        /// Reserved for authenticated v2 channel metadata. Not enabled by
+        /// normal update checks until signed manifests are published.
+        var authenticatedV2ManifestURL: URL? {
+            switch self {
+            case .stable: return nil
+            case .beta, .nightly:
+                return URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store-releases/main/releases/v2/\(rawValue).json")
+            }
+        }
     }
 
     func checkForSelectedChannel() async throws -> Release? {
