@@ -25,6 +25,42 @@ struct ZagSelfUpdateStatusView: View {
 
 
 
+    @State private var v2TestBusy = false
+    @State private var v2TestStatus = "Not prepared"
+    @State private var v2TestCandidate: String?
+
+    private func prepareAuthenticatedBetaTest() {
+        guard !v2TestBusy else { return }
+        v2TestBusy = true
+        v2TestCandidate = nil
+        v2TestStatus = "Selecting signing certificate…"
+        Task { @MainActor in
+            defer { v2TestBusy = false }
+            guard let certificate = await ZagCertificateSelection.chooseForSigning() else {
+                v2TestStatus = "Cancelled — no signing certificate selected"
+                return
+            }
+            v2TestStatus = "Authenticating Beta metadata and preparing signed candidate…"
+            do {
+                let endpoint = URL(string: "https://raw.githubusercontent.com/zagorskey/zag-store-releases/main/releases/v2-test/beta-1.0.0-3.json")!
+                // Separate from production rollback history; intentionally retained
+                // between test attempts to exercise sequence continuity.
+                let testStore = ZagUpdateRollbackStore(
+                    service: "app.zagstore.ios.update-metadata-v2.test-beta-only"
+                )
+                let result = try await coordinator.prepareAuthenticatedV2TestCandidate(
+                    endpoint: endpoint, channel: "beta",
+                    rollbackStore: testStore, certificate: certificate
+                )
+                try coordinator.validateSignedApp(result.signed, release: result.release)
+                v2TestCandidate = result.signed.uuid
+                v2TestStatus = "PASS — authenticated and signed \(result.release.version) (Build \(result.release.build)). No installation performed."
+            } catch {
+                v2TestStatus = "FAIL — " + error.localizedDescription
+            }
+        }
+    }
+
     @State private var report: [(key: String, value: String)] = []
     @State private var checkStatus = "Not checked"
     @State private var releaseCheckStatus = "Not checked"
@@ -744,6 +780,26 @@ struct ZagSelfUpdateStatusView: View {
             if zagAdvancedSettingsUnlocked {
             Section {
                 DisclosureGroup("Advanced diagnostics and recovery", isExpanded: $showAdvancedTools) {
+                Section("Authenticated Beta v2 — Test Only") {
+                    Button {
+                        prepareAuthenticatedBetaTest()
+                    } label: {
+                        Label(v2TestBusy ? "Preparing Verified Beta…" : "Prepare & Verify Beta v2", systemImage: "checkmark.shield")
+                    }
+                    .disabled(v2TestBusy || gate4.isGate4Running || coordinator.pendingInstallation != nil)
+                    Text(v2TestStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if let uuid = v2TestCandidate {
+                        LabeledContent("Signed candidate", value: String(uuid.prefix(12)) + "…")
+                        Text("Candidate prepared for inspection only. This test never authorizes or starts installation.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Uses a separate test-only HTTPS manifest and isolated rollback history. The existing v1 updater is unchanged.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Signing Identity Comparison") {
                     Button("Compare Installed and Signed Candidate") {
                         compareIdentity()
