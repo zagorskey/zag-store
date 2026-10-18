@@ -68,7 +68,6 @@ struct ZagSelfUpdateStatusView: View {
     @State private var checkStatus = "Not checked"
     @State private var releaseCheckStatus = "Not checked"
     @State private var releaseCheckBusy = false
-    @State private var useV2DiscoveryTest = false
     @State private var releaseDownloadSize: String?
     @State private var releaseDownloadBusy = false
     @State private var markerStatus = "Not checked"
@@ -642,17 +641,7 @@ struct ZagSelfUpdateStatusView: View {
                         defer { releaseCheckBusy = false }
                         do {
                             let selectedChannel = ZagSelfUpdateCoordinator.UpdateChannel.selected
-                            let release: ZagSelfUpdateCoordinator.Release?
-                            if useV2DiscoveryTest, let endpoint = selectedChannel.authenticatedV2ManifestURL {
-                                let store = ZagUpdateRollbackStore(service: "app.zagstore.ios.update-metadata-v2.discovery-test-\(selectedChannel.rawValue)")
-                                release = try await coordinator.checkAuthenticatedV2Channel(
-                                    endpoint: endpoint,
-                                    channel: selectedChannel,
-                                    rollbackStore: store
-                                )
-                            } else {
-                                release = try await coordinator.checkForSelectedChannel()
-                            }
+                            let release = try await coordinator.checkForSelectedChannel()
                             guard selectedChannel == ZagSelfUpdateCoordinator.UpdateChannel.selected else {
                                 releaseCheckStatus = "Channel changed — check the selected channel again"
                                 return
@@ -674,12 +663,6 @@ struct ZagSelfUpdateStatusView: View {
                     Label("Check for Updates", systemImage: "arrow.clockwise")
                 }
                 .disabled(releaseCheckBusy)
-                if zagBetaChannel == "beta" || zagBetaChannel == "nightly" {
-                    Toggle("Test authenticated v2 discovery", isOn: $useV2DiscoveryTest)
-                    Text("Discovery only. Requires a published signed v2 manifest; never installs an update.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
                 if releaseCheckStatus != "Not checked" {
                     Text(releaseCheckStatus)
                         .font(.footnote)
