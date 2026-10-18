@@ -314,7 +314,7 @@ struct ZagSelfUpdateStatusView: View {
         do {
             let candidates = try Storage.shared.context.fetch(request)
             let signed: Signed
-            if let uuid = preparedCandidateUUID {
+            if let uuid = v2TestCandidate ?? preparedCandidateUUID {
                 guard let match = candidates.first(where: { $0.uuid == uuid }) else {
                     checkStatus = "UNVERIFIED — prepared candidate no longer exists"
                     return
