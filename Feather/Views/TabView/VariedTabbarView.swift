@@ -498,11 +498,11 @@ struct ZagAccountPopup: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Close")
-                }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { dismiss() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Close")
             }
         }
         .environment(\.zagInsideAccountPopup, true)
