@@ -28,11 +28,13 @@ struct ZagSelfUpdateStatusView: View {
     @State private var v2TestBusy = false
     @State private var v2TestStatus = "Not prepared"
     @State private var v2TestCandidate: String?
+    @State private var v2TestRelease: ZagSelfUpdateCoordinator.Release?
 
     private func prepareAuthenticatedBetaTest() {
         guard !v2TestBusy else { return }
         v2TestBusy = true
         v2TestCandidate = nil
+        v2TestRelease = nil
         v2TestStatus = "Selecting signing certificate…"
         Task { @MainActor in
             defer { v2TestBusy = false }
@@ -54,6 +56,7 @@ struct ZagSelfUpdateStatusView: View {
                 )
                 try coordinator.validateSignedApp(result.signed, release: result.release)
                 v2TestCandidate = result.signed.uuid
+                v2TestRelease = result.release
                 v2TestStatus = "PASS — authenticated and signed \(result.release.version) (Build \(result.release.build)). No installation performed."
             } catch {
                 v2TestStatus = "FAIL — " + error.localizedDescription
