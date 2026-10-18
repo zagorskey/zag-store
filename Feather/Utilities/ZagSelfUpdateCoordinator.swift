@@ -49,8 +49,18 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         }
     }
 
+    private let betaV2RollbackStore = ZagUpdateRollbackStore(
+        service: "app.zagstore.ios.update-metadata-v2.production-beta"
+    )
+
     func checkForSelectedChannel() async throws -> Release? {
-        try await checkForUpdate(manifestURL: UpdateChannel.selected.manifestURL)
+        let channel = UpdateChannel.selected
+        if channel == .beta, let endpoint = channel.authenticatedV2ManifestURL {
+            return try await checkAuthenticatedV2Channel(
+                endpoint: endpoint, channel: channel, rollbackStore: betaV2RollbackStore
+            )
+        }
+        return try await checkForUpdate(manifestURL: channel.manifestURL)
     }
 
     /// Authenticated discovery for a future v2 channel cutover. This method
@@ -157,7 +167,14 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         automaticCheckStatus = "Checking for updates…"
         defer { automaticCheckInProgress = false }
         do {
-            let release = try await fetchUpdate(manifestURL: channel.manifestURL)
+            let release: Release?
+            if channel == .beta, let endpoint = channel.authenticatedV2ManifestURL {
+                release = try await checkAuthenticatedV2Channel(
+                    endpoint: endpoint, channel: channel, rollbackStore: betaV2RollbackStore
+                )
+            } else {
+                release = try await fetchUpdate(manifestURL: channel.manifestURL)
+            }
             guard generation == checkGeneration, channel == UpdateChannel.selected else { return }
             availableRelease = release
             if let release {
