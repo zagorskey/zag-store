@@ -70,6 +70,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         channel: UpdateChannel,
         rollbackStore: ZagUpdateRollbackStore
     ) async throws -> Release? {
+        let generation = checkGeneration
         let payload = try await ZagUpdateV2Discovery.fetchVerified(
             from: endpoint,
             channel: channel.rawValue,
@@ -93,7 +94,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         let newer = versionOrder == .orderedAscending ||
             (versionOrder == .orderedSame && buildOrder == .orderedAscending)
         let result: Release? = newer ? release : nil
-        guard channel == UpdateChannel.selected else { return nil }
+        guard generation == checkGeneration, channel == UpdateChannel.selected else { return nil }
         availableRelease = result
         return result
     }
@@ -183,7 +184,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
                 automaticCheckStatus = "Up to date — \(channel.rawValue.capitalized)"
             }
         } catch {
-            guard generation == checkGeneration else { return }
+            guard generation == checkGeneration, channel == UpdateChannel.selected else { return }
             availableRelease = nil
             if case UpdateError.channelNotPublished = error {
                 automaticCheckStatus = "No release published — \(channel.rawValue.capitalized)"
