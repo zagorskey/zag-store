@@ -446,6 +446,45 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         return try await signImportedRelease(imported, release: release, certificate: certificate)
     }
 
+    /// Explicit, test-only authenticated v2 preparation. The caller supplies a
+    /// separate test endpoint and an isolated rollback store. This does not
+    /// modify channel preferences, availableRelease, or invoke installation.
+    /// Do not call from automatic update checks or the live v1 updater.
+    func prepareAuthenticatedV2TestCandidate(
+        endpoint: URL,
+        channel: String,
+        rollbackStore: ZagUpdateRollbackStore,
+        certificate: CertificatePair
+    ) async throws -> (release: Release, signed: Signed) {
+        let payload = try await ZagUpdateV2Discovery.fetchVerified(
+            from: endpoint,
+            channel: channel,
+            trustedKeys: ZagUpdateTrustStore.productionKeys,
+            store: rollbackStore
+        )
+        guard let ipaURL = URL(string: payload.ipaURL) else {
+            throw UpdateError.invalidRelease
+        }
+        let release = Release(
+            version: payload.version,
+            build: payload.build,
+            bundleIdentifier: canonicalReleaseBundleID,
+            ipaURL: ipaURL,
+            sha256: payload.sha256,
+            minimumIOSVersion: payload.minimumIOSVersion,
+            releaseNotes: payload.releaseNotes
+        )
+        // A signed manifest is not authorization to downgrade or reinstall.
+        let versionOrder = currentVersion.compare(release.version, options: .numeric)
+        let buildOrder = currentBuild.compare(release.build, options: .numeric)
+        guard versionOrder == .orderedAscending ||
+              (versionOrder == .orderedSame && buildOrder == .orderedAscending) else {
+            throw UpdateError.noUpdateAvailable
+        }
+        let signed = try await prepareSignedUpdate(release, certificate: certificate)
+        return (release, signed)
+    }
+
     /// Signs an already imported release without changing Zag Store's bundle ID.
     /// This prepares a candidate only; it never installs it automatically.
     func signImportedRelease(
