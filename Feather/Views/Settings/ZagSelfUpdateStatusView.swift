@@ -795,7 +795,16 @@ struct ZagSelfUpdateStatusView: View {
                         .foregroundStyle(.secondary)
                     if let uuid = v2TestCandidate {
                         LabeledContent("Signed candidate", value: String(uuid.prefix(12)) + "…")
-                        Text("Candidate prepared for inspection only. This test never authorizes or starts installation.")
+                        Button("Review Beta v2 In-Place Update", role: .destructive) {
+                            guard v2TestRelease != nil, !installBusy,
+                                  !gate4.isGate4Running,
+                                  coordinator.pendingInstallation == nil else { return }
+                            preparedCandidateUUID = uuid
+                            preparedOfficialRelease = v2TestRelease
+                            showInstallConfirmation = true
+                        }
+                        .disabled(installBusy || gate4.isGate4Running || coordinator.pendingInstallation != nil)
+                        Text("Installation requires a separate explicit confirmation. No uninstall or fresh-install fallback.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
