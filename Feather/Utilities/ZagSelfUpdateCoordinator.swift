@@ -80,8 +80,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         )
         let versionOrder = currentVersion.compare(release.version, options: .numeric)
         let buildOrder = currentBuild.compare(release.build, options: .numeric)
-        return versionOrder == .orderedAscending ||
-            (versionOrder == .orderedSame && buildOrder == .orderedAscending) ? release : nil
+        let newer = versionOrder == .orderedAscending ||
+            (versionOrder == .orderedSame && buildOrder == .orderedAscending)
+        let result: Release? = newer ? release : nil
+        guard channel == UpdateChannel.selected else { return nil }
+        availableRelease = result
+        return result
     }
 
     struct PendingInstallation: Codable {
