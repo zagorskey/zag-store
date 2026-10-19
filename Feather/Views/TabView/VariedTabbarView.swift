@@ -389,6 +389,7 @@ struct ZagAccountPopup: View {
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
+    @State private var accountHeaderScrolled = false
 
     private enum AccountDestination: Hashable {
         case profile, updates, certificates, installation, signing, notifications, selfUpdate, settings
@@ -499,6 +500,7 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
+            .modifier(ZagAccountScrollObserver(isScrolled: $accountHeaderScrolled))
             .safeAreaInset(edge: .top, spacing: 0) {
                 HStack(spacing: 9) {
                     Image("ZagAccountIconDark")
@@ -514,6 +516,7 @@ struct ZagAccountPopup: View {
                 }
                 .padding(.horizontal, 20)
                 .frame(height: 76)
+                .background(accountHeaderScrolled ? Color(uiColor: .secondarySystemGroupedBackground) : Color.clear)
             }
             .navigationDestination(for: AccountDestination.self) { destination in
                 Group {
@@ -530,20 +533,41 @@ struct ZagAccountPopup: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Close")
+                        Color.clear.frame(width: 52, height: 44)
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
         }
+        .overlay(alignment: .topTrailing) {
+            if !accountPath.isEmpty {
+                accountCloseButton
+                    .padding(.top, 14)
+                    .padding(.trailing, 20)
+            }
+        }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
+        }
+    }
+}
+
+private struct ZagAccountScrollObserver: ViewModifier {
+    @Binding var isScrolled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 2
+            } action: { _, scrolled in
+                isScrolled = scrolled
+            }
+        } else {
+            content
         }
     }
 }
