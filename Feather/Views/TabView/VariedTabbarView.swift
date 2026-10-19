@@ -537,7 +537,6 @@ struct ZagAccountPopup: View {
                 .padding(.horizontal, 20)
                 .frame(height: 64, alignment: .center)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .systemGroupedBackground))
                 .allowsHitTesting(false)
             }
         }
