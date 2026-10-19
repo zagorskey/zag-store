@@ -481,7 +481,7 @@ struct ZagAccountPopup: View {
                         Label {
                             Text("Zag Store Settings").foregroundStyle(themeTint)
                         } icon: {
-                            Image(systemName: "gearshape.fill").foregroundStyle(themeTint)
+                            Image(systemName: "gear").foregroundStyle(themeTint)
                         }
                     }
                 }
