@@ -396,6 +396,19 @@ struct ZagAccountPopup: View {
 
     private var themeTint: Color { Color(hex: themeColorHex) }
 
+    private var accountCloseButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(.regularMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+    }
+
+
     var body: some View {
         NavigationStack(path: $accountPath) {
             Form {
@@ -486,6 +499,22 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack(spacing: 9) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                    Text("Zag Account")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    accountCloseButton
+                }
+                .padding(.horizontal, 20)
+                .frame(height: 76)
+            }
             .navigationDestination(for: AccountDestination.self) { destination in
                 Group {
                     switch destination {
@@ -499,39 +528,20 @@ struct ZagAccountPopup: View {
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
                     }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    HStack {
+                        Spacer()
+                        accountCloseButton
+                    }
+                    .padding(.horizontal, 18)
+                    .frame(height: 60)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
         }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
-        .overlay(alignment: .top) {
-            HStack(spacing: 9) {
-                if accountPath.isEmpty {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                }
-                Spacer(minLength: 0)
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
-            }
-            .padding(.leading, 20)
-            .padding(.trailing, 18)
-            .padding(.top, 14)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
         }
