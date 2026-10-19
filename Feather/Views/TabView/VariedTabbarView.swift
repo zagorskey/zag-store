@@ -530,7 +530,10 @@ struct ZagAccountPopup: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        accountCloseButton
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
                     }
                 }
             }
