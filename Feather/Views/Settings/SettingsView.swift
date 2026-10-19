@@ -45,14 +45,6 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
     @Environment(\.zagAccountClose) private var closeAccount
     func body(content: Content) -> some View {
         content.toolbar {
-            if insideAccountPopup, let closeAccount {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: closeAccount) {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Close")
-                }
-            }
             if !insideAccountPopup {
                 ToolbarItem(placement: .principal) {
                     ZagLocalVPNToolbarStatus()
@@ -290,7 +282,7 @@ struct SettingsView: View {
 					}
 				}
 
-				ToolbarItemGroup(placement: .topBarTrailing) {
+				ToolbarItemGroup(placement: embeddedInAccountNavigation ? .topBarLeading : .topBarTrailing) {
                     Button {
                         UIApplication.open("https://github.com/zagorskey/zag-store")
                     } label: {
@@ -313,12 +305,6 @@ struct SettingsView: View {
                         ZagProfileToolbarButton()
                             .tint(.primary)
                             .padding(.trailing, -2)
-                    }
-                    if embeddedInAccountNavigation, let closeAccount {
-                        Button(action: closeAccount) {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Close")
                     }
                 }
 			}
