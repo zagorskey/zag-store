@@ -512,17 +512,6 @@ struct ZagAccountPopup: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 if accountPath.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
-                        HStack(spacing: 9) {
-                            Image("ZagAccountIconDark")
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 27, height: 27)
-                                .clipShape(Circle())
-                            Text("Zag Account")
-                                .font(.system(size: 20, weight: .semibold))
-                        }
-                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(action: onClose) { Image(systemName: "xmark") }
                             .accessibilityLabel("Close")
@@ -532,6 +521,23 @@ struct ZagAccountPopup: View {
         }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
+        .overlay(alignment: .topLeading) {
+            if accountPath.isEmpty {
+                HStack(spacing: 9) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                    Text("Zag Account")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.leading, 20)
+                .padding(.top, 28)
+                .allowsHitTesting(false)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
         }
