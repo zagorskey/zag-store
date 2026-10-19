@@ -314,9 +314,7 @@ struct SettingsView: View {
                             .tint(.primary)
                             .padding(.trailing, -2)
                     }
-                }
-                if embeddedInAccountNavigation, let closeAccount {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    if embeddedInAccountNavigation, let closeAccount {
                         Button(action: closeAccount) {
                             Image(systemName: "xmark")
                         }
