@@ -389,26 +389,12 @@ struct ZagAccountPopup: View {
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
-    @State private var accountHeaderScrolled = false
 
     private enum AccountDestination: Hashable {
         case profile, updates, certificates, installation, signing, notifications, selfUpdate, settings
     }
 
     private var themeTint: Color { Color(hex: themeColorHex) }
-
-    private var accountCloseButton: some View {
-        Button(action: onClose) {
-            Image(systemName: "xmark")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(.regularMaterial, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Close")
-    }
-
 
     var body: some View {
         NavigationStack(path: $accountPath) {
@@ -500,23 +486,26 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .modifier(ZagAccountScrollObserver(isScrolled: $accountHeaderScrolled))
-            .safeAreaInset(edge: .top, spacing: 0) {
-                HStack(spacing: 9) {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    accountCloseButton
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 9) {
+                        Image("ZagAccountIconDark")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 27, height: 27)
+                            .clipShape(Circle())
+                        Text("Zag Account")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                    .accessibilityElement(children: .combine)
                 }
-                .padding(.horizontal, 20)
-                .frame(height: 76)
-                .background { if accountHeaderScrolled { Rectangle().fill(.regularMaterial) } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
             }
             .navigationDestination(for: AccountDestination.self) { destination in
                 Group {
@@ -542,7 +531,6 @@ struct ZagAccountPopup: View {
                 .toolbarRole(.editor)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
         }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
