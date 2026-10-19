@@ -518,7 +518,6 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AccountDestination.self) { destination in
                 Group {
                     switch destination {
