@@ -414,7 +414,7 @@ struct ZagAccountPopup: View {
                             }
                             Spacer(minLength: 0)
                         }
-                        .padding(.vertical, 7)
+                        .padding(.vertical, 0)
                     }
                     HStack(spacing: 14) {
                         Image(uiImage: ZagSourcesTabIcon.image)
@@ -481,7 +481,7 @@ struct ZagAccountPopup: View {
                         Label {
                             Text("Zag Store Settings").foregroundStyle(themeTint)
                         } icon: {
-                            Image(systemName: "gearshape").foregroundStyle(themeTint)
+                            Image(systemName: "gearshape.fill").foregroundStyle(themeTint)
                         }
                     }
                 }
