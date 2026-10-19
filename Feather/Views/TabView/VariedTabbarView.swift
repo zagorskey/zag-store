@@ -540,23 +540,6 @@ struct ZagAccountPopup: View {
     }
 }
 
-private struct ZagAccountScrollObserver: ViewModifier {
-    @Binding var isScrolled: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top > 2
-            } action: { _, scrolled in
-                isScrolled = scrolled
-            }
-        } else {
-            content
-        }
-    }
-}
-
 private struct ZagAccountNotificationsView: View {
     @AppStorage(UpdateManager.updateNotificationsEnabledKey) private var updateNotificationsEnabled = false
 
