@@ -499,31 +499,15 @@ struct ZagAccountPopup: View {
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
                     }
                 }
-                .toolbar {
-                    if destination != .settings {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button(action: onClose) { Image(systemName: "xmark") }
-                                .accessibilityLabel("Close")
-                        }
-                    }
-                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
-            .toolbar {
-                if accountPath.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: onClose) { Image(systemName: "xmark") }
-                            .accessibilityLabel("Close")
-                    }
-                }
-            }
         }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
-        .overlay(alignment: .topLeading) {
-            if accountPath.isEmpty {
-                HStack(spacing: 9) {
+        .overlay(alignment: .top) {
+            HStack(spacing: 9) {
+                if accountPath.isEmpty {
                     Image("ZagAccountIconDark")
                         .resizable()
                         .scaledToFill()
@@ -533,10 +517,20 @@ struct ZagAccountPopup: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
                 }
-                .padding(.leading, 20)
-                .padding(.top, 28)
-                .allowsHitTesting(false)
+                Spacer(minLength: 0)
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
             }
+            .padding(.leading, 20)
+            .padding(.trailing, 18)
+            .padding(.top, 14)
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
