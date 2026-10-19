@@ -499,13 +499,24 @@ struct ZagAccountPopup: View {
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
                     }
                 }
+                .toolbar {
+                    if destination != .settings {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: onClose) { Image(systemName: "xmark") }
+                                .accessibilityLabel("Close")
+                        }
+                    }
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: onClose) { Image(systemName: "xmark") }
-                        .accessibilityLabel("Close")
+                if accountPath.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: onClose) { Image(systemName: "xmark") }
+                            .accessibilityLabel("Close")
+                    }
                 }
             }
         }
@@ -524,7 +535,7 @@ struct ZagAccountPopup: View {
                         .foregroundStyle(.primary)
                 }
                 .padding(.leading, 20)
-                .frame(height: 64)
+                .padding(.top, 35)
                 .allowsHitTesting(false)
             }
         }
