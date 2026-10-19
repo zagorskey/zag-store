@@ -499,9 +499,11 @@ struct ZagAccountPopup: View {
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { dismiss() } label: { Image(systemName: "xmark") }
-                            .accessibilityLabel("Close")
+                    if destination != .settings {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { dismiss() } label: { Image(systemName: "xmark") }
+                                .accessibilityLabel("Close")
+                        }
                     }
                 }
             }
@@ -514,6 +516,7 @@ struct ZagAccountPopup: View {
             }
         }
         .environment(\.zagInsideAccountPopup, true)
+        .environment(\.zagAccountClose, { dismiss() })
         .overlay(alignment: .topLeading) {
             if accountPath.isEmpty {
                 HStack(spacing: 9) {

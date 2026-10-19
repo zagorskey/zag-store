@@ -27,12 +27,32 @@ extension EnvironmentValues {
     }
 }
 
+private struct ZagAccountCloseKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var zagAccountClose: (() -> Void)? {
+        get { self[ZagAccountCloseKey.self] }
+        set { self[ZagAccountCloseKey.self] = newValue }
+    }
+}
+
 // Shared avatar for pushed Settings destinations. Keep it on the destination
 // (not the parent) so the native back button and existing actions remain intact.
 private struct ZagSettingsDestinationAvatar: ViewModifier {
     @Environment(\.zagInsideAccountPopup) private var insideAccountPopup
+    @Environment(\.zagAccountClose) private var closeAccount
     func body(content: Content) -> some View {
         content.toolbar {
+            if insideAccountPopup, let closeAccount {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: closeAccount) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
             if !insideAccountPopup {
                 ToolbarItem(placement: .principal) {
                     ZagLocalVPNToolbarStatus()
@@ -98,6 +118,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 // MARK: - View
 struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
+	@Environment(\.zagAccountClose) private var closeAccount
 	var embeddedInAccountNavigation = false
 	@AppStorage("Feather.userTintColor") private var userTintColor = "#0090FF"
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
@@ -270,6 +291,12 @@ struct SettingsView: View {
 				}
 
 				ToolbarItemGroup(placement: .topBarTrailing) {
+                    if embeddedInAccountNavigation, let closeAccount {
+                        Button(action: closeAccount) {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
+                    }
                     Button {
                         UIApplication.open("https://github.com/zagorskey/zag-store")
                     } label: {
