@@ -332,7 +332,7 @@ struct ZagProfileToolbarButton: View {
 		.onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
 			avatarRevision = UUID()
 		}
-		.sheet(isPresented: $isAccountPresenting) { ZagAccountPopup() }
+		.sheet(isPresented: $isAccountPresenting) { ZagAccountPopup(onClose: { isAccountPresenting = false }) }
 	}
 }
 
@@ -381,6 +381,7 @@ struct ZagGlobalProfileAvatar: View {
 }
 
 struct ZagAccountPopup: View {
+    let onClose: () -> Void
     @ObservedObject private var updateManager = UpdateManager.shared
     @ObservedObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
     @Environment(\.dismiss) private var dismiss
@@ -501,7 +502,7 @@ struct ZagAccountPopup: View {
                 .toolbar {
                     if destination != .settings {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button { dismiss() } label: { Image(systemName: "xmark") }
+                            Button(action: onClose) { Image(systemName: "xmark") }
                                 .accessibilityLabel("Close")
                         }
                     }
@@ -510,13 +511,13 @@ struct ZagAccountPopup: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button(action: onClose) { Image(systemName: "xmark") }
                         .accessibilityLabel("Close")
                 }
             }
         }
         .environment(\.zagInsideAccountPopup, true)
-        .environment(\.zagAccountClose, { dismiss() })
+        .environment(\.zagAccountClose, onClose)
         .overlay(alignment: .topLeading) {
             if accountPath.isEmpty {
                 HStack(spacing: 9) {
