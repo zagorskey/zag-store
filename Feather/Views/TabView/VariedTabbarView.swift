@@ -528,13 +528,10 @@ struct ZagAccountPopup: View {
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
                     }
                 }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HStack {
-                        Spacer()
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
                         accountCloseButton
                     }
-                    .padding(.horizontal, 18)
-                    .frame(height: 60)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
