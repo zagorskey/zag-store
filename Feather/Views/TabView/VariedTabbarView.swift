@@ -530,11 +530,14 @@ struct ZagAccountPopup: View {
                         .frame(width: 27, height: 27)
                         .clipShape(Circle())
                     Text("Zag Account")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.headline)
                         .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
                 }
-                .padding(.leading, 20)
-                .padding(.top, 28)
+                .padding(.horizontal, 20)
+                .frame(height: 64, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(uiColor: .systemGroupedBackground))
                 .allowsHitTesting(false)
             }
         }
