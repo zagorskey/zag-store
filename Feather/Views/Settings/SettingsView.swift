@@ -232,12 +232,6 @@ struct SettingsView: View {
 					}
 				}
 				ToolbarItemGroup(placement: .topBarLeading) {
-					if embeddedInAccountNavigation {
-						Button { dismiss() } label: {
-							Image(systemName: "chevron.left")
-						}
-						.accessibilityLabel("Back to Zag Account")
-					}
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -309,7 +303,7 @@ struct SettingsView: View {
                 }
 			}
 		.navigationTitle("Settings")
-		.navigationBarBackButtonHidden(embeddedInAccountNavigation)
+
 	}
 
 	// MARK: Body
