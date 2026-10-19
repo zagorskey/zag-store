@@ -316,7 +316,7 @@ struct SettingsView: View {
                     }
                 }
                 if embeddedInAccountNavigation, let closeAccount {
-                    ToolbarItem(placement: .confirmationAction) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button(action: closeAccount) {
                             Image(systemName: "xmark")
                         }
