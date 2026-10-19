@@ -486,15 +486,23 @@ struct ZagAccountPopup: View {
                 }
             }
             .navigationDestination(for: AccountDestination.self) { destination in
-                switch destination {
-                case .profile: ZagAccountAvatarEditor()
-                case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
-                case .certificates: CertificatesView()
-                case .installation: InstallationView()
-                case .signing: ConfigurationView()
-                case .notifications: ZagAccountNotificationsView()
-                case .selfUpdate: ZagSelfUpdateStatusView()
-                case .settings: SettingsView(embeddedInAccountNavigation: true)
+                Group {
+                    switch destination {
+                    case .profile: ZagAccountAvatarEditor()
+                    case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
+                    case .certificates: CertificatesView()
+                    case .installation: InstallationView()
+                    case .signing: ConfigurationView()
+                    case .notifications: ZagAccountNotificationsView()
+                    case .selfUpdate: ZagSelfUpdateStatusView()
+                    case .settings: SettingsView(embeddedInAccountNavigation: true)
+                    }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { dismiss() } label: { Image(systemName: "xmark") }
+                            .accessibilityLabel("Close")
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
