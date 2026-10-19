@@ -13,6 +13,25 @@
     " apps from sources" : {
 
     },
+    "—" : {
+
+    },
+    "…" : {
+
+    },
+    ".json" : {
+
+    },
+    "%@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@"
+          }
+        }
+      }
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
@@ -391,7 +410,26 @@
         }
       }
     },
+    "%lld lines" : {
+
+    },
+    "%lld ms" : {
+
+    },
+    "%lld of %lld entries" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld entries"
+          }
+        }
+      }
+    },
     "%lld percent" : {
+
+    },
+    "%lld repositories" : {
 
     },
     "%lld required system dylibs not shown." : {
@@ -601,6 +639,9 @@
     "%lld%%" : {
 
     },
+    "•" : {
+
+    },
     "💜 This couldn't of been done without my sponsors!" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -791,7 +832,22 @@
         }
       }
     },
+    "About AltStore PAL distribution for %@" : {
+
+    },
     "About Us" : {
+
+    },
+    "Account and App Updates" : {
+
+    },
+    "Account info and settings" : {
+
+    },
+    "Account Type" : {
+
+    },
+    "Activity" : {
 
     },
     "Add" : {
@@ -1110,6 +1166,9 @@
         }
       }
     },
+    "Advanced diagnostics and recovery" : {
+
+    },
     "Advanced Installation Method" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1150,6 +1209,9 @@
           }
         }
       }
+    },
+    "After a few seconds, swipe up to the Home Screen normally. Wait for Zag Store to finish updating, then reopen it." : {
+
     },
     "Alignment" : {
 
@@ -1415,6 +1477,9 @@
         }
       }
     },
+    "AltStore PAL App" : {
+
+    },
     "An awesome application" : {
       "comment" : "Repository app has no description",
       "extractionState" : "manual",
@@ -1586,6 +1651,12 @@
           }
         }
       }
+    },
+    "App Management" : {
+
+    },
+    "App Updates" : {
+
     },
     "Appearance" : {
       "extractionState" : "manual",
@@ -1809,10 +1880,25 @@
         }
       }
     },
+    "Attempt In-Place Replacement" : {
+
+    },
+    "Authenticated Beta v2 — Test Only" : {
+
+    },
     "Automatic Installation" : {
 
     },
     "Automatic Preparation" : {
+
+    },
+    "Automatic Update Checks" : {
+
+    },
+    "Automatically Check for Updates" : {
+
+    },
+    "Back to Zag Account" : {
 
     },
     "Background" : {
@@ -1821,7 +1907,7 @@
     "Background Updates" : {
 
     },
-    "Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available. Update Notifications alerts you to newly discovered versions." : {
+    "Background Updates controls Zag Store’s scheduled checks. Automatic Preparation downloads and signs discovered updates. Automatic Installation attempts unattended installation when the RPPairing installation method and its direct transport are available." : {
 
     },
     "Backup & Restore" : {
@@ -2106,6 +2192,9 @@
         }
       }
     },
+    "Build %@" : {
+
+    },
     "Build: %@" : {
 
     },
@@ -2309,6 +2398,9 @@
           }
         }
       }
+    },
+    "Candidate Keychain Groups" : {
+
     },
     "Category" : {
       "extractionState" : "manual",
@@ -2638,6 +2730,15 @@
         }
       }
     },
+    "Check for Updates" : {
+
+    },
+    "Check Installation Prerequisites" : {
+
+    },
+    "Check Recovery Readiness" : {
+
+    },
     "Check Revokage" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2690,6 +2791,18 @@
           }
         }
       }
+    },
+    "Checking local VPN connection" : {
+
+    },
+    "Checking…" : {
+
+    },
+    "Checks for updates on launch and when returning to Zag Store. Downloads and installation require your approval." : {
+
+    },
+    "Checks whether iPhone device services are reachable through the local tunnel. This does not read LocalDevVPN's own connection state." : {
+
     },
     "Choose from Files" : {
       "comment" : "Select custom app icon from files",
@@ -2823,10 +2936,40 @@
         }
       }
     },
+    "Choose Profile Avatar" : {
+
+    },
+    "Choose Repository Recovery File" : {
+
+    },
+    "Choose Settings Recovery File" : {
+
+    },
     "Choose Signed App" : {
 
     },
+    "Choose which main page Zag Store opens on." : {
+
+    },
+    "Clear Logs" : {
+
+    },
+    "Clear Measurements" : {
+
+    },
+    "Clear Pending Record" : {
+
+    },
     "Clear Search" : {
+
+    },
+    "Clear Unverified Installation Record" : {
+
+    },
+    "Clear unverified installation record?" : {
+
+    },
+    "Clears only the pending self-update record. Does not remove apps or user data. Only use when no installation is active." : {
 
     },
     "Close" : {
@@ -2895,6 +3038,15 @@
       }
     },
     "Close Search" : {
+
+    },
+    "Collapse section" : {
+
+    },
+    "Collapsed" : {
+
+    },
+    "Compare Installed and Signed Candidate" : {
 
     },
     "Completed" : {
@@ -3069,10 +3221,28 @@
         }
       }
     },
+    "Configured repositories" : {
+
+    },
     "Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup." : {
 
     },
     "Connect to LocalDevVPN" : {
+
+    },
+    "Connection" : {
+
+    },
+    "Continue to Zag Store" : {
+
+    },
+    "Control" : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copied Diagnostics" : {
 
     },
     "Copies the original certificate name" : {
@@ -3164,6 +3334,9 @@
     "Copy Certificate Name" : {
 
     },
+    "Copy Diagnostics" : {
+
+    },
     "Copy Download URLs" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3216,6 +3389,42 @@
           }
         }
       }
+    },
+    "Copy Entry" : {
+
+    },
+    "Copy Filtered Logs" : {
+
+    },
+    "Copy Logs" : {
+
+    },
+    "Copy Message" : {
+
+    },
+    "Copy Metadata Keys" : {
+
+    },
+    "Copy Performance Report" : {
+
+    },
+    "Copy Repository URL" : {
+
+    },
+    "Copy Session Marker" : {
+
+    },
+    "Counts reflect retained events. Tap a row to open the matching filtered log." : {
+
+    },
+    "Create a disposable marker before an update. After a separately confirmed update, use Read Marker to check whether it survived. This never reads existing app credentials." : {
+
+    },
+    "Create or Read Marker" : {
+
+    },
+    "Create Test Marker" : {
+
     },
     "Credits" : {
       "extractionState" : "manual",
@@ -3299,6 +3508,9 @@
           }
         }
       }
+    },
+    "Current Session" : {
+
     },
     "Custom" : {
 
@@ -3598,6 +3810,9 @@
         }
       }
     },
+    "Decode" : {
+
+    },
     "Default" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3680,6 +3895,9 @@
           }
         }
       }
+    },
+    "Default Start Page" : {
+
     },
     "Default style for the app, only includes subtitle." : {
       "extractionState" : "manual",
@@ -3870,6 +4088,9 @@
         }
       }
     },
+    "Delete Test Marker" : {
+
+    },
     "Description" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3910,6 +4131,9 @@
           }
         }
       }
+    },
+    "Detailed Zag Store runtime logging and log management will live here." : {
+
     },
     "Developer" : {
       "extractionState" : "manual",
@@ -3952,19 +4176,34 @@
         }
       }
     },
+    "Developer controls expose additional Zag Store internals for testing and troubleshooting." : {
+
+    },
+    "Developer diagnostics" : {
+
+    },
     "Developer Options" : {
 
     },
     "Device" : {
 
     },
+    "DEVICE INFORMATION" : {
+
+    },
+    "Diagnostic Report" : {
+
+    },
+    "Diagnostic reports contain app, RPPairing, inventory, repository provenance summary and logs. Pairing records, certificate material and private keys are not included." : {
+
+    },
     "Diagnostics" : {
 
     },
-    "Diagnostics & Health Checks" : {
+    "Diagnostics & Logs" : {
 
     },
-    "Direct Install Status" : {
+    "Diagnostics Report" : {
 
     },
     "Disable Idle Timeout" : {
@@ -4127,6 +4366,15 @@
         }
       }
     },
+    "Disposable device-only marker. Does not access existing certificates or credentials. Verify again after a future in-place update." : {
+
+    },
+    "Do not force-quit Zag Store or start the installation again." : {
+
+    },
+    "Do not start another update until this installation is verified." : {
+
+    },
     "Do you want to export your certificate to an external app? That app will be able to sign apps using your certificate." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4173,6 +4421,9 @@
           }
         }
       }
+    },
+    "Documents is accessible and currently empty." : {
+
     },
     "Donate" : {
       "extractionState" : "manual",
@@ -4345,6 +4596,9 @@
 
     },
     "Done Reordering" : {
+
+    },
+    "Download again: %@" : {
 
     },
     "Download LocalDevVPN" : {
@@ -5043,6 +5297,9 @@
         }
       }
     },
+    "Entries" : {
+
+    },
     "Error" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5164,6 +5421,9 @@
         }
       }
     },
+    "Executable Entitlements" : {
+
+    },
     "Existing Dylibs" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5229,7 +5489,16 @@
         }
       }
     },
+    "Expand section" : {
+
+    },
+    "Expanded" : {
+
+    },
     "Experimental Features" : {
+
+    },
+    "Experimental SHA-256 Signing" : {
 
     },
     "Experiments" : {
@@ -5546,7 +5815,19 @@
     "Export File" : {
 
     },
+    "Export Filtered Logs" : {
+
+    },
+    "Export Logs" : {
+
+    },
+    "Export Pairing File" : {
+
+    },
     "Exports all Zag Store settings. Certificates, private keys, pairing data, installed apps and caches are not included." : {
+
+    },
+    "Exports repository names and sanitized URLs only. URL query strings and credentials are removed. Does not back up settings, databases, certificates, keys, or keychain items. Save the file outside Zag Store." : {
 
     },
     "Failed to download, check your internet connection and try again." : {
@@ -5933,6 +6214,9 @@
           }
         }
       }
+    },
+    "Finish on Home Screen" : {
+
     },
     "Force Localize" : {
       "extractionState" : "manual",
@@ -6330,6 +6614,9 @@
         }
       }
     },
+    "Generate Diagnostic Report" : {
+
+    },
     "Get" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6501,6 +6788,9 @@
           }
         }
       }
+    },
+    "Get notified when Zag Store discovers new app versions." : {
+
     },
     "Get started by adding your first repository." : {
       "extractionState" : "manual",
@@ -6809,6 +7099,9 @@
     "Health Checks" : {
 
     },
+    "Healthy" : {
+
+    },
     "Heartbeat" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7003,6 +7296,9 @@
           }
         }
       }
+    },
+    "House Arrest Test" : {
+
     },
     "Identifier" : {
       "extractionState" : "manual",
@@ -7775,6 +8071,9 @@
         }
       }
     },
+    "Import Validated Repositories" : {
+
+    },
     "Imported" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7839,6 +8138,9 @@
           }
         }
       }
+    },
+    "In progress" : {
+
     },
     "Info" : {
       "extractionState" : "manual",
@@ -7945,6 +8247,9 @@
           }
         }
       }
+    },
+    "Information is read directly from this device. Paired and registered devices will appear here when device management is available." : {
+
     },
     "Inject into Extensions" : {
       "extractionState" : "manual",
@@ -8099,6 +8404,21 @@
         }
       }
     },
+    "Inspect CodeDirectory Hashes" : {
+
+    },
+    "Inspect Entitlements" : {
+
+    },
+    "Inspect Installed Zag Store" : {
+
+    },
+    "Inspect the primary CodeDirectory of any signed app. Read-only: does not sign, install, or verify CMS authenticity." : {
+
+    },
+    "Inspection Error" : {
+
+    },
     "Install" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8232,6 +8552,9 @@
         }
       }
     },
+    "Install Pairing File in SideStore" : {
+
+    },
     "Installation" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8284,6 +8607,21 @@
           }
         }
       }
+    },
+    "Installation Diagnostics" : {
+
+    },
+    "Installation is awaiting verification" : {
+
+    },
+    "Installation requires a separate explicit confirmation. No uninstall or fresh-install fallback." : {
+
+    },
+    "Installation stage progress" : {
+
+    },
+    "Installation status" : {
+
     },
     "Installation Test" : {
 
@@ -8353,13 +8691,25 @@
         }
       }
     },
+    "Installation verified successfully" : {
+
+    },
     "Installed App Inventory" : {
+
+    },
+    "Installed App Metadata Keys" : {
 
     },
     "Installed Apps" : {
 
     },
     "Installed Apps Lookup" : {
+
+    },
+    "Installed Keychain Groups" : {
+
+    },
+    "Installed update verified" : {
 
     },
     "Installing" : {
@@ -8414,6 +8764,9 @@
           }
         }
       }
+    },
+    "Installing Pairing File…" : {
+
     },
     "iOS %@%@" : {
       "localizations" : {
@@ -8609,10 +8962,25 @@
         }
       }
     },
+    "Keychain Continuity Probe" : {
+
+    },
+    "Keychain Continuity Test" : {
+
+    },
+    "Last Event" : {
+
+    },
     "Last Inventory" : {
 
     },
+    "Last successful check" : {
+
+    },
     "Last Updated" : {
+
+    },
+    "Latest Repository Refresh" : {
 
     },
     "Learn more about how to setup a repository…" : {
@@ -8667,6 +9035,9 @@
           }
         }
       }
+    },
+    "Learn more about this update" : {
+
     },
     "Left" : {
 
@@ -8884,7 +9255,28 @@
     "Live Preview" : {
 
     },
+    "Loaded repositories" : {
+
+    },
+    "LOCAL" : {
+
+    },
+    "Local VPN" : {
+
+    },
+    "Local VPN device services reachable" : {
+
+    },
+    "Local VPN status unknown" : {
+
+    },
     "Lock Advanced Settings" : {
+
+    },
+    "Log Size" : {
+
+    },
+    "Logging" : {
 
     },
     "Minimum Requirement" : {
@@ -9207,6 +9599,21 @@
     "Name (Z–A)" : {
 
     },
+    "Name A–Z" : {
+
+    },
+    "Name Z–A" : {
+
+    },
+    "Native installer event" : {
+
+    },
+    "Native installer events are diagnostic information, not proof of successful replacement." : {
+
+    },
+    "Network" : {
+
+    },
     "New" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9354,6 +9761,9 @@
           }
         }
       }
+    },
+    "Newest First" : {
+
     },
     "Nickname (Optional)" : {
       "comment" : "Certificate custom nickname",
@@ -9592,9 +10002,6 @@
         }
       }
     },
-    "No computer-generated pairing file" : {
-
-    },
     "No Entitlements listed." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9635,6 +10042,9 @@
           }
         }
       }
+    },
+    "No entries match this category." : {
+
     },
     "No files chosen." : {
       "extractionState" : "manual",
@@ -9801,6 +10211,15 @@
         }
       }
     },
+    "No Log Entries" : {
+
+    },
+    "No Matches" : {
+
+    },
+    "No measurements yet. Refresh Sources once, then return here." : {
+
+    },
     "No pairing file found, please import it." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9960,6 +10379,12 @@
         }
       }
     },
+    "No signed apps in Library." : {
+
+    },
+    "No signed Zag Store candidate in Library." : {
+
+    },
     "No sources to copy" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10054,7 +10479,25 @@
         }
       }
     },
+    "None reported" : {
+
+    },
     "Not Found" : {
+
+    },
+    "Not loaded" : {
+
+    },
+    "Not loaded in this session" : {
+
+    },
+    "Not Saved" : {
+
+    },
+    "Notifications" : {
+
+    },
+    "Off" : {
 
     },
     "OK" : {
@@ -10139,6 +10582,24 @@
           }
         }
       }
+    },
+    "Oldest First" : {
+
+    },
+    "On" : {
+
+    },
+    "ON" : {
+
+    },
+    "Only after confirmation, validated URLs are submitted to Zag Store’s existing repository importer. Review Sources afterward; a successful handoff does not guarantee every remote repository loads." : {
+
+    },
+    "Only explicitly allowlisted non-sensitive settings are included. Certificates, tokens and keychain data are excluded." : {
+
+    },
+    "Only the Zag Store theme colour will change. No signing data, repositories, or other settings will be modified." : {
+
     },
     "Only use localhost address" : {
       "extractionState" : "manual",
@@ -10604,7 +11065,13 @@
         }
       }
     },
+    "Open the full report when needed. Refresh repositories first so the snapshot reflects the current installed apps and repository candidates." : {
+
+    },
     "Opens this app's source repository" : {
+
+    },
+    "Optional troubleshooting and recovery tools. Normal updates should not require manual exports." : {
 
     },
     "Other" : {
@@ -10653,6 +11120,9 @@
           }
         }
       }
+    },
+    "Overview" : {
+
     },
     "Packaging" : {
       "extractionState" : "manual",
@@ -10707,16 +11177,19 @@
         }
       }
     },
-    "Pair This iPhone" : {
+    "Pages" : {
 
     },
-    "Paired Device" : {
+    "Pair This iPhone" : {
 
     },
     "PAIRING CODE" : {
 
     },
-    "Pairing credentials saved" : {
+    "Pairing credentials are stored locally and reused for direct installation." : {
+
+    },
+    "Pairing File" : {
 
     },
     "Pairing File Guide" : {
@@ -10867,6 +11340,18 @@
         }
       }
     },
+    "Pending build" : {
+
+    },
+    "Pending Installation Recovery" : {
+
+    },
+    "Pending version" : {
+
+    },
+    "Performance" : {
+
+    },
     "Permissions" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10907,6 +11392,12 @@
           }
         }
       }
+    },
+    "Petar Zagorski" : {
+
+    },
+    "Photos Access" : {
+
     },
     "Platform" : {
       "extractionState" : "manual",
@@ -11287,7 +11778,25 @@
         }
       }
     },
+    "Prepare & Verify Beta v2" : {
+
+    },
+    "Prepare Repository Export" : {
+
+    },
+    "Prepare Settings Export" : {
+
+    },
+    "Preparing Update…" : {
+
+    },
+    "Preparing Verified Beta…" : {
+
+    },
     "Preview" : {
+
+    },
+    "Previous event" : {
 
     },
     "Previous Versions" : {
@@ -11455,6 +11964,9 @@
           }
         }
       }
+    },
+    "Profile Avatar" : {
+
     },
     "Properties" : {
       "comment" : "Select custom properties for the app",
@@ -11723,6 +12235,9 @@
         }
       }
     },
+    "Provisioning Profile Comparison" : {
+
+    },
     "Pulse" : {
 
     },
@@ -11791,6 +12306,24 @@
         }
       }
     },
+    "Reachable" : {
+
+    },
+    "Read Existing Marker" : {
+
+    },
+    "Read-only comparison of embedded XML code-signature entitlements. This does not verify cryptographic signatures or install an update." : {
+
+    },
+    "Read-only diagnostic. Vends SideStore's shared Documents domain through House Arrest and lists its contents without modifying files." : {
+
+    },
+    "Read-only structural checks. Experimental CMS verification is available above; this preflight does not authorize installation." : {
+
+    },
+    "Read-only structural diagnostics. No installation or data-preservation guarantee." : {
+
+    },
     "Reads the actual user-app inventory from installation_proxy and shows the bundle identifier, installed version and build reported by this iPhone." : {
 
     },
@@ -11847,7 +12380,28 @@
         }
       }
     },
+    "Recently Added" : {
+
+    },
+    "Records detailed Zag Store activity for troubleshooting. Warnings and errors are retained even when verbose logging is off. Logs are capped automatically to prevent unlimited storage growth." : {
+
+    },
+    "Recovery Export — Repositories Only" : {
+
+    },
+    "Recovery Import — Validation" : {
+
+    },
+    "Recovery Readiness" : {
+
+    },
+    "Refresh Local VPN status" : {
+
+    },
     "Refresh Repositories" : {
+
+    },
+    "Refresh the Installed apps inventory first." : {
 
     },
     "Refreshing Apps" : {
@@ -11857,6 +12411,15 @@
 
     },
     "Refreshing Repositories" : {
+
+    },
+    "Refreshing repositories…" : {
+
+    },
+    "Release Channel" : {
+
+    },
+    "Remember Last Page" : {
 
     },
     "Removal" : {
@@ -12367,6 +12930,9 @@
         }
       }
     },
+    "Replace the installed Zag Store?" : {
+
+    },
     "Replacement" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12437,6 +13003,9 @@
           }
         }
       }
+    },
+    "Repo Performance" : {
+
     },
     "Repos, Apps, Games and More" : {
 
@@ -12558,6 +13127,18 @@
           }
         }
       }
+    },
+    "Repository data available" : {
+
+    },
+    "Repository Details" : {
+
+    },
+    "Repository Health" : {
+
+    },
+    "Repository Performance" : {
+
     },
     "Repository Transfer" : {
 
@@ -13125,6 +13706,12 @@
     "Reset Zag Store Designer" : {
 
     },
+    "Resolved Bundle ID" : {
+
+    },
+    "Response time" : {
+
+    },
     "Restart Heartbeat" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13255,16 +13842,43 @@
         }
       }
     },
+    "Restore repositories?" : {
+
+    },
     "Restore Settings" : {
 
     },
+    "Restore theme colour" : {
+
+    },
+    "Restore Theme Colour" : {
+
+    },
+    "Restore theme colour?" : {
+
+    },
+    "Restore Validated Repositories" : {
+
+    },
+    "Restore Validated Theme Colour" : {
+
+    },
     "Restores all settings contained in a Zag Store settings backup." : {
+
+    },
+    "Retry installing %@" : {
+
+    },
+    "Retry signing %@" : {
 
     },
     "Returned Metadata Keys" : {
 
     },
     "Revert %@" : {
+
+    },
+    "Review Beta v2 In-Place Update" : {
 
     },
     "Revoked" : {
@@ -13317,13 +13931,19 @@
     "RPPairing" : {
 
     },
-    "RPPairing installs directly through this iPhone's device services. Run Health Check to verify the LocalDevVPN tunnel and complete direct-install path." : {
+    "RPPairing Diagnostics" : {
+
+    },
+    "RPPairing requires pairing and a LocalDevVPN connection for direct installation." : {
 
     },
     "Run Full Health Check" : {
 
     },
     "Run Installation Test…" : {
+
+    },
+    "Run Preflight" : {
 
     },
     "Run the complete RPPairing health check, inspect every device-service stage, and access the controlled installation test." : {
@@ -13409,6 +14029,9 @@
         }
       }
     },
+    "Saved" : {
+
+    },
     "Screenshots" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13449,6 +14072,9 @@
           }
         }
       }
+    },
+    "Search logs" : {
+
     },
     "See all " : {
 
@@ -13653,6 +14279,15 @@
     "Select an app already signed by Zag Store. Diagnostics creates a temporary IPA and runs it through the complete RPPairing direct-install path." : {
 
     },
+    "Select Apps" : {
+
+    },
+    "Select candidate" : {
+
+    },
+    "Select certificate" : {
+
+    },
     "Select entitlements file" : {
       "comment" : "Select custom entitlements for the app",
       "extractionState" : "manual",
@@ -13718,6 +14353,27 @@
           }
         }
       }
+    },
+    "Select signed app" : {
+
+    },
+    "Select the release channel. Switching channels clears the previous update and checks the new channel when automatic checks are enabled." : {
+
+    },
+    "Self-Update" : {
+
+    },
+    "Self-Update Candidate" : {
+
+    },
+    "Self-update fully verified" : {
+
+    },
+    "Self-Update Preflight" : {
+
+    },
+    "Self-Update Signature Diagnostics" : {
+
     },
     "Semi Local" : {
       "extractionState" : "manual",
@@ -14117,6 +14773,12 @@
         }
       }
     },
+    "Session health reflects only events recorded since the latest Zag Store launch marker." : {
+
+    },
+    "Session Started" : {
+
+    },
     "Settings" : {
       "comment" : "Settings tab",
       "extractionState" : "manual",
@@ -14201,13 +14863,25 @@
     "Settings Options" : {
 
     },
+    "Settings Recovery Export" : {
+
+    },
     "Settings Restore" : {
 
     },
-    "Setup" : {
+    "Setup Required" : {
 
     },
-    "Setup Required" : {
+    "Share Repository" : {
+
+    },
+    "Share Repository Export" : {
+
+    },
+    "Share Settings Export" : {
+
+    },
+    "Show Internal Metadata" : {
 
     },
     "Show Separators" : {
@@ -14474,6 +15148,9 @@
         }
       }
     },
+    "Signature Diagnostics" : {
+
+    },
     "Signed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14538,6 +15215,15 @@
           }
         }
       }
+    },
+    "Signed app" : {
+
+    },
+    "Signed App Hash Test" : {
+
+    },
+    "Signed candidate" : {
+
     },
     "Signing" : {
       "extractionState" : "manual",
@@ -14610,6 +15296,9 @@
         }
       }
     },
+    "Signing Identity Comparison" : {
+
+    },
     "Signing Options" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14681,6 +15370,9 @@
         }
       }
     },
+    "Signing temporary copy…" : {
+
+    },
     "Signing Type" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14734,6 +15426,9 @@
         }
       }
     },
+    "Signs only a temporary copy of the signed app selected above. Never installs, updates, or changes Library contents. Checks SHA-256 code pages, CMS authenticity, Apple hash-agility attributes and the X.509 certificate path. Does not authorize installation." : {
+
+    },
     "Size" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14774,6 +15469,9 @@
           }
         }
       }
+    },
+    "Sort Apps" : {
+
     },
     "Sort Repositories" : {
 
@@ -14883,6 +15581,9 @@
           }
         }
       }
+    },
+    "SOURCE URL" : {
+
     },
     "Source: %@" : {
 
@@ -15206,6 +15907,9 @@
           }
         }
       }
+    },
+    "Stable" : {
+
     },
     "Standard" : {
       "extractionState" : "manual",
@@ -15677,6 +16381,12 @@
         }
       }
     },
+    "Switch to %@" : {
+
+    },
+    "SYSTEM STATUS" : {
+
+    },
     "Team Identifiers" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15807,6 +16517,21 @@
         }
       }
     },
+    "Temporary diagnostic showing the InstallationProxy metadata keys returned by iOS." : {
+
+    },
+    "Test certificate" : {
+
+    },
+    "Test SHA-256 Signing" : {
+
+    },
+    "Test SideStore Documents" : {
+
+    },
+    "Testing SideStore Documents…" : {
+
+    },
     "Text" : {
 
     },
@@ -15928,6 +16653,12 @@
         }
       }
     },
+    "The running executable exactly matches the signed update prepared before installation. Your replacement is verified." : {
+
+    },
+    "The update will be verified and signed before you confirm installation." : {
+
+    },
     "Theme" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16046,6 +16777,9 @@
         }
       }
     },
+    "These experimental transformations modify apps while signing. Replace Substrate with ElleKit attempts to redirect injected tweaks that depend on CydiaSubstrate to ElleKit. Enable Liquid Glass attempts to make compatible apps use the newer Liquid Glass appearance. Compatibility varies by app and injected tweak." : {
+
+    },
     "This action cannot be undone. Would you like to proceed?" : {
       "localizations" : {
         "ar" : {
@@ -16139,6 +16873,15 @@
         }
       }
     },
+    "This app uses Apple's alternative marketplace distribution system and can't be installed directly by Zag Store. You can install it through its supported PAL marketplace, if available in your region." : {
+
+    },
+    "This check never installs or replaces the app. A candidate and readable marker do not establish a recovery procedure." : {
+
+    },
+    "This Device" : {
+
+    },
     "This enables liquid glass for this app, this requires a restart of the app to take effect." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16191,6 +16934,9 @@
           }
         }
       }
+    },
+    "This only removes the old pending verification record. It cannot cancel a native installation already in progress or prove that the earlier replacement failed." : {
+
     },
     "This option force converts apps to try to use the new liquid glass redesign iOS 26 introduced, this may not work for all applications due to differing frameworks." : {
       "extractionState" : "manual",
@@ -16410,6 +17156,12 @@
         }
       }
     },
+    "Total" : {
+
+    },
+    "Try a different search or category." : {
+
+    },
     "Tunnel & Pairing" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16535,7 +17287,13 @@
         }
       }
     },
+    "Unable to Export Pairing File" : {
+
+    },
     "Unable to Unpair" : {
+
+    },
+    "Unchecked" : {
 
     },
     "Unknown" : {
@@ -16630,19 +17388,37 @@
     "Unpair This iPhone?" : {
 
     },
+    "Unverified attempt" : {
+
+    },
     "Update" : {
 
     },
     "Update %@" : {
 
     },
+    "Update available" : {
+
+    },
+    "Update awaiting verification" : {
+
+    },
     "Update Badge" : {
+
+    },
+    "Update Diagnostics" : {
 
     },
     "Update Indicator" : {
 
     },
+    "Update is in progress" : {
+
+    },
     "Update Notifications" : {
+
+    },
+    "Update Now" : {
 
     },
     "Update SSL Certificates" : {
@@ -16804,7 +17580,13 @@
         }
       }
     },
+    "Use Default Avatar" : {
+
+    },
     "User Apps" : {
+
+    },
+    "Uses a separate test-only HTTPS manifest and isolated rollback history. The existing v1 updater is unchanged." : {
 
     },
     "Value" : {
@@ -16859,6 +17641,15 @@
           }
         }
       }
+    },
+    "Verbose Logging" : {
+
+    },
+    "Verified build" : {
+
+    },
+    "Verify Test Marker" : {
+
     },
     "Version" : {
       "extractionState" : "manual",
@@ -16979,6 +17770,26 @@
         }
       }
     },
+    "Version %@ · Build %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ · Build %2$@"
+          }
+        }
+      }
+    },
+    "Version %@ (Build %@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Version %1$@ (Build %2$@)"
+          }
+        }
+      }
+    },
     "Version History" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17021,6 +17832,9 @@
       }
     },
     "Version: %@" : {
+
+    },
+    "View Detailed Info" : {
 
     },
     "View Entitlements" : {
@@ -17089,7 +17903,13 @@
         }
       }
     },
+    "View Full Report" : {
+
+    },
     "View Installed App Versions" : {
+
+    },
+    "View Logs" : {
 
     },
     "Visit Patreon" : {
@@ -17223,6 +18043,9 @@
           }
         }
       }
+    },
+    "VPN" : {
+
     },
     "Waiting for This iPhone…" : {
 
@@ -17389,13 +18212,46 @@
         }
       }
     },
+    "Zag Account" : {
+
+    },
+    "Zag Featured repository" : {
+
+    },
+    "Zag shield preview" : {
+
+    },
     "Zag Store" : {
 
     },
-    "Zag Store can now run the iOS 27 Remote Pairing host directly on-device. Start pairing here; when iOS connects, Zag Store will display the six-digit code and save the resulting credentials locally." : {
+    "Zag Store %@" : {
+
+    },
+    "Zag Store Beta" : {
 
     },
     "Zag Store Designer" : {
+
+    },
+    "Zag Store Logs" : {
+
+    },
+    "Zag Store Nightly" : {
+
+    },
+    "Zag Store Settings" : {
+
+    },
+    "Zag Store Update" : {
+
+    },
+    "Zag Store Updated" : {
+
+    },
+    "Zag Store will attempt an in-place upgrade using the selected signed update. iOS may close the app during replacement. No automatic uninstall or fresh-install fallback will be attempted. Continue only if you have a recovery copy." : {
+
+    },
+    "Zag Store will reopen on the last main page you used." : {
 
     }
   },
