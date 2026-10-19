@@ -510,7 +510,6 @@ struct ZagAccountPopup: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 if accountPath.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -535,7 +534,7 @@ struct ZagAccountPopup: View {
                         .foregroundStyle(.primary)
                 }
                 .padding(.leading, 20)
-                .padding(.top, 35)
+                .padding(.top, 28)
                 .allowsHitTesting(false)
             }
         }
