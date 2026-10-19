@@ -539,6 +539,7 @@ struct ZagAccountPopup: View {
                         .accessibilityLabel("Close")
                     }
                 }
+                .toolbarRole(.editor)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
