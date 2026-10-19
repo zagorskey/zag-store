@@ -516,7 +516,7 @@ struct ZagAccountPopup: View {
                 }
                 .padding(.horizontal, 20)
                 .frame(height: 76)
-                .background(accountHeaderScrolled ? Color(uiColor: .secondarySystemGroupedBackground) : Color.clear)
+                .background { if accountHeaderScrolled { Rectangle().fill(.regularMaterial) } }
             }
             .navigationDestination(for: AccountDestination.self) { destination in
                 Group {
@@ -533,19 +533,15 @@ struct ZagAccountPopup: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Color.clear.frame(width: 52, height: 44)
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(uiColor: .secondarySystemGroupedBackground), for: .navigationBar)
-        }
-        .overlay(alignment: .topTrailing) {
-            if !accountPath.isEmpty {
-                accountCloseButton
-                    .padding(.top, 14)
-                    .padding(.trailing, 20)
-            }
         }
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
