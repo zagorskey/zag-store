@@ -291,12 +291,6 @@ struct SettingsView: View {
 				}
 
 				ToolbarItemGroup(placement: .topBarTrailing) {
-                    if embeddedInAccountNavigation, let closeAccount {
-                        Button(action: closeAccount) {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Close")
-                    }
                     Button {
                         UIApplication.open("https://github.com/zagorskey/zag-store")
                     } label: {
@@ -319,6 +313,12 @@ struct SettingsView: View {
                         ZagProfileToolbarButton()
                             .tint(.primary)
                             .padding(.trailing, -2)
+                    }
+                    if embeddedInAccountNavigation, let closeAccount {
+                        Button(action: closeAccount) {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
                     }
                 }
 			}
