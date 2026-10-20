@@ -213,6 +213,20 @@ struct ZagSigningAuditView: View {
                 Text("Further Inspection")
             }
 
+            if app.isSigned {
+                Section {
+                    NavigationLink {
+                        ZagSignedOutputAuditView(app: app)
+                    } label: {
+                        Label("Inspect Existing Signed App", systemImage: "doc.text.magnifyingglass")
+                    }
+                } header: {
+                    Text("Signed Output")
+                } footer: {
+                    Text("Inspect an existing signed app's metadata and embedded files. This does not validate its cryptographic signature.")
+                }
+            }
+
             Section {
                 Label("Live Apple revocation and device acceptance", systemImage: "questionmark.circle")
                 Label("Nested app, extension and framework signatures", systemImage: "questionmark.circle")
@@ -290,5 +304,96 @@ struct ZagSigningAuditView: View {
         }
         return ("\(comparison.issues.count) potential conflicts: \(comparison.issues.prefix(3).joined(separator: "; "))",
                 .attention)
+    }
+}
+
+
+// MARK: - Inspect a previously signed app without modifying its contents
+private struct ZagSignedOutputAuditView: View {
+    let app: AppInfoPresentable
+
+    @State private var inspecting = true
+    @State private var result: Inspection?
+
+    private struct Inspection: Sendable {
+        let identifier: String?
+        let executableFound: Bool
+        let embeddedProfile: Bool
+        let entitlementKeys: Int?
+        let entitlementStatus: String
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                if inspecting {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Inspecting signed app…")
+                    }
+                } else if let result {
+                    LabeledContent("Bundle Identifier", value: result.identifier ?? "Unavailable")
+                    _statusRow("Main Executable", present: result.executableFound)
+                    _statusRow("Embedded Profile", present: result.embeddedProfile)
+                    LabeledContent("Signature Entitlements",
+                                   value: result.entitlementKeys.map(String.init) ?? "Not read")
+                    Text(result.entitlementStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("Signed app directory unavailable", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Color.orange)
+                }
+            } header: {
+                Text("Existing Signed App")
+            } footer: {
+                Text("This reads the existing app bundle and attempts to extract XML entitlements from the main executable. It does not check the signature's cryptographic validity, nested code, Apple acceptance or installability.")
+            }
+        }
+        .navigationTitle("Signed Output Audit")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard let appURL = Storage.shared.getAppDirectory(for: app) else {
+                inspecting = false
+                return
+            }
+            result = await Task.detached(priority: .userInitiated) {
+                let bundle = Bundle(url: appURL)
+                let executable = bundle?.executableURL
+                let profile = FileManager.default.fileExists(
+                    atPath: appURL.appendingPathComponent("embedded.mobileprovision").path
+                )
+
+                var count: Int?
+                var status = "Main executable unavailable"
+                if let executable {
+                    do {
+                        count = try ZagMachOSignatureInspector.entitlements(at: executable).count
+                        status = "XML entitlement keys extracted from the existing executable."
+                    } catch {
+                        status = "XML signature entitlements could not be extracted from this executable."
+                    }
+                }
+                return Inspection(
+                    identifier: bundle?.bundleIdentifier,
+                    executableFound: executable != nil,
+                    embeddedProfile: profile,
+                    entitlementKeys: count,
+                    entitlementStatus: status
+                )
+            }.value
+            inspecting = false
+        }
+    }
+
+    private func _statusRow(_ title: String, present: Bool) -> some View {
+        HStack {
+            Image(systemName: present ? "checkmark.circle" : "questionmark.circle")
+                .foregroundStyle(present ? Color.green : Color.secondary)
+            Text(title)
+            Spacer()
+            Text(present ? "Present" : "Not found")
+                .foregroundStyle(.secondary)
+        }
     }
 }
