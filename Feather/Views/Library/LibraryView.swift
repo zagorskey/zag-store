@@ -322,7 +322,7 @@ struct LibraryView: View {
                     userInfo: ["presented": true]
                 )
 			} label: {
-				HStack(spacing: 12) {
+				HStack(spacing: 4) {
 					HStack(spacing: 9) {
 						Text(.localized("Updates"))
 							.font(.system(size: 20, weight: .semibold))
@@ -340,8 +340,7 @@ struct LibraryView: View {
 					.frame(height: 46)
 					.background(zagUpdatesPillBackground)
 					.clipShape(Capsule())
-					// Match the native HStack spacing on both sides of
-					// the transfer track; never draw underneath the pill.
+					// Equal compact gaps to the transfer track on both sides.
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
@@ -1689,8 +1688,8 @@ private struct ZagUpdateTransferParticles: View {
 					.truncatingRemainder(dividingBy: 6.3)
 				let width = max(proxy.size.width, 1)
                 // Symmetric optical inset inside the transfer region.
-                // The HStack itself supplies equal 12pt gaps at both ends.
-                let endpointInset: CGFloat = 5
+                // The HStack supplies 4pt gaps; retain just 2pt optical clearance.
+                let endpointInset: CGFloat = 2
                 let travel = max(width - endpointInset * 2, 0)
 				let grow = min(max((cycle - 0.42) / 0.48, 0), 1)
 				let dissolve = min(max((cycle - 3.00) / 0.52, 0), 1)
