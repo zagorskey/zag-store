@@ -1759,7 +1759,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 13, height: 13)
 							.blur(radius: 4)
 						Circle()
-							.fill(tint)
+							.fill(Color.white)
 							.frame(width: 3.5, height: 3.5)
 					}
 					.opacity(launchFlare)
@@ -1789,7 +1789,7 @@ private struct ZagUpdateTransferParticles: View {
 								.frame(width: core, height: pulse == 0 ? 1.8 : 1.3)
 
 							Circle()
-								.fill(tint)
+								.fill(Color.white)
 								.frame(
 									width: pulse == 0 ? 4.2 : 3.0,
 									height: pulse == 0 ? 4.2 : 3.0
@@ -1806,7 +1806,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 15, height: 15)
 							.blur(radius: 4.5)
 						Circle()
-							.fill(tint)
+							.fill(Color.white)
 							.frame(width: 4, height: 4)
 					}
 					.opacity(impactFlare)
