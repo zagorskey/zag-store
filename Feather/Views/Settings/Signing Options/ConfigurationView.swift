@@ -32,21 +32,18 @@ struct ConfigurationView: View {
 				) {
 					Label(.localized("Identifiers"), systemImage: "person.text.rectangle")
 				}
+				Menu {
+					_randomMenuItem()
+				} label: {
+					Label("PPQ String", systemImage: "character.textbox")
+						.foregroundStyle(.primary)
+				}
 			}footer: {
 				Text(.localized("This allows you to set rules for automatically replacing the Bundle ID/Display Name when signing an app."))
 			}
 			SigningOptionsView(options: $_optionsManager.options)
 		}
 		.navigationTitle(.localized("Signing Options"))
-		.toolbar {
-			ToolbarItem(placement: .topBarTrailing) {
-				Menu {
-					_randomMenuItem()
-				} label: {
-					Image(systemName: "character.textbox")
-				}
-			}
-		}
 		.alert(_optionsManager.options.ppqString, isPresented: $isRandomAlertPresenting) {
 			_randomMenuAlert()
 		}
