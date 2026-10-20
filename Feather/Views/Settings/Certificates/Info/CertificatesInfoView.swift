@@ -126,14 +126,8 @@ extension CertificatesInfoView {
                         }
                         .copyableText(fingerprint)
 
-                        if let summary = _x509Summary(certificate) {
-                            LabeledContent("Subject", value: summary.subject)
-                            LabeledContent("Valid From") {
-                                Text(summary.validFrom, style: .date)
-                            }
-                            LabeledContent("Valid Until") {
-                                Text(summary.validUntil, style: .date)
-                            }
+                        if let subject = _x509Subject(certificate) {
+                            LabeledContent("Subject", value: subject)
                         }
                     }
                 }
@@ -146,24 +140,12 @@ extension CertificatesInfoView {
         }
     }
 
-    private func _x509Summary(_ der: Data) -> (subject: String, validFrom: Date, validUntil: Date)? {
-        guard let certificate = SecCertificateCreateWithData(nil, der as CFData),
-              let values = SecCertificateCopyValues(
-                certificate,
-                [kSecOIDX509V1SubjectName, kSecOIDX509V1ValidityNotBefore,
-                 kSecOIDX509V1ValidityNotAfter] as CFArray,
-                nil
-              ) as? [String: Any],
-              let subject = SecCertificateCopySubjectSummary(certificate) as String?
+    // SecCertificateCopySubjectSummary is available on iOS; the macOS-only
+    // SecCertificateCopyValues API must not be used in this iOS target.
+    private func _x509Subject(_ der: Data) -> String? {
+        guard let certificate = SecCertificateCreateWithData(nil, der as CFData)
         else { return nil }
-        func date(for key: CFString) -> Date? {
-            guard let entry = values[key as String] as? [String: Any] else { return nil }
-            return entry[kSecPropertyKeyValue as String] as? Date
-        }
-        guard let start = date(for: kSecOIDX509V1ValidityNotBefore),
-              let end = date(for: kSecOIDX509V1ValidityNotAfter)
-        else { return nil }
-        return (subject, start, end)
+        return SecCertificateCopySubjectSummary(certificate) as String?
     }
 }
 
