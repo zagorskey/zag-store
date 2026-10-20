@@ -16,7 +16,7 @@ struct ConfigurationView: View {
 	
 	// MARK: Body
 	var body: some View {
-		NBList(.localized("Signing Options")) {
+		List {
 			Section {
 				NavigationLink(destination: ConfigurationDictView(
 					title: .localized("Display Names"),
@@ -37,6 +37,8 @@ struct ConfigurationView: View {
 			}
 			SigningOptionsView(options: $_optionsManager.options)
 		}
+		.navigationTitle("Signing Options")
+		.navigationBarTitleDisplayMode(.inline)
 		.toolbar {
 			NBToolbarMenu(
 				systemImage: "character.textbox",
