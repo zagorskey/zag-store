@@ -347,12 +347,15 @@ struct LibraryView: View {
                         .frame(maxWidth: .infinity)
                         .overlay(alignment: .top) {
                             Text("\(release.version) (Build \(release.build))")
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
-                                .foregroundStyle(.secondary)
+                                // Match the 8pt certificate-days captions below
+                                // the installed-app action pills.
+                                .font(.system(size: 8, weight: .regular))
+                                .foregroundStyle(Color(uiColor: .tertiaryLabel))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
                                 .allowsHitTesting(false)
-                                .padding(.top, 2)
+                                // Bring the caption closer to the 23pt centerline.
+                                .padding(.top, 9)
                         }
 
                     ZagUpdatesCore(
