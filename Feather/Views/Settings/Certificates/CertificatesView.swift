@@ -73,53 +73,51 @@ struct CertificatesView: View {
         List {
             if !_certificates.isEmpty {
                 Section {
-                    VStack(alignment: .leading, spacing: 18) {
-                        _sectionHeading("Certificate Overview")
-                        _dashboard
+                    _dashboard
+                        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } header: {
+                    Text("Certificate Overview")
+                }
+            }
 
-                        if let active = _activeCertificate {
-                            _sectionHeading("Active Signing Identity")
-                                .padding(.top, 3)
-                            _activeCertificateCard(active)
-                        }
+            if let active = _activeCertificate {
+                Section {
+                    _activeCertificateCard(active)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } header: {
+                    Text("Active Signing Identity")
+                }
+            }
 
-                        HStack(alignment: .firstTextBaseline) {
-                            _sectionHeading("Certificate Library (\(_certificates.count))")
-                            Spacer(minLength: 4)
-                            if _certificates.count == 1 {
-                                Text("1 identity")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .padding(.top, 3)
-
-                        if _certificates.count > 1 || !_searchText.isEmpty || _filter != .all {
-                            _libraryControls
-                        }
-
-                        if _visible.isEmpty {
-                            Text("No certificates match your search or filter.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(.vertical, 12)
-                        } else {
-                            VStack(spacing: 10) {
-                                ForEach(_visible, id: \.element.uuid) { item in
-                                    _cellButton(for: item.element, at: item.offset)
-                                }
-                            }
-                        }
-
-                        Text("Tap to select · Long-press to manage")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 1)
+            if !_certificates.isEmpty {
+                Section {
+                    if _certificates.count > 1 || !_searchText.isEmpty || _filter != .all {
+                        _libraryControls
+                            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 6, trailing: 20))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
-                    .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 12, trailing: 20))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+
+                    if _visible.isEmpty {
+                        Text("No certificates match your search or filter.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(_visible, id: \.element.uuid) { item in
+                            _cellButton(for: item.element, at: item.offset)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
+                } header: {
+                    Text("Certificate Library (\(_certificates.count))")
+                } footer: {
+                    Text("Tap to select · Long-press to manage")
                 }
             }
         }
@@ -206,13 +204,6 @@ extension CertificatesView {
         let index = _selectedCertBinding.wrappedValue
         guard _certificates.indices.contains(index) else { return nil }
         return _certificates[index]
-    }
-
-    private func _sectionHeading(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var _dashboard: some View {
