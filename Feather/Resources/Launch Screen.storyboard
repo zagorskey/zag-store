@@ -25,7 +25,7 @@
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
-                        <color key="backgroundColor" red="0.018" green="0.023" blue="0.052" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.027" green="0.027" blue="0.043" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="Zag-image" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="Zag-centerX"/>
                             <constraint firstItem="Zag-image" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" constant="-6" id="Zag-centerY"/>
