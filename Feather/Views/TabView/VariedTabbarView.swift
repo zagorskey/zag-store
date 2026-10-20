@@ -488,23 +488,21 @@ struct ZagAccountPopup: View {
             }
             .navigationTitle("")
             .toolbar {
-                if accountPath.isEmpty {
-                    if #available(iOS 26.0, *) {
-                        ToolbarItem(placement: .topBarLeading) {
-                            ZagAccountToolbarHeading()
-                        }
-                        .sharedBackgroundVisibility(.hidden)
-                    } else {
-                        ToolbarItem(placement: .topBarLeading) {
-                            ZagAccountToolbarHeading()
-                        }
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ZagAccountToolbarHeading()
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Close")
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ZagAccountToolbarHeading()
                     }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
                 }
             }
             .navigationDestination(for: AccountDestination.self) { destination in
