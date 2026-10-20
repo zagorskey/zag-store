@@ -19,9 +19,10 @@ struct CertificatesCellView: View {
 
 	// MARK: Body
     var body: some View {
-        let title = cert.nickname ?? data?.Name ?? "Unknown Certificate"
-        let profileExpiry = data?.ExpirationDate ?? cert.expiration
-        let isCurrent = data.map { $0.CreationDate <= Date() && $0.ExpirationDate > Date() } ?? false
+        let profile = data ?? Storage.shared.getProvisionFileDecoded(for: cert)
+        let title = cert.nickname ?? profile?.Name ?? "Unknown Certificate"
+        let profileExpiry = profile?.ExpirationDate ?? cert.expiration
+        let isCurrent = profile.map { $0.CreationDate <= Date() && $0.ExpirationDate > Date() } ?? false
         let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
         let needsAttention = cert.revoked || !isCurrent || !hasP12
 
@@ -42,7 +43,7 @@ struct CertificatesCellView: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
 
-                    Text(data?.TeamName ?? data?.AppIDName ?? "Unknown signing team")
+                    Text(profile?.TeamName ?? profile?.AppIDName ?? "Unknown signing team")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -68,6 +69,7 @@ struct CertificatesCellView: View {
                 Label(
                     cert.revoked ? "Marked revoked" :
                     !hasP12 ? "P12 missing" :
+                    profile == nil ? "Profile unavailable" :
                     !isCurrent ? "Profile not current" : "Files present",
                     systemImage: needsAttention ? "exclamationmark.circle" : "checkmark.circle"
                 )
