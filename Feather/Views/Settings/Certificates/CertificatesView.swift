@@ -178,6 +178,12 @@ struct CertificatesView: View {
 				}
 			}
 		}
+        .task {
+            await ZagCertificateExpiryNotifications.refresh()
+        }
+        .onChange(of: _certificates.count) { _ in
+            Task { await ZagCertificateExpiryNotifications.refresh() }
+        }
         .navigationDestination(isPresented: Binding(
             get: { _isSelectedInfoPresenting != nil },
             set: { if !$0 { _isSelectedInfoPresenting = nil } }
