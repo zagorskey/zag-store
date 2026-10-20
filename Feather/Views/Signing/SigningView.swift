@@ -324,6 +324,15 @@ extension SigningView {
                     } label: {
                         Label("Signing Preflight", systemImage: "checkmark.shield")
                     }
+                    NavigationLink {
+                        ZagSigningAuditView(
+                            app: app,
+                            certificate: certificate,
+                            options: _temporaryOptions
+                        )
+                    } label: {
+                        Label("Full Local Signing Audit", systemImage: "checkmark.shield.fill")
+                    }
                 } else {
                     Label("Choose a certificate to inspect signing compatibility", systemImage: "info.circle")
                         .foregroundStyle(.secondary)
@@ -331,7 +340,7 @@ extension SigningView {
             } header: {
                 Text("Diagnostics")
             } footer: {
-                Text("Read-only certificate, identifier and entitlement checks. Signing is unchanged.")
+                Text("Read-only preflight and on-demand signing audit. The signing engine is unchanged.")
             }
         }
     }
