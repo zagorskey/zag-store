@@ -39,12 +39,29 @@ struct CertificatesView: View {
 	// MARK: Body
 	var body: some View {
 		List {
+            if let active = _activeCertificate {
+                Section {
+                    _activeCertificateCard(active)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } header: {
+                    Text("Active Signing Certificate")
+                }
+            }
+
+            Section {
 			ForEach(Array(_certificates.enumerated()), id: \.element.uuid) { index, cert in
 				_cellButton(for: cert, at: index)
 					.listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
 					.listRowSeparator(.hidden)
 					.listRowBackground(Color.clear)
 			}
+            } header: {
+                if !_certificates.isEmpty {
+                    Text("Certificate Library (\(_certificates.count))")
+                }
+            }
 		}
 		.listStyle(.plain)
 		.scrollContentBackground(.hidden)
@@ -116,6 +133,90 @@ struct CertificatesView: View {
 			)
 		}
 	}
+}
+
+// MARK: - Certificate manager summary
+extension CertificatesView {
+    // Keep the existing selection index semantics for signing. This is a
+    // read-only summary; changing the storage model belongs in a separate step.
+    private var _activeCertificate: CertificatePair? {
+        let index = _selectedCertBinding.wrappedValue
+        guard _certificates.indices.contains(index) else { return nil }
+        return _certificates[index]
+    }
+
+    private func _activeCertificateCard(_ cert: CertificatePair) -> some View {
+        let profile = Storage.shared.getProvisionFileDecoded(for: cert)
+        let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
+        let hasProfile = profile != nil
+        let expiration = profile?.ExpirationDate ?? cert.expiration
+        let isExpired = expiration.map { $0 <= Date() } ?? true
+        let isRevoked = cert.revoked
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 27))
+                    .foregroundStyle(isRevoked || isExpired ? Color.orange : Color.accentColor)
+                    .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
+                        .font(.system(size: 18, weight: .semibold))
+                        .lineLimit(2)
+                    Text(profile?.TeamName ?? "Unknown signing team")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if let expiration {
+                HStack {
+                    Text("Provisioning Profile")
+                    Spacer()
+                    Text(expiration, style: .date)
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: isRevoked || isExpired || !hasP12 || !hasProfile
+                      ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                Text(isRevoked ? "Marked revoked" :
+                     isExpired ? "Expired" :
+                     !hasP12 ? "Missing P12 file" :
+                     !hasProfile ? "Missing provisioning profile" :
+                     "Files present · Revocation unverified")
+                    .lineLimit(2)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(isRevoked || isExpired || !hasP12 || !hasProfile
+                             ? Color.orange : Color.secondary)
+
+            Button {
+                _isSelectedInfoPresenting = cert
+            } label: {
+                HStack {
+                    Text("View Certificate Details")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            .padding(.top, 2)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 28)
+                .fill(Color(uiColor: .quaternarySystemFill))
+        )
+    }
 }
 
 // MARK: - View extension
