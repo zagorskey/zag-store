@@ -399,20 +399,6 @@ struct ZagAccountPopup: View {
     var body: some View {
         NavigationStack(path: $accountPath) {
             Form {
-                HStack(spacing: 9) {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 48)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 4, trailing: 20))
                 Section {
                     NavigationLink(value: AccountDestination.profile) {
                         HStack(spacing: 14) {
@@ -500,8 +486,17 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
+            .navigationTitle("Zag Account")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                        .accessibilityHidden(true)
+                }
+                ToolbarItem(placement: .confirmationAction) {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                     }
@@ -522,7 +517,7 @@ struct ZagAccountPopup: View {
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button(action: onClose) {
                             Image(systemName: "xmark")
                         }
