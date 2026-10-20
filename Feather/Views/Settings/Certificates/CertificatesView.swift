@@ -30,10 +30,14 @@ struct CertificatesView: View {
 
     private func _attention(_ cert: CertificatePair) -> Bool {
         guard let profile = Storage.shared.getProvisionFileDecoded(for: cert) else { return true }
+        let now = Date()
+        let expiringSoon = profile.ExpirationDate > now
+            && profile.ExpirationDate <= now.addingTimeInterval(30 * 24 * 60 * 60)
         return cert.revoked
             || Storage.shared.getFile(.certificate, from: cert) == nil
-            || profile.CreationDate > Date()
-            || profile.ExpirationDate <= Date()
+            || profile.CreationDate > now
+            || profile.ExpirationDate <= now
+            || expiringSoon
     }
 
     // Filter using the original fetched-results index: selection persists as an index.
@@ -125,26 +129,14 @@ struct CertificatesView: View {
             if !_certificates.isEmpty {
                 Section {
                     NavigationLink {
-                        ZagProvisioningProfileInspectorView()
+                        ZagCertificateToolsView()
                     } label: {
-                        Label("Inspect Provisioning Profile", systemImage: "doc.text.magnifyingglass")
-                    }
-
-                    NavigationLink {
-                        ZagStoredProfileComparisonView()
-                    } label: {
-                        Label("Compare Stored Profiles", systemImage: "arrow.left.arrow.right")
-                    }
-
-                    NavigationLink {
-                        ZagCertificateHealthView()
-                    } label: {
-                        Label("Certificate Health & Reminders", systemImage: "heart.text.square")
+                        Label("Certificate Health & Tools", systemImage: "checkmark.shield")
                     }
                 } header: {
                     Text("Certificate Utilities")
                 } footer: {
-                    Text("Local inspection, comparison and optional expiry reminders.")
+                    Text("Health checks, expiry reminders and profile inspection.")
                 }
             }
         }
@@ -355,20 +347,29 @@ extension CertificatesView {
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 1)
 
-            HStack(spacing: 8) {
-                Label(attention ? "Needs attention" : "Files appear ready",
-                      systemImage: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(attention ? Color.orange : Color.green)
-                Spacer(minLength: 4)
-                if let expiry = profile?.ExpirationDate {
-                    Text("Expires")
-                        .foregroundStyle(.secondary)
-                    Text(expiry, style: .date)
+            NavigationLink {
+                ZagCertificateHealthView()
+            } label: {
+                HStack(spacing: 8) {
+                    Label(_activeStatus(for: cert, profile: profile),
+                          systemImage: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(attention ? Color.orange : Color.accentColor)
+                    Spacer(minLength: 4)
+                    if let expiry = profile?.ExpirationDate {
+                        let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
+                        Text(days < 0 ? "Expired" : days == 0 ? "Expires today" : "\(days) days left")
+                            .foregroundStyle(days <= 30 ? Color.orange : Color.secondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
                 }
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             }
-            .font(.system(size: 12, weight: .medium))
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .buttonStyle(.plain)
+            .accessibilityHint("Open certificate health and expiry reminders")
 
             Button {
                 _isSelectedInfoPresenting = cert
@@ -394,6 +395,20 @@ extension CertificatesView {
                 }
         }
     }
+
+    private func _activeStatus(for cert: CertificatePair, profile: Certificate?) -> String {
+        guard let profile else { return "Profile unavailable" }
+        if cert.revoked { return "Marked revoked" }
+        if Storage.shared.getFile(.certificate, from: cert) == nil { return "P12 missing" }
+        let now = Date()
+        if profile.CreationDate > now { return "Profile not yet valid" }
+        if profile.ExpirationDate <= now { return "Profile expired" }
+        if profile.ExpirationDate <= now.addingTimeInterval(30 * 24 * 60 * 60) {
+            return "Expiring soon"
+        }
+        return "Files appear ready"
+    }
+
 }
 
 // MARK: - View extension
