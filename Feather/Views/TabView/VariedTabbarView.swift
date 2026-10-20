@@ -124,6 +124,9 @@ struct VariedTabbarView: View {
 		              appearance.compactInlineLayoutAppearance] {
 			items.selected.iconColor = color
 			items.selected.titleTextAttributes = [.foregroundColor: color]
+            // Keep native tab item geometry stable. Hide labels only on
+            // unselected tabs; the active destination retains its title.
+            items.normal.titleTextAttributes = [.foregroundColor: UIColor.clear]
 		}
 		UITabBar.appearance().tintColor = color
 		UITabBar.appearance().standardAppearance = appearance
