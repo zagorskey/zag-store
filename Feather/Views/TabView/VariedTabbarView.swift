@@ -498,9 +498,9 @@ struct ZagAccountPopup: View {
                         Text("Zag Account")
                             .font(.headline)
                             .fixedSize(horizontal: true, vertical: false)
-                        Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
