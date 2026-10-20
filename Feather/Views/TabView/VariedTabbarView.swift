@@ -104,6 +104,7 @@ struct VariedTabbarView: View {
 			}
 		}
 		.task {
+			await ZagLaunchGate.shared.waitUntilSplashFinishes()
 			await updateManager.requestBadgePermission()
 			await sourcesViewModel.fetchSources(sources, refresh: true)
 		}
