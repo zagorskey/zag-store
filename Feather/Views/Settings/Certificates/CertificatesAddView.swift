@@ -20,6 +20,8 @@ struct CertificatesAddView: View {
     @State private var _isValidating = false
     @State private var _validationMessage: String?
     @State private var _importError: String?
+    @State private var _filesValidated = false
+    @State private var _validationGeneration = 0
 
     @FetchRequest(
         entity: CertificatePair.entity(),
@@ -31,7 +33,7 @@ struct CertificatesAddView: View {
 	@State private var _isImportingMobileProvisionPresenting = false
 	
 	var saveButtonDisabled: Bool {
-		_p12URL == nil || _provisionURL == nil || _isValidating
+		!_filesValidated || _isValidating
 	}
 	
     // MARK: Body
@@ -92,17 +94,29 @@ struct CertificatesAddView: View {
                 }
             }
             .toolbar {
-                NBToolbarButton(role: .cancel)
-
-                NBToolbarButton(
-                    .localized("Save"),
-                    style: .text,
-                    placement: .confirmationAction,
-                    isDisabled: saveButtonDisabled
-                ) {
-                    _saveCertificate()
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        _saveCertificate()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(_filesValidated ? Color.accentColor : Color.secondary)
+                    }
+                    .disabled(saveButtonDisabled)
+                    .accessibilityLabel("Import Certificate")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close New Certificate")
                 }
             }
+            .onChange(of: _p12URL) { _ in _scheduleValidation() }
+            .onChange(of: _provisionURL) { _ in _scheduleValidation() }
+            .onChange(of: _p12Password) { _ in _scheduleValidation() }
             .alert("Certificate Import", isPresented: Binding(
                 get: { _importError != nil },
                 set: { if !$0 { _importError = nil } }
@@ -117,7 +131,7 @@ struct CertificatesAddView: View {
                     onDocumentsPicked: { urls in
                         guard let selectedFileURL = urls.first else { return }
                         _p12URL = selectedFileURL
-                        _validationMessage = nil
+                        _scheduleValidation()
                     }
                 )
                 .ignoresSafeArea()
@@ -156,50 +170,70 @@ extension CertificatesAddView {
 
 // MARK: - Import validation
 extension CertificatesAddView {
-    private func _saveCertificate() {
-        guard !_isValidating,
-              let p12URL = _p12URL,
-              let provisionURL = _provisionURL else { return }
-
-        _isValidating = true
+    private func _scheduleValidation() {
+        _validationGeneration += 1
+        let generation = _validationGeneration
+        _filesValidated = false
         _validationMessage = nil
         _importError = nil
+        _isValidating = false
+
+        guard let p12 = _p12URL, let provision = _provisionURL else { return }
 
         let password = _p12Password
-        let name = _certificateName
         let existingUUIDs = Set(_existingCertificates.compactMap {
             Storage.shared.getProvisionFileDecoded(for: $0)?.UUID.lowercased()
         })
 
-        // Validate outside the UI thread; never log or display the password.
+        _isValidating = true
         Task {
+            // Allow password edits to settle before expensive PKCS#12 decoding.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard generation == _validationGeneration else { return }
+
             let result = await Task.detached(priority: .userInitiated) {
                 ZagCertificateImportValidation.validate(
-                    p12: p12URL, provision: provisionURL,
+                    p12: p12, provision: provision,
                     password: password, existingUUIDs: existingUUIDs
                 )
             }.value
 
-            guard result.isValid else {
-                _importError = result.message
-                _isValidating = false
-                return
-            }
+            guard generation == _validationGeneration else { return }
+            _isValidating = false
+            _filesValidated = result.isValid
+            _validationMessage = result.isValid
+                ? "Signing identity and provisioning profile match."
+                : nil
+            // Don't interrupt typing with alerts. A failed validation remains
+            // disabled; tapping Save only becomes possible after a valid match.
+        }
+    }
 
-            _validationMessage = "Files match. Saving signing identity…"
-            FR.handleCertificateFiles(
+    private func _saveCertificate() {
+        guard _filesValidated, !_isValidating,
+              let p12URL = _p12URL,
+              let provisionURL = _provisionURL else { return }
+
+        _isValidating = true
+        _filesValidated = false
+        _validationMessage = "Saving signing identity…"
+        _importError = nil
+
+        let password = _p12Password
+        let name = _certificateName
+        FR.handleCertificateFiles(
                 p12URL: p12URL,
                 provisionURL: provisionURL,
                 p12Password: password,
                 certificateName: name
-            ) { error in
-                _isValidating = false
-                if let error {
-                    _validationMessage = nil
-                    _importError = "Could not save the certificate: \(error.localizedDescription)"
-                } else {
-                    dismiss()
-                }
+        ) { error in
+            _isValidating = false
+            if let error {
+                _validationMessage = nil
+                _importError = "Could not save the certificate: \(error.localizedDescription)"
+                _scheduleValidation()
+            } else {
+                dismiss()
             }
         }
     }
