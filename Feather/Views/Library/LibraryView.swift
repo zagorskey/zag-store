@@ -323,20 +323,31 @@ struct LibraryView: View {
             } label: {
                 HStack(spacing: 4) {
                     HStack(spacing: 7) {
-                        Text("Update")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(Color(uiColor: UIColor { traits in
-                                traits.userInterfaceStyle == .dark
-                                    ? UIColor(white: 0.72, alpha: 1)
-                                    : UIColor(white: 0.38, alpha: 1)
-                            }))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Update")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(Color(uiColor: UIColor { traits in
+                                    traits.userInterfaceStyle == .dark
+                                        ? UIColor(white: 0.72, alpha: 1)
+                                        : UIColor(white: 0.38, alpha: 1)
+                                }))
+
+                            // The release channel is the source of truth;
+                            // this label follows Stable / Beta / Nightly.
+                            Text(ZagSelfUpdateCoordinator.UpdateChannel.selected.rawValue.capitalized)
+                                .font(.system(size: 8, weight: .medium))
+                                .tracking(0.45)
+                                .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                        }
+                        .fixedSize(horizontal: true, vertical: false)
 
                         ZagFlashingUpdateDot()
                             .frame(width: 9, height: 9)
                             .offset(y: 1)
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: 46)
+                    // Match the native leading toolbar capsule on iPhone.
+                    // Preserve the original 46pt height and rounded shape.
+                    .frame(width: 112, height: 46)
                     .background(zagUpdatesPillBackground)
                     .clipShape(Capsule())
 
