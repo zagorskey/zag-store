@@ -30,6 +30,7 @@ struct CertificatesInfoView: View {
 				}
 				
 				if let data {
+                    _diagnosticsSection(data: data)
                     _validitySection(data: data)
                     _identitySection(data: data)
                     _certificateFingerprints(data: data)
@@ -46,10 +47,104 @@ struct CertificatesInfoView: View {
 			}
         .navigationTitle("Certificate Details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("Close Certificate Details")
+            }
+        }
 		.onAppear {
 			data = Storage.shared.getProvisionFileDecoded(for: cert)
 		}
 	}
+}
+
+// MARK: - Local signing preflight
+extension CertificatesInfoView {
+    // These checks do not contact Apple, import the P12 into the keychain,
+    // expose passwords or claim that the identity can sign an app.
+    private func _diagnosticsSection(data: Certificate) -> some View {
+        let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
+        let hasEmbeddedCertificates = !(data.DeveloperCertificates ?? []).isEmpty
+        let isCurrent = data.CreationDate <= Date() && data.ExpirationDate > Date()
+        let isRevoked = cert.revoked
+        let fileReady = hasP12 && hasEmbeddedCertificates && isCurrent && !isRevoked
+
+        return Section {
+            HStack(spacing: 10) {
+                Image(systemName: fileReady ? "checkmark.shield" : "exclamationmark.shield")
+                    .foregroundStyle(fileReady ? Color.accentColor : Color.orange)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(fileReady ? "Local preflight passed" : "Local preflight needs attention")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Signing and Apple revocation status are not verified.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            _diagnosticRow(
+                "P12 Signing File",
+                passed: hasP12,
+                success: "Present",
+                failure: "Missing"
+            )
+            _diagnosticRow(
+                "Embedded Developer Certificates",
+                passed: hasEmbeddedCertificates,
+                success: "\(data.DeveloperCertificates?.count ?? 0) found",
+                failure: "None found"
+            )
+            _diagnosticRow(
+                "Profile Date Range",
+                passed: isCurrent,
+                success: "Current",
+                failure: "Not currently valid"
+            )
+            _diagnosticRow(
+                "Local Revocation Flag",
+                passed: !isRevoked,
+                success: "No revocation recorded",
+                failure: "Marked revoked"
+            )
+            LabeledContent("Provisioning Type", value: _profileType(data))
+        } header: {
+            Text("Signing Diagnostics")
+        } footer: {
+            Text("Local preflight checks file presence and profile metadata only. It does not verify the P12 password, private-key match, Apple revocation status, device eligibility or actual signing.")
+        }
+    }
+
+    private func _diagnosticRow(
+        _ title: String, passed: Bool, success: String, failure: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(passed ? Color.green : Color.orange)
+            Text(title)
+            Spacer(minLength: 8)
+            Text(passed ? success : failure)
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func _profileType(_ data: Certificate) -> String {
+        if data.ProvisionsAllDevices == true {
+            return "In-House / Enterprise"
+        }
+        if data.Entitlements?["get-task-allow"]?.value as? Bool == true {
+            return "Development"
+        }
+        if let devices = data.ProvisionedDevices, !devices.isEmpty {
+            return "Ad Hoc Distribution"
+        }
+        return "Distribution / Other"
+    }
 }
 
 // MARK: - Paid certificate diagnostics (read-only)
@@ -166,7 +261,7 @@ extension CertificatesInfoView {
 			_info(.localized("Expires"), description: data.ExpirationDate.expirationInfo().formatted)
 				.foregroundStyle(data.ExpirationDate.expirationInfo().color)
 			
-			_info(.localized("Revoked"), description: cert.revoked ? "✓" : "✗")
+			_info("Revocation Status", description: cert.revoked ? "Marked revoked" : "Not verified")
 			
 			if let ppq = data.PPQCheck {
 				_info(.localized("PPQCheck"), description: ppq ? "✓" : "✗")
