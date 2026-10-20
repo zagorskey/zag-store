@@ -166,7 +166,7 @@ private struct ZagAnimatedLaunchOverlay: View {
             if visible {
                 GeometryReader { geometry in
                     ZStack {
-                        Color(red: 0.018, green: 0.023, blue: 0.052)
+                        Color(red: 0.027, green: 0.027, blue: 0.043)
                         RadialGradient(
                             colors: [
                                 Color(red: 0.01, green: 0.18, blue: 0.46).opacity(illuminated ? 0.38 : 0.15),
@@ -188,9 +188,25 @@ private struct ZagAnimatedLaunchOverlay: View {
                         Image("ZagAccountIconDark")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: min(geometry.size.width * 0.44, 180))
-                            .scaleEffect(illuminated || reduceMotion ? 1.0 : 0.97)
-                            .opacity(illuminated ? 1 : 0.9)
+                            .frame(width: min(geometry.size.width * 0.62, 250))
+                            // Fade only the square image's dark outer edges.
+                            // The original glass Z pixels remain unmodified.
+                            .mask {
+                                GeometryReader { imageGeometry in
+                                    RadialGradient(
+                                        stops: [
+                                            .init(color: .white, location: 0),
+                                            .init(color: .white, location: 0.65),
+                                            .init(color: .clear, location: 1)
+                                        ],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: imageGeometry.size.width * 0.70
+                                    )
+                                }
+                            }
+                            .scaleEffect(illuminated || reduceMotion ? 1.0 : 0.985)
+                            .opacity(illuminated ? 1 : 0.96)
                             .accessibilityHidden(true)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
