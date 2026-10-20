@@ -8,6 +8,7 @@
 
 import SwiftUI
 import NukeUI
+import UIKit
 
 @available(iOS 18, *)
 struct ExtendedTabbarView: View {
@@ -17,6 +18,10 @@ struct ExtendedTabbarView: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
+    @State private var dockIsCompact = false
+    @State private var previousDragY: CGFloat = 0
+    @State private var accumulatedScroll: CGFloat = 0
+    @State private var previousDirection: CGFloat = 0
 	
 	@State private var _isAddingPresenting = false
 
@@ -25,6 +30,7 @@ struct ExtendedTabbarView: View {
 			get: { selectedTabRawValue },
 			set: { newValue in
 				selectedTabRawValue = newValue
+                dockIsCompact = false
 				if rememberLastPage {
 					UserDefaults.standard.set(
 						newValue,
@@ -47,6 +53,7 @@ struct ExtendedTabbarView: View {
 				if tab == .sources {
                     Tab(value: tab.rawValue) {
                         TabEnum.view(for: tab)
+                            .simultaneousGesture(dockDirectionGesture, including: .all)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -57,6 +64,7 @@ struct ExtendedTabbarView: View {
                 } else {
                     Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
                         TabEnum.view(for: tab)
+                            .simultaneousGesture(dockDirectionGesture, including: .all)
                     }
                 }
 			}
@@ -64,6 +72,7 @@ struct ExtendedTabbarView: View {
 			ForEach(TabEnum.customizableTabs, id: \.hashValue) { tab in
 				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
 					TabEnum.view(for: tab)
+                            .simultaneousGesture(dockDirectionGesture, including: .all)
 				}
 				.customizationID("tab.\(tab.rawValue)")
 				.defaultVisibility(.hidden, for: .tabBar)
@@ -102,6 +111,12 @@ struct ExtendedTabbarView: View {
 			.hidden(horizontalSizeClass == .compact)
 		}
 		.tabViewStyle(.sidebarAdaptable)
+        .background {
+            if horizontalSizeClass == .compact {
+                ZagNativeDockScaleBridge(compact: dockIsCompact)
+                    .frame(width: 0, height: 0)
+            }
+        }
 		.overlay(alignment: .bottom) {
 			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
 				GeometryReader { proxy in
@@ -139,6 +154,32 @@ struct ExtendedTabbarView: View {
 		}
 	}
 	
+    private var dockDirectionGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard horizontalSizeClass == .compact,
+                      abs(value.translation.height) > abs(value.translation.width) * 1.3 else { return }
+                let delta = value.translation.height - previousDragY
+                previousDragY = value.translation.height
+                guard abs(delta) > 0.5 else { return }
+                let direction: CGFloat = delta > 0 ? 1 : -1
+                if direction != previousDirection {
+                    accumulatedScroll = 0
+                    previousDirection = direction
+                }
+                accumulatedScroll += abs(delta)
+                guard accumulatedScroll >= 22 else { return }
+                accumulatedScroll = 0
+                let compact = direction < 0
+                if dockIsCompact != compact { dockIsCompact = compact }
+            }
+            .onEnded { _ in
+                previousDragY = 0
+                previousDirection = 0
+                accumulatedScroll = 0
+            }
+    }
+
 	@ViewBuilder
 	private func _icon(_ title: String, iconUrl: URL?) -> some View {
 		Label {
@@ -165,3 +206,50 @@ struct ExtendedTabbarView: View {
 	}
 }
 
+
+// Apply a transform to the existing UIKit tab bar rather than recreating it.
+// Its Liquid Glass material, labels, symbols, badges and tab interactions
+// remain exactly as provided by the system.
+@available(iOS 18, *)
+private struct ZagNativeDockScaleBridge: UIViewRepresentable {
+    let compact: Bool
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let compact = compact
+        DispatchQueue.main.async {
+            guard let window = view.window,
+                  let tabBar = findTabBar(in: window.rootViewController) else { return }
+            let transform = compact
+                ? CGAffineTransform(scaleX: 0.86, y: 0.84)
+                : .identity
+            guard tabBar.transform != transform else { return }
+            UIView.animate(
+                withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.30,
+                delay: 0,
+                usingSpringWithDamping: 0.88,
+                initialSpringVelocity: 0,
+                options: [.beginFromCurrentState, .allowUserInteraction]
+            ) {
+                tabBar.transform = transform
+            }
+        }
+    }
+
+    private func findTabBar(in controller: UIViewController?) -> UITabBar? {
+        guard let controller else { return nil }
+        if let tabs = controller as? UITabBarController { return tabs.tabBar }
+        for child in controller.children {
+            if let found = findTabBar(in: child) { return found }
+        }
+        if let presented = controller.presentedViewController {
+            return findTabBar(in: presented)
+        }
+        return nil
+    }
+}
