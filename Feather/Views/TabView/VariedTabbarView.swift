@@ -416,7 +416,7 @@ struct ZagAccountPopup: View {
                         }
                         .padding(.vertical, 0)
                     }
-                    HStack(spacing: 14) {
+                    HStack(spacing: 8) {
                         Image(uiImage: ZagSourcesTabIcon.image)
                             .resizable()
                             .renderingMode(.template)
