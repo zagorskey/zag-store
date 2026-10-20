@@ -91,6 +91,12 @@ struct SigningView: View {
 					_temporaryOptions = OptionsManager.shared.options
 					appIcon = nil
 				}
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close Sign App")
+                }
 			}
 			.sheet(isPresented: $_isAltPickerPresenting) { SigningAlternativeIconView(app: app, appIcon: $appIcon, isModifing: .constant(true)) }
 			.sheet(isPresented: $_isFilePickerPresenting) {
@@ -149,7 +155,7 @@ struct SigningView: View {
 extension SigningView {
 	@ViewBuilder
 	private func _customizationOptions(for app: AppInfoPresentable) -> some View {
-		NBSection(.localized("Customization")) {
+		Section {
 			Menu {
 				Button(.localized("Select Alternative Icon"), systemImage: "app.dashed") { _isAltPickerPresenting = true }
 				Button(.localized("Choose from Files"), systemImage: "folder") { _isFilePickerPresenting = true }
@@ -184,12 +190,14 @@ extension SigningView {
 					bindingValue: $_temporaryOptions.appVersion
 				)
 			}
-		}
+		} header: {
+            Text("Customisation")
+        }
 	}
 	
 	@ViewBuilder
 	private func _cert() -> some View {
-		NBSection(.localized("Signing")) {
+		Section {
 			if let cert = _selectedCert() {
 				NavigationLink {
 					CertificatesView(selectedCert: $_temporaryCertificate)
@@ -203,12 +211,14 @@ extension SigningView {
 					.font(.footnote)
 					.foregroundColor(.disabled())
 			}
-		}
+		} header: {
+            Text(.localized("Signing"))
+        }
 	}
 	
 	@ViewBuilder
 	private func _customizationProperties(for app: AppInfoPresentable) -> some View {
-		NBSection(.localized("Advanced")) {
+		Section {
 			DisclosureGroup(.localized("Modify")) {
 				NavigationLink(.localized("Existing Dylibs")) {
 					SigningDylibView(
@@ -244,7 +254,9 @@ extension SigningView {
 				)}
 				.navigationTitle(.localized("Properties"))
 			}
-		}
+		} header: {
+            Text(.localized("Advanced"))
+        }
 	}
 	
 	@ViewBuilder
@@ -270,7 +282,8 @@ extension SigningView {
                         ZagSigningPreflightView(
                             app: app,
                             certificate: certificate,
-                            options: _temporaryOptions
+                            options: _temporaryOptions,
+                            onClose: { dismiss() }
                         )
                     } label: {
                         Label("Signing Preflight", systemImage: "checkmark.shield")
@@ -294,6 +307,7 @@ struct ZagSigningPreflightView: View {
     let app: AppInfoPresentable
     let certificate: CertificatePair
     let options: Options
+    let onClose: () -> Void
     @State private var originalEntitlementAudit: ZagOriginalEntitlementAudit.Report?
     @State private var originalEntitlementRunning = false
     @State private var originalEntitlementRequest = UUID()
@@ -367,8 +381,8 @@ struct ZagSigningPreflightView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { dismiss() } label: { Image(systemName: "xmark") }
-                    .accessibilityLabel("Close Signing Preflight")
+                Button { onClose() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Close Signing and Return to Apps")
             }
         }
     }
