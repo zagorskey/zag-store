@@ -134,10 +134,16 @@ struct CertificatesView: View {
                     } label: {
                         Label("Compare Stored Profiles", systemImage: "arrow.left.arrow.right")
                     }
+
+                    NavigationLink {
+                        ZagCertificateHealthView()
+                    } label: {
+                        Label("Certificate Health & Reminders", systemImage: "heart.text.square")
+                    }
                 } header: {
                     Text("Certificate Utilities")
                 } footer: {
-                    Text("Read-only profile inspection and comparison. Signing identities remain unchanged.")
+                    Text("Local inspection, comparison and optional expiry reminders.")
                 }
             }
         }
