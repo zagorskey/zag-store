@@ -501,7 +501,6 @@ struct ZagAccountPopup: View {
                     }
                     .fixedSize(horizontal: true, vertical: false)
                     .accessibilityElement(children: .combine)
-                    .modifier(ZagAccountPlainToolbarLabel())
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
@@ -548,19 +547,6 @@ struct ZagAccountPopup: View {
         .environment(\.zagAccountClose, onClose)
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
-        }
-    }
-}
-
-// iOS 26+ gives navigation toolbar items an automatic Liquid Glass capsule.
-// The account logo/title is a label, not an action, so it should not have one.
-private struct ZagAccountPlainToolbarLabel: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.sharedBackgroundVisibility(.hidden)
-        } else {
-            content
         }
     }
 }
