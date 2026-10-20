@@ -434,9 +434,14 @@ private enum ZagP12IdentityCheck {
               let items = imported as? [[String: Any]]
         else { return .invalidArchive }
 
-        guard let identity = items.compactMap({
-            $0[kSecImportItemIdentity as String] as? SecIdentity
-        }).first else { return .missingIdentity }
+        // SecIdentity is a CoreFoundation type. Swift rejects a conditional
+        // downcast from Any to SecIdentity; use an explicit type check first.
+        guard let item = items.first(where: {
+            CFGetTypeID($0[kSecImportItemIdentity as String] as CFTypeRef) == SecIdentityGetTypeID()
+        }), let rawIdentity = item[kSecImportItemIdentity as String] else {
+            return .missingIdentity
+        }
+        let identity = rawIdentity as! SecIdentity
 
         var privateKey: SecKey?
         guard SecIdentityCopyPrivateKey(identity, &privateKey) == errSecSuccess,
