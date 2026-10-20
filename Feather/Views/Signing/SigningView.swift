@@ -350,6 +350,7 @@ struct ZagSigningPreflightView: View {
 
     var body: some View {
         Form {
+            _preflightSummary()
             Section {
                 if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
                         let bundleID = options.appIdentifier ?? app.identifier ?? ""
@@ -421,6 +422,68 @@ struct ZagSigningPreflightView: View {
                     .accessibilityLabel("Close Signing and Return to Apps")
             }
         }
+    }
+
+    // A conservative summary of checks performed locally. This does not
+    // predict installation success or override the signer's own behaviour.
+    @ViewBuilder
+    private func _preflightSummary() -> some View {
+        Section {
+            if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+                let hasP12 = Storage.shared.getFile(.certificate, from: certificate) != nil
+                let datesCurrent = profile.CreationDate <= Date() && profile.ExpirationDate > Date()
+                let customIssues: [String]? = options.appEntitlementsFile.flatMap {
+                    _preflightEntitlementIssues(at: $0, profile: profile)
+                }
+                let customUnreadable = options.appEntitlementsFile != nil && customIssues == nil
+                let customWarnings = customIssues?.count ?? 0
+                let needsAttention = !hasP12 || !datesCurrent || certificate.revoked || customUnreadable || customWarnings > 0
+                let message = needsAttention
+                    ? "Some local checks need attention"
+                    : "No issues in the basic local checks"
+                Label(message, systemImage: needsAttention ? "exclamationmark.triangle" : "checkmark.circle")
+                    .foregroundStyle(needsAttention ? Color.orange : Color.green)
+
+                if !hasP12 {
+                    _summaryFinding("P12 file is missing")
+                }
+                if !datesCurrent {
+                    _summaryFinding("Provisioning profile is not currently valid")
+                }
+                if certificate.revoked {
+                    _summaryFinding("Certificate was previously marked revoked")
+                }
+                if customUnreadable {
+                    _summaryFinding("Selected custom entitlements could not be read")
+                } else if customWarnings > 0 {
+                    _summaryFinding("\(customWarnings) potential custom entitlement difference(s)")
+                }
+                Text("The summary covers local files, profile dates and any explicitly selected custom entitlements. Identifier and original-app comparisons are advisory, not confirmed signing errors.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("Cannot assess: provisioning profile unavailable", systemImage: "questionmark.circle")
+                    .foregroundStyle(Color.orange)
+            }
+            DisclosureGroup("Not Verified") {
+                Text("P12 password and private-key usability")
+                Text("Live Apple certificate revocation status")
+                Text("Final signed bundle identifier and entitlements")
+                Text("Device registration and installation eligibility")
+                Text("Nested app and extension signing outcomes")
+            }
+            .font(.subheadline)
+        } header: {
+            Text("Pre-signing Summary")
+        } footer: {
+            Text("Informational only. These checks never prevent signing.")
+        }
+    }
+
+    private func _summaryFinding(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
     }
 
     @ViewBuilder
