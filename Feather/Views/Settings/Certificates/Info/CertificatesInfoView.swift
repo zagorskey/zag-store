@@ -17,6 +17,7 @@ struct CertificatesInfoView: View {
 	@State var data: Certificate?
     @State private var _identityCheck: ZagP12IdentityCheck.Result?
     @State private var _identityCheckRunning = false
+    @State private var _testBundleID = ""
 	
 	var cert: CertificatePair
 	
@@ -33,6 +34,7 @@ struct CertificatesInfoView: View {
 				
 				if let data {
                     _diagnosticsSection(data: data)
+                    _appCompatibilitySection(data: data)
                     _validitySection(data: data)
                     _identitySection(data: data)
                     _certificateFingerprints(data: data)
@@ -197,6 +199,105 @@ extension CertificatesInfoView {
             return "Ad Hoc Distribution"
         }
         return "Distribution / Other"
+    }
+}
+
+// MARK: - Bundle identifier / provisioning profile compatibility
+extension CertificatesInfoView {
+    private func _appCompatibilitySection(data: Certificate) -> some View {
+        let entitlement = data.Entitlements?["application-identifier"]?.value as? String
+            ?? data.Entitlements?["com.apple.application-identifier"]?.value as? String
+        let requestedID = _testBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let check = _checkBundleIdentifier(requestedID, allowed: entitlement, teams: data.TeamIdentifier)
+
+        return Section {
+            if let entitlement {
+                LabeledContent("Allowed App Identifier") {
+                    Text(entitlement)
+                        .font(.system(.caption, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                }
+                .copyableText(entitlement)
+            } else {
+                LabeledContent("Allowed App Identifier", value: "Not available")
+            }
+
+            TextField("Enter an app bundle identifier", text: $_testBundleID)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            if !requestedID.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: check.matches ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundStyle(check.matches ? Color.green : Color.orange)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(check.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(check.explanation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            LabeledContent("Platform", value: data.Platform.joined(separator: ", "))
+            LabeledContent("Device Eligibility") {
+                Text(_deviceScope(data))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+        } header: {
+            Text("App Compatibility")
+        } footer: {
+            Text("Enter the final CFBundleIdentifier of the app you plan to sign. This checks only the provisioning profile’s App ID pattern and team prefix; it does not validate requested entitlements, registered device UDIDs or installability.")
+        }
+    }
+
+    private func _deviceScope(_ data: Certificate) -> String {
+        if data.ProvisionsAllDevices == true {
+            return "All devices (in-house profile)"
+        }
+        if let devices = data.ProvisionedDevices {
+            return "\(devices.count) registered device(s)"
+        }
+        return "No device list (distribution profile)"
+    }
+
+    private func _checkBundleIdentifier(
+        _ requested: String, allowed: String?, teams: [String]
+    ) -> (matches: Bool, title: String, explanation: String) {
+        guard !requested.isEmpty else { return (false, "", "") }
+        guard let allowed, !allowed.isEmpty else {
+            return (false, "Cannot determine compatibility",
+                    "This profile does not expose an application-identifier entitlement.")
+        }
+
+        // An Apple application-identifier entitlement starts with an App ID
+        // prefix, normally the Team ID, followed by a period and bundle ID.
+        guard let separator = allowed.firstIndex(of: ".") else {
+            return (false, "Invalid profile App ID",
+                    "The application-identifier entitlement has no team prefix.")
+        }
+        let prefix = String(allowed[..<separator])
+        let pattern = String(allowed[allowed.index(after: separator)...])
+        guard teams.contains(prefix) else {
+            return (false, "Team prefix differs",
+                    "The App ID prefix is not listed among this profile’s Team Identifiers.")
+        }
+
+        let matches: Bool
+        if pattern == "*" {
+            matches = true
+        } else if pattern.hasSuffix("*") && pattern.filter({ $0 == "*" }).count == 1 {
+            let start = String(pattern.dropLast())
+            matches = requested.hasPrefix(start) && requested.count > start.count
+        } else {
+            matches = requested == pattern
+        }
+
+        return matches
+            ? (true, "App ID matches", "This bundle identifier matches the profile’s App ID pattern.")
+            : (false, "App ID does not match", "This bundle identifier is not permitted by the profile’s App ID pattern.")
     }
 }
 
