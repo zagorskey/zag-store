@@ -120,6 +120,26 @@ struct CertificatesView: View {
                     Text("Tap to select · Long-press to manage")
                 }
             }
+
+            if !_certificates.isEmpty {
+                Section {
+                    NavigationLink {
+                        ZagProvisioningProfileInspectorView()
+                    } label: {
+                        Label("Inspect Provisioning Profile", systemImage: "doc.text.magnifyingglass")
+                    }
+
+                    NavigationLink {
+                        ZagStoredProfileComparisonView()
+                    } label: {
+                        Label("Compare Stored Profiles", systemImage: "arrow.left.arrow.right")
+                    }
+                } header: {
+                    Text("Certificate Utilities")
+                } footer: {
+                    Text("Read-only profile inspection and comparison. Signing identities remain unchanged.")
+                }
+            }
         }
 		.listStyle(.plain)
 		.scrollContentBackground(.hidden)
