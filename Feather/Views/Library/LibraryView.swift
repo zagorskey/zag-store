@@ -69,6 +69,7 @@ struct LibraryView: View {
 
 
 	@StateObject private var updateManager = UpdateManager.shared
+    @StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@StateObject private var rppairingCore = ZagRPPairingCore.shared
 
 
@@ -98,6 +99,7 @@ struct LibraryView: View {
 
 	@State private var _isDownloadingPresenting = false
 	@State private var _isUpdatesPresenting = false
+    @State private var _isSelfUpdatePresenting = false
 	@State private var _removingBundleIDs: Set<String> = []
 	@State private var _pendingRemoveApp: AnyApp?
 	@State private var _transactionSignedUUIDs: Set<String> = []
@@ -311,66 +313,72 @@ struct LibraryView: View {
 		ZagWideGamutTint.color(hex: zagUpdatesThemeHex)
 	}
 
-	@ViewBuilder
-	private var zagUpdatesContent: some View {
-		if updateManager.hasVisibleUpdates {
-			Button {
-				_isUpdatesPresenting = true
-                NotificationCenter.default.post(
-                    name: .zagUpdatesSheetVisibilityDidChange,
-                    object: nil,
-                    userInfo: ["presented": true]
-                )
-			} label: {
-				HStack(spacing: 4) {
-					HStack(spacing: 9) {
-						Text(.localized("Updates"))
-							.font(.system(size: 20, weight: .semibold))
-							.foregroundStyle(Color(uiColor: UIColor { traits in
+    // This announcement is exclusively for Zag Store itself.
+    // Installed-app update counts live in the global avatar.
+    @ViewBuilder
+    private var zagUpdatesContent: some View {
+        if let release = selfUpdateCoordinator.availableRelease {
+            Button {
+                _isSelfUpdatePresenting = true
+            } label: {
+                HStack(spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text("Update")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Color(uiColor: UIColor { traits in
                                 traits.userInterfaceStyle == .dark
                                     ? UIColor(white: 0.72, alpha: 1)
                                     : UIColor(white: 0.38, alpha: 1)
                             }))
 
-						ZagFlashingUpdateDot()
-							.frame(width: 9, height: 9)
-							.offset(y: 1)
-					}
-					.padding(.horizontal, 14)
-					.frame(height: 46)
-					.background(zagUpdatesPillBackground)
-					.clipShape(Capsule())
-					// Equal compact gaps to the transfer track on both sides.
+                        ZagFlashingUpdateDot()
+                            .frame(width: 9, height: 9)
+                            .offset(y: 1)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 46)
+                    .background(zagUpdatesPillBackground)
+                    .clipShape(Capsule())
 
-					ZagUpdateTransferParticles()
-						.frame(maxWidth: .infinity)
+                    // Preserve the existing left-to-right energy flow,
+                    // but use the extra width freed by the shorter pill.
+                    // Version is centered above the line, never hardcoded.
+                    ZagUpdateTransferParticles()
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .top) {
+                            Text("\(release.version) (Build \(release.build))")
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .allowsHitTesting(false)
+                                .padding(.top, 2)
+                        }
 
-					// The avatar already reports the update count. Keep the
-					// original transfer animation and turn its destination
-					// into a theme-aware, animated glass Zag Core.
-					ZagUpdatesCore(
-						baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
-					)
-					.frame(width: 46, height: 46)
-				}
-				.frame(maxWidth: .infinity, alignment: .leading)
-				// Native search scopes consume additional vertical space while
-				// search is active. Do not pull the animated Updates row into them.
-				.padding(.top, _searchFieldFocused ? 0 : -16)
-			}
-			.buttonStyle(.plain)
-            .accessibilityLabel("Updates, \(updateManager.updateCount) available")
-			.listRowSeparator(.hidden)
-			.listRowBackground(Color.clear)
-			.padding(.vertical, 2)
-			.transition(
-				.asymmetric(
-					insertion: .opacity.combined(with: .move(edge: .top)),
-					removal: .opacity.combined(with: .move(edge: .top))
-				)
-			)
-		}
-	}
+                    ZagUpdatesCore(
+                        baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
+                    )
+                    .frame(width: 46, height: 46)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, _searchFieldFocused ? 0 : -16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                "Zag Store update available: \(release.version), Build \(release.build). Open Zag Store Update"
+            )
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .padding(.vertical, 2)
+            .transition(
+                .asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                )
+            )
+        }
+    }
 
 	private var _repositorySourceIsPresented: Binding<Bool> {
 		Binding(
@@ -989,6 +997,9 @@ struct LibraryView: View {
 			) {
 				_repositoryDestination
 			}
+            .navigationDestination(isPresented: $_isSelfUpdatePresenting) {
+                ZagSelfUpdateStatusView()
+            }
 
 			.sheet(isPresented: $_showAppDiagnostics) {
                 NavigationStack { RPPairingDiagnosticsView() }
