@@ -351,68 +351,9 @@ struct ZagSigningPreflightView: View {
     var body: some View {
         Form {
             _preflightSummary()
-            Section {
-                if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
-                        let bundleID = options.appIdentifier ?? app.identifier ?? ""
-                        let appID = profile.Entitlements?["application-identifier"]?.value as? String
-                            ?? profile.Entitlements?["com.apple.application-identifier"]?.value as? String
-                        let bundleMatches = _profileAllows(bundleID, appID: appID, teamIDs: profile.TeamIdentifier)
-                        let validDates = profile.CreationDate <= Date() && profile.ExpirationDate > Date()
-                        let p12Present = Storage.shared.getFile(.certificate, from: certificate) != nil
-
-                        LabeledContent("Profile", value: profile.Name)
-                        _preflightRow("P12 File", okay: p12Present, success: "Present", failure: "Missing")
-                        _preflightRow("Profile Dates", okay: validDates, success: "Current", failure: "Not valid")
-                        _identifierPreflight(
-                            originalID: app.identifier ?? "",
-                            requestedID: bundleID,
-                            profileAppID: appID,
-                            matches: bundleMatches,
-                            ppqMayChange: options.ppqProtection && certificate.ppQCheck
-                        )
-                        if certificate.revoked {
-                            Label("Certificate previously marked revoked", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(Color.orange)
-                        } else {
-                            Text("Apple revocation status has not been verified.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let entitlementsURL = options.appEntitlementsFile {
-                            let issues = _preflightEntitlementIssues(at: entitlementsURL, profile: profile)
-                            if let issues {
-                                if issues.isEmpty {
-                                    Label("Custom entitlements: no basic conflicts found", systemImage: "checkmark.circle")
-                                        .foregroundStyle(Color.green)
-                                } else {
-                                    DisclosureGroup("Custom entitlements: \(issues.count) warning(s)") {
-                                        ForEach(issues, id: \.self) { issue in
-                                            Text(issue)
-                                                .font(.caption)
-                                        }
-                                    }
-                                }
-                            } else {
-                                Label("Custom entitlements could not be read", systemImage: "exclamationmark.triangle")
-                                    .foregroundStyle(Color.orange)
-                            }
-                        }
-
-                        _originalEntitlementInspection(profile: profile)
-
-                        NavigationLink("Certificate Details") {
-                            CertificatesInfoView(cert: certificate)
-                        }
-                } else {
-                    Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(Color.orange)
-                }
-            } header: {
-                Text("Signing Preflight")
-            } footer: {
-                Text("Read-only guidance, not signing authorization. Final identifiers and entitlements may change during signing. P12 password, Apple revocation, signed output and device registration are not verified here.")
-            }
+            _certificateSection()
+            _identifierSection()
+            _entitlementsSection()
         }
         .navigationTitle("Signing Preflight")
         .navigationBarTitleDisplayMode(.inline)
@@ -420,6 +361,92 @@ struct ZagSigningPreflightView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { onClose() } label: { Image(systemName: "xmark") }
                     .accessibilityLabel("Close Signing and Return to Apps")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func _certificateSection() -> some View {
+        Section {
+            if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+                LabeledContent("Profile", value: profile.Name)
+                _preflightRow(
+                    "P12 File",
+                    okay: Storage.shared.getFile(.certificate, from: certificate) != nil,
+                    success: "Present",
+                    failure: "Missing"
+                )
+                _preflightRow(
+                    "Profile Dates",
+                    okay: profile.CreationDate <= Date() && profile.ExpirationDate > Date(),
+                    success: "Current",
+                    failure: "Not valid"
+                )
+                if certificate.revoked {
+                    Label("Previously marked revoked", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Color.orange)
+                }
+                NavigationLink("Certificate Details") {
+                    CertificatesInfoView(cert: certificate)
+                }
+            } else {
+                Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Color.orange)
+            }
+        } header: {
+            Text("Certificate")
+        }
+    }
+
+    @ViewBuilder
+    private func _identifierSection() -> some View {
+        if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+            let bundleID = options.appIdentifier ?? app.identifier ?? ""
+            let appID = profile.Entitlements?["application-identifier"]?.value as? String
+                ?? profile.Entitlements?["com.apple.application-identifier"]?.value as? String
+            Section {
+                _identifierPreflight(
+                    originalID: app.identifier ?? "",
+                    requestedID: bundleID,
+                    profileAppID: appID,
+                    matches: _profileAllows(bundleID, appID: appID, teamIDs: profile.TeamIdentifier),
+                    ppqMayChange: options.ppqProtection && certificate.ppQCheck
+                )
+            } header: {
+                Text("App Identifier")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func _entitlementsSection() -> some View {
+        if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+            Section {
+                if let entitlementsURL = options.appEntitlementsFile {
+                    if let issues = _preflightEntitlementIssues(at: entitlementsURL, profile: profile) {
+                        if issues.isEmpty {
+                            Label("Custom entitlements: no basic differences found", systemImage: "checkmark.circle")
+                                .foregroundStyle(Color.green)
+                        } else {
+                            DisclosureGroup("Custom entitlements to review (\(issues.count))") {
+                                ForEach(issues, id: \.self) { issue in
+                                    Text(issue)
+                                        .font(.caption)
+                                }
+                            }
+                        }
+                    } else {
+                        Label("Custom entitlements could not be read", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(Color.orange)
+                    }
+                } else {
+                    LabeledContent("Custom Entitlements", value: "Not selected")
+                }
+                _originalEntitlementInspection(profile: profile)
+            } header: {
+                Text("Entitlements")
+            } footer: {
+                Text("Original-app capabilities may be replaced when signing. Differences here are advisory, not confirmed failures.")
             }
         }
     }
@@ -466,13 +493,18 @@ struct ZagSigningPreflightView: View {
                     .foregroundStyle(Color.orange)
             }
             DisclosureGroup("Not Verified") {
-                Text("P12 password and private-key usability")
-                Text("Live Apple certificate revocation status")
-                Text("Final signed bundle identifier and entitlements")
-                Text("Device registration and installation eligibility")
-                Text("Nested app and extension signing outcomes")
+                ForEach([
+                    "P12 password and private-key usability",
+                    "Live Apple certificate revocation status",
+                    "Final signed bundle identifier and entitlements",
+                    "Device registration and installation eligibility",
+                    "Nested app and extension signing outcomes"
+                ], id: \.self) { item in
+                    Label(item, systemImage: "questionmark.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .font(.subheadline)
         } header: {
             Text("Pre-signing Summary")
         } footer: {
@@ -504,11 +536,11 @@ struct ZagSigningPreflightView: View {
                 .font(.subheadline)
         }
         if !matches || ppqMayChange {
-            Text("The profile's App ID does not establish the identifier that will be used after re-signing. This is not a certificate failure.")
+            Text("The final signed identifier is not verified. This does not establish a certificate failure.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        DisclosureGroup("Identifier Comparison") {
+        DisclosureGroup("Compare Identifiers") {
             LabeledContent("Original App") {
                 Text(originalID.isEmpty ? "Unavailable" : originalID)
                     .foregroundStyle(.secondary)
@@ -546,7 +578,7 @@ struct ZagSigningPreflightView: View {
                 } else {
                     Image(systemName: "doc.text.magnifyingglass")
                 }
-                Text("Inspect Original App Entitlements")
+                Text("Inspect Original Entitlements")
             }
         }
         .disabled(originalEntitlementRunning)
@@ -717,7 +749,7 @@ private enum ZagOriginalEntitlementAudit {
         }
         var summary: String {
             if let error { return error }
-            return "\(inspected) original entitlement(s), \(issues.count) difference(s) from the selected profile. Original capabilities may be replaced during re-signing; these are not confirmed signing failures."
+            return "\(inspected) original entitlement(s), \(issues.count) profile difference(s). Not a final signing check."
         }
     }
 
