@@ -16,6 +16,7 @@ struct CertificatesView: View {
 	@State private var _isRenamingPresenting = false
 	@State private var _isSelectedInfoPresenting: CertificatePair?
 	@State private var _certToRename: CertificatePair?
+    @State private var _certToExport: CertificatePair?
 	@State private var _newNickname: String = ""
 	@State private var _pendingCertificateDelete: CertificatePair?
     @State private var _searchText = ""
@@ -196,6 +197,11 @@ struct CertificatesView: View {
 			CertificatesAddView()
 				.presentationDetents([.medium])
 		}
+        .sheet(item: $_certToExport) { cert in
+            NavigationStack {
+                ZagCertificateExportView(cert: cert)
+            }
+        }
 		.alert(.localized("Change Name"), isPresented: $_isRenamingPresenting, presenting: _certToRename) { cert in
 			TextField(.localized("Name"), text: $_newNickname)
 			Button(.localized("Cancel"), role: .cancel) { }
@@ -213,8 +219,17 @@ struct CertificatesView: View {
 			presenting: _pendingCertificateDelete
 		) { cert in
 			Button(.localized("Delete"), role: .destructive) {
-				Storage.shared.deleteCertificate(for: cert)
-				_pendingCertificateDelete = nil
+                let deletedIndex = _certificates.firstIndex(where: { $0.objectID == cert.objectID })
+                let selectedIndex = _selectedCertBinding.wrappedValue
+                Storage.shared.deleteCertificate(for: cert)
+                if let deletedIndex {
+                    if deletedIndex < selectedIndex {
+                        _selectedCertBinding.wrappedValue = selectedIndex - 1
+                    } else if deletedIndex == selectedIndex {
+                        _selectedCertBinding.wrappedValue = 0
+                    }
+                }
+                _pendingCertificateDelete = nil
 			}
 			Button(.localized("Cancel"), role: .cancel) {
 				_pendingCertificateDelete = nil
@@ -444,6 +459,9 @@ extension CertificatesView {
 		Button(.localized("Get Info"), systemImage: "info.circle") {
 			_isSelectedInfoPresenting = cert
 		}
+        Button("Export Signing Files", systemImage: "square.and.arrow.up") {
+            _certToExport = cert
+        }
 		Button(.localized("Change Name"), systemImage: "pencil") {
 			_newNickname = cert.nickname ?? ""
 			_certToRename = cert
