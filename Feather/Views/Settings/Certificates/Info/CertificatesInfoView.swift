@@ -424,7 +424,7 @@ extension CertificatesInfoView {
                 .frame(minHeight: 110, maxHeight: 180)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .onChange(of: _requestedEntitlementsText) { _, _ in
+                .onChange(of: _requestedEntitlementsText) { _ in
                     _entitlementCheck = nil
                 }
 
