@@ -22,6 +22,8 @@ struct SigningView: View {
 	@State private var _isSigning = false
 	@State private var _selectedPhoto: PhotosPickerItem? = nil
 	@State var appIcon: UIImage?
+    @State private var _originalEntitlementAudit: ZagOriginalEntitlementAudit.Report?
+    @State private var _originalEntitlementRunning = false
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -310,6 +312,8 @@ extension SigningView {
                             }
                         }
 
+                        _originalEntitlementInspection(profile: profile)
+
                         NavigationLink("Certificate Details") {
                             CertificatesInfoView(cert: certificate)
                         }
@@ -324,8 +328,95 @@ extension SigningView {
             } header: {
                 Text("Signing Preflight")
             } footer: {
-                Text("Advisory checks only. The final bundle identifier may be changed by signing options. This does not verify the P12 password, Apple's revocation service, actual app entitlements or device registration.")
+                Text("Advisory checks only. The final bundle identifier may be changed by signing options. This does not verify the P12 password, Apple's revocation service, final signed entitlements or device registration.")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func _originalEntitlementInspection(profile: Certificate) -> some View {
+        Button {
+            _inspectOriginalEntitlements(profile: profile)
+        } label: {
+            HStack(spacing: 8) {
+                if _originalEntitlementRunning {
+                    ProgressView()
+                } else {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                Text("Inspect Original App Entitlements")
+            }
+        }
+        .disabled(_originalEntitlementRunning)
+        .onChange(of: _temporaryCertificate) { _ in
+            _originalEntitlementAudit = nil
+        }
+
+        if let report = _originalEntitlementAudit {
+            VStack(alignment: .leading, spacing: 5) {
+                Label(report.title, systemImage: report.issues.isEmpty && report.error == nil
+                      ? "checkmark.circle" : "exclamationmark.triangle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(report.issues.isEmpty && report.error == nil ? Color.green : Color.orange)
+                Text(report.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !report.issues.isEmpty {
+                DisclosureGroup("Potential capability conflicts (\(report.issues.count))") {
+                    ForEach(report.issues, id: \.self) { issue in
+                        Text(issue)
+                            .font(.caption)
+                    }
+                }
+            }
+            if !report.identityKeys.isEmpty {
+                DisclosureGroup("Identity-bound keys (\(report.identityKeys.count))") {
+                    ForEach(report.identityKeys, id: \.self) { key in
+                        Text(key)
+                            .font(.caption)
+                    }
+                    Text("These values usually change during re-signing and are not treated as profile conflicts here.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func _inspectOriginalEntitlements(profile: Certificate) {
+        guard !_originalEntitlementRunning else { return }
+        guard let appURL = Storage.shared.getAppDirectory(for: app),
+              let executable = Bundle(url: appURL)?.executableURL else {
+            _originalEntitlementAudit = .init(
+                inspected: 0, issues: [], identityKeys: [],
+                error: "The imported application's executable is unavailable."
+            )
+            return
+        }
+
+        // Capture immutable property-list bytes instead of moving Core Data
+        // objects or non-Sendable dictionaries into the detached task.
+        let profileValues = profile.Entitlements?.mapValues { $0.value } ?? [:]
+        guard PropertyListSerialization.propertyList(profileValues, isValidFor: .xml),
+              let profileData = try? PropertyListSerialization.data(
+                fromPropertyList: profileValues, format: .xml, options: 0
+              ) else {
+            _originalEntitlementAudit = .init(
+                inspected: 0, issues: [], identityKeys: [],
+                error: "The selected profile's entitlements could not be decoded."
+            )
+            return
+        }
+
+        _originalEntitlementRunning = true
+        _originalEntitlementAudit = nil
+        Task {
+            let report = await Task.detached(priority: .userInitiated) {
+                ZagOriginalEntitlementAudit.inspect(executable: executable, profileData: profileData)
+            }.value
+            _originalEntitlementAudit = report
+            _originalEntitlementRunning = false
         }
     }
 
@@ -403,6 +494,100 @@ extension SigningView {
         }
         if let requested = requested as? Data, let allowed = allowed as? Data {
             return requested == allowed
+        }
+        return false
+    }
+}
+
+// MARK: - Original code-signature entitlement audit
+// Reports only capabilities present in the existing main executable.
+// Does not claim to know the entitlements the signer will finally generate.
+private enum ZagOriginalEntitlementAudit {
+    struct Report: Sendable {
+        let inspected: Int
+        let issues: [String]
+        let identityKeys: [String]
+        let error: String?
+
+        var title: String {
+            if error != nil { return "Original signature not inspected" }
+            return issues.isEmpty ? "No obvious capability conflicts" : "Potential capability conflicts"
+        }
+        var summary: String {
+            if let error { return error }
+            return "\(inspected) original entitlement(s) found, \(issues.count) potential conflict(s). This is not a final signing or installation check."
+        }
+    }
+
+    static func inspect(executable: URL, profileData: Data) -> Report {
+        let original: [String: Any]
+        do {
+            original = try ZagMachOSignatureInspector.entitlements(at: executable)
+        } catch ZagMachOSignatureInspector.InspectionError.unsupportedFormat {
+            return Report(inspected: 0, issues: [], identityKeys: [],
+                          error: "This Mach-O format is not supported by the current signature inspector (for example, a fat binary).")
+        } catch ZagMachOSignatureInspector.InspectionError.missingEntitlements {
+            return Report(inspected: 0, issues: [], identityKeys: [],
+                          error: "No XML entitlements were found in the original executable's signature.")
+        } catch {
+            return Report(inspected: 0, issues: [], identityKeys: [],
+                          error: "Unable to inspect the original executable's code-signature entitlements.")
+        }
+        guard let profile = (try? PropertyListSerialization.propertyList(
+            from: profileData, options: [], format: nil
+        )) as? [String: Any] else {
+            return Report(inspected: original.count, issues: [], identityKeys: [],
+                          error: "The selected provisioning profile's entitlements are unreadable.")
+        }
+
+        // Original app and team identifiers commonly change on re-signing.
+        let identityKeys: Set<String> = [
+            "application-identifier",
+            "com.apple.application-identifier",
+            "com.apple.developer.team-identifier",
+            "keychain-access-groups",
+            "com.apple.security.application-groups",
+            "com.apple.developer.ubiquity-kvstore-identifier",
+            "com.apple.developer.icloud-container-identifiers",
+            "get-task-allow"
+        ]
+        let ignored = original.keys.filter { identityKeys.contains($0) }.sorted()
+        var issues: [String] = []
+        for key in original.keys.sorted() where !identityKeys.contains(key) {
+            guard let value = original[key] else { continue }
+            guard let permitted = profile[key] else {
+                issues.append("\(key): capability not present in selected profile")
+                continue
+            }
+            if !matches(value, permitted) {
+                issues.append("\(key): capability value differs from selected profile")
+            }
+        }
+        return Report(inspected: original.count, issues: issues, identityKeys: ignored, error: nil)
+    }
+
+    private static func matches(_ original: Any, _ allowed: Any) -> Bool {
+        if let lhs = original as? String, let rhs = allowed as? String {
+            if lhs == rhs { return true }
+            if rhs.hasSuffix("*"), rhs.filter({ $0 == "*" }).count == 1 {
+                return lhs.hasPrefix(String(rhs.dropLast()))
+            }
+            return false
+        }
+        if let lhs = original as? [String], let rhs = allowed as? [String] {
+            return lhs.allSatisfy { item in rhs.contains { matches(item, $0) } }
+        }
+        if let lhs = original as? [String: Any], let rhs = allowed as? [String: Any] {
+            return lhs.allSatisfy { key, value in
+                guard let permitted = rhs[key] else { return false }
+                return matches(value, permitted)
+            }
+        }
+        if let lhs = original as? NSNumber, let rhs = allowed as? NSNumber {
+            return CFGetTypeID(lhs) == CFGetTypeID(rhs) && lhs == rhs
+        }
+        if let lhs = original as? Data, let rhs = allowed as? Data {
+            return lhs == rhs
         }
         return false
     }
