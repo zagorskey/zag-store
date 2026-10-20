@@ -65,7 +65,7 @@ extension CertificatesInfoView {
             [.day], from: Date(), to: data.ExpirationDate
         ).day ?? 0)
 
-        return Section("Validity Period") {
+        return Section {
             LabeledContent("Valid From") {
                 Text(data.CreationDate, format: .dateTime.day().month(.abbreviated).year())
             }
@@ -86,13 +86,15 @@ extension CertificatesInfoView {
                 Text("\(remaining)")
                     .foregroundStyle(data.ExpirationDate <= Date() ? .red : .secondary)
             }
+        } header: {
+            Text("Validity Period")
         } footer: {
             Text("These dates describe the provisioning profile, not necessarily the P12 signing certificate.")
         }
     }
 
     private func _identitySection(data: Certificate) -> some View {
-        Section("Signing Identity") {
+        Section {
             LabeledContent("Team Name", value: data.TeamName)
             if let teamID = data.TeamIdentifier.first {
                 LabeledContent("Team ID", value: teamID)
@@ -106,13 +108,15 @@ extension CertificatesInfoView {
                      ? "P12 present" : "P12 missing")
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            Text("Signing Identity")
         } footer: {
             Text("File presence alone does not confirm that the private key, profile and certificate match.")
         }
     }
 
     private func _certificateFingerprints(data: Certificate) -> some View {
-        Section("Developer Certificates") {
+        Section {
             if let certificates = data.DeveloperCertificates, !certificates.isEmpty {
                 ForEach(Array(certificates.enumerated()), id: \.offset) { index, certificate in
                     DisclosureGroup("Certificate \(index + 1)") {
@@ -135,6 +139,8 @@ extension CertificatesInfoView {
                 Text("No embedded developer certificates available")
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            Text("Developer Certificates")
         } footer: {
             Text("Fingerprints identify public certificates embedded in the provisioning profile. No private-key data is displayed.")
         }
