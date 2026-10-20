@@ -18,6 +18,7 @@ struct ExtendedTabbarView: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
     @State private var compactDock = false
     @State private var lastScrollOffset: CGFloat?
     @State private var scrollDirection = 0
@@ -110,35 +111,25 @@ struct ExtendedTabbarView: View {
 			.defaultVisibility(.hidden, for: .tabBar)
 			.hidden(horizontalSizeClass == .compact)
 		}
-		.tabViewStyle(.sidebarAdaptable)
-        .background {
+        .tabViewStyle(.sidebarAdaptable)
+        // Reserve a constant layout height. Only the *native* UITabBar's
+        // frame animates; the underlying lists never change their safe area
+        // on a compact/expanded transition.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if horizontalSizeClass == .compact {
-                ZagNativeDockTransformBridge(compact: compactDock)
-                    .frame(width: 1, height: 1)
-                    .allowsHitTesting(false)
+                ZagStandaloneNativeDock(
+                    selectedTab: selectedTabRawValue,
+                    compact: compactDock,
+                    tint: UIColor(ZagWideGamutTint.color(hex: themeColorHex)),
+                    showsUpdates: updateManager.hasVisibleUpdates,
+                    onSelect: { rawValue in
+                        selectedTab.wrappedValue = rawValue
+                    }
+                )
+                .frame(height: 88)
+                .padding(.bottom, 2)
             }
         }
-		.overlay(alignment: .bottom) {
-			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
-				GeometryReader { proxy in
-					// The native floating tab bar keeps its items inside a
-					// horizontal content inset. Preserve the original indicator
-					// geometry: 12pt to the right of the Apps icon centre.
-					let tabContentInset: CGFloat = 30
-					let contentWidth = proxy.size.width - (tabContentInset * 2)
-					let itemWidth = contentWidth / CGFloat(TabEnum.defaultTabs.count)
-					Circle()
-						.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
-						.frame(width: 7, height: 7)
-						.position(
-							x: tabContentInset + itemWidth * 2.5 + 12,
-							y: proxy.size.height - 55
-						)
-						.allowsHitTesting(false)
-				}
-				.ignoresSafeArea()
-			}
-		}
 		.tabViewCustomization($customization)
 		.onOpenURL { url in
             if let tab = TabEnum.tab(for: url) {
@@ -157,11 +148,20 @@ struct ExtendedTabbarView: View {
 	
     @ViewBuilder
     private func nativeDestination(for tab: TabEnum) -> some View {
-        TabEnum.view(for: tab)
-            .environment(\.zagDockDidScroll, { oldOffset, newOffset in
-                guard selectedTabRawValue == tab.rawValue else { return }
-                trackNativeDockScroll(old: oldOffset, new: newOffset)
-            })
+        if horizontalSizeClass == .compact {
+            TabEnum.view(for: tab)
+                // The system TabView still owns navigation. Its managed
+                // tab bar is hidden on iPhone so that only one actual
+                // UITabBar is visible and touchable.
+                .toolbar(.hidden, for: .tabBar)
+                .environment(\.zagDockDidScroll, { oldOffset, newOffset in
+                    guard selectedTabRawValue == tab.rawValue else { return }
+                    trackNativeDockScroll(old: oldOffset, new: newOffset)
+                })
+        } else {
+            // iPad keeps the unmodified native adaptable TabView.
+            TabEnum.view(for: tab)
+        }
     }
 
     private func trackNativeDockScroll(old: CGFloat, new: CGFloat) {
@@ -219,63 +219,204 @@ struct ExtendedTabbarView: View {
 }
 
 
-// Preserve the system's real UITabBar and its native Liquid Glass,
-// selection interactions, accessibility, and tab-switching animations.
-// Only its rendered presentation is scaled; SwiftUI's tab layout stays native.
+// iPhone-only experiment: this is an actual system UITabBar, NOT a
+// SwiftUI imitation. Its frame changes size as one unit, allowing UIKit
+// to redraw Liquid Glass, the selection capsule, icons and titles itself.
+// The original SwiftUI TabView continues owning the actual page navigation.
 @available(iOS 18, *)
-private struct ZagNativeDockTransformBridge: UIViewRepresentable {
-    var compact: Bool
+private struct ZagStandaloneNativeDock: UIViewRepresentable {
+    let selectedTab: String
+    let compact: Bool
+    let tint: UIColor
+    let showsUpdates: Bool
+    let onSelect: (String) -> Void
 
-    func makeUIView(context: Context) -> Probe {
-        let view = Probe()
-        view.isUserInteractionEnabled = false
+    func makeUIView(context: Context) -> DockHost {
+        let view = DockHost()
+        view.onSelect = onSelect
         return view
     }
 
-    func updateUIView(_ view: Probe, context: Context) {
-        view.compact = compact
-        view.apply()
+    func updateUIView(_ view: DockHost, context: Context) {
+        view.onSelect = onSelect
+        view.configure(
+            selectedTab: selectedTab,
+            compact: compact,
+            tint: tint,
+            showsUpdates: showsUpdates
+        )
     }
 
-    final class Probe: UIView {
-        var compact = false
-        private weak var tabBar: UITabBar?
-        private var animator: UIViewPropertyAnimator?
+    final class DockHost: UIView, UITabBarDelegate {
+        private let tabBar = UITabBar(frame: .zero)
+        private let updatesDot = UIView(frame: .zero)
+        private var collapseAnimator: UIViewPropertyAnimator?
+        private var isCompact = false
+        private var needsFirstLayout = true
+        private var lastHostWidth: CGFloat = 0
 
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            DispatchQueue.main.async { [weak self] in self?.apply() }
+        var onSelect: ((String) -> Void)?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            backgroundColor = .clear
+            isOpaque = false
+            clipsToBounds = false
+
+            tabBar.backgroundColor = .clear
+            tabBar.isTranslucent = true
+            tabBar.clipsToBounds = false
+            tabBar.itemPositioning = .fill
+            tabBar.delegate = self
+
+            tabBar.items = TabEnum.defaultTabs.enumerated().map { index, tab in
+                let image = tab == .sources
+                    ? ZagSourcesTabIcon.image
+                    : UIImage(systemName: tab.icon)
+                let item = UITabBarItem(
+                    title: tab.title,
+                    image: image?.withRenderingMode(.alwaysTemplate),
+                    selectedImage: nil
+                )
+                item.tag = index
+                item.accessibilityLabel = tab.title
+                return item
+            }
+            addSubview(tabBar)
+
+            updatesDot.backgroundColor = UIColor(
+                displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1
+            )
+            updatesDot.layer.cornerRadius = 3.5
+            updatesDot.isUserInteractionEnabled = false
+            updatesDot.isHidden = true
+            addSubview(updatesDot)
         }
 
-        func apply() {
-            guard let window else { return }
-            guard let bar = tabBar ?? findBar(in: window.rootViewController) else { return }
-            tabBar = bar
-            let target = compact
-                ? CGAffineTransform(scaleX: 0.84, y: 0.88)
-                : CGAffineTransform.identity
-            guard bar.transform != target else { return }
-            animator?.stopAnimation(true)
-            let animator = UIViewPropertyAnimator(
-                duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.34,
-                dampingRatio: 0.88
-            ) {
-                bar.transform = target
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) is not supported")
+        }
+
+        func configure(
+            selectedTab: String,
+            compact: Bool,
+            tint: UIColor,
+            showsUpdates: Bool
+        ) {
+            tabBar.tintColor = tint
+            let index = TabEnum.defaultTabs.firstIndex {
+                $0.rawValue == selectedTab
+            } ?? 0
+            if let items = tabBar.items, items.indices.contains(index),
+               tabBar.selectedItem !== items[index] {
+                tabBar.selectedItem = items[index]
             }
-            self.animator = animator
+
+            updatesDot.isHidden = !showsUpdates
+
+            guard isCompact != compact else {
+                // The system can lay out the bar again after tab changes.
+                // Do not restart the size animation for selection changes.
+                return
+            }
+            isCompact = compact
+            animateSizeChange()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard bounds.width > 0 else { return }
+
+            // UIKit owns the bar's frame during an active animator.
+            // Reposition only when the host really changes width,
+            // e.g. rotation or multitasking.
+            let widthChanged = abs(bounds.width - lastHostWidth) > 0.5
+            if collapseAnimator?.isRunning == true, !widthChanged {
+                return
+            }
+            lastHostWidth = bounds.width
+            guard collapseAnimator?.isRunning != true else { return }
+            let destination = targetFrame(compact: isCompact)
+            if needsFirstLayout || tabBar.frame != destination {
+                tabBar.frame = destination
+                tabBar.layoutIfNeeded()
+                needsFirstLayout = false
+            }
+            positionUpdatesDot()
+        }
+
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard TabEnum.defaultTabs.indices.contains(item.tag) else { return }
+            // This also handles tapping the selected tab: SwiftUI expands
+            // the dock even though navigation does not change.
+            onSelect?(TabEnum.defaultTabs[item.tag].rawValue)
+        }
+
+        private func animateSizeChange() {
+            guard !needsFirstLayout, bounds.width > 0 else {
+                setNeedsLayout()
+                return
+            }
+            if let previous = collapseAnimator {
+                previous.stopAnimation(false)
+                previous.finishAnimation(at: .current)
+                collapseAnimator = nil
+            }
+
+            let destination = targetFrame(compact: isCompact)
+            guard tabBar.frame != destination else {
+                positionUpdatesDot()
+                return
+            }
+            let duration: TimeInterval = UIAccessibility.isReduceMotionEnabled
+                ? 0
+                : 0.38
+            let animator = UIViewPropertyAnimator(
+                duration: duration,
+                dampingRatio: 0.94
+            ) { [weak self] in
+                guard let self else { return }
+                self.tabBar.frame = destination
+                self.tabBar.layoutIfNeeded()
+                self.positionUpdatesDot()
+            }
+            collapseAnimator = animator
+            animator.addCompletion { [weak self] _ in
+                guard let self else { return }
+                self.collapseAnimator = nil
+                self.setNeedsLayout()
+            }
             animator.startAnimation()
         }
 
-        private func findBar(in controller: UIViewController?) -> UITabBar? {
-            guard let controller else { return nil }
-            if let tabs = controller as? UITabBarController { return tabs.tabBar }
-            for child in controller.children {
-                if let found = findBar(in: child) { return found }
-            }
-            if let presented = controller.presentedViewController {
-                return findBar(in: presented)
-            }
-            return nil
+        private func targetFrame(compact: Bool) -> CGRect {
+            // The iOS 26+ standalone UITabBar renders its own floating
+            // glass capsule *inside* these frames. We change the actual
+            // layout rectangle rather than applying a transform.
+            let availableWidth = max(bounds.width - 24, 0)
+            let expandedWidth = min(availableWidth, 396)
+            let width = compact
+                ? min(expandedWidth, 312)
+                : expandedWidth
+            let height: CGFloat = compact ? 70 : 78
+            return CGRect(
+                x: (bounds.width - width) / 2,
+                y: bounds.height - height - 2,
+                width: width,
+                height: height
+            )
+        }
+
+        private func positionUpdatesDot() {
+            let frame = tabBar.frame
+            // Apps is the third of five evenly distributed native items.
+            // Keep the vivid red indicator as a passive overlay.
+            updatesDot.frame = CGRect(
+                x: frame.minX + frame.width * 2.5 / 5 + 8.5,
+                y: frame.minY + 11,
+                width: 7,
+                height: 7
+            )
         }
     }
 }
