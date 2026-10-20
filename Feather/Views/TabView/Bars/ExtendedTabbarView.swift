@@ -102,6 +102,7 @@ struct ExtendedTabbarView: View {
 			.hidden(horizontalSizeClass == .compact)
 		}
 		.tabViewStyle(.sidebarAdaptable)
+        .modifier(ZagDockScrollMinimization())
 		.overlay(alignment: .bottom) {
 			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
 				GeometryReader { proxy in
@@ -165,3 +166,15 @@ struct ExtendedTabbarView: View {
 	}
 }
 
+
+@available(iOS 18, *)
+private struct ZagDockScrollMinimization: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
+    }
+}
