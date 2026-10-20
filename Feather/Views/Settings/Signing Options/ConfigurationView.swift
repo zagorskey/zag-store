@@ -13,6 +13,7 @@ struct ConfigurationView: View {
 	@StateObject private var _optionsManager = OptionsManager.shared
 	@State var isRandomAlertPresenting = false
 	@State var randomString = ""
+	@AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
 	
 	// MARK: Body
 	var body: some View {
@@ -43,6 +44,7 @@ struct ConfigurationView: View {
 			}
 			SigningOptionsView(options: $_optionsManager.options)
 		}
+		.tint(Color(hex: themeColorHex))
 		.navigationTitle(.localized("Signing Options"))
 		.alert(_optionsManager.options.ppqString, isPresented: $isRandomAlertPresenting) {
 			_randomMenuAlert()
