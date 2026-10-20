@@ -23,6 +23,7 @@ struct ExtendedTabbarView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var previousScrollDirection = 0
     @State private var directionalScrollDistance: CGFloat = 0
+    @State private var lastDockScrollOffset: CGFloat?
 	
 	@State private var _isAddingPresenting = false
 
@@ -34,6 +35,7 @@ struct ExtendedTabbarView: View {
                 expandDock()
                 previousScrollDirection = 0
                 directionalScrollDistance = 0
+                lastDockScrollOffset = nil
 				if rememberLastPage {
 					UserDefaults.standard.set(
 						newValue,
@@ -117,8 +119,8 @@ struct ExtendedTabbarView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if horizontalSizeClass == .compact {
                 zagDock
+                    .frame(height: 78, alignment: .bottom)
                     .padding(.horizontal, 16)
-                    .padding(.top, 4)
                     .padding(.bottom, 6)
             }
         }
@@ -184,21 +186,32 @@ struct ExtendedTabbarView: View {
     private func reportDockScroll(from oldOffset: CGFloat, to newOffset: CGFloat) {
         guard horizontalSizeClass == .compact,
               oldOffset.isFinite, newOffset.isFinite else { return }
-        let delta = newOffset - oldOffset
-        guard abs(delta) >= 1, abs(delta) < 120 else { return }
+        // A fixed-height safe area prevents every dock animation from
+        // re-laying out the underlying List and feeding back into scrolling.
+        // Ignore offset discontinuities from refreshes and list reloads.
         if newOffset <= 3 {
+            lastDockScrollOffset = newOffset
             directionalScrollDistance = 0
             previousScrollDirection = 0
             expandDock()
             return
         }
+        guard let lastOffset = lastDockScrollOffset else {
+            lastDockScrollOffset = newOffset
+            return
+        }
+        lastDockScrollOffset = newOffset
+        let delta = newOffset - lastOffset
+        guard abs(delta) >= 2, abs(delta) < 70 else { return }
         let direction = delta > 0 ? 1 : -1
         if direction != previousScrollDirection {
             previousScrollDirection = direction
             directionalScrollDistance = 0
         }
         directionalScrollDistance += abs(delta)
-        guard directionalScrollDistance >= 16 else { return }
+        // Require sustained motion to avoid repeatedly reversing the spring
+        // from minor scroll-view bounce and deceleration jitter.
+        guard directionalScrollDistance >= 32 else { return }
         directionalScrollDistance = 0
         let shouldCompact = direction > 0
         guard dockCompact != shouldCompact else { return }
@@ -253,9 +266,7 @@ struct ExtendedTabbarView: View {
                     .background {
                         if selected {
                             Capsule()
-                                .fill(colorScheme == .dark
-                                      ? Color.black.opacity(0.43)
-                                      : Color.white.opacity(0.58))
+                                .fill(Color.primary.opacity(0.065))
                                 .padding(.horizontal, 2)
                                 .padding(.vertical, 2)
                         }
@@ -280,14 +291,7 @@ struct ExtendedTabbarView: View {
         // five item positions interpolate together, rather than scaling
         // the whole rendered tab bar.
         .frame(maxWidth: dockCompact ? 312 : 396)
-        .background {
-            if #available(iOS 26.0, *) {
-                Capsule().glassEffect(.regular, in: Capsule())
-            } else {
-                Capsule().fill(.regularMaterial)
-                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
-            }
-        }
+        .modifier(ZagDockNativeGlass())
         .shadow(color: .black.opacity(0.13), radius: 12, y: 4)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
@@ -357,5 +361,20 @@ private struct ZagDockScrollReportingModifier: ViewModifier {
 extension View {
     func zagTrackDockScrolling() -> some View {
         modifier(ZagDockScrollReportingModifier())
+    }
+}
+
+// Use the same interactive Liquid Glass treatment as Zag Store's top
+// toolbar capsules. Applying glassEffect to the dock content (rather than
+// putting a glassEffect-rendered Capsule behind another view) preserves the
+// system's transparent refraction and adaptive highlights.
+private struct ZagDockNativeGlass: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            content.background(.ultraThinMaterial, in: Capsule())
+        }
     }
 }
