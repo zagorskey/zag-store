@@ -488,19 +488,15 @@ struct ZagAccountPopup: View {
             }
             .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 9) {
-                        Image("ZagAccountIconDark")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 27, height: 27)
-                            .clipShape(Circle())
-                        Text("Zag Account")
-                            .font(.headline)
-                            .fixedSize(horizontal: true, vertical: false)
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ZagAccountToolbarHeading()
                     }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .accessibilityElement(children: .combine)
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarLeading) {
+                        ZagAccountToolbarHeading()
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
@@ -548,6 +544,23 @@ struct ZagAccountPopup: View {
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
         }
+    }
+}
+
+private struct ZagAccountToolbarHeading: View {
+    var body: some View {
+        HStack(spacing: 9) {
+            Image("ZagAccountIconDark")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 27, height: 27)
+                .clipShape(Circle())
+            Text("Zag Account")
+                .font(.headline)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .combine)
     }
 }
 
