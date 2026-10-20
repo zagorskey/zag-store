@@ -54,6 +54,14 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
                         .tint(.primary)
                         .padding(.trailing, -2)
                 }
+            } else if let closeAccount {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: closeAccount) {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(.primary)
+                    .accessibilityLabel("Close")
+                }
             }
         }
     }
