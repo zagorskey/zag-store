@@ -112,22 +112,29 @@ struct ExtendedTabbarView: View {
 			.hidden(horizontalSizeClass == .compact)
 		}
         .tabViewStyle(.sidebarAdaptable)
-        // Reserve a constant layout height. Only the *native* UITabBar's
-        // frame animates; the underlying lists never change their safe area
-        // on a compact/expanded transition.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // Present the real UIKit dock over scrolling content, as the
+        // original floating Apple tab bar does. A safeAreaInset incorrectly
+        // added another 88pt at the bottom and lifted the dock ~one home
+        // indicator above its original position.
+        .overlay(alignment: .bottom) {
             if horizontalSizeClass == .compact {
-                ZagStandaloneNativeDock(
-                    selectedTab: selectedTabRawValue,
-                    compact: compactDock,
-                    tint: UIColor(ZagWideGamutTint.color(hex: themeColorHex)),
-                    showsUpdates: updateManager.hasVisibleUpdates,
-                    onSelect: { rawValue in
-                        selectedTab.wrappedValue = rawValue
-                    }
-                )
-                .frame(height: 88)
-                .padding(.bottom, 2)
+                GeometryReader { geometry in
+                    ZagStandaloneNativeDock(
+                        selectedTab: selectedTabRawValue,
+                        compact: compactDock,
+                        tint: UIColor(ZagWideGamutTint.color(hex: themeColorHex)),
+                        showsUpdates: updateManager.hasVisibleUpdates,
+                        onSelect: { rawValue in
+                            selectedTab.wrappedValue = rawValue
+                        }
+                    )
+                    .frame(height: 88)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    // The native bar floats above the home indicator.
+                    // Cancel the outer SwiftUI safe-area displacement so
+                    // its bottom matches the system tab bar's baseline.
+                    .offset(y: max(0, geometry.safeAreaInsets.bottom - 4))
+                }
             }
         }
 		.tabViewCustomization($customization)
@@ -254,6 +261,20 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
         private var isCompact = false
         private var needsFirstLayout = true
         private var lastHostWidth: CGFloat = 0
+        private var currentTint: UIColor? = nil
+
+        private static let expandedZImage = makeSourcesImage(size: 25)
+        private static let compactZImage = makeSourcesImage(size: 21)
+
+        private static func makeSourcesImage(size: CGFloat) -> UIImage {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+            let image = renderer.image { _ in
+                ZagSourcesTabIcon.image.draw(
+                    in: CGRect(x: 0, y: 0, width: size, height: size)
+                )
+            }
+            return image.withRenderingMode(.alwaysTemplate)
+        }
 
         var onSelect: ((String) -> Void)?
 
@@ -304,6 +325,10 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
             showsUpdates: Bool
         ) {
             tabBar.tintColor = tint
+            if currentTint?.isEqual(tint) != true {
+                currentTint = tint
+                applyItemMetrics(compact: isCompact, tint: tint)
+            }
             let index = TabEnum.defaultTabs.firstIndex {
                 $0.rawValue == selectedTab
             } ?? 0
@@ -320,7 +345,7 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
                 return
             }
             isCompact = compact
-            animateSizeChange()
+            animateSizeChange(tint: tint)
         }
 
         override func layoutSubviews() {
@@ -352,8 +377,9 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
             onSelect?(TabEnum.defaultTabs[item.tag].rawValue)
         }
 
-        private func animateSizeChange() {
+        private func animateSizeChange(tint: UIColor) {
             guard !needsFirstLayout, bounds.width > 0 else {
+                applyItemMetrics(compact: isCompact, tint: tint)
                 setNeedsLayout()
                 return
             }
@@ -365,12 +391,26 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
 
             let destination = targetFrame(compact: isCompact)
             guard tabBar.frame != destination else {
+                applyItemMetrics(compact: isCompact, tint: tint)
                 positionUpdatesDot()
                 return
             }
             let duration: TimeInterval = UIAccessibility.isReduceMotionEnabled
                 ? 0
                 : 0.38
+
+            // Icons and type become slightly smaller together with the
+            // glass. Cross-dissolve UIKit's discrete symbol/font metrics;
+            // the capsule itself continues its uninterrupted frame spring.
+            UIView.transition(
+                with: tabBar,
+                duration: duration * 0.65,
+                options: [.transitionCrossDissolve, .beginFromCurrentState, .allowAnimatedContent],
+                animations: { [weak self] in
+                    self?.applyItemMetrics(compact: self?.isCompact ?? false, tint: tint)
+                }
+            )
+
             let animator = UIViewPropertyAnimator(
                 duration: duration,
                 dampingRatio: 0.94
@@ -389,15 +429,59 @@ private struct ZagStandaloneNativeDock: UIViewRepresentable {
             animator.startAnimation()
         }
 
+        private func applyItemMetrics(compact: Bool, tint: UIColor) {
+            let symbolSize: CGFloat = compact ? 19.0 : 22.0
+            let configuration = UIImage.SymbolConfiguration(
+                pointSize: symbolSize,
+                weight: .medium
+            )
+            for (index, item) in (tabBar.items ?? []).enumerated() {
+                guard TabEnum.defaultTabs.indices.contains(index) else { continue }
+                let tab = TabEnum.defaultTabs[index]
+                item.image = tab == .sources
+                    ? (compact ? Self.compactZImage : Self.expandedZImage)
+                    : UIImage(
+                        systemName: tab.icon,
+                        withConfiguration: configuration
+                    )?.withRenderingMode(.alwaysTemplate)
+                // Never abbreviate or remove labels in the compact state.
+                item.title = tab.title
+            }
+
+            // Keep the exact system-defined background / Liquid Glass
+            // appearance, only adjusting item typography and theme tint.
+            let appearance = (tabBar.standardAppearance.copy()
+                as? UITabBarAppearance) ?? UITabBarAppearance()
+            let fontSize: CGFloat = compact ? 9.5 : 10.5
+            for layout in [
+                appearance.stackedLayoutAppearance,
+                appearance.inlineLayoutAppearance,
+                appearance.compactInlineLayoutAppearance
+            ] {
+                layout.normal.titleTextAttributes = [
+                    .font: UIFont.systemFont(ofSize: fontSize, weight: .regular)
+                ]
+                layout.selected.titleTextAttributes = [
+                    .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold),
+                    .foregroundColor: tint
+                ]
+                layout.selected.iconColor = tint
+            }
+            tabBar.standardAppearance = appearance
+            tabBar.scrollEdgeAppearance = appearance
+        }
+
         private func targetFrame(compact: Bool) -> CGRect {
             // The iOS 26+ standalone UITabBar renders its own floating
             // glass capsule *inside* these frames. We change the actual
             // layout rectangle rather than applying a transform.
-            let availableWidth = max(bounds.width - 24, 0)
-            let expandedWidth = min(availableWidth, 396)
-            let width = compact
-                ? min(expandedWidth, 312)
-                : expandedWidth
+            // The host itself spans the display width. UIKit's own
+            // Liquid Glass optical insets then match the original expanded
+            // tab bar (the previous 396pt cap made it noticeably narrower).
+            let expandedWidth = min(max(bounds.width, 0), 460)
+            // A 10% reduction is visible without forcing UIKit to
+            // truncate Discover, Sources, Activity or Devices.
+            let width = compact ? expandedWidth * 0.90 : expandedWidth
             let height: CGFloat = compact ? 70 : 78
             return CGRect(
                 x: (bounds.width - width) / 2,
