@@ -176,6 +176,12 @@ struct ZagCertificateHealthView: View {
                 }
                 .padding(.vertical, 2)
             }
+
+            NavigationLink {
+                CertificatesInfoView(cert: cert)
+            } label: {
+                Label("Inspect & Verify Identity", systemImage: "checkmark.shield")
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: problems == 0 ? "checkmark.shield" : "exclamationmark.shield")
@@ -185,7 +191,7 @@ struct ZagCertificateHealthView: View {
                          ?? Storage.shared.getProvisionFileDecoded(for: cert)?.Name
                          ?? "Signing Identity")
                         .font(.subheadline.weight(.medium))
-                    Text(problems == 0 ? "Local checks passed" : "\(problems) item(s) need attention")
+                    Text(problems == 0 ? "No local issues detected" : "\(problems) local issue(s) detected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
