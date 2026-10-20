@@ -20,8 +20,7 @@ struct CertificatesInfoView: View {
 	
 	// MARK: Body
 	var body: some View {
-		NBNavigationView(cert.nickname ?? "", displayMode: .inline) {
-			Form {
+		Form {
 				Section {} header: {
 					Image("Cert")
 						.resizable()
@@ -45,10 +44,8 @@ struct CertificatesInfoView: View {
 					}
 				}
 			}
-			.toolbar {
-				NBToolbarButton(role: .close)
-			}
-		}
+        .navigationTitle("Certificate Details")
+        .navigationBarTitleDisplayMode(.inline)
 		.onAppear {
 			data = Storage.shared.getProvisionFileDecoded(for: cert)
 		}
