@@ -604,6 +604,9 @@ private struct ZagAccountNotificationsView: View {
 private struct ZagAccountAvatarEditor: View {
     @State private var selection: PhotosPickerItem?
     @State private var revision = UUID()
+    @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
+
+    private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
 
     var body: some View {
         Form {
@@ -625,7 +628,11 @@ private struct ZagAccountAvatarEditor: View {
             // divider between the preview and the first button.
             Section {
                 PhotosPicker(selection: $selection, matching: .images) {
-                    Label("Choose Profile Avatar", systemImage: "photo")
+                    Label {
+                        Text("Choose Profile Avatar")
+                    } icon: {
+                        Image(systemName: "photo").foregroundStyle(themeTint)
+                    }
                 }
                 .onChange(of: selection) { item in
                     guard let item else { return }
@@ -644,7 +651,11 @@ private struct ZagAccountAvatarEditor: View {
                         ZagProfileAvatarStore.removeCustomImage()
                         revision = UUID()
                     } label: {
-                        Label("Use Default Avatar", systemImage: "arrow.counterclockwise")
+                        Label {
+                            Text("Use Default Avatar")
+                        } icon: {
+                            Image(systemName: "arrow.counterclockwise").foregroundStyle(themeTint)
+                        }
                     }
                 }
             }
@@ -653,7 +664,8 @@ private struct ZagAccountAvatarEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Color.clear.frame(width: 0, height: 0)
+                Text("Account Info")
+                    .font(.headline)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
