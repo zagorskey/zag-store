@@ -156,79 +156,49 @@ struct FeatherApp: App {
 }
 
 
+private final class ZagLaunchReadiness: ObservableObject {
+    static let shared = ZagLaunchReadiness()
+    @Published var repositoriesReady = false
+}
+
 private struct ZagAnimatedLaunchOverlay: View {
+    @ObservedObject private var readiness = ZagLaunchReadiness.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var visible = true
-    @State private var illuminated = false
+    @State private var minimumDisplayElapsed = false
+    @State private var dismissed = false
 
     var body: some View {
         Group {
-            if visible {
+            if !dismissed {
                 GeometryReader { geometry in
-                    ZStack {
-                        Color(red: 0.027, green: 0.027, blue: 0.043)
-                        RadialGradient(
-                            colors: [
-                                Color(red: 0.01, green: 0.18, blue: 0.46).opacity(illuminated ? 0.38 : 0.15),
-                                .clear
-                            ],
-                            center: .init(x: 0.32, y: 0.49),
-                            startRadius: 10,
-                            endRadius: geometry.size.width * 0.85
-                        )
-                        RadialGradient(
-                            colors: [
-                                Color(red: 0.48, green: 0.03, blue: 0.48).opacity(illuminated ? 0.26 : 0.1),
-                                .clear
-                            ],
-                            center: .init(x: 0.73, y: 0.51),
-                            startRadius: 10,
-                            endRadius: geometry.size.width * 0.72
-                        )
-                        Image("ZagAccountIconDark")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: min(geometry.size.width * 0.62, 250))
-                            // Fade only the square image's dark outer edges.
-                            // The original glass Z pixels remain unmodified.
-                            .mask {
-                                GeometryReader { imageGeometry in
-                                    RadialGradient(
-                                        stops: [
-                                            .init(color: .white, location: 0),
-                                            .init(color: .white, location: 0.65),
-                                            .init(color: .clear, location: 1)
-                                        ],
-                                        center: .center,
-                                        startRadius: 0,
-                                        endRadius: imageGeometry.size.width * 0.70
-                                    )
-                                }
-                            }
-                            .scaleEffect(illuminated || reduceMotion ? 1.0 : 0.985)
-                            .opacity(illuminated ? 1 : 0.96)
-                            .accessibilityHidden(true)
-                    }
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .ignoresSafeArea()
+                    Image("ZagSplashFull")
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                        .ignoresSafeArea()
+                        .accessibilityHidden(true)
                 }
+                .ignoresSafeArea()
                 .transition(.opacity)
                 .allowsHitTesting(true)
                 .task {
-                    if !reduceMotion {
-                        withAnimation(.easeOut(duration: 0.38)) {
-                            illuminated = true
-                        }
-                    } else {
-                        illuminated = true
-                    }
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 550))
+                    try? await Task.sleep(for: .milliseconds(650))
                     guard !Task.isCancelled else { return }
-                    withAnimation(.easeOut(duration: reduceMotion ? 0.01 : 0.22)) {
-                        visible = false
-                    }
+                    minimumDisplayElapsed = true
+                    dismissIfReady()
+                }
+                .onChange(of: readiness.repositoriesReady) { _ in
+                    dismissIfReady()
                 }
             }
+        }
+    }
+
+    private func dismissIfReady() {
+        guard readiness.repositoriesReady, minimumDisplayElapsed, !dismissed else { return }
+        withAnimation(.easeOut(duration: reduceMotion ? 0.01 : 0.22)) {
+            dismissed = true
         }
     }
 }
