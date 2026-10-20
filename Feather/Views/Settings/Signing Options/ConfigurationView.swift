@@ -37,6 +37,7 @@ struct ConfigurationView: View {
 			}
 			SigningOptionsView(options: $_optionsManager.options)
 		}
+		.navigationTitle(.localized("Signing Options"))
 		.toolbar {
 			NBToolbarMenu(
 				systemImage: "character.textbox",
