@@ -19,6 +19,8 @@ struct CertificatesInfoView: View {
     @State private var _identityCheckRunning = false
     @State private var _testBundleID = ""
     @State private var _testDeviceUDID = ""
+    @State private var _requestedEntitlementsText = ""
+    @State private var _entitlementCheck: ZagEntitlementCompatibility.Result?
 	
 	var cert: CertificatePair
 	
@@ -38,6 +40,7 @@ struct CertificatesInfoView: View {
                     _appCompatibilitySection(data: data)
                     _deviceCompatibilitySection(data: data)
                     _entitlementDiagnosticsSection(data: data)
+                    _requestedEntitlementsSection(data: data)
                     _validitySection(data: data)
                     _identitySection(data: data)
                     _certificateFingerprints(data: data)
@@ -405,6 +408,149 @@ extension CertificatesInfoView {
                 }
             }
         }
+    }
+}
+
+// MARK: - Requested entitlements vs profile (local, read-only)
+extension CertificatesInfoView {
+    private func _requestedEntitlementsSection(data: Certificate) -> some View {
+        Section {
+            Text("Paste the XML property-list entitlements extracted from the app you intend to sign.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextEditor(text: $_requestedEntitlementsText)
+                .font(.system(.caption, design: .monospaced))
+                .frame(minHeight: 110, maxHeight: 180)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onChange(of: _requestedEntitlementsText) { _, _ in
+                    _entitlementCheck = nil
+                }
+
+            HStack {
+                Button("Compare Entitlements") {
+                    let profile = data.Entitlements?.mapValues { $0.value } ?? [:]
+                    _entitlementCheck = ZagEntitlementCompatibility.compare(
+                        requestedXML: _requestedEntitlementsText,
+                        profile: profile
+                    )
+                }
+                .disabled(_requestedEntitlementsText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Spacer()
+                if !_requestedEntitlementsText.isEmpty {
+                    Button("Clear") {
+                        _requestedEntitlementsText = ""
+                        _entitlementCheck = nil
+                    }
+                }
+            }
+
+            if let result = _entitlementCheck {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: result.issues.isEmpty && result.error == nil
+                          ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(result.issues.isEmpty && result.error == nil ? Color.green : Color.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(result.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(result.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !result.issues.isEmpty {
+                    ForEach(result.issues, id: \.self) { issue in
+                        Label(issue, systemImage: "exclamationmark.circle")
+                            .font(.caption)
+                    }
+                }
+            }
+        } header: {
+            Text("Requested Entitlements Check")
+        } footer: {
+            Text("Only explicitly supplied app entitlements are compared. Values stay in memory on this page and are not uploaded or stored. Matching these checks does not prove the app will sign or install.")
+        }
+    }
+}
+
+private enum ZagEntitlementCompatibility {
+    struct Result {
+        let checked: Int
+        let issues: [String]
+        let error: String?
+
+        var title: String {
+            if error != nil { return "Cannot compare entitlements" }
+            return issues.isEmpty ? "No mismatches detected" : "Potential entitlement conflicts"
+        }
+        var summary: String {
+            if let error { return error }
+            return "\(checked) requested entitlement(s) checked; \(issues.count) potential conflict(s)."
+        }
+    }
+
+    static func compare(requestedXML: String, profile: [String: Any]) -> Result {
+        guard let bytes = requestedXML.data(using: .utf8),
+              bytes.count <= 512_000 else {
+            return Result(checked: 0, issues: [], error: "Entitlements input is too large or invalid.")
+        }
+        let decoded: Any
+        do {
+            decoded = try PropertyListSerialization.propertyList(from: bytes, options: [], format: nil)
+        } catch {
+            return Result(checked: 0, issues: [], error: "Enter a valid XML property list containing a dictionary of entitlements.")
+        }
+        guard let requested = decoded as? [String: Any] else {
+            return Result(checked: 0, issues: [], error: "The entitlement plist must contain a dictionary.")
+        }
+
+        var issues: [String] = []
+        for key in requested.keys.sorted() {
+            guard let requestedValue = requested[key] else { continue }
+            guard let allowedValue = profile[key] else {
+                issues.append("\(key): not included in profile")
+                continue
+            }
+            if !matches(requestedValue, allowedValue) {
+                issues.append("\(key): requested value differs from profile")
+            }
+        }
+        return Result(checked: requested.count, issues: issues, error: nil)
+    }
+
+    private static func matches(_ requested: Any, _ allowed: Any) -> Bool {
+        // App ID, keychain and group entitlements can include a trailing
+        // wildcard. A wildcard is not a general-purpose glob expression.
+        if let requested = requested as? String, let allowed = allowed as? String {
+            if allowed == requested { return true }
+            if allowed.hasSuffix("*"), allowed.filter({ $0 == "*" }).count == 1 {
+                return requested.hasPrefix(String(allowed.dropLast()))
+            }
+            return false
+        }
+        if let requested = requested as? [String], let allowed = allowed as? [String] {
+            return requested.allSatisfy { item in
+                allowed.contains { matches(item, $0) }
+            }
+        }
+        if let requested = requested as? [String: Any],
+           let allowed = allowed as? [String: Any] {
+            return requested.allSatisfy { key, value in
+                guard let permitted = allowed[key] else { return false }
+                return matches(value, permitted)
+            }
+        }
+        if let lhs = requested as? NSNumber, let rhs = allowed as? NSNumber {
+            return CFGetTypeID(lhs) == CFGetTypeID(rhs) && lhs == rhs
+        }
+        if let lhs = requested as? Data, let rhs = allowed as? Data {
+            return lhs == rhs
+        }
+        if let lhs = requested as? Date, let rhs = allowed as? Date {
+            return lhs == rhs
+        }
+        return false
     }
 }
 
