@@ -14,6 +14,7 @@ import UIKit
 extension Notification.Name {
 	static let zagProfileAvatarDidChange = Notification.Name("ZagStore.profileAvatarDidChange")
     static let zagUpdatesSheetVisibilityDidChange = Notification.Name("ZagStore.updatesSheetVisibilityDidChange")
+    static let zagLaunchSplashVisibilityDidChange = Notification.Name("ZagStore.launchSplashVisibilityDidChange")
 }
 
 enum ZagProfileAvatarStore {
@@ -181,6 +182,7 @@ private final class ZagProfileBadgeCoordinator {
     private var labels: [ObjectIdentifier: UILabel] = [:]
     private var visibleStates: [ObjectIdentifier: Bool] = [:]
     private var updatesSheetPresented = false
+    private var launchSplashVisible = true
 
     private init() {
         NotificationCenter.default.addObserver(
@@ -188,6 +190,13 @@ private final class ZagProfileBadgeCoordinator {
         ) { [weak self] notification in
             guard let self else { return }
             self.updatesSheetPresented = notification.userInfo?["presented"] as? Bool ?? false
+            self.refresh()
+        }
+        NotificationCenter.default.addObserver(
+            forName: .zagLaunchSplashVisibilityDidChange, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            self.launchSplashVisible = notification.userInfo?["visible"] as? Bool ?? false
             self.refresh()
         }
     }
@@ -255,7 +264,7 @@ private final class ZagProfileBadgeCoordinator {
                 }
                 let count = chosen.1.count
                 label.text = count.description
-                setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented, for: key, label: label)
+                setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented && !launchSplashVisible, for: key, label: label)
                 let width = max(23.5, CGFloat(count.description.count * 8) + 8.5)
                 label.frame = CGRect(x: chosen.2.maxX - width + 7,
                                      y: chosen.2.minY - 7, width: width, height: 18)
