@@ -18,6 +18,7 @@ struct CertificatesInfoView: View {
     @State private var _identityCheck: ZagP12IdentityCheck.Result?
     @State private var _identityCheckRunning = false
     @State private var _testBundleID = ""
+    @State private var _testDeviceUDID = ""
 	
 	var cert: CertificatePair
 	
@@ -35,6 +36,8 @@ struct CertificatesInfoView: View {
 				if let data {
                     _diagnosticsSection(data: data)
                     _appCompatibilitySection(data: data)
+                    _deviceCompatibilitySection(data: data)
+                    _entitlementDiagnosticsSection(data: data)
                     _validitySection(data: data)
                     _identitySection(data: data)
                     _certificateFingerprints(data: data)
@@ -298,6 +301,110 @@ extension CertificatesInfoView {
         return matches
             ? (true, "App ID matches", "This bundle identifier matches the profile’s App ID pattern.")
             : (false, "App ID does not match", "This bundle identifier is not permitted by the profile’s App ID pattern.")
+    }
+}
+
+// MARK: - Device eligibility and profile entitlement overview
+extension CertificatesInfoView {
+    private func _deviceCompatibilitySection(data: Certificate) -> some View {
+        let typedUDID = _testDeviceUDID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let registered = data.ProvisionedDevices ?? []
+        let isEnterprise = data.ProvisionsAllDevices == true
+        let isRegistered = registered.contains { $0.caseInsensitiveCompare(typedUDID) == .orderedSame }
+        let hasDeviceList = data.ProvisionedDevices != nil
+
+        return Section {
+            if isEnterprise {
+                Label("All-device enterprise provisioning", systemImage: "checkmark.shield")
+                    .foregroundStyle(Color.accentColor)
+                Text("This profile declares ProvisionsAllDevices. Device registration is not required by the profile.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if hasDeviceList {
+                LabeledContent("Registered Devices", value: String(registered.count))
+                TextField("Check a device UDID", text: $_testDeviceUDID)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .textContentType(.none)
+
+                if !typedUDID.isEmpty {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: isRegistered ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(isRegistered ? Color.green : Color.orange)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(isRegistered ? "Device is registered" : "Device is not listed")
+                                .font(.subheadline.weight(.semibold))
+                            Text(isRegistered
+                                 ? "The entered UDID appears in this provisioning profile."
+                                 : "The entered UDID is not among the devices embedded in this profile.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } else {
+                Label("No registered-device list", systemImage: "info.circle")
+                Text("This profile does not include ProvisionedDevices. This is normal for App Store distribution, but it does not establish direct-install eligibility.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Device Compatibility")
+        } footer: {
+            Text("UDID comparisons are performed locally and are not saved or sent anywhere. A matching UDID does not guarantee successful installation.")
+        }
+    }
+
+    private func _entitlementDiagnosticsSection(data: Certificate) -> some View {
+        let entitlements = data.Entitlements ?? [:]
+        let taskAllow = entitlements["get-task-allow"]?.value as? Bool
+        let pushEnvironment = entitlements["aps-environment"]?.value as? String
+        let appGroups = _entitlementStrings(entitlements, key: "com.apple.security.application-groups")
+        let keychainGroups = _entitlementStrings(entitlements, key: "keychain-access-groups")
+        let associatedDomains = _entitlementStrings(entitlements, key: "com.apple.developer.associated-domains")
+        let iCloudContainers = _entitlementStrings(entitlements, key: "com.apple.developer.icloud-container-identifiers")
+
+        return Section {
+            LabeledContent("Profile Entitlements", value: String(entitlements.count))
+            LabeledContent("Debugging Allowed") {
+                Text(taskAllow.map { $0 ? "Yes (development)" : "No" } ?? "Not specified")
+                    .foregroundStyle(.secondary)
+            }
+            LabeledContent("Push Notifications") {
+                Text(pushEnvironment ?? "Not included")
+                    .foregroundStyle(.secondary)
+            }
+            _entitlementGroup("App Groups", values: appGroups)
+            _entitlementGroup("Keychain Groups", values: keychainGroups)
+            _entitlementGroup("Associated Domains", values: associatedDomains)
+            _entitlementGroup("iCloud Containers", values: iCloudContainers)
+        } header: {
+            Text("Entitlement Capabilities")
+        } footer: {
+            Text("These capabilities come from the provisioning profile. Zag Store has not compared them with an app’s requested entitlements; a capability being listed does not guarantee it will work after signing.")
+        }
+    }
+
+    private func _entitlementStrings(
+        _ entitlements: [String: AnyCodable], key: String
+    ) -> [String] {
+        entitlements[key]?.value as? [String] ?? []
+    }
+
+    @ViewBuilder
+    private func _entitlementGroup(_ title: String, values: [String]) -> some View {
+        if values.isEmpty {
+            LabeledContent(title, value: "Not included")
+        } else {
+            DisclosureGroup("\(title) (\(values.count))") {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .copyableText(value)
+                }
+            }
+        }
     }
 }
 
