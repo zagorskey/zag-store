@@ -657,7 +657,7 @@ extension CertificatesInfoView {
     }
 }
 
-private enum ZagEntitlementCompatibility {
+enum ZagEntitlementCompatibility {
     struct Result {
         let checked: Int
         let issues: [String]
@@ -918,7 +918,7 @@ extension CertificatesInfoView {
 // MARK: - Local P12 identity / provisioning-profile comparison
 // Deliberately performs no network or Apple Developer Portal requests.
 // Never stores or displays the password, private key or PKCS#12 payload.
-private enum ZagP12IdentityCheck {
+enum ZagP12IdentityCheck {
     enum Result: Sendable {
         case matched
         case missingFile
