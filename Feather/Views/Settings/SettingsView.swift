@@ -112,6 +112,7 @@ struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
 	@Environment(\.zagAccountClose) private var closeAccount
 	var embeddedInAccountNavigation = false
+	var onAccountBack: (() -> Void)? = nil
 	@AppStorage("Feather.userTintColor") private var userTintColor = "#0090FF"
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
@@ -232,6 +233,12 @@ struct SettingsView: View {
 					}
 				}
 				ToolbarItemGroup(placement: .topBarLeading) {
+					if embeddedInAccountNavigation {
+						Button(action: { onAccountBack?() }) {
+							Image(systemName: "chevron.left")
+						}
+						.accessibilityLabel("Back")
+					}
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -276,31 +283,35 @@ struct SettingsView: View {
 					}
 				}
 
-				ToolbarItemGroup(placement: embeddedInAccountNavigation ? .topBarLeading : .topBarTrailing) {
-                    Button {
-                        UIApplication.open("https://github.com/zagorskey/zag-store")
-                    } label: {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    }
-                    .accessibilityLabel("GitHub Repository")
-                    if embeddedInAccountNavigation {
-                        Button {
-                            if _advancedSettingsUnlocked {
-                                withAnimation(.snappy) { _advancedSettingsUnlocked = false }
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            } else {
-                                _presentAdvancedSettingsWarning()
-                            }
-                        } label: {
-                            Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
-                        }
-                        .accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
-                    } else {
-                        ZagProfileToolbarButton()
-                            .tint(.primary)
-                            .padding(.trailing, -2)
-                    }
-                }
+				ToolbarItemGroup(placement: .topBarTrailing) {
+					if embeddedInAccountNavigation {
+						Button {
+							if _advancedSettingsUnlocked {
+								withAnimation(.snappy) { _advancedSettingsUnlocked = false }
+								UIImpactFeedbackGenerator(style: .light).impactOccurred()
+							} else {
+								_presentAdvancedSettingsWarning()
+							}
+						} label: {
+							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
+						}
+						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
+						Button(action: { closeAccount?() }) {
+							Image(systemName: "xmark")
+						}
+						.accessibilityLabel("Close")
+					} else {
+						Button {
+							UIApplication.open("https://github.com/zagorskey/zag-store")
+						} label: {
+							Image(systemName: "chevron.left.forwardslash.chevron.right")
+						}
+						.accessibilityLabel("GitHub Repository")
+						ZagProfileToolbarButton()
+							.tint(.primary)
+							.padding(.trailing, -2)
+					}
+				}
 			}
 		.navigationTitle("Settings")
 
