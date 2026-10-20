@@ -606,7 +606,7 @@ private struct ZagAccountAvatarEditor: View {
     @State private var revision = UUID()
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
 
-    private var themeTint: Color { ZagWideGamutTint.color(hex: themeColorHex) }
+    private var themeTint: Color { Color(hex: themeColorHex) }
 
     var body: some View {
         Form {
