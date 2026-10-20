@@ -512,16 +512,7 @@ struct ZagAccountPopup: View {
                     case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
                     case .certificates: CertificatesView()
                     case .installation: InstallationView()
-                    case .signing:
-                        ConfigurationView()
-                            .navigationTitle("")
-                            .navigationBarTitleDisplayMode(.inline)
-                            .toolbar {
-                                ToolbarItem(placement: .principal) {
-                                    Text("Signing Options")
-                                        .font(.headline)
-                                }
-                            }
+                    case .signing: ConfigurationView()
                     case .notifications: ZagAccountNotificationsView()
                     case .selfUpdate: ZagSelfUpdateStatusView()
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
