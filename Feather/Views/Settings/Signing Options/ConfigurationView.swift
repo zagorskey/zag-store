@@ -39,12 +39,12 @@ struct ConfigurationView: View {
 		}
 		.navigationTitle(.localized("Signing Options"))
 		.toolbar {
-			NBToolbarMenu(
-				systemImage: "character.textbox",
-				style: .icon,
-				placement: .topBarTrailing
-			) {
-				_randomMenuItem()
+			ToolbarItem(placement: .topBarTrailing) {
+				Menu {
+					_randomMenuItem()
+				} label: {
+					Image(systemName: "character.textbox")
+				}
 			}
 		}
 		.alert(_optionsManager.options.ppqString, isPresented: $isRandomAlertPresenting) {
