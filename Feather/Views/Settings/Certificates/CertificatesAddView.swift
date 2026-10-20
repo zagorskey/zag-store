@@ -17,70 +17,124 @@ struct CertificatesAddView: View {
 	@State private var _provisionURL: URL? = nil
 	@State private var _p12Password: String = ""
 	@State private var _certificateName: String = ""
+    @State private var _isValidating = false
+    @State private var _validationMessage: String?
+    @State private var _importError: String?
+
+    @FetchRequest(
+        entity: CertificatePair.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \CertificatePair.date, ascending: false)]
+    ) private var _existingCertificates: FetchedResults<CertificatePair>
+
 	
 	@State private var _isImportingP12Presenting = false
 	@State private var _isImportingMobileProvisionPresenting = false
 	
 	var saveButtonDisabled: Bool {
-		_p12URL == nil || _provisionURL == nil
+		_p12URL == nil || _provisionURL == nil || _isValidating
 	}
 	
-	// MARK: Body
-	var body: some View {
-		NBNavigationView(.localized("New Certificate"), displayMode: .inline) {
-			Form {
-				NBSection(.localized("Files")) {
-					_importButton(.localized("Import Certificate File"), file: _p12URL) {
-						_isImportingP12Presenting = true
-					}
-					_importButton(.localized("Import Provisioning File"), file: _provisionURL) {
-						_isImportingMobileProvisionPresenting = true
-					}
-				}
-				NBSection(.localized("Password")) {
-					SecureField(.localized("Enter Password"), text: $_p12Password)
-				} footer: {
-					Text(.localized("Enter the password associated with the private key. Leave it blank if theres no password required."))
-				}
-				
-				Section {
-					TextField(.localized("Nickname (Optional)"), text: $_certificateName)
-				}
-			}
-			.toolbar {
-				NBToolbarButton(role: .cancel)
-				
-				NBToolbarButton(
-					.localized("Save"),
-					style: .text,
-					placement: .confirmationAction,
-					isDisabled: saveButtonDisabled
-				) {
-					_saveCertificate()
-				}
-			}
-			.sheet(isPresented: $_isImportingP12Presenting) {
-				FileImporterRepresentableView(
-					allowedContentTypes: [.p12],
-					onDocumentsPicked: { urls in
-						guard let selectedFileURL = urls.first else { return }
-						self._p12URL = selectedFileURL
-					}
-				)
-				.ignoresSafeArea()
-			}
-			.sheet(isPresented: $_isImportingMobileProvisionPresenting) {
-				FileImporterRepresentableView(
-					allowedContentTypes: [.mobileProvision],
-					onDocumentsPicked: { urls in
-						guard let selectedFileURL = urls.first else { return }
-						self._provisionURL = selectedFileURL
-					}
-				)
-				.ignoresSafeArea()
-			}
-		}
-	}
+    // MARK: Body
+    var body: some View {
+        NBNavigationView(.localized("New Certificate"), displayMode: .inline) {
+            Form {
+                Section {
+                    _importButton("Import Certificate File", file: _p12URL) {
+                        _isImportingP12Presenting = true
+                    }
+                    if let file = _p12URL {
+                        LabeledContent("P12", value: file.lastPathComponent)
+                            .font(.subheadline)
+                    }
+                    _importButton("Import Provisioning File", file: _provisionURL) {
+                        _isImportingMobileProvisionPresenting = true
+                    }
+                    if let file = _provisionURL {
+                        LabeledContent("Provisioning", value: file.lastPathComponent)
+                            .font(.subheadline)
+                    }
+                } header: {
+                    Text("Files")
+                } footer: {
+                    Text("Both files must belong to the same signing identity.")
+                }
+
+                Section {
+                    SecureField(.localized("Enter Password"), text: $_p12Password)
+                } header: {
+                    Text("Password")
+                } footer: {
+                    Text("Enter the P12 password. Leave blank only if the archive has no password.")
+                }
+
+                Section {
+                    TextField(.localized("Nickname (Optional)"), text: $_certificateName)
+                } header: {
+                    Text("Identity")
+                }
+
+                if _isValidating || _validationMessage != nil {
+                    Section {
+                        if _isValidating {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Validating signing files…")
+                            }
+                        }
+                        if let _validationMessage {
+                            Label(_validationMessage, systemImage: "info.circle")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("Import Validation")
+                    }
+                }
+            }
+            .toolbar {
+                NBToolbarButton(role: .cancel)
+
+                NBToolbarButton(
+                    .localized("Save"),
+                    style: .text,
+                    placement: .confirmationAction,
+                    isDisabled: saveButtonDisabled
+                ) {
+                    _saveCertificate()
+                }
+            }
+            .alert("Certificate Import", isPresented: Binding(
+                get: { _importError != nil },
+                set: { if !$0 { _importError = nil } }
+            )) {
+                Button("OK", role: .cancel) { _importError = nil }
+            } message: {
+                Text(_importError ?? "")
+            }
+            .sheet(isPresented: $_isImportingP12Presenting) {
+                FileImporterRepresentableView(
+                    allowedContentTypes: [.p12],
+                    onDocumentsPicked: { urls in
+                        guard let selectedFileURL = urls.first else { return }
+                        _p12URL = selectedFileURL
+                        _validationMessage = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+            .sheet(isPresented: $_isImportingMobileProvisionPresenting) {
+                FileImporterRepresentableView(
+                    allowedContentTypes: [.mobileProvision],
+                    onDocumentsPicked: { urls in
+                        guard let selectedFileURL = urls.first else { return }
+                        _provisionURL = selectedFileURL
+                        _validationMessage = nil
+                    }
+                )
+                .ignoresSafeArea()
+            }
+        }
+    }
 }
 
 // MARK: - Extension: View
@@ -100,29 +154,53 @@ extension CertificatesAddView {
 	}
 }
 
-// MARK: - Extension: View (import)
+// MARK: - Import validation
 extension CertificatesAddView {
-	private func _saveCertificate() {
-		guard
-			let p12URL = _p12URL,
-			let provisionURL = _provisionURL,
-			FR.checkPasswordForCertificate(for: p12URL, with: _p12Password, using: provisionURL)
-		else {
-			UIAlertController.showAlertWithOk(
-				title: .localized("Bad Password"),
-				message: .localized("Please check the password and try again.")
-			)
-			return
-		}
-		
-		FR.handleCertificateFiles(
-			p12URL: p12URL,
-			provisionURL: provisionURL,
-			p12Password: _p12Password,
-			certificateName: _certificateName
-		) { _ in
-			dismiss()
-		}
-	}
-}
+    private func _saveCertificate() {
+        guard !_isValidating,
+              let p12URL = _p12URL,
+              let provisionURL = _provisionURL else { return }
 
+        _isValidating = true
+        _validationMessage = nil
+        _importError = nil
+
+        let password = _p12Password
+        let name = _certificateName
+        let existingUUIDs = Set(_existingCertificates.compactMap {
+            Storage.shared.getProvisionFileDecoded(for: $0)?.UUID.lowercased()
+        })
+
+        // Validate outside the UI thread; never log or display the password.
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                ZagCertificateImportValidation.validate(
+                    p12: p12URL, provision: provisionURL,
+                    password: password, existingUUIDs: existingUUIDs
+                )
+            }.value
+
+            guard result.isValid else {
+                _importError = result.message
+                _isValidating = false
+                return
+            }
+
+            _validationMessage = "Files match. Saving signing identity…"
+            FR.handleCertificateFiles(
+                p12URL: p12URL,
+                provisionURL: provisionURL,
+                p12Password: password,
+                certificateName: name
+            ) { error in
+                _isValidating = false
+                if let error {
+                    _validationMessage = nil
+                    _importError = "Could not save the certificate: \(error.localizedDescription)"
+                } else {
+                    dismiss()
+                }
+            }
+        }
+    }
+}
