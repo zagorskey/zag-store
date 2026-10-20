@@ -1870,11 +1870,15 @@ private struct ZagUpdatesPillSurface: View {
 // The Zag Core is a miniature glass emblem, not a second update counter.
 // Its rim reuses the existing 6.3-second charge and edge-glint timing,
 // synchronized with ZagUpdateTransferParticles.
+// Zag Core 2.0. The mark is the EXACT template UIImage used by the
+// native Sources dock tab (ZagSourcesTabIcon.image), never a redrawn Z.
+// Keep the original 46pt footprint and 6.3-second transfer/glint cycle.
 private struct ZagUpdatesCore: View {
     let baseColorHex: String
 
     @AppStorage("Feather.userTintColor")
     private var themeColorHex: String = "#0090FF"
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tint: Color {
@@ -1893,87 +1897,74 @@ private struct ZagUpdatesCore: View {
                 : exp(-pow((cycle - 0.82) / 0.28, 2))
             let reception = reduceMotion ? 0.0
                 : exp(-pow((cycle - 2.62) / 0.22, 2))
-            let energy = max(charge * 0.60, reception)
+            let energy = max(charge * 0.55, reception)
 
             ZStack {
-                // Translucent inner lens. No solid red notification badge.
+                // A neutral dark optical lens gives the white mark
+                // contrast instead of drowning it in a bright blue fill.
                 Circle()
                     .fill(.ultraThinMaterial)
+                    .padding(1)
+
+                Circle()
+                    .fill(
+                        colorScheme == .dark
+                            ? Color.black.opacity(0.72)
+                            : Color.black.opacity(0.78)
+                    )
                     .padding(1.5)
 
                 Circle()
                     .fill(
                         RadialGradient(
                             colors: [
-                                .white.opacity(0.18 + energy * 0.14),
-                                tint.opacity(0.12 + energy * 0.17),
-                                tint.opacity(0.035),
+                                tint.opacity(0.17 + energy * 0.16),
+                                tint.opacity(0.065),
                                 .clear
                             ],
-                            center: .init(x: 0.30, y: 0.22),
+                            center: .init(x: 0.28, y: 0.18),
                             startRadius: 0,
-                            endRadius: 28
+                            endRadius: 29
                         )
                     )
                     .padding(2)
 
-                // Optical tracks, with a slow rotating highlight.
+                // One understated inner orbit; only a short highlight
+                // rotates, leaving the center visually quiet.
                 Circle()
-                    .strokeBorder(tint.opacity(0.20 + energy * 0.18), lineWidth: 0.75)
-                    .padding(6)
+                    .strokeBorder(tint.opacity(0.22 + energy * 0.10), lineWidth: 0.85)
+                    .padding(5.7)
 
                 Circle()
-                    .trim(from: 0.03, to: 0.26)
+                    .trim(from: 0.04, to: 0.20)
                     .stroke(
-                        AngularGradient(
-                            colors: [.clear, tint.opacity(0.72), .white.opacity(0.95)],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 1.35, lineCap: .round)
+                        tint.opacity(0.56 + energy * 0.25),
+                        style: StrokeStyle(lineWidth: 1.15, lineCap: .round)
                     )
                     .rotationEffect(.degrees(rotation))
-                    .padding(6)
+                    .padding(5.7)
 
-                Circle()
-                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.6)
-                    .padding(10.2)
+                // The exact same 30x30 UIImage as the bottom dock,
+                // rendered at 27pt inside the 46pt glass capsule.
+                // White template tint maximizes small-size readability.
+                Image(uiImage: ZagSourcesTabIcon.image)
+                    .renderingMode(.template)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .foregroundStyle(Color.white)
+                    .frame(width: 27, height: 27)
+                    .shadow(color: tint.opacity(0.25 + energy * 0.24), radius: 1.3)
 
-                Circle()
-                    .fill(tint.opacity(0.30 + energy * 0.22))
-                    .frame(width: 23, height: 23)
-                    .blur(radius: 8)
-
-                // Custom geometric Z, not an SF Symbol.
-                zagPath
-                    .stroke(
-                        tint.opacity(0.54 + energy * 0.30),
-                        style: StrokeStyle(lineWidth: 4.8, lineCap: .round, lineJoin: .round)
-                    )
-                    .blur(radius: 2.1)
-
-                zagPath
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.97),
-                                tint.opacity(0.95),
-                                .white.opacity(0.76)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        style: StrokeStyle(lineWidth: 2.9, lineCap: .round, lineJoin: .round)
-                    )
-                    .shadow(color: tint.opacity(0.48 + energy * 0.28), radius: 2)
-
-                // Small refracted highlight on the glass surface.
+                // Narrow top-left refraction, away from the Z strokes.
                 Ellipse()
-                    .fill(.white.opacity(0.17))
-                    .frame(width: 20, height: 7)
-                    .blur(radius: 4)
-                    .offset(x: -7, y: -13)
+                    .fill(.white.opacity(0.15))
+                    .frame(width: 16, height: 4)
+                    .blur(radius: 2.5)
+                    .offset(x: -7, y: -16)
 
-                // Reuse the original edge glint and synchronized flare.
+                // Preserve the original rim reflections, charging
+                // flare, and synchronized transfer-particle timing.
                 ZagUpdatesPillSurface(
                     baseColorHex: baseColorHex,
                     showsBaseFill: false
@@ -1984,15 +1975,6 @@ private struct ZagUpdatesCore: View {
             .clipShape(Circle())
         }
         .accessibilityHidden(true)
-    }
-
-    private var zagPath: Path {
-        Path { path in
-            path.move(to: CGPoint(x: 16, y: 17))
-            path.addLine(to: CGPoint(x: 30, y: 17))
-            path.addLine(to: CGPoint(x: 16, y: 29))
-            path.addLine(to: CGPoint(x: 30, y: 29))
-        }
     }
 }
 
