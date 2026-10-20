@@ -42,14 +42,14 @@ struct CertificatesAddView: View {
         NBNavigationView(.localized("New Certificate"), displayMode: .inline) {
             Form {
                 Section {
-                    _importButton("Import Certificate File", file: _p12URL) {
+                    _importButton("Import Certificate File", replacementTitle: "Change Certificate File", file: _p12URL) {
                         _isImportingP12Presenting = true
                     }
                     if let file = _p12URL {
                         LabeledContent("P12", value: file.lastPathComponent)
                             .font(.subheadline)
                     }
-                    _importButton("Import Provisioning File", file: _provisionURL) {
+                    _importButton("Import Provisioning File", replacementTitle: "Change Provisioning File", file: _provisionURL) {
                         _isImportingMobileProvisionPresenting = true
                     }
                     if let file = _provisionURL {
@@ -159,18 +159,16 @@ struct CertificatesAddView: View {
 // MARK: - Extension: View
 extension CertificatesAddView {
 	@ViewBuilder
-	private func _importButton(
-		_ title: String,
-		file: URL?,
-		action: @escaping () -> Void
-	) -> some View {
-		Button(title) {
-			action()
-		}
-		.foregroundColor(file == nil ? .accentColor : .disabled())
-		.disabled(file != nil)
-		.animation(.easeInOut(duration: 0.3), value: file != nil)
-	}
+    private func _importButton(
+        _ title: String,
+        replacementTitle: String,
+        file: URL?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(file == nil ? title : replacementTitle, action: action)
+            .foregroundStyle(Color.accentColor)
+            .disabled(_isValidating && _filesValidated)
+    }
 }
 
 // MARK: - Import validation
