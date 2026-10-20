@@ -288,7 +288,7 @@ struct ZagSigningAuditView: View {
     private static func _customEntitlements(
         _ url: URL, profile: Certificate
     ) -> (detail: String, verdict: Verdict) {
-        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey])).fileSize,
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
               size > 0 && size <= 512_000,
               let bytes = try? Data(contentsOf: url),
               let text = String(data: bytes, encoding: .utf8) else {
