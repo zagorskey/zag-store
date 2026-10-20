@@ -211,6 +211,7 @@ struct SettingsView: View {
 				Color.clear.frame(height: 48)
 			}
 
+			.tint(Color(hex: userTintColor))
 			.toggleStyle(ZagThemeTintToggleStyle())
 			.environment(\.editMode, .constant(_isReorderingSettings ? .active : .inactive))
 			.navigationDestination(isPresented: $_routeInstallation) {
