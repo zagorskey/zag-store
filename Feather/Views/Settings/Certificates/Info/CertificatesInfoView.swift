@@ -15,6 +15,8 @@ import Security
 struct CertificatesInfoView: View {
 	@Environment(\.dismiss) var dismiss
 	@State var data: Certificate?
+    @State private var _identityCheck: ZagP12IdentityCheck.Result?
+    @State private var _identityCheckRunning = false
 	
 	var cert: CertificatePair
 	
@@ -111,10 +113,37 @@ extension CertificatesInfoView {
                 failure: "Marked revoked"
             )
             LabeledContent("Provisioning Type", value: _profileType(data))
+            Button {
+                _verifySigningIdentity(data: data)
+            } label: {
+                HStack(spacing: 8) {
+                    if _identityCheckRunning {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "checkmark.shield")
+                    }
+                    Text(_identityCheck == nil ? "Verify P12 and Profile Match" : "Verify Again")
+                }
+            }
+            .disabled(_identityCheckRunning || !hasP12 || !hasEmbeddedCertificates)
+
+            if let result = _identityCheck {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: result.isMatch ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(result.isMatch ? Color.green : Color.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(result.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(result.explanation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         } header: {
             Text("Signing Diagnostics")
         } footer: {
-            Text("Local preflight checks file presence and profile metadata only. It does not verify the P12 password, private-key match, Apple revocation status, device eligibility or actual signing.")
+            Text("Run Verify P12 and Profile Match to check the local signing identity against the profile. Apple revocation status, device eligibility and an actual app-signing operation are not checked.")
         }
     }
 
@@ -130,6 +159,30 @@ extension CertificatesInfoView {
                 .foregroundStyle(.secondary)
                 .font(.subheadline)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func _verifySigningIdentity(data: Certificate) {
+        guard !_identityCheckRunning,
+              let p12URL = Storage.shared.getFile(.certificate, from: cert)
+        else { return }
+
+        let password = cert.password ?? ""
+        let embedded = data.DeveloperCertificates ?? []
+        _identityCheck = nil
+        _identityCheckRunning = true
+
+        // PKCS#12 parsing can be expensive. Do not block SwiftUI rendering.
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                ZagP12IdentityCheck.verify(
+                    file: p12URL,
+                    password: password,
+                    embeddedCertificates: embedded
+                )
+            }.value
+            _identityCheck = result
+            _identityCheckRunning = false
         }
     }
 
@@ -319,4 +372,82 @@ extension CertificatesInfoView {
 			}
 		}
 	}
+}
+
+// MARK: - Local P12 identity / provisioning-profile comparison
+// Deliberately performs no network or Apple Developer Portal requests.
+// Never stores or displays the password, private key or PKCS#12 payload.
+private enum ZagP12IdentityCheck {
+    enum Result: Sendable {
+        case matched
+        case missingFile
+        case incorrectPassword
+        case invalidArchive
+        case missingIdentity
+        case missingPrivateKey
+        case mismatch
+
+        var isMatch: Bool {
+            if case .matched = self { return true }
+            return false
+        }
+
+        var title: String {
+            switch self {
+            case .matched: return "P12 and Profile Match"
+            case .missingFile: return "P12 File Unavailable"
+            case .incorrectPassword: return "P12 Password Rejected"
+            case .invalidArchive: return "Unable to Read P12"
+            case .missingIdentity: return "Signing Identity Missing"
+            case .missingPrivateKey: return "Private Key Missing"
+            case .mismatch: return "Certificate Mismatch"
+            }
+        }
+
+        var explanation: String {
+            switch self {
+            case .matched:
+                return "The P12 was unlocked, contains a private key and its public certificate is embedded in this provisioning profile. This does not establish Apple revocation or device eligibility."
+            case .missingFile:
+                return "The imported P12 file could not be read."
+            case .incorrectPassword:
+                return "The saved P12 password was rejected. Reimport the certificate with the correct password."
+            case .invalidArchive:
+                return "Security could not decode this P12 archive. It may be damaged or use unsupported encryption."
+            case .missingIdentity:
+                return "No signing identity was found in the P12 archive."
+            case .missingPrivateKey:
+                return "The P12 identity does not contain an accessible private key."
+            case .mismatch:
+                return "The P12 signing certificate is not among the developer certificates authorized by this provisioning profile."
+            }
+        }
+    }
+
+    static func verify(file: URL, password: String, embeddedCertificates: [Data]) -> Result {
+        guard let archive = try? Data(contentsOf: file) else { return .missingFile }
+        var imported: CFArray?
+        let options = [kSecImportExportPassphrase as String: password] as CFDictionary
+        let status = SecPKCS12Import(archive as CFData, options, &imported)
+        if status == errSecAuthFailed { return .incorrectPassword }
+        guard status == errSecSuccess,
+              let items = imported as? [[String: Any]]
+        else { return .invalidArchive }
+
+        guard let identity = items.compactMap({
+            $0[kSecImportItemIdentity as String] as? SecIdentity
+        }).first else { return .missingIdentity }
+
+        var privateKey: SecKey?
+        guard SecIdentityCopyPrivateKey(identity, &privateKey) == errSecSuccess,
+              privateKey != nil else { return .missingPrivateKey }
+
+        var publicCertificate: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &publicCertificate) == errSecSuccess,
+              let publicCertificate
+        else { return .missingIdentity }
+
+        let signingDER = SecCertificateCopyData(publicCertificate) as Data
+        return embeddedCertificates.contains(signingDER) ? .matched : .mismatch
+    }
 }
