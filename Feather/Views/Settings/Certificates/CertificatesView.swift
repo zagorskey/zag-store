@@ -123,6 +123,8 @@ struct CertificatesView: View {
                     Text("Certificate Library (\(_certificates.count))")
                 } footer: {
                     Text("Tap to select · Long-press to manage")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -135,8 +137,6 @@ struct CertificatesView: View {
                     }
                 } header: {
                     Text("Certificate Utilities")
-                } footer: {
-                    Text("Health checks, expiry reminders and profile inspection.")
                 }
             }
         }
@@ -254,7 +254,7 @@ extension CertificatesView {
             return profile.ExpirationDate > now && profile.ExpirationDate <= deadline
         }.count
 
-        return HStack(spacing: 9) {
+        return HStack(spacing: 8) {
             _metric("\(_certificates.count)", title: "Stored", icon: "square.stack.3d.up", tint: .accentColor)
             _metric("\(attentionCount)", title: "Attention", icon: "exclamationmark.shield",
                     tint: attentionCount > 0 ? .orange : .secondary)
@@ -264,23 +264,26 @@ extension CertificatesView {
     }
 
     private func _metric(_ value: String, title: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(tint)
-            Text(value)
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(tint)
+                Text(value)
+                    .font(.system(size: 21, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
             Text(title)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
         .background(Color(uiColor: .secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 17, style: .continuous))
     }
 
     private var _libraryControls: some View {
@@ -318,12 +321,12 @@ extension CertificatesView {
         let profile = Storage.shared.getProvisionFileDecoded(for: cert)
         let attention = _attention(cert)
 
-        return VStack(alignment: .leading, spacing: 11) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Color.accentColor)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 42, height: 42)
                     .background(Color.accentColor.opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: 14))
 
@@ -333,7 +336,7 @@ extension CertificatesView {
                         .tracking(1.2)
                         .foregroundStyle(Color.accentColor)
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .lineLimit(2)
                     Text(profile?.TeamName ?? "Unknown signing team")
                         .font(.subheadline)
@@ -360,9 +363,6 @@ extension CertificatesView {
                         Text(days < 0 ? "Expired" : days == 0 ? "Expires today" : "\(days) days left")
                             .foregroundStyle(days <= 30 ? Color.orange : Color.secondary)
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
                 }
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
@@ -379,18 +379,18 @@ extension CertificatesView {
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 0.75)
                 }
         }
