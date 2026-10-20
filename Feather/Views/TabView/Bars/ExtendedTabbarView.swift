@@ -165,9 +165,14 @@ struct ExtendedTabbarView: View {
     // remain native. Only the visual dock is custom on compact-width devices.
     @ViewBuilder
     private func tabDestination(for tab: TabEnum) -> some View {
-        TabEnum.view(for: tab)
-            .toolbar(.hidden, for: .tabBar)
-            .simultaneousGesture(dockScrollGesture, including: .all)
+        if horizontalSizeClass == .compact {
+            TabEnum.view(for: tab)
+                .toolbar(.hidden, for: .tabBar)
+                .simultaneousGesture(dockScrollGesture, including: .all)
+        } else {
+            // Retain iPad's native sidebar and tab bar.
+            TabEnum.view(for: tab)
+        }
     }
 
     private var dockScrollGesture: some Gesture {
