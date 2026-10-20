@@ -200,6 +200,16 @@ private struct ZagAnimatedLaunchOverlay: View {
         withAnimation(.easeOut(duration: reduceMotion ? 0.01 : 0.22)) {
             dismissed = true
         }
+        // The badge is a UIKit subview above SwiftUI, so reveal it only
+        // after the splash fade finishes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 250))
+            NotificationCenter.default.post(
+                name: .zagLaunchSplashVisibilityDidChange,
+                object: nil,
+                userInfo: ["visible": false]
+            )
+        }
     }
 }
 
