@@ -16,7 +16,7 @@ struct ConfigurationView: View {
 	
 	// MARK: Body
 	var body: some View {
-		NBList(.localized("Signing Options")) {
+		List {
 			Section {
 				NavigationLink(destination: ConfigurationDictView(
 					title: .localized("Display Names"),
