@@ -343,20 +343,10 @@ struct LibraryView: View {
                     // Preserve the existing left-to-right energy flow,
                     // but use the extra width freed by the shorter pill.
                     // Version is centered above the line, never hardcoded.
-                    ZagUpdateTransferParticles()
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .top) {
-                            Text("\(release.version) (Build \(release.build))")
-                                // Match the 8pt certificate-days captions below
-                                // the installed-app action pills.
-                                .font(.system(size: 8, weight: .regular))
-                                .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .allowsHitTesting(false)
-                                // Bring the caption closer to the 23pt centerline.
-                                .padding(.top, 9)
-                        }
+                    ZagUpdateTransferParticles(
+                        versionLabel: "\(release.version) (Build \(release.build))"
+                    )
+                    .frame(maxWidth: .infinity)
 
                     ZagUpdatesCore(
                         baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
@@ -1692,6 +1682,8 @@ extension LibraryView {
 
 
 private struct ZagUpdateTransferParticles: View {
+    let versionLabel: String
+
 	@AppStorage("Feather.userTintColor")
 	private var themeColorHex: String = "#3F8EF7"
 
@@ -1712,6 +1704,23 @@ private struct ZagUpdateTransferParticles: View {
 				let impactFlare = exp(-pow((cycle - 2.62) / 0.15, 2))
 
 				ZStack {
+                    // Use the EXACT same TimelineView sample and filament
+                    // envelope as the line, avoiding phase drift between
+                    // independently scheduled animation views.
+                    Text(versionLabel)
+                        .font(.system(size: 8, weight: .regular))
+                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .opacity(filament)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .top
+                        )
+                        .offset(y: 9)
+                        .allowsHitTesting(false)
+
 					// The electrical path is visible enough to connect both
 					// controls, but remains subordinate to the moving energy.
 					Capsule()
