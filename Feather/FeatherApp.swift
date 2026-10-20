@@ -156,7 +156,7 @@ struct FeatherApp: App {
 }
 
 
-private final class ZagLaunchReadiness: ObservableObject {
+final class ZagLaunchReadiness: ObservableObject {
     static let shared = ZagLaunchReadiness()
     @Published var repositoriesReady = false
 }
