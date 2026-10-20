@@ -24,37 +24,131 @@ struct CertificatesInfoView: View {
 	
 	var cert: CertificatePair
 	
-	// MARK: Body
-	var body: some View {
-		Form {
-				Section {} header: {
-					Image("Cert")
-						.resizable()
-						.scaledToFit()
-						.frame(width: 107, height: 107)
-						.frame(maxWidth: .infinity, alignment: .center)
-				}
-				
-				if let data {
-                    _diagnosticsSection(data: data)
-                    _appCompatibilitySection(data: data)
-                    _deviceCompatibilitySection(data: data)
-                    _entitlementDiagnosticsSection(data: data)
-                    _requestedEntitlementsSection(data: data)
-                    _validitySection(data: data)
-                    _identitySection(data: data)
-                    _certificateFingerprints(data: data)
-					_infoSection(data: data)
-					_entitlementsSection(data: data)
-					_miscSection(data: data)
-				}
-				
-				Section {
-					Button(.localized("Open in Files"), systemImage: "folder") {
-						UIApplication.open(Storage.shared.getUuidDirectory(for: cert)!.toSharedDocumentsURL()!)
-					}
-				}
-			}
+    // MARK: - Certificate details hub
+    var body: some View {
+        Form {
+            if let data {
+                Section {
+                    _identityHero(data: data)
+                } header: {
+                    Text("Signing Identity")
+                }
+
+                Section {
+                    _overviewStatus(data: data)
+
+                    LabeledContent("Profile Expires") {
+                        Text(data.ExpirationDate, format: .dateTime.day().month(.abbreviated).year())
+                    }
+
+                    LabeledContent("Provisioning", value: _profileType(data))
+
+                    if let teamID = data.TeamIdentifier.first {
+                        LabeledContent("Team ID") {
+                            Text(teamID)
+                                .font(.system(.subheadline, design: .monospaced))
+                        }
+                        .copyableText(teamID)
+                    }
+                } header: {
+                    Text("At a Glance")
+                } footer: {
+                    Text("These indicators describe locally available files and profile data. They do not establish Apple revocation status or successful signing.")
+                }
+
+                Section {
+                    NavigationLink {
+                        Form {
+                            _diagnosticsSection(data: data)
+                            _validitySection(data: data)
+                        }
+                        .navigationTitle("Signing Diagnostics")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        _destinationLabel(
+                            "Signing Diagnostics",
+                            subtitle: "P12 verification, profile dates and local checks",
+                            symbol: "checkmark.shield"
+                        )
+                    }
+
+                    NavigationLink {
+                        Form {
+                            _identitySection(data: data)
+                            _certificateFingerprints(data: data)
+                            _infoSection(data: data)
+                        }
+                        .navigationTitle("Certificate & Profile")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        _destinationLabel(
+                            "Certificate & Profile",
+                            subtitle: "Signing team, identifiers and SHA-256 fingerprints",
+                            symbol: "person.text.rectangle"
+                        )
+                    }
+
+                    NavigationLink {
+                        Form {
+                            _appCompatibilitySection(data: data)
+                            _deviceCompatibilitySection(data: data)
+                            _miscSection(data: data)
+                        }
+                        .navigationTitle("Compatibility")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        _destinationLabel(
+                            "Compatibility & Devices",
+                            subtitle: "App IDs, provisioning scope and device eligibility",
+                            symbol: "iphone.gen3"
+                        )
+                    }
+
+                    NavigationLink {
+                        Form {
+                            _entitlementDiagnosticsSection(data: data)
+                            _requestedEntitlementsSection(data: data)
+                            _entitlementsSection(data: data)
+                        }
+                        .navigationTitle("Entitlements")
+                        .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        _destinationLabel(
+                            "Entitlements & Capabilities",
+                            subtitle: "Profile permissions and requested entitlement checks",
+                            symbol: "lock.shield"
+                        )
+                    }
+                } header: {
+                    Text("Advanced Inspection")
+                } footer: {
+                    Text("All inspections are local and read-only. The signing engine is unchanged.")
+                }
+            } else {
+                Section {
+                    Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Color.orange)
+                    Text("Certificate details cannot be decoded from the imported provisioning profile.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Signing Identity")
+                }
+            }
+
+            Section {
+                Button {
+                    if let directory = Storage.shared.getUuidDirectory(for: cert),
+                       let sharedURL = directory.toSharedDocumentsURL() {
+                        UIApplication.open(sharedURL)
+                    }
+                } label: {
+                    Label("Open in Files", systemImage: "folder")
+                }
+            } header: {
+                Text("Files")
+            }
+        }
         .navigationTitle("Certificate Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -67,10 +161,93 @@ struct CertificatesInfoView: View {
                 .accessibilityLabel("Close Certificate Details")
             }
         }
-		.onAppear {
-			data = Storage.shared.getProvisionFileDecoded(for: cert)
-		}
-	}
+        .onAppear {
+            data = Storage.shared.getProvisionFileDecoded(for: cert)
+        }
+    }
+
+    private func _identityHero(data: Certificate) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: "checkmark.shield")
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 54, height: 54)
+                .background(
+                    Color.accentColor.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(cert.nickname ?? data.Name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Text(data.TeamName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Provisioning profile")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 7)
+    }
+
+    @ViewBuilder
+    private func _overviewStatus(data: Certificate) -> some View {
+        let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
+        let isCurrent = data.CreationDate <= Date() && data.ExpirationDate > Date()
+        let hasDeveloperCertificates = !(data.DeveloperCertificates ?? []).isEmpty
+
+        _overviewRow("P12 Signing File", okay: hasP12, success: "Present", failure: "Missing")
+        _overviewRow("Profile Dates", okay: isCurrent, success: "Current", failure: "Not current")
+        _overviewRow("Developer Certificates", okay: hasDeveloperCertificates,
+                     success: "\(data.DeveloperCertificates?.count ?? 0) embedded", failure: "None embedded")
+        HStack {
+            Label("Apple Revocation", systemImage: "questionmark.circle")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(cert.revoked ? "Previously marked revoked" : "Not verified")
+                .font(.subheadline)
+                .foregroundStyle(cert.revoked ? Color.orange : Color.secondary)
+        }
+    }
+
+    private func _overviewRow(
+        _ title: String, okay: Bool, success: String, failure: String
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: okay ? "checkmark.circle" : "exclamationmark.circle")
+                .foregroundStyle(okay ? Color.green : Color.orange)
+            Text(title)
+            Spacer(minLength: 8)
+            Text(okay ? success : failure)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func _destinationLabel(_ title: String, subtitle: String, symbol: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 34, height: 38)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 3)
+        }
+    }
 }
 
 // MARK: - Local signing preflight
@@ -658,11 +835,13 @@ extension CertificatesInfoView {
 extension CertificatesInfoView {
 	@ViewBuilder
 	private func _infoSection(data: Certificate) -> some View {
-		NBSection(.localized("Info")) {
-			_info(.localized("Name"), description: data.Name)
-			_info(.localized("AppID Name"), description: data.AppIDName)
-			_info(.localized("Team Name"), description: data.TeamName)
-		}
+        Section {
+            _info(.localized("Name"), description: data.Name)
+            _info(.localized("AppID Name"), description: data.AppIDName)
+            _info(.localized("Team Name"), description: data.TeamName)
+        } header: {
+            Text("Profile Information")
+        }
 		
 		Section {
 			_info(.localized("Expires"), description: data.ExpirationDate.expirationInfo().formatted)
@@ -689,8 +868,8 @@ extension CertificatesInfoView {
 	
 	@ViewBuilder
 	private func _miscSection(data: Certificate) -> some View {
-		NBSection(.localized("Misc")) {
-			_disclosure(.localized("Platform"), keys: data.Platform)
+        Section {
+            _disclosure(.localized("Platform"), keys: data.Platform)
 			
 			if let all = data.ProvisionsAllDevices {
 				_info(.localized("Provision All Devices"), description: all.description)
@@ -705,7 +884,9 @@ extension CertificatesInfoView {
 			if let prefix = data.ApplicationIdentifierPrefix{
 				_disclosure(.localized("Identifier Prefix"), keys: prefix)
 			}
-		}
+        } header: {
+            Text("Additional Profile Data")
+        }
 	}
 	
 	@ViewBuilder
