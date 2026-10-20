@@ -230,7 +230,6 @@ private struct ZagDevicesPage: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
-            .zagTrackDockScrolling()
             .zagWallpaperSurface()
             .onAppear(perform: refreshInformation)
             .refreshable { refreshInformation() }
