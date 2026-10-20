@@ -49,6 +49,7 @@ struct SigningView: View {
 			Form {
 				_customizationOptions(for: app)
 				_cert()
+                _signingPreflightSection()
 				_customizationProperties(for: app)
 				
 				// horrible
@@ -259,6 +260,152 @@ extension SigningView {
 			}
 		}
 	}
+}
+
+// MARK: - Signing preflight (local, non-blocking advisory)
+extension SigningView {
+    @ViewBuilder
+    private func _signingPreflightSection() -> some View {
+        if _temporaryOptions.signingOption == .default {
+            Section {
+                if let certificate = _selectedCert() {
+                    if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+                        let bundleID = _temporaryOptions.appIdentifier ?? app.identifier ?? ""
+                        let appID = profile.Entitlements?["application-identifier"]?.value as? String
+                            ?? profile.Entitlements?["com.apple.application-identifier"]?.value as? String
+                        let bundleMatches = _profileAllows(bundleID, appID: appID, teamIDs: profile.TeamIdentifier)
+                        let validDates = profile.CreationDate <= Date() && profile.ExpirationDate > Date()
+                        let p12Present = Storage.shared.getFile(.certificate, from: certificate) != nil
+
+                        LabeledContent("Profile", value: profile.Name)
+                        _preflightRow("P12 File", okay: p12Present, success: "Present", failure: "Missing")
+                        _preflightRow("Profile Dates", okay: validDates, success: "Current", failure: "Not valid")
+                        _preflightRow("App Identifier", okay: bundleMatches, success: "Matches profile", failure: "Not matched")
+                        if certificate.revoked {
+                            Label("Certificate previously marked revoked", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.orange)
+                        } else {
+                            Text("Apple revocation status has not been verified.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let entitlementsURL = _temporaryOptions.appEntitlementsFile {
+                            let issues = _preflightEntitlementIssues(at: entitlementsURL, profile: profile)
+                            if let issues {
+                                if issues.isEmpty {
+                                    Label("Custom entitlements: no basic conflicts found", systemImage: "checkmark.circle")
+                                        .foregroundStyle(Color.green)
+                                } else {
+                                    DisclosureGroup("Custom entitlements: \(issues.count) warning(s)") {
+                                        ForEach(issues, id: \.self) { issue in
+                                            Text(issue)
+                                                .font(.caption)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Label("Custom entitlements could not be read", systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(Color.orange)
+                            }
+                        }
+
+                        NavigationLink("Certificate Details") {
+                            CertificatesInfoView(cert: certificate)
+                        }
+                    } else {
+                        Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(Color.orange)
+                    }
+                } else {
+                    Text("Choose a signing certificate to see preflight diagnostics.")
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Signing Preflight")
+            } footer: {
+                Text("Advisory checks only. The final bundle identifier may be changed by signing options. This does not verify the P12 password, Apple's revocation service, actual app entitlements or device registration.")
+            }
+        }
+    }
+
+    private func _preflightRow(_ title: String, okay: Bool, success: String, failure: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: okay ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(okay ? Color.green : Color.orange)
+            Text(title)
+            Spacer(minLength: 8)
+            Text(okay ? success : failure)
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func _profileAllows(_ bundleID: String, appID: String?, teamIDs: [String]) -> Bool {
+        guard !bundleID.isEmpty,
+              let appID,
+              let separator = appID.firstIndex(of: ".") else { return false }
+        let prefix = String(appID[..<separator])
+        guard teamIDs.contains(prefix) else { return false }
+        let pattern = String(appID[appID.index(after: separator)...])
+        if pattern == "*" { return true }
+        if pattern.hasSuffix("*") && pattern.filter({ $0 == "*" }).count == 1 {
+            let start = String(pattern.dropLast())
+            return bundleID.hasPrefix(start) && bundleID.count > start.count
+        }
+        return bundleID == pattern
+    }
+
+    // This compares an explicitly selected entitlement plist, not the
+    // entitlements extracted from the imported IPA's code signature.
+    private func _preflightEntitlementIssues(at url: URL, profile: Certificate) -> [String]? {
+        guard let bytes = try? Data(contentsOf: url),
+              let raw = try? PropertyListSerialization.propertyList(from: bytes, options: [], format: nil),
+              let requested = raw as? [String: Any],
+              let allowed = profile.Entitlements else { return nil }
+
+        var issues: [String] = []
+        for key in requested.keys.sorted() {
+            guard let requestedValue = requested[key] else { continue }
+            guard let profileValue = allowed[key]?.value else {
+                issues.append("\(key): not included in profile")
+                continue
+            }
+            if !_preflightValueMatches(requestedValue, allowed: profileValue) {
+                issues.append("\(key): requested value differs from profile")
+            }
+        }
+        return issues
+    }
+
+    private func _preflightValueMatches(_ requested: Any, allowed: Any) -> Bool {
+        if let requested = requested as? String, let allowed = allowed as? String {
+            if requested == allowed { return true }
+            if allowed.hasSuffix("*") && allowed.filter({ $0 == "*" }).count == 1 {
+                return requested.hasPrefix(String(allowed.dropLast()))
+            }
+            return false
+        }
+        if let requested = requested as? [String], let allowed = allowed as? [String] {
+            return requested.allSatisfy { item in
+                allowed.contains { _preflightValueMatches(item, allowed: $0) }
+            }
+        }
+        if let requested = requested as? [String: Any], let allowed = allowed as? [String: Any] {
+            return requested.allSatisfy { key, value in
+                guard let permitted = allowed[key] else { return false }
+                return _preflightValueMatches(value, allowed: permitted)
+            }
+        }
+        if let requested = requested as? NSNumber, let allowed = allowed as? NSNumber {
+            return CFGetTypeID(requested) == CFGetTypeID(allowed) && requested == allowed
+        }
+        if let requested = requested as? Data, let allowed = allowed as? Data {
+            return requested == allowed
+        }
+        return false
+    }
 }
 
 // MARK: - Extension: View (import)
