@@ -615,6 +615,15 @@ private struct ZagAccountAvatarEditor: View {
                     Spacer()
                 }
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            } header: {
+                Text("Profile Avatar")
+            }
+
+            // Keep the avatar preview outside the grouped actions so the
+            // actions receive their native rounded top corners, without a
+            // divider between the preview and the first button.
+            Section {
                 PhotosPicker(selection: $selection, matching: .images) {
                     Label("Choose Profile Avatar", systemImage: "photo")
                 }
@@ -638,11 +647,9 @@ private struct ZagAccountAvatarEditor: View {
                         Label("Use Default Avatar", systemImage: "arrow.counterclockwise")
                     }
                 }
-            } header: {
-                Text("Profile Avatar")
             }
         }
-        .navigationTitle("Profile Avatar")
+        .navigationTitle("Account Info")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
