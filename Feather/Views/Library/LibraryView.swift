@@ -1709,10 +1709,10 @@ private struct ZagUpdateTransferParticles: View {
 							color: ZagWideGamutTint.color(hex: themeColorHex).opacity(0.34 * filament),
 							radius: 2.4
 						)
-						.frame(maxWidth: .infinity, alignment: .trailing)
-						.offset(x: 4)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.offset(x: -4)
 
-					// Launch flare lives just under the counter's left edge.
+					// Launch flare starts at the Updates pill on the left.
 					ZStack {
 						Circle()
 							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.42))
@@ -1723,7 +1723,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 3.5, height: 3.5)
 					}
 					.opacity(launchFlare)
-					.offset(x: width / 2 + 2)
+					.offset(x: -width / 2 - 2)
 
 					// One dominant packet followed by two smaller echoes.
 					ForEach(0..<3, id: \.self) { pulse in
@@ -1754,10 +1754,10 @@ private struct ZagUpdateTransferParticles: View {
 								)
 						}
 						.opacity(visible ? sin(local * .pi) * strength : 0)
-						.offset(x: (width / 2 + 4) - CGFloat(eased) * (width + 8))
+						.offset(x: (-width / 2 - 4) + CGFloat(eased) * (width + 8))
 					}
 
-					// Reception flare is tucked beneath the Updates capsule.
+					// Reception flare lands beneath the Zag Core on the right.
 					ZStack {
 						Circle()
 							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.52))
@@ -1768,7 +1768,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 4, height: 4)
 					}
 					.opacity(impactFlare)
-					.offset(x: -width / 2 - 2)
+					.offset(x: width / 2 + 2)
 				}
 				.frame(width: proxy.size.width, height: proxy.size.height)
 			}
@@ -1893,11 +1893,11 @@ private struct ZagUpdatesCore: View {
             let time = context.date.timeIntervalSinceReferenceDate
             let cycle = time.truncatingRemainder(dividingBy: 6.3)
             let rotation = reduceMotion ? 0.0 : time / 12.0 * 360.0
-            let charge = reduceMotion ? 0.0
-                : exp(-pow((cycle - 0.82) / 0.28, 2))
+            // Updates launch at the left pill; the Zag Core now lights
+            // up when the incoming energy reaches it on the right.
             let reception = reduceMotion ? 0.0
                 : exp(-pow((cycle - 2.62) / 0.22, 2))
-            let energy = max(charge * 0.55, reception)
+            let energy = reception
 
             ZStack {
                 // A neutral dark optical lens gives the white mark
@@ -1963,8 +1963,8 @@ private struct ZagUpdatesCore: View {
                     .blur(radius: 2.5)
                     .offset(x: -7, y: -16)
 
-                // Preserve the original rim reflections, charging
-                // flare, and synchronized transfer-particle timing.
+                // Preserve the original rim reflections and timing; the
+                // incoming transfer now ends here at the Zag Core.
                 ZagUpdatesPillSurface(
                     baseColorHex: baseColorHex,
                     showsBaseFill: false
