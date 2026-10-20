@@ -400,7 +400,6 @@ extension SettingsView {
 			Toggle(isOn: $_showInternalMetadata) {
 				Label("Show Internal Metadata", systemImage: "curlybraces")
 			}
-			.tint(.green)
 		} header: {
 			Text("Developer Options")
 		} footer: {
@@ -503,9 +502,7 @@ extension SettingsView {
 				}
 
 				Toggle(.localized("Ask every time"), isOn: $_askCertificateEveryTime)
-					.tint(.green)
 				Toggle(.localized("Allow Customisation"), isOn: $_allowSigningCustomisation)
-					.tint(.green)
 			} header: {
 				Text(.localized("Certificates"))
 			} footer: {
