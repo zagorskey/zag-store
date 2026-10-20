@@ -30,7 +30,7 @@ struct ExtendedTabbarView: View {
 			get: { selectedTabRawValue },
 			set: { newValue in
 				selectedTabRawValue = newValue
-                dockIsCompact = false
+                withAnimation(.spring(response: 0.33, dampingFraction: 0.86)) { dockIsCompact = false }
 				if rememberLastPage {
 					UserDefaults.standard.set(
 						newValue,
@@ -171,7 +171,11 @@ struct ExtendedTabbarView: View {
                 guard accumulatedScroll >= 22 else { return }
                 accumulatedScroll = 0
                 let compact = direction < 0
-                if dockIsCompact != compact { dockIsCompact = compact }
+                if dockIsCompact != compact {
+                    withAnimation(.spring(response: 0.33, dampingFraction: 0.86)) {
+                        dockIsCompact = compact
+                    }
+                }
             }
             .onEnded { _ in
                 previousDragY = 0
@@ -207,9 +211,8 @@ struct ExtendedTabbarView: View {
 }
 
 
-// Apply a transform to the existing UIKit tab bar rather than recreating it.
-// Its Liquid Glass material, labels, symbols, badges and tab interactions
-// remain exactly as provided by the system.
+// Scale the existing floating dock's presentation, not the UIKit tab bar's
+// layout transform. Preserve its native glass, labels, icons and hit testing.
 @available(iOS 18, *)
 private struct ZagNativeDockScaleBridge: UIViewRepresentable {
     let compact: Bool
@@ -221,23 +224,18 @@ private struct ZagNativeDockScaleBridge: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UIView, context: Context) {
-        let compact = compact
         DispatchQueue.main.async {
             guard let window = view.window,
                   let tabBar = findTabBar(in: window.rootViewController) else { return }
-            let transform = compact
-                ? CGAffineTransform(scaleX: 0.86, y: 0.84)
-                : .identity
-            guard tabBar.transform != transform else { return }
-            UIView.animate(
-                withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.30,
-                delay: 0,
-                usingSpringWithDamping: 0.88,
-                initialSpringVelocity: 0,
-                options: [.beginFromCurrentState, .allowUserInteraction]
-            ) {
-                tabBar.transform = transform
-            }
+            // UIKit can replace the presentation layer during layout. Use the
+            // tab bar's containing view when it is the floating glass capsule.
+            let dock = tabBar
+            let target = compact ? CATransform3DMakeScale(0.82, 0.78, 1) : CATransform3DIdentity
+            guard !CATransform3DEqualToTransform(dock.layer.transform, target) else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            dock.layer.transform = target
+            CATransaction.commit()
         }
     }
 
