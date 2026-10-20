@@ -18,6 +18,7 @@ struct CertificatesAddView: View {
 	@State private var _p12Password: String = ""
 	@State private var _certificateName: String = ""
     @State private var _isValidating = false
+    @State private var _isSaving = false
     @State private var _validationMessage: String?
     @State private var _validationError: String?
     @State private var _importError: String?
@@ -34,7 +35,7 @@ struct CertificatesAddView: View {
 	@State private var _isImportingMobileProvisionPresenting = false
 	
 	var saveButtonDisabled: Bool {
-		!_filesValidated || _isValidating
+		!_filesValidated || _isValidating || _isSaving
 	}
 	
     // MARK: Body
@@ -167,7 +168,7 @@ extension CertificatesAddView {
     ) -> some View {
         Button(file == nil ? title : replacementTitle, action: action)
             .foregroundStyle(Color.accentColor)
-            .disabled(_isValidating && _filesValidated)
+            .disabled(_isSaving)
     }
 }
 
@@ -215,11 +216,11 @@ extension CertificatesAddView {
     }
 
     private func _saveCertificate() {
-        guard _filesValidated, !_isValidating,
+        guard _filesValidated, !_isValidating, !_isSaving,
               let p12URL = _p12URL,
               let provisionURL = _provisionURL else { return }
 
-        _isValidating = true
+        _isSaving = true
         _filesValidated = false
         _validationMessage = "Saving signing identity…"
         _importError = nil
@@ -232,7 +233,7 @@ extension CertificatesAddView {
                 p12Password: password,
                 certificateName: name
         ) { error in
-            _isValidating = false
+            _isSaving = false
             if let error {
                 _validationMessage = nil
                 _importError = "Could not save the certificate: \(error.localizedDescription)"
