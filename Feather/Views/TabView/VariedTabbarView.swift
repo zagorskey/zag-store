@@ -538,6 +538,7 @@ struct ZagAccountPopup: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        .toggleStyle(ZagThemeTintToggleStyle())
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
