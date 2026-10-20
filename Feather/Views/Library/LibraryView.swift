@@ -323,7 +323,7 @@ struct LibraryView: View {
             } label: {
                 HStack(spacing: 4) {
                     HStack(spacing: 7) {
-                        VStack(alignment: .center, spacing: -2) {
+                        VStack(alignment: .center, spacing: 0) {
                             Text("Update")
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundStyle(Color(uiColor: UIColor { traits in
