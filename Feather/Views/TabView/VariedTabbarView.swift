@@ -401,7 +401,7 @@ struct ZagAccountPopup: View {
             Form {
                 Section {
                     NavigationLink(value: AccountDestination.profile) {
-                        HStack(spacing: 20) {
+                        HStack(spacing: 8) {
                             ZagGlobalProfileAvatar(revision: avatarRevision)
                                 .frame(width: 54, height: 54)
                             VStack(alignment: .leading, spacing: 3) {
