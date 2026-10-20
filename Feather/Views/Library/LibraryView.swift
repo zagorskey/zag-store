@@ -1696,7 +1696,11 @@ private struct ZagUpdateTransferParticles: View {
     let versionLabel: String
 
 	@AppStorage("Feather.userTintColor")
-	private var themeColorHex: String = "#3F8EF7"
+	private var themeColorHex: String = "#0090FF"
+
+    private var tint: Color {
+        ZagWideGamutTint.color(hex: themeColorHex)
+    }
 
 	var body: some View {
 		GeometryReader { proxy in
@@ -1735,14 +1739,14 @@ private struct ZagUpdateTransferParticles: View {
 					// The electrical path is visible enough to connect both
 					// controls, but remains subordinate to the moving energy.
 					Capsule()
-						.fill(ZagWideGamutTint.color(hex: themeColorHex))
+						.fill(tint)
 						.frame(
 							width: travel * grow,
 							height: 1.0 / UIScreen.main.scale
 						)
 						.opacity(0.43 * filament)
 						.shadow(
-							color: ZagWideGamutTint.color(hex: themeColorHex).opacity(0.34 * filament),
+							color: tint.opacity(0.34 * filament),
 							radius: 2.4
 						)
 						.frame(maxWidth: .infinity, alignment: .leading)
@@ -1751,16 +1755,18 @@ private struct ZagUpdateTransferParticles: View {
 					// Launch flare starts at the Updates pill on the left.
 					ZStack {
 						Circle()
-							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.42))
+							.fill(tint.opacity(0.42))
 							.frame(width: 13, height: 13)
 							.blur(radius: 4)
 						Circle()
-							.fill(Color.white)
+							.fill(tint)
 							.frame(width: 3.5, height: 3.5)
 					}
 					.opacity(launchFlare)
                     .offset(x: -travel / 2)
 
+					// Keep packet cores in the same Display P3 theme tint as
+                    // the filament and Zag Core; no fixed white/blue dots.
 					// One dominant packet followed by two smaller echoes.
 					ForEach(0..<3, id: \.self) { pulse in
 						let launch = 0.92 + Double(pulse) * 0.28
@@ -1774,16 +1780,16 @@ private struct ZagUpdateTransferParticles: View {
 
 						ZStack {
 							Capsule()
-								.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.30 * strength))
+								.fill(tint.opacity(0.30 * strength))
 								.frame(width: tail, height: pulse == 0 ? 4 : 3)
 								.blur(radius: 2.4)
 
 							Capsule()
-								.fill(ZagWideGamutTint.color(hex: themeColorHex))
+								.fill(tint)
 								.frame(width: core, height: pulse == 0 ? 1.8 : 1.3)
 
 							Circle()
-								.fill(Color.white)
+								.fill(tint)
 								.frame(
 									width: pulse == 0 ? 4.2 : 3.0,
 									height: pulse == 0 ? 4.2 : 3.0
@@ -1796,11 +1802,11 @@ private struct ZagUpdateTransferParticles: View {
 					// Reception flare lands beneath the Zag Core on the right.
 					ZStack {
 						Circle()
-							.fill(ZagWideGamutTint.color(hex: themeColorHex).opacity(0.52))
+							.fill(tint.opacity(0.52))
 							.frame(width: 15, height: 15)
 							.blur(radius: 4.5)
 						Circle()
-							.fill(Color.white)
+							.fill(tint)
 							.frame(width: 4, height: 4)
 					}
 					.opacity(impactFlare)
