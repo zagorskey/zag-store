@@ -36,6 +36,7 @@ struct FeatherApp: App {
 						.onOpenURL(perform: _handleURL)
 						.transition(.move(edge: .top).combined(with: .opacity))
 				}
+				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
@@ -152,6 +153,68 @@ struct FeatherApp: App {
 			}
 		}
 	}
+}
+
+
+private struct ZagAnimatedLaunchOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = true
+    @State private var illuminated = false
+
+    var body: some View {
+        Group {
+            if visible {
+                GeometryReader { geometry in
+                    ZStack {
+                        Color(red: 0.018, green: 0.023, blue: 0.052)
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.01, green: 0.18, blue: 0.46).opacity(illuminated ? 0.38 : 0.15),
+                                .clear
+                            ],
+                            center: .init(x: 0.32, y: 0.49),
+                            startRadius: 10,
+                            endRadius: geometry.size.width * 0.85
+                        )
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.48, green: 0.03, blue: 0.48).opacity(illuminated ? 0.26 : 0.1),
+                                .clear
+                            ],
+                            center: .init(x: 0.73, y: 0.51),
+                            startRadius: 10,
+                            endRadius: geometry.size.width * 0.72
+                        )
+                        Image("ZagAccountIconDark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: min(geometry.size.width * 0.44, 180))
+                            .scaleEffect(illuminated || reduceMotion ? 1.0 : 0.97)
+                            .opacity(illuminated ? 1 : 0.9)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .ignoresSafeArea()
+                }
+                .transition(.opacity)
+                .allowsHitTesting(true)
+                .task {
+                    if !reduceMotion {
+                        withAnimation(.easeOut(duration: 0.38)) {
+                            illuminated = true
+                        }
+                    } else {
+                        illuminated = true
+                    }
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 550))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: reduceMotion ? 0.01 : 0.22)) {
+                        visible = false
+                    }
+                }
+            }
+        }
+    }
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
