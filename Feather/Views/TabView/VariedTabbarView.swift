@@ -502,7 +502,6 @@ struct ZagAccountPopup: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .accessibilityElement(children: .combine)
                 }
-                .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
