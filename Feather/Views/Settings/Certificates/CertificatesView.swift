@@ -94,9 +94,14 @@ struct CertificatesView: View {
 				}
 			}
 		}
-		.sheet(item: $_isSelectedInfoPresenting) { cert in
-			CertificatesInfoView(cert: cert)
-		}
+        .navigationDestination(isPresented: Binding(
+            get: { _isSelectedInfoPresenting != nil },
+            set: { if !$0 { _isSelectedInfoPresenting = nil } }
+        )) {
+            if let cert = _isSelectedInfoPresenting {
+                CertificatesInfoView(cert: cert)
+            }
+        }
 		.sheet(isPresented: $_isAddingPresenting) {
 			CertificatesAddView()
 				.presentationDetents([.medium])
