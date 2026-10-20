@@ -389,7 +389,6 @@ struct ZagAccountPopup: View {
     @AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
     @State private var avatarRevision = UUID()
     @State private var accountPath: [AccountDestination] = []
-    @State private var accountHeaderScrolled = false
 
     private enum AccountDestination: Hashable {
         case profile, updates, certificates, installation, signing, notifications, selfUpdate, settings
@@ -400,6 +399,20 @@ struct ZagAccountPopup: View {
     var body: some View {
         NavigationStack(path: $accountPath) {
             Form {
+                HStack(spacing: 9) {
+                    Image("ZagAccountIconDark")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 27, height: 27)
+                        .clipShape(Circle())
+                    Text("Zag Account")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: 48)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 4, trailing: 20))
                 Section {
                     NavigationLink(value: AccountDestination.profile) {
                         HStack(spacing: 14) {
@@ -487,35 +500,12 @@ struct ZagAccountPopup: View {
                     }
                 }
             }
-            .modifier(ZagAccountScrollObserver(isScrolled: $accountHeaderScrolled))
-            .safeAreaInset(edge: .top, spacing: 0) {
-                HStack(spacing: 9) {
-                    Image("ZagAccountIconDark")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 27, height: 27)
-                        .clipShape(Circle())
-                    Text("Zag Account")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: true, vertical: false)
-                    Spacer(minLength: 0)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44)
-                            .background(.regularMaterial, in: Circle())
                     }
-                    .buttonStyle(.plain)
                     .accessibilityLabel("Close")
-                }
-                .padding(.horizontal, 20)
-                .frame(height: 76)
-                .background {
-                    if accountHeaderScrolled {
-                        Rectangle().fill(.regularMaterial)
-                    }
                 }
             }
             .navigationDestination(for: AccountDestination.self) { destination in
@@ -546,23 +536,6 @@ struct ZagAccountPopup: View {
         .environment(\.zagAccountClose, onClose)
         .onReceive(NotificationCenter.default.publisher(for: .zagProfileAvatarDidChange)) { _ in
             avatarRevision = UUID()
-        }
-    }
-}
-
-private struct ZagAccountScrollObserver: ViewModifier {
-    @Binding var isScrolled: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top > 2
-            } action: { _, scrolled in
-                isScrolled = scrolled
-            }
-        } else {
-            content
         }
     }
 }
