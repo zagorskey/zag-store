@@ -340,9 +340,8 @@ struct LibraryView: View {
 					.frame(height: 46)
 					.background(zagUpdatesPillBackground)
 					.clipShape(Capsule())
-					// Reduce only the leading transfer-line gap; leave the
-					// trailing gap and animation's drawing coordinates unchanged.
-					.padding(.trailing, -8)
+					// Match the native HStack spacing on both sides of
+					// the transfer track; never draw underneath the pill.
 
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
@@ -1689,6 +1688,10 @@ private struct ZagUpdateTransferParticles: View {
 				let cycle = context.date.timeIntervalSinceReferenceDate
 					.truncatingRemainder(dividingBy: 6.3)
 				let width = max(proxy.size.width, 1)
+                // Symmetric optical inset inside the transfer region.
+                // The HStack itself supplies equal 12pt gaps at both ends.
+                let endpointInset: CGFloat = 5
+                let travel = max(width - endpointInset * 2, 0)
 				let grow = min(max((cycle - 0.42) / 0.48, 0), 1)
 				let dissolve = min(max((cycle - 3.00) / 0.52, 0), 1)
 				let filament = grow * (1 - dissolve)
@@ -1701,7 +1704,7 @@ private struct ZagUpdateTransferParticles: View {
 					Capsule()
 						.fill(ZagWideGamutTint.color(hex: themeColorHex))
 						.frame(
-							width: max(0, (width + 8) * grow),
+							width: travel * grow,
 							height: 1.0 / UIScreen.main.scale
 						)
 						.opacity(0.43 * filament)
@@ -1710,7 +1713,7 @@ private struct ZagUpdateTransferParticles: View {
 							radius: 2.4
 						)
 						.frame(maxWidth: .infinity, alignment: .leading)
-						.offset(x: -4)
+                        .offset(x: endpointInset)
 
 					// Launch flare starts at the Updates pill on the left.
 					ZStack {
@@ -1723,7 +1726,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 3.5, height: 3.5)
 					}
 					.opacity(launchFlare)
-					.offset(x: -width / 2 - 2)
+                    .offset(x: -travel / 2)
 
 					// One dominant packet followed by two smaller echoes.
 					ForEach(0..<3, id: \.self) { pulse in
@@ -1754,7 +1757,7 @@ private struct ZagUpdateTransferParticles: View {
 								)
 						}
 						.opacity(visible ? sin(local * .pi) * strength : 0)
-						.offset(x: (-width / 2 - 4) + CGFloat(eased) * (width + 8))
+						.offset(x: -travel / 2 + CGFloat(eased) * travel)
 					}
 
 					// Reception flare lands beneath the Zag Core on the right.
@@ -1768,7 +1771,7 @@ private struct ZagUpdateTransferParticles: View {
 							.frame(width: 4, height: 4)
 					}
 					.opacity(impactFlare)
-					.offset(x: width / 2 + 2)
+                    .offset(x: travel / 2)
 				}
 				.frame(width: proxy.size.width, height: proxy.size.height)
 			}
@@ -1781,6 +1784,9 @@ private struct ZagUpdateTransferParticles: View {
 private struct ZagUpdatesPillSurface: View {
 	var baseColorHex: String = "#2C2C2E"
     var showsBaseFill = true
+    // Default keeps the original glint; the receiving Core uses
+    // the particle impact timestamp instead of the launch timestamp.
+    var chargePhase: Double = 0.82
 
 	@AppStorage("Feather.userTintColor")
 	private var themeColorHex: String = "#3F8EF7"
@@ -1792,7 +1798,7 @@ private struct ZagUpdatesPillSurface: View {
 			// Keep a slow ambient reflection, then concentrate light at the
 			// counter's left edge immediately before the transmission launches.
 			let progress = time.truncatingRemainder(dividingBy: 7.4) / 7.4
-			let charge = exp(-pow((cycle - 0.82) / 0.28, 2))
+			let charge = exp(-pow((cycle - chargePhase) / 0.28, 2))
 
 			Circle()
 				.fill(showsBaseFill ? Color(hex: baseColorHex) : Color.clear)
@@ -1936,6 +1942,14 @@ private struct ZagUpdatesCore: View {
                     .padding(5.7)
 
                 Circle()
+                    .strokeBorder(
+                        tint.opacity(energy * 0.42),
+                        lineWidth: 1.0
+                    )
+                    .padding(6)
+                    .scaleEffect(1 + energy * 0.12)
+
+                Circle()
                     .trim(from: 0.04, to: 0.20)
                     .stroke(
                         tint.opacity(0.56 + energy * 0.25),
@@ -1954,7 +1968,9 @@ private struct ZagUpdatesCore: View {
                     .scaledToFit()
                     .foregroundStyle(Color.white)
                     .frame(width: 27, height: 27)
-                    .shadow(color: tint.opacity(0.25 + energy * 0.24), radius: 1.3)
+                    // The actual dock Z reacts gently when energy lands.
+                    .scaleEffect(1 + energy * 0.045)
+                    .shadow(color: tint.opacity(0.25 + energy * 0.55), radius: 1.3 + energy * 2.1)
 
                 // Narrow top-left refraction, away from the Z strokes.
                 Ellipse()
@@ -1967,12 +1983,16 @@ private struct ZagUpdatesCore: View {
                 // incoming transfer now ends here at the Zag Core.
                 ZagUpdatesPillSurface(
                     baseColorHex: baseColorHex,
-                    showsBaseFill: false
+                    showsBaseFill: false,
+                    chargePhase: 2.62
                 )
                 .allowsHitTesting(false)
             }
             .frame(width: 46, height: 46)
             .clipShape(Circle())
+            // One subtle breathing response, synchronized with the
+            // reception flare, without changing layout or hit target.
+            .scaleEffect(1 + energy * 0.035)
         }
         .accessibilityHidden(true)
     }
