@@ -18,6 +18,38 @@ struct CertificatesView: View {
 	@State private var _certToRename: CertificatePair?
 	@State private var _newNickname: String = ""
 	@State private var _pendingCertificateDelete: CertificatePair?
+    @State private var _searchText = ""
+    @State private var _filter: LibraryFilter = .all
+
+    private enum LibraryFilter: String, CaseIterable {
+        case all = "All"
+        case ready = "Files Ready"
+        case attention = "Attention"
+    }
+
+    private func _attention(_ cert: CertificatePair) -> Bool {
+        guard let profile = Storage.shared.getProvisionFileDecoded(for: cert) else { return true }
+        return cert.revoked
+            || Storage.shared.getFile(.certificate, from: cert) == nil
+            || profile.CreationDate > Date()
+            || profile.ExpirationDate <= Date()
+    }
+
+    // Filter using the original fetched-results index: selection persists as an index.
+    private var _visible: [(offset: Int, element: CertificatePair)] {
+        Array(_certificates.enumerated()).filter { item in
+            let profile = Storage.shared.getProvisionFileDecoded(for: item.element)
+            let query = _searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let searchable = [item.element.nickname ?? "", profile?.Name ?? "",
+                              profile?.TeamName ?? "", profile?.TeamIdentifier.joined(separator: " ") ?? ""]
+            let matches = query.isEmpty || searchable.contains {
+                $0.localizedCaseInsensitiveContains(query)
+            }
+            let needsAttention = _attention(item.element)
+            return matches && (_filter == .all || (_filter == .attention && needsAttention)
+                               || (_filter == .ready && !needsAttention))
+        }
+    }
 
 	// MARK: Fetch
 	@FetchRequest(
@@ -37,8 +69,19 @@ struct CertificatesView: View {
 	}
 	
 	// MARK: Body
-	var body: some View {
-		List {
+    var body: some View {
+        List {
+            if !_certificates.isEmpty {
+                Section {
+                    _dashboard
+                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } header: {
+                    Text("Certificate Overview")
+                }
+            }
+
             if let active = _activeCertificate {
                 Section {
                     _activeCertificateCard(active)
@@ -46,23 +89,34 @@ struct CertificatesView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 } header: {
-                    Text("Active Signing Certificate")
+                    Text("Active Signing Identity")
                 }
             }
 
-            Section {
-			ForEach(Array(_certificates.enumerated()), id: \.element.uuid) { index, cert in
-				_cellButton(for: cert, at: index)
-					.listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-					.listRowSeparator(.hidden)
-					.listRowBackground(Color.clear)
-			}
-            } header: {
-                if !_certificates.isEmpty {
+            if !_certificates.isEmpty {
+                Section {
+                    _libraryControls
+                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 10, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    if _visible.isEmpty {
+                        Text("No certificates match your search or filter.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(_visible, id: \.element.uuid) { item in
+                            _cellButton(for: item.element, at: item.offset)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
+                    }
+                } header: {
                     Text("Certificate Library (\(_certificates.count))")
+                } footer: {
+                    Text("Tap to select a signing identity. Long-press for management. File readiness does not verify live Apple revocation or successful signing.")
                 }
             }
-		}
+        }
 		.listStyle(.plain)
 		.scrollContentBackground(.hidden)
 		.navigationTitle(.localized("Certificates"))
@@ -140,34 +194,103 @@ struct CertificatesView: View {
 	}
 }
 
-// MARK: - Certificate manager summary
+// MARK: - Certificate dashboard
 extension CertificatesView {
-    // Keep the existing selection index semantics for signing. This is a
-    // read-only summary; changing the storage model belongs in a separate step.
     private var _activeCertificate: CertificatePair? {
         let index = _selectedCertBinding.wrappedValue
         guard _certificates.indices.contains(index) else { return nil }
         return _certificates[index]
     }
 
+    private var _dashboard: some View {
+        let attentionCount = _certificates.filter { _attention($0) }.count
+        let now = Date()
+        let deadline = now.addingTimeInterval(30 * 24 * 60 * 60)
+        let expiring = _certificates.filter { cert in
+            guard let profile = Storage.shared.getProvisionFileDecoded(for: cert) else { return false }
+            return profile.ExpirationDate > now && profile.ExpirationDate <= deadline
+        }.count
+
+        return HStack(spacing: 9) {
+            _metric("\(_certificates.count)", title: "Stored", icon: "square.stack.3d.up", tint: .accentColor)
+            _metric("\(attentionCount)", title: "Attention", icon: "exclamationmark.shield",
+                    tint: attentionCount > 0 ? .orange : .secondary)
+            _metric("\(expiring)", title: "Expiring Soon", icon: "calendar.badge.clock",
+                    tint: expiring > 0 ? .orange : .secondary)
+        }
+    }
+
+    private func _metric(_ value: String, title: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.system(size: 27, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var _libraryControls: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search certificates or teams", text: $_searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if !_searchText.isEmpty {
+                    Button {
+                        _searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            Picker("Certificate Filter", selection: $_filter) {
+                ForEach(LibraryFilter.allCases, id: \.self) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
     private func _activeCertificateCard(_ cert: CertificatePair) -> some View {
         let profile = Storage.shared.getProvisionFileDecoded(for: cert)
-        let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
-        let hasProfile = profile != nil
-        let expiration = profile?.ExpirationDate ?? cert.expiration
-        let isExpired = expiration.map { $0 <= Date() } ?? true
-        let isRevoked = cert.revoked
+        let attention = _attention(cert)
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        return VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 27))
-                    .foregroundStyle(isRevoked || isExpired ? Color.orange : Color.accentColor)
-                    .frame(width: 38, height: 38)
+                    .font(.system(size: 24))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 52, height: 52)
+                    .background(Color.accentColor.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 16))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("SELECTED FOR SIGNING")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.accentColor)
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .lineLimit(2)
                     Text(profile?.TeamName ?? "Unknown signing team")
                         .font(.subheadline)
@@ -177,50 +300,48 @@ extension CertificatesView {
                 Spacer(minLength: 0)
             }
 
-            if let expiration {
-                HStack {
-                    Text("Provisioning Profile")
-                    Spacer()
-                    Text(expiration, style: .date)
-                        .foregroundStyle(.secondary)
-                }
-                .font(.subheadline)
-            }
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
 
-            HStack(spacing: 6) {
-                Image(systemName: isRevoked || isExpired || !hasP12 || !hasProfile
-                      ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                Text(isRevoked ? "Marked revoked" :
-                     isExpired ? "Expired" :
-                     !hasP12 ? "Missing P12 file" :
-                     !hasProfile ? "Missing provisioning profile" :
-                     "Files present · Revocation unverified")
-                    .lineLimit(2)
+            HStack(spacing: 8) {
+                Label(attention ? "Needs attention" : "Files appear ready",
+                      systemImage: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(attention ? Color.orange : Color.green)
+                Spacer(minLength: 4)
+                if let expiry = profile?.ExpirationDate {
+                    Text("Expires")
+                        .foregroundStyle(.secondary)
+                    Text(expiry, style: .date)
+                }
             }
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(isRevoked || isExpired || !hasP12 || !hasProfile
-                             ? Color.orange : Color.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
 
             Button {
                 _isSelectedInfoPresenting = cert
             } label: {
                 HStack {
-                    Text("View Certificate Details")
+                    Label("Inspect Certificate", systemImage: "slider.horizontal.3")
                     Spacer()
-                    Image(systemName: "chevron.right")
+                    Image(systemName: "arrow.up.right")
                 }
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
-            .padding(.top, 2)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 28)
-                .fill(Color(uiColor: .quaternarySystemFill))
-        )
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 1)
+                }
+        }
     }
 }
 
@@ -230,9 +351,9 @@ extension CertificatesView {
 	private func _cellButton(for cert: CertificatePair, at index: Int) -> some View {
 		let cornerRadius = {
 			if #available(iOS 26.0, *) {
-				28.0
+				22.0
 			} else {
-				10.5
+				16.0
 			}
 		}()
 		
@@ -245,13 +366,13 @@ extension CertificatesView {
 			.padding()
 			.background(
 				RoundedRectangle(cornerRadius: cornerRadius)
-					.fill(Color(uiColor: .quaternarySystemFill))
+					.fill(Color(uiColor: .secondarySystemGroupedBackground))
 			)
 			.overlay(
 				RoundedRectangle(cornerRadius: cornerRadius)
 					.strokeBorder(
-						_selectedCertBinding.wrappedValue == index ? Color.accentColor : Color.clear,
-						lineWidth: 2
+						_selectedCertBinding.wrappedValue == index ? Color.accentColor : Color.primary.opacity(0.06),
+						lineWidth: 1.5
 					)
 			)
 			.contextMenu {
