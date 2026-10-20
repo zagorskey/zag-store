@@ -515,15 +515,24 @@ struct ZagAccountPopup: View {
                     case .signing: ConfigurationView()
                     case .notifications: ZagAccountNotificationsView()
                     case .selfUpdate: ZagSelfUpdateStatusView()
-                    case .settings: SettingsView(embeddedInAccountNavigation: true)
+                    case .settings:
+                        SettingsView(
+                            embeddedInAccountNavigation: true,
+                            onAccountBack: {
+                                if !accountPath.isEmpty { accountPath.removeLast() }
+                            }
+                        )
+                        .navigationBarBackButtonHidden(true)
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
+                    if destination != .settings {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(action: onClose) {
+                                Image(systemName: "xmark")
+                            }
+                            .accessibilityLabel("Close")
                         }
-                        .accessibilityLabel("Close")
                     }
                 }
             }
