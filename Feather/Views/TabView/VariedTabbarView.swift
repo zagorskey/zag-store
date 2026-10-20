@@ -476,6 +476,7 @@ struct ZagAccountPopup: View {
                     NavigationLink(value: AccountDestination.selfUpdate) {
                         HStack(spacing: 10) {
                             ZagSelfUpdateRotatingIcon(isAnimating: selfUpdateCoordinator.availableRelease != nil)
+                                .frame(width: 28, height: 28)
                                 .foregroundStyle(themeTint)
                             Text("Zag Store Update").foregroundStyle(themeTint)
                             Spacer(minLength: 8)
@@ -488,10 +489,11 @@ struct ZagAccountPopup: View {
                         }
                     }
                     NavigationLink(value: AccountDestination.settings) {
-                        Label {
+                        HStack(spacing: 10) {
+                            Image(systemName: "gear")
+                                .frame(width: 28, height: 28)
+                                .foregroundStyle(themeTint)
                             Text("Zag Store Settings").foregroundStyle(themeTint)
-                        } icon: {
-                            Image(systemName: "gear").foregroundStyle(themeTint)
                         }
                     }
                 }
