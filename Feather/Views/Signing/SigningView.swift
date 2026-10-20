@@ -266,8 +266,43 @@ extension SigningView {
         if _temporaryOptions.signingOption == .default {
             Section {
                 if let certificate = _selectedCert() {
-                    if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
-                        let bundleID = _temporaryOptions.appIdentifier ?? app.identifier ?? ""
+                    NavigationLink {
+                        ZagSigningPreflightView(
+                            app: app,
+                            certificate: certificate,
+                            options: _temporaryOptions
+                        )
+                    } label: {
+                        Label("Signing Preflight", systemImage: "checkmark.shield")
+                    }
+                } else {
+                    Label("Choose a certificate to inspect signing compatibility", systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Diagnostics")
+            } footer: {
+                Text("Read-only certificate, identifier and entitlement checks. Signing is unchanged.")
+            }
+        }
+    }
+}
+
+// MARK: - Signing preflight (local, non-blocking advisory)
+struct ZagSigningPreflightView: View {
+    @Environment(\.dismiss) private var dismiss
+    let app: AppInfoPresentable
+    let certificate: CertificatePair
+    let options: Options
+    @State private var originalEntitlementAudit: ZagOriginalEntitlementAudit.Report?
+    @State private var originalEntitlementRunning = false
+    @State private var originalEntitlementRequest = UUID()
+
+    var body: some View {
+        Form {
+            Section {
+                if let profile = Storage.shared.getProvisionFileDecoded(for: certificate) {
+                        let bundleID = options.appIdentifier ?? app.identifier ?? ""
                         let appID = profile.Entitlements?["application-identifier"]?.value as? String
                             ?? profile.Entitlements?["com.apple.application-identifier"]?.value as? String
                         let bundleMatches = _profileAllows(bundleID, appID: appID, teamIDs: profile.TeamIdentifier)
@@ -282,7 +317,7 @@ extension SigningView {
                             requestedID: bundleID,
                             profileAppID: appID,
                             matches: bundleMatches,
-                            ppqMayChange: _temporaryOptions.ppqProtection && certificate.ppQCheck
+                            ppqMayChange: options.ppqProtection && certificate.ppQCheck
                         )
                         if certificate.revoked {
                             Label("Certificate previously marked revoked", systemImage: "exclamationmark.triangle.fill")
@@ -293,7 +328,7 @@ extension SigningView {
                                 .foregroundStyle(.secondary)
                         }
 
-                        if let entitlementsURL = _temporaryOptions.appEntitlementsFile {
+                        if let entitlementsURL = options.appEntitlementsFile {
                             let issues = _preflightEntitlementIssues(at: entitlementsURL, profile: profile)
                             if let issues {
                                 if issues.isEmpty {
@@ -318,18 +353,22 @@ extension SigningView {
                         NavigationLink("Certificate Details") {
                             CertificatesInfoView(cert: certificate)
                         }
-                    } else {
-                        Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(Color.orange)
-                    }
                 } else {
-                    Text("Choose a signing certificate to see preflight diagnostics.")
-                        .foregroundStyle(.secondary)
+                    Label("Provisioning profile unavailable", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Color.orange)
                 }
             } header: {
                 Text("Signing Preflight")
             } footer: {
                 Text("Read-only guidance, not signing authorization. Final identifiers and entitlements may change during signing. P12 password, Apple revocation, signed output and device registration are not verified here.")
+            }
+        }
+        .navigationTitle("Signing Preflight")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { dismiss() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Close Signing Preflight")
             }
         }
     }
@@ -389,7 +428,7 @@ extension SigningView {
             _inspectOriginalEntitlements(profile: profile)
         } label: {
             HStack(spacing: 8) {
-                if _originalEntitlementRunning {
+                if originalEntitlementRunning {
                     ProgressView()
                 } else {
                     Image(systemName: "doc.text.magnifyingglass")
@@ -397,14 +436,9 @@ extension SigningView {
                 Text("Inspect Original App Entitlements")
             }
         }
-        .disabled(_originalEntitlementRunning)
-        .onChange(of: _temporaryCertificate) { _ in
-            _originalEntitlementRequest = UUID()
-            _originalEntitlementAudit = nil
-            _originalEntitlementRunning = false
-        }
+        .disabled(originalEntitlementRunning)
 
-        if let report = _originalEntitlementAudit {
+        if let report = originalEntitlementAudit {
             VStack(alignment: .leading, spacing: 5) {
                 Label(report.title, systemImage: report.error != nil
                       ? "questionmark.circle" : "doc.text.magnifyingglass")
@@ -437,10 +471,10 @@ extension SigningView {
     }
 
     private func _inspectOriginalEntitlements(profile: Certificate) {
-        guard !_originalEntitlementRunning else { return }
+        guard !originalEntitlementRunning else { return }
         guard let appURL = Storage.shared.getAppDirectory(for: app),
               let executable = Bundle(url: appURL)?.executableURL else {
-            _originalEntitlementAudit = .init(
+            originalEntitlementAudit = .init(
                 inspected: 0, issues: [], identityKeys: [],
                 error: "The imported application's executable is unavailable."
             )
@@ -454,7 +488,7 @@ extension SigningView {
               let profileData = try? PropertyListSerialization.data(
                 fromPropertyList: profileValues, format: .xml, options: 0
               ) else {
-            _originalEntitlementAudit = .init(
+            originalEntitlementAudit = .init(
                 inspected: 0, issues: [], identityKeys: [],
                 error: "The selected profile's entitlements could not be decoded."
             )
@@ -462,16 +496,16 @@ extension SigningView {
         }
 
         let request = UUID()
-        _originalEntitlementRequest = request
-        _originalEntitlementRunning = true
-        _originalEntitlementAudit = nil
+        originalEntitlementRequest = request
+        originalEntitlementRunning = true
+        originalEntitlementAudit = nil
         Task {
             let report = await Task.detached(priority: .userInitiated) {
                 ZagOriginalEntitlementAudit.inspect(executable: executable, profileData: profileData)
             }.value
-            guard _originalEntitlementRequest == request else { return }
-            _originalEntitlementAudit = report
-            _originalEntitlementRunning = false
+            guard originalEntitlementRequest == request else { return }
+            originalEntitlementAudit = report
+            originalEntitlementRunning = false
         }
     }
 
