@@ -83,15 +83,13 @@ struct SigningView: View {
 
 			.toolbar {
 				NBToolbarButton(role: .dismiss)
-				NBToolbarButton(
-					.localized("Reset"),
-					style: .text,
-					placement: .topBarTrailing
-				) {
-					_temporaryOptions = OptionsManager.shared.options
-					appIcon = nil
-				}
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Reset") {
+                        _temporaryOptions = OptionsManager.shared.options
+                        appIcon = nil
+                    }
+                    .accessibilityLabel("Reset Signing Options")
+
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
                     }
@@ -219,6 +217,14 @@ extension SigningView {
 	@ViewBuilder
 	private func _customizationProperties(for app: AppInfoPresentable) -> some View {
 		Section {
+            NavigationLink {
+                SigningModifyView(app: app, options: $_temporaryOptions)
+            } label: {
+                Text(.localized("Modify"))
+            }
+            /* Previously a DisclosureGroup; use a navigation row so the
+               chevron matches Properties and other navigation links. */
+            /*
 			DisclosureGroup(.localized("Modify")) {
 				NavigationLink(.localized("Existing Dylibs")) {
 					SigningDylibView(
@@ -247,6 +253,7 @@ extension SigningView {
 				}
 			}
 			
+            */
 			NavigationLink(.localized("Properties")) {
 				Form { SigningOptionsView(
 					options: $_temporaryOptions,
@@ -269,6 +276,35 @@ extension SigningView {
 			}
 		}
 	}
+}
+
+// MARK: - Signing modifications
+private struct SigningModifyView: View {
+    let app: AppInfoPresentable
+    @Binding var options: Options
+
+    var body: some View {
+        Form {
+            Section {
+                NavigationLink(.localized("Existing Dylibs")) {
+                    SigningDylibView(app: app, options: $options.optional())
+                }
+                NavigationLink(.localized("Frameworks & PlugIns")) {
+                    SigningFrameworksView(app: app, options: $options.optional())
+                }
+                #if NIGHTLY || DEBUG
+                NavigationLink(.localized("Entitlements") + " (BETA)") {
+                    SigningEntitlementsView(bindingValue: $options.appEntitlementsFile)
+                }
+                #endif
+                NavigationLink(.localized("Tweaks")) {
+                    SigningTweaksView(options: $options)
+                }
+            }
+        }
+        .navigationTitle(.localized("Modify"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 // MARK: - Signing preflight (local, non-blocking advisory)
