@@ -347,20 +347,12 @@ struct LibraryView: View {
 					ZagUpdateTransferParticles()
 						.frame(maxWidth: .infinity)
 
-					ZStack {
-						ZagUpdatesPillSurface(
-							baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
-						)
-
-						Text(updateManager.updateCount.description)
-							.font(.system(size: 14, weight: .regular))
-							.foregroundStyle(.white)
-							.frame(width: 24, height: 24)
-							.background(
-								Circle()
-									.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
-							)
-					}
+					// The avatar already reports the update count. Keep the
+					// original transfer animation and turn its destination
+					// into a theme-aware, animated glass Zag Core.
+					ZagUpdatesCore(
+						baseColorHex: zagUpdatesColorScheme == .dark ? "#1C1C1E" : "#EEEEEF"
+					)
 					.frame(width: 46, height: 46)
 				}
 				.frame(maxWidth: .infinity, alignment: .leading)
@@ -369,6 +361,7 @@ struct LibraryView: View {
 				.padding(.top, _searchFieldFocused ? 0 : -16)
 			}
 			.buttonStyle(.plain)
+            .accessibilityLabel("Updates, \(updateManager.updateCount) available")
 			.listRowSeparator(.hidden)
 			.listRowBackground(Color.clear)
 			.padding(.vertical, 2)
@@ -1787,6 +1780,7 @@ private struct ZagUpdateTransferParticles: View {
 
 private struct ZagUpdatesPillSurface: View {
 	var baseColorHex: String = "#2C2C2E"
+    var showsBaseFill = true
 
 	@AppStorage("Feather.userTintColor")
 	private var themeColorHex: String = "#3F8EF7"
@@ -1801,7 +1795,7 @@ private struct ZagUpdatesPillSurface: View {
 			let charge = exp(-pow((cycle - 0.82) / 0.28, 2))
 
 			Circle()
-				.fill(Color(hex: baseColorHex))
+				.fill(showsBaseFill ? Color(hex: baseColorHex) : Color.clear)
 				.overlay {
 					ZStack {
 						ZagUpdatesEdgeGlint(
@@ -1872,6 +1866,135 @@ private struct ZagUpdatesPillSurface: View {
 	}
 }
 
+
+// The Zag Core is a miniature glass emblem, not a second update counter.
+// Its rim reuses the existing 6.3-second charge and edge-glint timing,
+// synchronized with ZagUpdateTransferParticles.
+private struct ZagUpdatesCore: View {
+    let baseColorHex: String
+
+    @AppStorage("Feather.userTintColor")
+    private var themeColorHex: String = "#0090FF"
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var tint: Color {
+        ZagWideGamutTint.color(hex: themeColorHex)
+    }
+
+    var body: some View {
+        TimelineView(.animation(
+            minimumInterval: 1.0 / 30.0,
+            paused: reduceMotion
+        )) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            let cycle = time.truncatingRemainder(dividingBy: 6.3)
+            let rotation = reduceMotion ? 0.0 : time / 12.0 * 360.0
+            let charge = reduceMotion ? 0.0
+                : exp(-pow((cycle - 0.82) / 0.28, 2))
+            let reception = reduceMotion ? 0.0
+                : exp(-pow((cycle - 2.62) / 0.22, 2))
+            let energy = max(charge * 0.60, reception)
+
+            ZStack {
+                // Translucent inner lens. No solid red notification badge.
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .padding(1.5)
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                .white.opacity(0.18 + energy * 0.14),
+                                tint.opacity(0.12 + energy * 0.17),
+                                tint.opacity(0.035),
+                                .clear
+                            ],
+                            center: .init(x: 0.30, y: 0.22),
+                            startRadius: 0,
+                            endRadius: 28
+                        )
+                    )
+                    .padding(2)
+
+                // Optical tracks, with a slow rotating highlight.
+                Circle()
+                    .strokeBorder(tint.opacity(0.20 + energy * 0.18), lineWidth: 0.75)
+                    .padding(6)
+
+                Circle()
+                    .trim(from: 0.03, to: 0.26)
+                    .stroke(
+                        AngularGradient(
+                            colors: [.clear, tint.opacity(0.72), .white.opacity(0.95)],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 1.35, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(rotation))
+                    .padding(6)
+
+                Circle()
+                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.6)
+                    .padding(10.2)
+
+                Circle()
+                    .fill(tint.opacity(0.30 + energy * 0.22))
+                    .frame(width: 23, height: 23)
+                    .blur(radius: 8)
+
+                // Custom geometric Z, not an SF Symbol.
+                zagPath
+                    .stroke(
+                        tint.opacity(0.54 + energy * 0.30),
+                        style: StrokeStyle(lineWidth: 4.8, lineCap: .round, lineJoin: .round)
+                    )
+                    .blur(radius: 2.1)
+
+                zagPath
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.97),
+                                tint.opacity(0.95),
+                                .white.opacity(0.76)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 2.9, lineCap: .round, lineJoin: .round)
+                    )
+                    .shadow(color: tint.opacity(0.48 + energy * 0.28), radius: 2)
+
+                // Small refracted highlight on the glass surface.
+                Ellipse()
+                    .fill(.white.opacity(0.17))
+                    .frame(width: 20, height: 7)
+                    .blur(radius: 4)
+                    .offset(x: -7, y: -13)
+
+                // Reuse the original edge glint and synchronized flare.
+                ZagUpdatesPillSurface(
+                    baseColorHex: baseColorHex,
+                    showsBaseFill: false
+                )
+                .allowsHitTesting(false)
+            }
+            .frame(width: 46, height: 46)
+            .clipShape(Circle())
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var zagPath: Path {
+        Path { path in
+            path.move(to: CGPoint(x: 16, y: 17))
+            path.addLine(to: CGPoint(x: 30, y: 17))
+            path.addLine(to: CGPoint(x: 16, y: 29))
+            path.addLine(to: CGPoint(x: 30, y: 29))
+        }
+    }
+}
 
 private struct ZagUpdatesEdgeGlint: View {
 	let progress: Double
