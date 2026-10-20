@@ -73,47 +73,53 @@ struct CertificatesView: View {
         List {
             if !_certificates.isEmpty {
                 Section {
-                    _dashboard
-                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                } header: {
-                    Text("Certificate Overview")
-                }
-            }
+                    VStack(alignment: .leading, spacing: 18) {
+                        _sectionHeading("Certificate Overview")
+                        _dashboard
 
-            if let active = _activeCertificate {
-                Section {
-                    _activeCertificateCard(active)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                } header: {
-                    Text("Active Signing Identity")
-                }
-            }
-
-            if !_certificates.isEmpty {
-                Section {
-                    _libraryControls
-                        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 10, trailing: 20))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    if _visible.isEmpty {
-                        Text("No certificates match your search or filter.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(_visible, id: \.element.uuid) { item in
-                            _cellButton(for: item.element, at: item.offset)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
+                        if let active = _activeCertificate {
+                            _sectionHeading("Active Signing Identity")
+                                .padding(.top, 3)
+                            _activeCertificateCard(active)
                         }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            _sectionHeading("Certificate Library (\(_certificates.count))")
+                            Spacer(minLength: 4)
+                            if _certificates.count == 1 {
+                                Text("1 identity")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.top, 3)
+
+                        if _certificates.count > 1 || !_searchText.isEmpty || _filter != .all {
+                            _libraryControls
+                        }
+
+                        if _visible.isEmpty {
+                            Text("No certificates match your search or filter.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 12)
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(_visible, id: \.element.uuid) { item in
+                                    _cellButton(for: item.element, at: item.offset)
+                                }
+                            }
+                        }
+
+                        Text("Tap to select · Long-press to manage")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 1)
                     }
-                } header: {
-                    Text("Certificate Library (\(_certificates.count))")
-                } footer: {
-                    Text("Tap to select a signing identity. Long-press for management. File readiness does not verify live Apple revocation or successful signing.")
+                    .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 12, trailing: 20))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
         }
@@ -202,6 +208,13 @@ extension CertificatesView {
         return _certificates[index]
     }
 
+    private func _sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var _dashboard: some View {
         let attentionCount = _certificates.filter { _attention($0) }.count
         let now = Date()
@@ -221,12 +234,12 @@ extension CertificatesView {
     }
 
     private func _metric(_ value: String, title: String, icon: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(tint)
             Text(value)
-                .font(.system(size: 27, weight: .semibold, design: .rounded))
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
                 .monospacedDigit()
             Text(title)
                 .font(.system(size: 11, weight: .medium))
@@ -235,7 +248,7 @@ extension CertificatesView {
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(12)
         .background(Color(uiColor: .secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
@@ -275,22 +288,22 @@ extension CertificatesView {
         let profile = Storage.shared.getProvisionFileDecoded(for: cert)
         let attention = _attention(cert)
 
-        return VStack(alignment: .leading, spacing: 15) {
-            HStack(alignment: .top, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Color.accentColor)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 46, height: 46)
                     .background(Color.accentColor.opacity(0.12),
-                                in: RoundedRectangle(cornerRadius: 16))
+                                in: RoundedRectangle(cornerRadius: 14))
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("SELECTED FOR SIGNING")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .tracking(1.2)
                         .foregroundStyle(Color.accentColor)
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .lineLimit(2)
                     Text(profile?.TeamName ?? "Unknown signing team")
                         .font(.subheadline)
@@ -332,14 +345,14 @@ extension CertificatesView {
             }
             .buttonStyle(.plain)
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 1)
+                        .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 0.75)
                 }
         }
     }
@@ -371,8 +384,8 @@ extension CertificatesView {
 			.overlay(
 				RoundedRectangle(cornerRadius: cornerRadius)
 					.strokeBorder(
-						_selectedCertBinding.wrappedValue == index ? Color.accentColor : Color.primary.opacity(0.06),
-						lineWidth: 1.5
+						_selectedCertBinding.wrappedValue == index ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.06),
+						lineWidth: 1
 					)
 			)
 			.contextMenu {
