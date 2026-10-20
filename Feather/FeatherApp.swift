@@ -156,15 +156,9 @@ struct FeatherApp: App {
 }
 
 
-final class ZagLaunchReadiness: ObservableObject {
-    static let shared = ZagLaunchReadiness()
-    @Published var repositoriesReady = false
-}
-
 private struct ZagAnimatedLaunchOverlay: View {
-    @ObservedObject private var readiness = ZagLaunchReadiness.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var minimumDisplayElapsed = false
+    @State private var opacity = 1.0
     @State private var dismissed = false
 
     var body: some View {
@@ -180,35 +174,28 @@ private struct ZagAnimatedLaunchOverlay: View {
                         .accessibilityHidden(true)
                 }
                 .ignoresSafeArea()
-                .transition(.opacity)
-                .allowsHitTesting(true)
+                .opacity(opacity)
+                .allowsHitTesting(opacity > 0.01)
                 .task {
-                    try? await Task.sleep(for: .milliseconds(650))
+                    // A brief brand introduction, never a repository-loading gate.
+                    try? await Task.sleep(for: .milliseconds(180))
                     guard !Task.isCancelled else { return }
-                    minimumDisplayElapsed = true
-                    dismissIfReady()
-                }
-                .onChange(of: readiness.repositoriesReady) { _ in
-                    dismissIfReady()
+                    let fadeDuration = reduceMotion ? 0.01 : 0.42
+                    withAnimation(.easeInOut(duration: fadeDuration)) {
+                        opacity = 0
+                    }
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 440))
+                    guard !Task.isCancelled else { return }
+                    dismissed = true
+                    // The global updates badge lives in a UIKit window layer.
+                    // Reveal it only after the full-screen image is gone.
+                    NotificationCenter.default.post(
+                        name: .zagLaunchSplashVisibilityDidChange,
+                        object: nil,
+                        userInfo: ["visible": false]
+                    )
                 }
             }
-        }
-    }
-
-    private func dismissIfReady() {
-        guard readiness.repositoriesReady, minimumDisplayElapsed, !dismissed else { return }
-        withAnimation(.easeOut(duration: reduceMotion ? 0.01 : 0.22)) {
-            dismissed = true
-        }
-        // The badge is a UIKit subview above SwiftUI, so reveal it only
-        // after the splash fade finishes.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 250))
-            NotificationCenter.default.post(
-                name: .zagLaunchSplashVisibilityDidChange,
-                object: nil,
-                userInfo: ["visible": false]
-            )
         }
     }
 }
