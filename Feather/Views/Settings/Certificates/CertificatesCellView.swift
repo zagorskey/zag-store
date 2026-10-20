@@ -24,7 +24,11 @@ struct CertificatesCellView: View {
         let profileExpiry = profile?.ExpirationDate ?? cert.expiration
         let isCurrent = profile.map { $0.CreationDate <= Date() && $0.ExpirationDate > Date() } ?? false
         let hasP12 = Storage.shared.getFile(.certificate, from: cert) != nil
-        let needsAttention = cert.revoked || !isCurrent || !hasP12
+        let now = Date()
+        let expiringSoon = profile.map {
+            $0.ExpirationDate > now && $0.ExpirationDate <= now.addingTimeInterval(30 * 24 * 60 * 60)
+        } ?? false
+        let needsAttention = cert.revoked || !isCurrent || !hasP12 || expiringSoon
 
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 12) {
@@ -66,14 +70,16 @@ struct CertificatesCellView: View {
             }
 
             HStack(spacing: 8) {
-                Label(
-                    cert.revoked ? "Marked revoked" :
-                    !hasP12 ? "P12 missing" :
-                    profile == nil ? "Profile unavailable" :
-                    !isCurrent ? "Profile not current" : "Files present",
-                    systemImage: needsAttention ? "exclamationmark.circle" : "checkmark.circle"
-                )
-                .foregroundStyle(needsAttention ? Color.orange : Color.secondary)
+                if needsAttention {
+                    Label(
+                        cert.revoked ? "Marked revoked" :
+                        !hasP12 ? "P12 missing" :
+                        profile == nil ? "Profile unavailable" :
+                        !isCurrent ? "Profile not current" : "Expiring soon",
+                        systemImage: "exclamationmark.circle"
+                    )
+                    .foregroundStyle(Color.orange)
+                }
 
                 Spacer(minLength: 4)
 
