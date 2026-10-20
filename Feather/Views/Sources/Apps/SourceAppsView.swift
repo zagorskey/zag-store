@@ -1014,7 +1014,6 @@ struct SourceAppsView: View {
 					.listRowBackground(Color.clear)
 			}
 		}
-        .zagTrackDockScrolling()
 		.background {
 			if object.count == 1 {
 				ZagRepositoryScrollObserver(scrolled: $_repositoryScrolled)
