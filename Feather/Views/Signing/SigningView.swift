@@ -24,6 +24,7 @@ struct SigningView: View {
 	@State var appIcon: UIImage?
     @State private var _originalEntitlementAudit: ZagOriginalEntitlementAudit.Report?
     @State private var _originalEntitlementRunning = false
+    @State private var _originalEntitlementRequest = UUID()
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -276,7 +277,13 @@ extension SigningView {
                         LabeledContent("Profile", value: profile.Name)
                         _preflightRow("P12 File", okay: p12Present, success: "Present", failure: "Missing")
                         _preflightRow("Profile Dates", okay: validDates, success: "Current", failure: "Not valid")
-                        _preflightRow("App Identifier", okay: bundleMatches, success: "Matches profile", failure: "Not matched")
+                        _identifierPreflight(
+                            originalID: app.identifier ?? "",
+                            requestedID: bundleID,
+                            profileAppID: appID,
+                            matches: bundleMatches,
+                            ppqMayChange: _temporaryOptions.ppqProtection && certificate.ppQCheck
+                        )
                         if certificate.revoked {
                             Label("Certificate previously marked revoked", systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(Color.orange)
@@ -322,8 +329,57 @@ extension SigningView {
             } header: {
                 Text("Signing Preflight")
             } footer: {
-                Text("Advisory checks only. The final bundle identifier may be changed by signing options. This does not verify the P12 password, Apple's revocation service, final signed entitlements or device registration.")
+                Text("Read-only guidance, not signing authorization. Final identifiers and entitlements may change during signing. P12 password, Apple revocation, signed output and device registration are not verified here.")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func _identifierPreflight(
+        originalID: String,
+        requestedID: String,
+        profileAppID: String?,
+        matches: Bool,
+        ppqMayChange: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: matches && !ppqMayChange ? "checkmark.circle.fill" : "questionmark.circle")
+                .foregroundStyle(matches && !ppqMayChange ? Color.green : Color.secondary)
+            Text("App Identifier")
+            Spacer(minLength: 8)
+            Text(matches && !ppqMayChange ? "Pattern matches" : "Not verified")
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+        }
+        if !matches || ppqMayChange {
+            Text("The profile's App ID does not establish the identifier that will be used after re-signing. This is not a certificate failure.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        DisclosureGroup("Identifier Comparison") {
+            LabeledContent("Original App") {
+                Text(originalID.isEmpty ? "Unavailable" : originalID)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            LabeledContent("Requested") {
+                Text(requestedID.isEmpty ? "Unavailable" : requestedID)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            LabeledContent("Profile App ID") {
+                Text(profileAppID ?? "Unavailable")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            if ppqMayChange {
+                Text("PPQ protection can override the requested identifier at signing time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Comparison uses the current signing options and selected profile. It does not inspect a finished signed IPA.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -343,21 +399,23 @@ extension SigningView {
         }
         .disabled(_originalEntitlementRunning)
         .onChange(of: _temporaryCertificate) { _ in
+            _originalEntitlementRequest = UUID()
             _originalEntitlementAudit = nil
+            _originalEntitlementRunning = false
         }
 
         if let report = _originalEntitlementAudit {
             VStack(alignment: .leading, spacing: 5) {
-                Label(report.title, systemImage: report.issues.isEmpty && report.error == nil
-                      ? "checkmark.circle" : "exclamationmark.triangle")
+                Label(report.title, systemImage: report.error != nil
+                      ? "questionmark.circle" : "doc.text.magnifyingglass")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(report.issues.isEmpty && report.error == nil ? Color.green : Color.orange)
+                    .foregroundStyle(report.error != nil ? Color.orange : Color.secondary)
                 Text(report.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             if !report.issues.isEmpty {
-                DisclosureGroup("Potential capability conflicts (\(report.issues.count))") {
+                DisclosureGroup("Original capabilities to review (\(report.issues.count))") {
                     ForEach(report.issues, id: \.self) { issue in
                         Text(issue)
                             .font(.caption)
@@ -370,7 +428,7 @@ extension SigningView {
                         Text(key)
                             .font(.caption)
                     }
-                    Text("These values usually change during re-signing and are not treated as profile conflicts here.")
+                    Text("These values may change during re-signing; the original values are not treated as final signing conflicts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -403,12 +461,15 @@ extension SigningView {
             return
         }
 
+        let request = UUID()
+        _originalEntitlementRequest = request
         _originalEntitlementRunning = true
         _originalEntitlementAudit = nil
         Task {
             let report = await Task.detached(priority: .userInitiated) {
                 ZagOriginalEntitlementAudit.inspect(executable: executable, profileData: profileData)
             }.value
+            guard _originalEntitlementRequest == request else { return }
             _originalEntitlementAudit = report
             _originalEntitlementRunning = false
         }
@@ -505,11 +566,11 @@ private enum ZagOriginalEntitlementAudit {
 
         var title: String {
             if error != nil { return "Original signature not inspected" }
-            return issues.isEmpty ? "No obvious capability conflicts" : "Potential capability conflicts"
+            return issues.isEmpty ? "Original capabilities inspected" : "Original capabilities need review"
         }
         var summary: String {
             if let error { return error }
-            return "\(inspected) original entitlement(s) found, \(issues.count) potential conflict(s). This is not a final signing or installation check."
+            return "\(inspected) original entitlement(s), \(issues.count) difference(s) from the selected profile. Original capabilities may be replaced during re-signing; these are not confirmed signing failures."
         }
     }
 
@@ -550,11 +611,11 @@ private enum ZagOriginalEntitlementAudit {
         for key in original.keys.sorted() where !identityKeys.contains(key) {
             guard let value = original[key] else { continue }
             guard let permitted = profile[key] else {
-                issues.append("\(key): capability not present in selected profile")
+                issues.append("\(key): present in original app, absent from selected profile")
                 continue
             }
             if !matches(value, permitted) {
-                issues.append("\(key): capability value differs from selected profile")
+                issues.append("\(key): original value differs from selected profile")
             }
         }
         return Report(inspected: original.count, issues: issues, identityKeys: ignored, error: nil)
