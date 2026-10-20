@@ -323,7 +323,7 @@ struct LibraryView: View {
             } label: {
                 HStack(spacing: 4) {
                     HStack(spacing: 7) {
-                        VStack(alignment: .center, spacing: 0) {
+                        VStack(alignment: .center, spacing: -2) {
                             Text("Update")
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundStyle(Color(uiColor: UIColor { traits in
@@ -335,7 +335,7 @@ struct LibraryView: View {
                             // The release channel is the source of truth;
                             // this label follows Stable / Beta / Nightly.
                             Text(ZagSelfUpdateCoordinator.UpdateChannel.selected.rawValue.capitalized)
-                                .font(.system(size: 8, weight: .medium))
+                                .font(.system(size: 10, weight: .medium))
                                 .tracking(0.45)
                                 .foregroundStyle(Color(uiColor: .tertiaryLabel))
                         }
