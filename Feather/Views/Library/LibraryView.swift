@@ -745,7 +745,6 @@ struct LibraryView: View {
 			NBListAdaptable(transparentBackground: true) {
 				libraryListContent
 			}
-            .zagTrackDockScrolling()
 			.modifier(ZagLibrarySectionSpacingModifier())
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
