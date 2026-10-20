@@ -189,7 +189,7 @@ struct ExtendedTabbarView: View {
                 directionalScrollDistance = 0
                 let shouldCompact = direction < 0
                 guard dockCompact != shouldCompact else { return }
-                withAnimation(reduceMotion ? .none : .spring(response: 0.33, dampingFraction: 0.86)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.86)) {
                     dockCompact = shouldCompact
                 }
             }
@@ -202,7 +202,7 @@ struct ExtendedTabbarView: View {
 
     private func expandDock() {
         guard dockCompact else { return }
-        withAnimation(reduceMotion ? .none : .spring(response: 0.33, dampingFraction: 0.86)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.86)) {
             dockCompact = false
         }
     }
@@ -219,8 +219,9 @@ struct ExtendedTabbarView: View {
                     ZStack(alignment: .top) {
                         Group {
                             if tab == .sources {
-                                ZagSourcesTabIcon.label
+                                Image(uiImage: ZagSourcesTabIcon.image)
                                     .resizable()
+                                    .renderingMode(.template)
                                     .interpolation(.high)
                                     .frame(width: dockCompact ? 19 : 22,
                                            height: dockCompact ? 19 : 22)
@@ -268,14 +269,14 @@ struct ExtendedTabbarView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
-                .accessibilityAddTraits(selected ? [.isSelected] : [])
+                .accessibilityAddTraits(selected ? .isSelected : [])
                 .accessibilityHint("Select tab")
             }
         }
         .frame(maxWidth: dockCompact ? 292 : 360)
         .background {
             if #available(iOS 26.0, *) {
-                Capsule().glassEffect(.regular, in: .capsule)
+                Capsule().glassEffect(.regular, in: Capsule())
             } else {
                 Capsule().fill(.regularMaterial)
                     .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
