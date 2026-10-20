@@ -19,6 +19,7 @@ struct CertificatesAddView: View {
 	@State private var _certificateName: String = ""
     @State private var _isValidating = false
     @State private var _validationMessage: String?
+    @State private var _validationError: String?
     @State private var _importError: String?
     @State private var _filesValidated = false
     @State private var _validationGeneration = 0
@@ -75,7 +76,7 @@ struct CertificatesAddView: View {
                     Text("Identity")
                 }
 
-                if _isValidating || _validationMessage != nil {
+                if _isValidating || _validationMessage != nil || _validationError != nil {
                     Section {
                         if _isValidating {
                             HStack(spacing: 10) {
@@ -84,9 +85,14 @@ struct CertificatesAddView: View {
                             }
                         }
                         if let _validationMessage {
-                            Label(_validationMessage, systemImage: "info.circle")
+                            Label(_validationMessage, systemImage: "checkmark.circle")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                        }
+                        if let _validationError {
+                            Label(_validationError, systemImage: "exclamationmark.circle")
+                                .font(.subheadline)
+                                .foregroundStyle(Color.orange)
                         }
                     } header: {
                         Text("Import Validation")
@@ -131,7 +137,6 @@ struct CertificatesAddView: View {
                     onDocumentsPicked: { urls in
                         guard let selectedFileURL = urls.first else { return }
                         _p12URL = selectedFileURL
-                        _scheduleValidation()
                     }
                 )
                 .ignoresSafeArea()
@@ -175,6 +180,7 @@ extension CertificatesAddView {
         let generation = _validationGeneration
         _filesValidated = false
         _validationMessage = nil
+        _validationError = nil
         _importError = nil
         _isValidating = false
 
@@ -204,6 +210,7 @@ extension CertificatesAddView {
             _validationMessage = result.isValid
                 ? "Signing identity and provisioning profile match."
                 : nil
+            _validationError = result.isValid ? nil : result.message
             // Don't interrupt typing with alerts. A failed validation remains
             // disabled; tapping Save only becomes possible after a valid match.
         }
@@ -231,7 +238,7 @@ extension CertificatesAddView {
             if let error {
                 _validationMessage = nil
                 _importError = "Could not save the certificate: \(error.localizedDescription)"
-                _scheduleValidation()
+                _filesValidated = true
             } else {
                 dismiss()
             }
