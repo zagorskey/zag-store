@@ -246,6 +246,7 @@ struct SourcesView: View {
 				}
 				.listRowBackground(Color.clear)
 			}
+            .zagTrackDockScrolling()
 			.safeAreaInset(edge: .bottom) {
 				Color.clear.frame(height: 48)
 			}

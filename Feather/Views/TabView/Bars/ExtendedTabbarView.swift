@@ -8,7 +8,6 @@
 
 import SwiftUI
 import NukeUI
-import UIKit
 
 @available(iOS 18, *)
 struct ExtendedTabbarView: View {
@@ -18,10 +17,12 @@ struct ExtendedTabbarView: View {
 	@StateObject private var updateManager = UpdateManager.shared
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
-    @State private var dockIsCompact = false
-    @State private var previousDragY: CGFloat = 0
-    @State private var accumulatedScroll: CGFloat = 0
-    @State private var previousDirection: CGFloat = 0
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dockCompact = false
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var previousScrollDirection = 0
+    @State private var directionalScrollDistance: CGFloat = 0
 	
 	@State private var _isAddingPresenting = false
 
@@ -30,7 +31,9 @@ struct ExtendedTabbarView: View {
 			get: { selectedTabRawValue },
 			set: { newValue in
 				selectedTabRawValue = newValue
-                withAnimation(.spring(response: 0.33, dampingFraction: 0.86)) { dockIsCompact = false }
+                expandDock()
+                previousScrollDirection = 0
+                directionalScrollDistance = 0
 				if rememberLastPage {
 					UserDefaults.standard.set(
 						newValue,
@@ -52,8 +55,7 @@ struct ExtendedTabbarView: View {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				if tab == .sources {
                     Tab(value: tab.rawValue) {
-                        TabEnum.view(for: tab)
-                            .simultaneousGesture(dockDirectionGesture, including: .all)
+                        tabDestination(for: tab)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -63,8 +65,7 @@ struct ExtendedTabbarView: View {
                     }
                 } else {
                     Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
-                        TabEnum.view(for: tab)
-                            .simultaneousGesture(dockDirectionGesture, including: .all)
+                        tabDestination(for: tab)
                     }
                 }
 			}
@@ -72,7 +73,6 @@ struct ExtendedTabbarView: View {
 			ForEach(TabEnum.customizableTabs, id: \.hashValue) { tab in
 				Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
 					TabEnum.view(for: tab)
-                            .simultaneousGesture(dockDirectionGesture, including: .all)
 				}
 				.customizationID("tab.\(tab.rawValue)")
 				.defaultVisibility(.hidden, for: .tabBar)
@@ -110,34 +110,34 @@ struct ExtendedTabbarView: View {
 			.defaultVisibility(.hidden, for: .tabBar)
 			.hidden(horizontalSizeClass == .compact)
 		}
-		.tabViewStyle(.sidebarAdaptable)
-        .background {
+
+        .tabViewStyle(.sidebarAdaptable)
+        // The native tab bar remains the selection host, but the compact-width
+        // dock is drawn separately so its labels and capsule can actually resize.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if horizontalSizeClass == .compact {
-                ZagNativeDockScaleBridge(compact: dockIsCompact)
-                    .frame(width: 0, height: 0)
+                zagDock
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 6)
             }
         }
-		.overlay(alignment: .bottom) {
-			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
-				GeometryReader { proxy in
-					// The native floating tab bar keeps its items inside a
-					// horizontal content inset. Preserve the original indicator
-					// geometry: 12pt to the right of the Apps icon centre.
-					let tabContentInset: CGFloat = 30
-					let contentWidth = proxy.size.width - (tabContentInset * 2)
-					let itemWidth = contentWidth / CGFloat(TabEnum.defaultTabs.count)
-					Circle()
-						.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
-						.frame(width: 7, height: 7)
-						.position(
-							x: tabContentInset + itemWidth * 2.5 + 12,
-							y: proxy.size.height - 55
-						)
-						.allowsHitTesting(false)
-				}
-				.ignoresSafeArea()
-			}
-		}
+        .overlay(alignment: .bottom) {
+            // On iPad preserve the existing native dock indicator.
+            if horizontalSizeClass != .compact, updateManager.hasVisibleUpdates {
+                GeometryReader { proxy in
+                    let inset: CGFloat = 30
+                    let itemWidth = (proxy.size.width - inset * 2) / CGFloat(TabEnum.defaultTabs.count)
+                    Circle()
+                        .fill(updatesDotColor)
+                        .frame(width: 7, height: 7)
+                        .position(x: inset + itemWidth * 2.5 + 12,
+                                  y: proxy.size.height - 55)
+                        .allowsHitTesting(false)
+                }
+                .ignoresSafeArea()
+            }
+        }
 		.tabViewCustomization($customization)
 		.onOpenURL { url in
             if let tab = TabEnum.tab(for: url) {
@@ -154,34 +154,143 @@ struct ExtendedTabbarView: View {
 		}
 	}
 	
-    private var dockDirectionGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard horizontalSizeClass == .compact,
-                      abs(value.translation.height) > abs(value.translation.width) * 1.3 else { return }
-                let delta = value.translation.height - previousDragY
-                previousDragY = value.translation.height
-                guard abs(delta) > 0.5 else { return }
-                let direction: CGFloat = delta > 0 ? 1 : -1
-                if direction != previousDirection {
-                    accumulatedScroll = 0
-                    previousDirection = direction
-                }
-                accumulatedScroll += abs(delta)
-                guard accumulatedScroll >= 22 else { return }
-                accumulatedScroll = 0
-                let compact = direction < 0
-                if dockIsCompact != compact {
-                    withAnimation(.spring(response: 0.33, dampingFraction: 0.86)) {
-                        dockIsCompact = compact
+ 
+    private var updatesDotColor: Color {
+        Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1))
+    }
+
+    private var dockTint: Color {
+        ZagWideGamutTint.color(hex: themeColorHex)
+    }
+
+    // Tab selection, deep links, persistence, and the existing page hierarchy
+    // remain native. Only the visual dock is custom on compact-width devices.
+    @ViewBuilder
+    private func tabDestination(for tab: TabEnum) -> some View {
+        if horizontalSizeClass == .compact {
+            TabEnum.view(for: tab)
+                .toolbar(.hidden, for: .tabBar)
+                .environment(\.zagDockDidScroll, { oldOffset, newOffset in
+                    guard selectedTabRawValue == tab.rawValue else { return }
+                    reportDockScroll(from: oldOffset, to: newOffset)
+                })
+        } else {
+            // Retain iPad's native sidebar and tab bar.
+            TabEnum.view(for: tab)
+        }
+    }
+
+    // Driven by the list's real scroll offset, not a competing drag gesture.
+    private func reportDockScroll(from oldOffset: CGFloat, to newOffset: CGFloat) {
+        guard horizontalSizeClass == .compact,
+              oldOffset.isFinite, newOffset.isFinite else { return }
+        let delta = newOffset - oldOffset
+        guard abs(delta) >= 1, abs(delta) < 120 else { return }
+        if newOffset <= 3 {
+            directionalScrollDistance = 0
+            previousScrollDirection = 0
+            expandDock()
+            return
+        }
+        let direction = delta > 0 ? 1 : -1
+        if direction != previousScrollDirection {
+            previousScrollDirection = direction
+            directionalScrollDistance = 0
+        }
+        directionalScrollDistance += abs(delta)
+        guard directionalScrollDistance >= 16 else { return }
+        directionalScrollDistance = 0
+        let shouldCompact = direction > 0
+        guard dockCompact != shouldCompact else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.86)) {
+            dockCompact = shouldCompact
+        }
+    }
+
+    private func expandDock() {
+        guard dockCompact else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.33, dampingFraction: 0.86)) {
+            dockCompact = false
+        }
+    }
+
+    private var zagDock: some View {
+        HStack(spacing: 0) {
+            ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
+                let selected = selectedTabRawValue == tab.rawValue
+                Button {
+                    // Tapping any destination restores the expanded dock.
+                    selectedTab.wrappedValue = tab.rawValue
+                    expandDock()
+                } label: {
+                    VStack(spacing: dockCompact ? 1 : 3) {
+                        Group {
+                            if tab == .sources {
+                                Image(uiImage: ZagSourcesTabIcon.image)
+                                    .resizable()
+                                    .renderingMode(.template)
+                                    .interpolation(.high)
+                                    .frame(width: 25, height: 25)
+                            } else {
+                                Image(systemName: tab.icon)
+                                    .font(.system(size: 23, weight: .medium))
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                        }
+                        .frame(height: 27)
+
+                        // Retain the original Zag Store layout: all five
+                        // destination titles remain visible.
+                        Text(tab.title)
+                            .font(.system(size: dockCompact ? 9 : 10,
+                                          weight: selected ? .semibold : .regular))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
                     }
+                    .foregroundStyle(selected ? dockTint : Color.primary.opacity(0.93))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: dockCompact ? 50 : 64)
+                    .background {
+                        if selected {
+                            Capsule()
+                                .fill(colorScheme == .dark
+                                      ? Color.black.opacity(0.43)
+                                      : Color.white.opacity(0.58))
+                                .padding(.horizontal, 2)
+                                .padding(.vertical, 2)
+                        }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if tab == .library && updateManager.hasVisibleUpdates {
+                            Circle()
+                                .fill(updatesDotColor)
+                                .frame(width: 7, height: 7)
+                                .offset(x: -12, y: dockCompact ? 6 : 9)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityHint("Select tab")
             }
-            .onEnded { _ in
-                previousDragY = 0
-                previousDirection = 0
-                accumulatedScroll = 0
+        }
+        // The earlier successful layout animation: the capsule and the
+        // five item positions interpolate together, rather than scaling
+        // the whole rendered tab bar.
+        .frame(maxWidth: dockCompact ? 312 : 396)
+        .background {
+            if #available(iOS 26.0, *) {
+                Capsule().glassEffect(.regular, in: Capsule())
+            } else {
+                Capsule().fill(.regularMaterial)
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
             }
+        }
+        .shadow(color: .black.opacity(0.13), radius: 12, y: 4)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
     }
 
 	@ViewBuilder
@@ -211,43 +320,42 @@ struct ExtendedTabbarView: View {
 }
 
 
-// Scale the existing floating dock's presentation, not the UIKit tab bar's
-// layout transform. Preserve its native glass, labels, icons and hit testing.
-@available(iOS 18, *)
-private struct ZagNativeDockScaleBridge: UIViewRepresentable {
-    let compact: Bool
+// The real list/ScrollView reports its content offset through this lightweight
+// environment action. It is inert when used outside the main five-tab host.
+private struct ZagDockScrollActionKey: EnvironmentKey {
+    static var defaultValue: (CGFloat, CGFloat) -> Void { { _, _ in } }
+}
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        return view
+extension EnvironmentValues {
+    var zagDockDidScroll: (CGFloat, CGFloat) -> Void {
+        get { self[ZagDockScrollActionKey.self] }
+        set { self[ZagDockScrollActionKey.self] = newValue }
     }
+}
 
-    func updateUIView(_ view: UIView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = view.window,
-                  let tabBar = findTabBar(in: window.rootViewController) else { return }
-            // UIKit can replace the presentation layer during layout. Use the
-            // tab bar's containing view when it is the floating glass capsule.
-            let dock = tabBar
-            let target = compact ? CATransform3DMakeScale(0.82, 0.78, 1) : CATransform3DIdentity
-            guard !CATransform3DEqualToTransform(dock.layer.transform, target) else { return }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            dock.layer.transform = target
-            CATransaction.commit()
+private struct ZagDockScrollReportingModifier: ViewModifier {
+    @Environment(\.zagDockDidScroll) private var didScroll
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(
+                for: CGFloat.self,
+                of: { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                },
+                action: { oldOffset, newOffset in
+                    didScroll(oldOffset, newOffset)
+                }
+            )
+        } else {
+            content
         }
     }
+}
 
-    private func findTabBar(in controller: UIViewController?) -> UITabBar? {
-        guard let controller else { return nil }
-        if let tabs = controller as? UITabBarController { return tabs.tabBar }
-        for child in controller.children {
-            if let found = findTabBar(in: child) { return found }
-        }
-        if let presented = controller.presentedViewController {
-            return findTabBar(in: presented)
-        }
-        return nil
+extension View {
+    func zagTrackDockScrolling() -> some View {
+        modifier(ZagDockScrollReportingModifier())
     }
 }
