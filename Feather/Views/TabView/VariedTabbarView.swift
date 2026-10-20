@@ -488,7 +488,7 @@ struct ZagAccountPopup: View {
             }
             .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .principal) {
+                ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 9) {
                         Image("ZagAccountIconDark")
                             .resizable()
@@ -499,7 +499,7 @@ struct ZagAccountPopup: View {
                             .font(.headline)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
                     .accessibilityElement(children: .combine)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -516,7 +516,14 @@ struct ZagAccountPopup: View {
                     case .updates: ZagUpdatesPopup(updates: updateManager.updates, embeddedInAccountNavigation: true)
                     case .certificates: CertificatesView()
                     case .installation: InstallationView()
-                    case .signing: ConfigurationView()
+                    case .signing:
+                        ConfigurationView()
+                            .toolbar {
+                                ToolbarItem(placement: .principal) {
+                                    Text("Signing Options")
+                                        .font(.headline)
+                                }
+                            }
                     case .notifications: ZagAccountNotificationsView()
                     case .selfUpdate: ZagSelfUpdateStatusView()
                     case .settings: SettingsView(embeddedInAccountNavigation: true)
