@@ -137,6 +137,12 @@ struct CertificatesInfoView: View {
             }
 
             Section {
+                NavigationLink {
+                    ZagCertificateExportView(cert: cert)
+                } label: {
+                    Label("Export Signing Files", systemImage: "square.and.arrow.up")
+                }
+
                 Button {
                     if let directory = Storage.shared.getUuidDirectory(for: cert),
                        let sharedURL = directory.toSharedDocumentsURL() {
