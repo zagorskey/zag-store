@@ -107,6 +107,16 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.aboutUs
 ]
 
+// Theme the switch track without recoloring navigation buttons or links.
+struct ZagThemeTintToggleStyle: ToggleStyle {
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
+
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration)
+            .tint(Color(hex: themeColorHex))
+    }
+}
+
 // MARK: - View
 struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
