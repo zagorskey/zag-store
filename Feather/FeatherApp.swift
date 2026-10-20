@@ -156,6 +156,28 @@ struct FeatherApp: App {
 }
 
 
+@MainActor
+final class ZagLaunchGate {
+    static let shared = ZagLaunchGate()
+    private var completed = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilSplashFinishes() async {
+        if completed { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func finish() {
+        guard !completed else { return }
+        completed = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
 private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var opacity = 1.0
@@ -177,16 +199,17 @@ private struct ZagAnimatedLaunchOverlay: View {
                 .opacity(opacity)
                 .allowsHitTesting(opacity > 0.01)
                 .task {
-                    // A brief brand introduction, never a repository-loading gate.
-                    try? await Task.sleep(for: .milliseconds(180))
+                    // Hold the original artwork for 0.7 seconds before fading.
+                    try? await Task.sleep(for: .milliseconds(700))
                     guard !Task.isCancelled else { return }
-                    let fadeDuration = reduceMotion ? 0.01 : 0.42
+                    let fadeDuration = reduceMotion ? 0.01 : 0.50
                     withAnimation(.easeInOut(duration: fadeDuration)) {
                         opacity = 0
                     }
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 440))
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 520))
                     guard !Task.isCancelled else { return }
                     dismissed = true
+                    ZagLaunchGate.shared.finish()
                     // The global updates badge lives in a UIKit window layer.
                     // Reveal it only after the full-screen image is gone.
                     NotificationCenter.default.post(
