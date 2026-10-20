@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 // MARK: - View
 struct InstallationView: View {
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
     // The legacy transport remains available for older iOS versions.
     // The installation dispatcher must use the same platform rule.
     private var usesLegacyTransport: Bool {
@@ -26,12 +27,26 @@ struct InstallationView: View {
                 RPPairingView()
             }
         }
+        .tint(Color(hex: themeColorHex))
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 48)
         }
     }
 }
 
+
+private struct ZagInstallationTintedIconLabelStyle: LabelStyle {
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.icon
+                .foregroundStyle(Color(hex: themeColorHex))
+            configuration.title
+                .foregroundStyle(.primary)
+        }
+    }
+}
 
 private struct RPPairingView: View {
 	@State private var isLocalDevVpnAvailable = true
@@ -315,6 +330,7 @@ private struct RPPairingView: View {
 	) -> some View {
 		HStack {
 			Label(title, systemImage: titleSystemImage)
+                .labelStyle(ZagInstallationTintedIconLabelStyle())
 			Spacer()
 			Text(value)
 				.foregroundStyle(color)
