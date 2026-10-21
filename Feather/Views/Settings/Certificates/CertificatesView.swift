@@ -417,14 +417,11 @@ extension CertificatesView {
                 ZagCertificateHealthView()
             } label: {
                 HStack(spacing: 8) {
-                    Label {
-                        Text(_activeStatus(for: cert, profile: profile))
-                            .foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                            .foregroundStyle(attention ? Color.red : _positiveGreen)
-                            .frame(width: 24, alignment: .center)
-                    }
+                    Image(systemName: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(attention ? Color.red : _positiveGreen)
+                        .frame(width: 24, alignment: .center)
+                    Text(_activeStatus(for: cert, profile: profile))
+                        .foregroundStyle(.primary)
                     Spacer(minLength: 4)
                     if let expiry = profile?.ExpirationDate {
                         let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
@@ -447,7 +444,9 @@ extension CertificatesView {
                 _isSelectedInfoPresenting = cert
             } label: {
                 HStack {
-                    Label("Inspect Certificate", systemImage: "slider.horizontal.3")
+                    Image(systemName: "slider.horizontal.3")
+                        .frame(width: 24, alignment: .center)
+                    Text("Inspect Certificate")
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
