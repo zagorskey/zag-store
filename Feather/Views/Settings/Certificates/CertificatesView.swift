@@ -580,8 +580,10 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         Coordinator(text: $text, startDictation: startDictation)
     }
 
-    func makeUIView(context: Context) -> UISearchTextField {
-        let field = UISearchTextField(frame: .zero)
+    func makeUIView(context: Context) -> UISearchBar {
+        let searchBar = UISearchBar(frame: .zero)
+        searchBar.searchBarStyle = .minimal
+        let field = searchBar.searchTextField
         field.placeholder = "Search Certificates"
         field.backgroundColor = .clear
         field.borderStyle = .none
@@ -626,10 +628,11 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         context.coordinator.mic = mic
         mic.isEnabled = dictationAvailable
         mic.alpha = dictationAvailable ? 1 : 0.45
-        return field
+        return searchBar
     }
 
-    func updateUIView(_ field: UISearchTextField, context: Context) {
+    func updateUIView(_ searchBar: UISearchBar, context: Context) {
+        let field = searchBar.searchTextField
         if field.text != text { field.text = text }
         context.coordinator.startDictation = startDictation
         context.coordinator.mic?.isEnabled = dictationAvailable
