@@ -81,28 +81,31 @@ struct CertificatesView: View {
         List {
             if !_certificates.isEmpty {
                 Section {
+                    _nonStickyTitle("Overview")
                     _dashboard
                         .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                } header: {
-                    Text("Overview")
                 }
             }
 
             if let active = _activeCertificate {
                 Section {
+                    _nonStickyTitle("Active Certificate")
                     _activeCertificateCard(active)
                         .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                } header: {
-                    Text("Active Certificate")
                 }
             }
 
             if !_certificates.isEmpty {
                 Section {
+                    HStack(spacing: 8) {
+                        Text("Certificates")
+                        _certificateCountBadge(_certificates.count)
+                    }
+                    .modifier(ZagCertificateSectionTitleRow())
                     if _certificates.count > 1 || _filter != .all {
                         _libraryControls
                             .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 6, trailing: 20))
@@ -122,16 +125,12 @@ struct CertificatesView: View {
                                 .listRowBackground(Color.clear)
                         }
                     }
-                } header: {
-                    HStack(spacing: 8) {
-                        Text("Certificates")
-                        _certificateCountBadge(_certificates.count)
-                    }
                 }
             }
 
             if !_certificates.isEmpty {
                 Section {
+                    _nonStickyTitle("Utilities")
                     NavigationLink {
                         ZagCertificateToolsView()
                     } label: {
@@ -150,8 +149,6 @@ struct CertificatesView: View {
                     .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                } header: {
-                    Text("Utilities")
                 }
             }
         }
@@ -274,6 +271,11 @@ extension CertificatesView {
         let index = _selectedCertBinding.wrappedValue
         guard _certificates.indices.contains(index) else { return nil }
         return _certificates[index]
+    }
+
+    private func _nonStickyTitle(_ title: String) -> some View {
+        Text(title)
+            .modifier(ZagCertificateSectionTitleRow())
     }
 
     private var _positiveGreen: Color {
@@ -670,5 +672,17 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
             field?.becomeFirstResponder()
             startDictation()
         }
+    }
+}
+
+private struct ZagCertificateSectionTitleRow: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.system(.headline))
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .listRowInsets(EdgeInsets(top: 22, leading: 20, bottom: 10, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
