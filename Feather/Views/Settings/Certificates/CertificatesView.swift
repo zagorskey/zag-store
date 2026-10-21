@@ -600,6 +600,21 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
                 .foregroundColor: UIColor.placeholderText
             ]
         )
+        // Override only the pinned field's leading search icon.
+        // Apps and Sources continue to use their system-provided icons.
+        let searchIcon = UIImageView(image: UIImage(
+            systemName: "magnifyingglass",
+            withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: 24,
+                weight: .regular,
+                scale: .medium
+            )
+        ))
+        searchIcon.tintColor = .label
+        searchIcon.contentMode = .center
+        searchIcon.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+        field.leftView = searchIcon
+        field.leftViewMode = .always
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
                         for: .editingChanged)
 
