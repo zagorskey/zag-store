@@ -159,15 +159,16 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        // A native UISearchTextField preserves the same search glyph and mic
-        // proportions as Sources while allowing a full-width bottom position.
+        // Reuse the existing Zag Store search component, including its icons and dictation hook.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ZagCertificatesBottomSearchField(
+            ZagLiquidGlassSearchBar(
                 text: $_searchText,
-                startDictation: _startDictationFromSearchMic
+                isActive: $_isSearchActive,
+                isPinned: true,
+                prompt: "Search Certificates",
+                activePrompt: "Search Certificates",
+                onMicTap: _startDictationFromSearchMic
             )
-            .frame(height: 50)
-            .zagSearchGlass()
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 12)
@@ -358,7 +359,7 @@ extension CertificatesView {
     }
 
     private func _startDictationFromSearchMic() {
-        // ZagLiquidGlassSearchBar focuses its TextField before this callback.
+        // The shared search bar focuses its field before invoking this callback.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             _startSystemDictation()
         }
@@ -571,66 +572,3 @@ private struct ZagCertificatesTopInset: ViewModifier {
 }
 
 
-private struct ZagCertificatesBottomSearchField: UIViewRepresentable {
-    @Binding var text: String
-    let startDictation: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, startDictation: startDictation)
-    }
-
-    func makeUIView(context: Context) -> UISearchTextField {
-        let field = UISearchTextField(frame: .zero)
-        field.placeholder = "Search Certificates"
-        field.backgroundColor = .clear
-        field.borderStyle = .none
-        field.font = .systemFont(ofSize: 17)
-        field.textColor = .label
-        field.tintColor = .label
-        field.autocorrectionType = .no
-        field.autocapitalizationType = .none
-        field.returnKeyType = .search
-        field.clearButtonMode = .whileEditing
-        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
-                        for: .editingChanged)
-
-        let mic = UIButton(type: .system)
-        let configuration = UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)
-        mic.setImage(UIImage(systemName: "mic", withConfiguration: configuration), for: .normal)
-        mic.tintColor = .label
-        mic.accessibilityLabel = "Start Dictation"
-        mic.frame = CGRect(x: 0, y: 0, width: 36, height: 44)
-        mic.addTarget(context.coordinator, action: #selector(Coordinator.dictate(_:)),
-                      for: .touchUpInside)
-        field.rightView = mic
-        field.rightViewMode = .unlessEditing
-        field.leftViewMode = .always
-        context.coordinator.field = field
-        return field
-    }
-
-    func updateUIView(_ field: UISearchTextField, context: Context) {
-        if field.text != text { field.text = text }
-        context.coordinator.startDictation = startDictation
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var text: String
-        var startDictation: () -> Void
-        weak var field: UISearchTextField?
-
-        init(text: Binding<String>, startDictation: @escaping () -> Void) {
-            _text = text
-            self.startDictation = startDictation
-        }
-
-        @objc func textChanged(_ sender: UISearchTextField) {
-            text = sender.text ?? ""
-        }
-
-        @objc func dictate(_ sender: UIButton) {
-            field?.becomeFirstResponder()
-            startDictation()
-        }
-    }
-}
