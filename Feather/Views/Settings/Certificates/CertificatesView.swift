@@ -24,7 +24,7 @@ struct CertificatesView: View {
     @State private var _searchText = ""
     @State private var _filter: LibraryFilter = .all
     @State private var _dictationAvailable = false
-    @State private var _isSearchActive = false
+    @FocusState private var _searchFieldFocused: Bool
 
     private enum LibraryFilter: String, CaseIterable {
         case all = "All"
@@ -159,19 +159,24 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        // Reuse the existing Zag Store search component, including its icons and dictation hook.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ZagLiquidGlassSearchBar(
-                text: $_searchText,
-                isActive: $_isSearchActive,
-                isPinned: true,
-                prompt: "Search Certificates",
-                activePrompt: "Search Certificates",
-                onMicTap: _startDictationFromSearchMic
+        .searchable(
+            text: $_searchText,
+            placement: .platform(),
+            prompt: Text("Search Certificates")
+        )
+        .modifier(
+            ZagRepositorySearchFocusModifier(
+                isFocused: $_searchFieldFocused
             )
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+        )
+        .background {
+            ZagNativeSearchMicInstaller(
+                isAvailable: _dictationAvailable,
+                action: _startDictationFromSearchMic,
+                prompt: "Search Certificates",
+                activePrompt: "Search Certificates"
+            )
+            .frame(width: 0, height: 0)
         }
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
@@ -359,7 +364,7 @@ extension CertificatesView {
     }
 
     private func _startDictationFromSearchMic() {
-        // The shared search bar focuses its field before invoking this callback.
+        _searchFieldFocused = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             _startSystemDictation()
         }
