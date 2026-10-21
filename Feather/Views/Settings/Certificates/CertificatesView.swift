@@ -603,24 +603,10 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
                         for: .editingChanged)
 
-        // Exact SF Symbol configuration from ZagNativeSearchMicInstaller.
-        let mic = UIButton(type: .system)
-        mic.setImage(
-            UIImage(
-                systemName: "mic",
-                withConfiguration: UIImage.SymbolConfiguration(
-                    pointSize: 20,
-                    weight: .regular,
-                    scale: .medium
-                )
-            ),
-            for: .normal
+        let mic = ZagNativeSearchMicInstaller.makeMicrophoneButton(
+            target: context.coordinator,
+            action: #selector(Coordinator.dictate)
         )
-        mic.tintColor = .label
-        mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
-        mic.accessibilityLabel = "Start Dictation"
-        mic.addTarget(context.coordinator, action: #selector(Coordinator.dictate),
-                      for: .touchUpInside)
         field.rightView = mic
         field.rightViewMode = .always
         context.coordinator.field = field
