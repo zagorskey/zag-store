@@ -24,7 +24,6 @@ struct CertificatesView: View {
     @State private var _searchText = ""
     @State private var _filter: LibraryFilter = .all
     @State private var _dictationAvailable = false
-    @State private var _isSearchActive = false
 
     private enum LibraryFilter: String, CaseIterable {
         case all = "All"
@@ -159,16 +158,16 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        // Keep search permanently at the bottom; native .searchable moves it to the top.
+        // Keep the UIKit search field pinned, with the same native search glyph
+        // and microphone symbol configuration as Apps and Sources.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ZagLiquidGlassSearchBar(
+            ZagCertificatesNativeBottomSearch(
                 text: $_searchText,
-                isActive: $_isSearchActive,
-                isPinned: true,
-                prompt: "Search Certificates",
-                activePrompt: "Search Certificates",
-                onMicTap: _startDictationFromSearchMic
+                dictationAvailable: _dictationAvailable,
+                startDictation: _startDictationFromSearchMic
             )
+            .frame(height: 50)
+            .zagSearchGlass()
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 12)
@@ -571,3 +570,90 @@ private struct ZagCertificatesTopInset: ViewModifier {
 }
 
 
+
+private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
+    @Binding var text: String
+    let dictationAvailable: Bool
+    let startDictation: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, startDictation: startDictation)
+    }
+
+    func makeUIView(context: Context) -> UISearchTextField {
+        let field = UISearchTextField(frame: .zero)
+        field.placeholder = "Search Certificates"
+        field.backgroundColor = .clear
+        field.borderStyle = .none
+        field.font = .systemFont(ofSize: 17)
+        field.textColor = .label
+        field.tintColor = .label
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.returnKeyType = .search
+        field.clearButtonMode = .whileEditing
+        field.attributedPlaceholder = NSAttributedString(
+            string: "Search Certificates",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 19, weight: .semibold),
+                .foregroundColor: UIColor.placeholderText
+            ]
+        )
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
+                        for: .editingChanged)
+
+        // Exact SF Symbol configuration from ZagNativeSearchMicInstaller.
+        let mic = UIButton(type: .system)
+        mic.setImage(
+            UIImage(
+                systemName: "mic",
+                withConfiguration: UIImage.SymbolConfiguration(
+                    pointSize: 20,
+                    weight: .regular,
+                    scale: .medium
+                )
+            ),
+            for: .normal
+        )
+        mic.tintColor = .label
+        mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+        mic.accessibilityLabel = "Start Dictation"
+        mic.addTarget(context.coordinator, action: #selector(Coordinator.dictate),
+                      for: .touchUpInside)
+        field.rightView = mic
+        field.rightViewMode = .always
+        context.coordinator.field = field
+        context.coordinator.mic = mic
+        mic.isEnabled = dictationAvailable
+        mic.alpha = dictationAvailable ? 1 : 0.45
+        return field
+    }
+
+    func updateUIView(_ field: UISearchTextField, context: Context) {
+        if field.text != text { field.text = text }
+        context.coordinator.startDictation = startDictation
+        context.coordinator.mic?.isEnabled = dictationAvailable
+        context.coordinator.mic?.alpha = dictationAvailable ? 1 : 0.45
+    }
+
+    final class Coordinator: NSObject {
+        @Binding var text: String
+        var startDictation: () -> Void
+        weak var field: UISearchTextField?
+        weak var mic: UIButton?
+
+        init(text: Binding<String>, startDictation: @escaping () -> Void) {
+            _text = text
+            self.startDictation = startDictation
+        }
+
+        @objc func textChanged(_ field: UISearchTextField) {
+            text = field.text ?? ""
+        }
+
+        @objc func dictate() {
+            field?.becomeFirstResponder()
+            startDictation()
+        }
+    }
+}
