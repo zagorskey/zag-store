@@ -391,18 +391,20 @@ extension CertificatesView {
                     .background(_themeTint.opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: 14))
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .lineLimit(2)
+                    Text("SN: \(profile?.Name ?? "Unavailable")")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(0.6)
+                        .foregroundStyle(_themeTint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                     Text(profile?.TeamName ?? "Unknown signing team")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    Text("ACTIVE SIGNING CERTIFICATE")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .tracking(1.2)
-                        .foregroundStyle(_themeTint)
                 }
                 Spacer(minLength: 0)
             }
