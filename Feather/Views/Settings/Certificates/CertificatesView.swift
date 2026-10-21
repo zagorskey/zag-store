@@ -390,10 +390,6 @@ extension CertificatesView {
                                 in: RoundedRectangle(cornerRadius: 14))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("SELECTED FOR SIGNING")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .tracking(1.2)
-                        .foregroundStyle(_themeTint)
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(2)
@@ -401,6 +397,10 @@ extension CertificatesView {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    Text("ACTIVE SIGNING CERTIFICATE")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(_themeTint)
                 }
                 Spacer(minLength: 0)
             }
