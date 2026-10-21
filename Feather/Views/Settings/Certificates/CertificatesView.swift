@@ -605,7 +605,7 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         let searchIcon = UIImageView(image: UIImage(
             systemName: "magnifyingglass",
             withConfiguration: UIImage.SymbolConfiguration(
-                pointSize: 24,
+                pointSize: 22,
                 weight: .regular,
                 scale: .medium
             )
