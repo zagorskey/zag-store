@@ -571,8 +571,9 @@ private struct ZagCertificatesTopInset: ViewModifier {
 
 
 
-private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
+struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
     @Binding var text: String
+    var prompt: String = "Search Certificates"
     let dictationAvailable: Bool
     let startDictation: () -> Void
 
@@ -582,7 +583,7 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UISearchTextField {
         let field = UISearchTextField(frame: .zero)
-        field.placeholder = "Search Certificates"
+        field.placeholder = prompt
         field.backgroundColor = .clear
         field.borderStyle = .none
         field.font = .systemFont(ofSize: 17)
@@ -594,7 +595,7 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.clearButtonMode = .whileEditing
         // Match the native Apps/Sources search placeholder styling.
         field.attributedPlaceholder = NSAttributedString(
-            string: "Search Certificates",
+            string: prompt,
             attributes: [
                 .font: UIFont.systemFont(ofSize: 19, weight: .semibold),
                 .foregroundColor: UIColor.placeholderText
