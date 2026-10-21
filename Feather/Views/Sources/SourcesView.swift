@@ -1056,6 +1056,9 @@ struct ZagLiquidGlassSearchBar: View {
 	var isPinned: Bool = false
 	var prompt: String = "Repos, Apps, Games and More"
 	var activePrompt: String? = "Repos, Apps and More"
+    // Optional native dictation hook for pinned search bars in internal pages.
+    // Existing Apps/Sources usages retain the speech-recogniser fallback.
+    var onMicTap: (() -> Void)? = nil
 
 	@Environment(\.scenePhase)
 	private var scenePhase
@@ -1090,7 +1093,11 @@ struct ZagLiquidGlassSearchBar: View {
 				}
 
 				Button {
-					if speech.isListening {
+					if let onMicTap {
+                        isActive = true
+                        isFocused = true
+                        onMicTap()
+                    } else if speech.isListening {
 						speech.stop()
 					} else {
 						isActive = true
