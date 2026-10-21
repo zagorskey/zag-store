@@ -159,22 +159,14 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        // Native .searchable follows the navigation bar in this internal
-        // NavigationStack. Keep the shared glass search pinned to the bottom
-        // instead, with its own microphone and keyboard focus.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ZagLiquidGlassSearchBar(
-                text: $_searchText,
-                isActive: $_isSearchActive,
-                isPinned: true,
-                prompt: "Search Certificates",
-                activePrompt: "Search Certificates",
-                onMicTap: _dictationAvailable ? _startDictationFromSearchMic : nil
-            )
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-        }
+        // Use the exact same system .searchable and native mic installer as
+        // Sources and Apps. On iOS 26+, the bottom toolbar owns its placement.
+        .modifier(ZagCertificatesSearchChrome(
+            text: $_searchText,
+            isActive: $_isSearchActive,
+            dictationAvailable: _dictationAvailable,
+            startDictation: _startDictationFromSearchMic
+        ))
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
 			if _certificates.isEmpty {
@@ -194,6 +186,9 @@ struct CertificatesView: View {
 			}
 		}
 		.toolbar {
+            if #available(iOS 26.0, *) {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            }
 			if _bindingSelectedCert == nil {
 				NBToolbarButton(
 					systemImage: "plus",
@@ -569,6 +564,49 @@ private struct ZagCertificatesTopInset: ViewModifier {
             content.contentMargins(.top, 0, for: .scrollContent)
         } else {
             content
+        }
+    }
+}
+
+private struct ZagCertificatesSearchChrome: ViewModifier {
+    @Binding var text: String
+    @Binding var isActive: Bool
+    let dictationAvailable: Bool
+    let startDictation: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .searchable(
+                    text: $text,
+                    placement: .toolbar,
+                    prompt: Text("Search Certificates")
+                )
+                .background {
+                    ZagNativeSearchMicInstaller(
+                        isAvailable: dictationAvailable,
+                        action: startDictation,
+                        prompt: "Search Certificates",
+                        activePrompt: "Search Certificates"
+                    )
+                    .frame(width: 0, height: 0)
+                }
+        } else {
+            // Keep search available on older supported iOS versions.
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                ZagLiquidGlassSearchBar(
+                    text: $text,
+                    isActive: $isActive,
+                    isPinned: true,
+                    prompt: "Search Certificates",
+                    activePrompt: "Search Certificates",
+                    onMicTap: dictationAvailable ? startDictation : nil
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            }
         }
     }
 }
