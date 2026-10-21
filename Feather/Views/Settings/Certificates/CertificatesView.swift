@@ -428,8 +428,12 @@ extension CertificatesView {
                     Spacer(minLength: 4)
                     if let expiry = profile?.ExpirationDate {
                         let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
-                        Text(days < 0 ? "Expired" : days == 0 ? "Expires today" : "\(days) days left")
-                            .foregroundStyle(days <= 30 ? Color.orange : Color.secondary)
+                        HStack(spacing: 5) {
+                            Image(systemName: "clock")
+                            Text(days < 0 ? "Expired" : days == 0 ? "0 days" : "\(days) days")
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(days <= 30 || attention ? Color.red : _positiveGreen)
                     }
                 }
                 .font(.system(size: 12, weight: .medium))
