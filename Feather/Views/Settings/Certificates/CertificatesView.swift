@@ -77,8 +77,7 @@ struct CertificatesView: View {
 	
 	// MARK: Body
     var body: some View {
-        // Use the same native top inset as the main Settings Form.
-        Form {
+        List {
             if !_certificates.isEmpty {
                 Section {
                     _dashboard
@@ -148,8 +147,9 @@ struct CertificatesView: View {
                 }
             }
         }
-        .tint(_themeTint)
-		.scrollContentBackground(.hidden)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .modifier(ZagCertificatesTopInset())
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
 			if _certificates.isEmpty {
@@ -364,7 +364,7 @@ extension CertificatesView {
                 HStack(spacing: 8) {
                     Label(_activeStatus(for: cert, profile: profile),
                           systemImage: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(attention ? Color.orange : _themeTint)
+                        .foregroundStyle(attention ? Color.orange : Color.primary)
                     Spacer(minLength: 4)
                     if let expiry = profile?.ExpirationDate {
                         let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
@@ -388,7 +388,7 @@ extension CertificatesView {
                     Image(systemName: "arrow.up.right")
                 }
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(_themeTint)
+                .foregroundStyle(.primary)
             }
             .buttonStyle(.plain)
         }
@@ -501,4 +501,17 @@ extension CertificatesView {
 			Storage.shared.revokagedCertificate(for: cert)
 		}
 	}
+}
+
+// Keep the custom plain-list cards and typography while reducing only the
+// scroll-content top inset. Do not use Form here: it changes row presentation.
+private struct ZagCertificatesTopInset: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.contentMargins(.top, 0, for: .scrollContent)
+        } else {
+            content
+        }
+    }
 }
