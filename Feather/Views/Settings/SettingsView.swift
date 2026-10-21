@@ -488,6 +488,49 @@ extension SettingsView {
 		}
 	}
 
+    // Search covers the visible settings sections, their individual option names,
+    // and advanced settings only when unlocked.
+    private var _settingsSearchResults: some View {
+        Group {
+            ForEach(_settingsSectionOrder.filter { section in
+                switch section {
+                case .display:
+                    return _settingsSearchMatches("Display Appearance App Icon")
+                case .pages:
+                    return _settingsSearchMatches("Pages Remember Last Page Default Start Page")
+                case .certificates:
+                    return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
+                case .features:
+                    return _settingsSearchMatches("Features Installation Signing Options Archive Compression Photos Access")
+                case .diagnostics:
+                    return _settingsSearchMatches("Diagnostics Installation Diagnostics Update Diagnostics Repo Performance")
+                case .health:
+                    return _settingsSearchMatches("Health Health Checks")
+                case .refreshingApps:
+                    return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
+                case .aboutUs:
+                    return _settingsSearchMatches("About Us Zag Store Submit Feedback Bug Report")
+                case .misc:
+                    return _settingsSearchMatches("Browse Documents Archives Certificates Files")
+                case .reset:
+                    return _settingsSearchMatches("Reset")
+                }
+            }) { section in
+                _settingsSection(section)
+            }
+            if _settingsSearchMatches("Backup Restore Backup Settings Restore Settings") {
+                _backupAndRestoreSection
+            }
+            if _settingsSearchMatches("Reset") {
+                _settingsSection(.reset)
+            }
+            if _advancedSettingsUnlocked &&
+                _settingsSearchMatches("Developer Options Show Internal Metadata Experimental Features Self-Update Signature Diagnostics Signing Logging") {
+                _advancedSettingsSections
+            }
+        }
+    }
+
 	@ViewBuilder
 	private func _settingsSection(_ section: ZagSettingsSection) -> some View {
 		switch section {
