@@ -142,13 +142,13 @@ struct CertificatesView: View {
                                 .foregroundStyle(_themeTint)
                         }
                     }
-                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
                     .listRowSeparator(.hidden)
-                    .listRowBackground {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color(uiColor: .secondarySystemGroupedBackground))
-                            .padding(.horizontal, 20)
-                    }
+                    .listRowBackground(Color.clear)
                 } header: {
                     Text("Utilities")
                 }
