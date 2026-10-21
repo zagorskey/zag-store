@@ -85,7 +85,7 @@ struct CertificatesView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 } header: {
-                    Text("Certificate Overview")
+                    Text("Overview")
                 }
             }
 
@@ -96,7 +96,7 @@ struct CertificatesView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 } header: {
-                    Text("Active Signing Identity")
+                    Text("Active Certificate")
                 }
             }
 
@@ -122,11 +122,10 @@ struct CertificatesView: View {
                         }
                     }
                 } header: {
-                    Text("Certificate Library (\(_certificates.count))")
-                } footer: {
-                    Text("Tap to select · Long-press to manage")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text("Certificates")
+                        _certificateCountBadge(_certificates.count)
+                    }
                 }
             }
 
@@ -137,13 +136,21 @@ struct CertificatesView: View {
                     } label: {
                         Label {
                             Text("Certificate Health & Tools")
+                                .foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundStyle(_themeTint)
                         }
                     }
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                            .padding(.horizontal, 20)
+                    }
                 } header: {
-                    Text("Certificate Utilities")
+                    Text("Utilities")
                 }
             }
         }
@@ -253,6 +260,23 @@ extension CertificatesView {
         return _certificates[index]
     }
 
+    private var _positiveGreen: Color {
+        Color(uiColor: UIColor(displayP3Red: 0.12, green: 0.83, blue: 0.34, alpha: 1))
+    }
+
+    private func _certificateCountBadge(_ count: Int) -> some View {
+        Text(count.formatted())
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(_themeTint)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(_themeTint.opacity(0.14), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(_themeTint.opacity(0.5), lineWidth: 1)
+            }
+            .accessibilityLabel("\(count) certificates")
+    }
+
     private var _dashboard: some View {
         let attentionCount = _certificates.filter { _attention($0) }.count
         let now = Date()
@@ -263,23 +287,26 @@ extension CertificatesView {
         }.count
 
         return HStack(spacing: 8) {
-            _metric("\(_certificates.count)", title: "Stored", icon: "square.stack.3d.up", tint: _themeTint)
-            _metric("\(attentionCount)", title: "Attention", icon: "exclamationmark.shield",
-                    tint: attentionCount > 0 ? .orange : _themeTint)
-            _metric("\(expiring)", title: "Expiring Soon", icon: "calendar.badge.clock",
-                    tint: expiring > 0 ? .orange : _themeTint)
+            _metric(_certificates.count, title: "Stored", icon: "square.stack.3d.up",
+                    activeTint: _themeTint, numberTint: _positiveGreen)
+            _metric(attentionCount, title: "Attention", icon: "exclamationmark.shield",
+                    activeTint: .orange, numberTint: .orange)
+            _metric(expiring, title: "Expiring Soon", icon: "calendar.badge.clock",
+                    activeTint: .orange, numberTint: .orange)
         }
     }
 
-    private func _metric(_ value: String, title: String, icon: String, tint: Color) -> some View {
+    private func _metric(_ value: Int, title: String, icon: String,
+                         activeTint: Color, numberTint: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(tint)
-                Text(value)
+                    .foregroundStyle(value == 0 ? Color.secondary : activeTint)
+                Text(value.formatted())
                     .font(.system(size: 21, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(value == 0 ? Color.primary : numberTint)
             }
             Text(title)
                 .font(.system(size: 11, weight: .medium))
