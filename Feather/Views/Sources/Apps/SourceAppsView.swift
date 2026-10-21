@@ -286,6 +286,27 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 	}
 
+    // Shared native accessory used by Apps, Sources, and pinned internal search.
+    static func makeMicrophoneButton(target: Any?, action: Selector) -> UIButton {
+        let mic = UIButton(type: .system)
+        mic.setImage(
+            UIImage(
+                systemName: "mic",
+                withConfiguration: UIImage.SymbolConfiguration(
+                    pointSize: 20,
+                    weight: .regular,
+                    scale: .medium
+                )
+            ),
+            for: .normal
+        )
+        mic.tintColor = .label
+        mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
+        mic.addTarget(target, action: action, for: .touchUpInside)
+        mic.accessibilityLabel = "Start Dictation"
+        return mic
+    }
+
 	final class Coordinator: NSObject {
 		var action: () -> Void
 		var prompt: String
