@@ -621,7 +621,7 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         let mic = ZagNativeSearchMicInstaller.makeMicrophoneButton(
             target: context.coordinator,
             action: #selector(Coordinator.dictate),
-            pointSize: 24
+            pointSize: 22
         )
         field.rightView = mic
         field.rightViewMode = .always
