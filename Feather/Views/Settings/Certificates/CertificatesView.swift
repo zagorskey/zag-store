@@ -422,7 +422,8 @@ extension CertificatesView {
                             .foregroundStyle(.primary)
                     } icon: {
                         Image(systemName: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                            .foregroundStyle(attention ? Color.orange : _themeTint)
+                            .foregroundStyle(attention ? Color.red : _positiveGreen)
+                            .frame(width: 24, alignment: .center)
                     }
                     Spacer(minLength: 4)
                     if let expiry = profile?.ExpirationDate {
