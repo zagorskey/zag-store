@@ -1070,10 +1070,11 @@ struct ZagLiquidGlassSearchBar: View {
 	private var speech = ZagSpeechRecognizer()
 
 	var body: some View {
-		HStack(spacing: 10) {
+		// Avoid reserving the close-button gap while search is inactive.
+		HStack(spacing: isActive ? 10 : 0) {
 			HStack(spacing: 10) {
 				Image(systemName: "magnifyingglass")
-					.font(.system(size: 19, weight: .regular))
+					.font(.system(size: 16, weight: .regular))
 					.foregroundStyle(.primary)
 
 				ZStack(alignment: .leading) {
