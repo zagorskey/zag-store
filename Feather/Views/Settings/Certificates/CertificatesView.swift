@@ -24,7 +24,7 @@ struct CertificatesView: View {
     @State private var _searchText = ""
     @State private var _filter: LibraryFilter = .all
     @State private var _dictationAvailable = false
-    @FocusState private var _searchFieldFocused: Bool
+    @State private var _isSearchActive = false
 
     private enum LibraryFilter: String, CaseIterable {
         case all = "All"
@@ -159,24 +159,21 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 48)
-        }
-        // Reuse the native, bottom-positioned Liquid Glass search from Apps and Sources.
-        .searchable(
-            text: $_searchText,
-            placement: .platform(),
-            prompt: Text("Search Certificates")
-        )
-        .modifier(ZagRepositorySearchFocusModifier(isFocused: $_searchFieldFocused))
-        .background {
-            ZagNativeSearchMicInstaller(
-                isAvailable: _dictationAvailable,
-                action: _startDictationFromSearchMic,
+        // Native .searchable follows the navigation bar in this internal
+        // NavigationStack. Keep the shared glass search pinned to the bottom
+        // instead, with its own microphone and keyboard focus.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ZagLiquidGlassSearchBar(
+                text: $_searchText,
+                isActive: $_isSearchActive,
+                isPinned: true,
                 prompt: "Search Certificates",
-                activePrompt: "Search Certificates"
+                activePrompt: "Search Certificates",
+                onMicTap: _dictationAvailable ? _startDictationFromSearchMic : nil
             )
-            .frame(width: 0, height: 0)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
@@ -364,7 +361,7 @@ extension CertificatesView {
     }
 
     private func _startDictationFromSearchMic() {
-        _searchFieldFocused = true
+        // ZagLiquidGlassSearchBar focuses its TextField before this callback.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             _startSystemDictation()
         }
