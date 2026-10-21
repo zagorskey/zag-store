@@ -283,25 +283,16 @@ extension CertificatesView {
     }
 
     private func _certificateCountBadge(_ count: Int) -> some View {
-        let valid = _certificates.filter { !_attention($0) }.count
-        let invalid = count - valid
-        return HStack(spacing: 6) {
-            _statusCountBadge(valid, tint: _positiveGreen, label: "Valid certificates")
-            _statusCountBadge(invalid, tint: .red, label: "Certificates requiring attention")
-        }
-    }
-
-    private func _statusCountBadge(_ count: Int, tint: Color, label: String) -> some View {
         Text(count.formatted())
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(tint)
+            .foregroundStyle(_themeTint)
             .padding(.horizontal, 9)
             .padding(.vertical, 3)
-            .background(tint.opacity(0.14), in: Capsule())
+            .background(_themeTint.opacity(0.14), in: Capsule())
             .overlay {
-                Capsule().strokeBorder(tint.opacity(0.5), lineWidth: 1)
+                Capsule().strokeBorder(_themeTint.opacity(0.5), lineWidth: 1)
             }
-            .accessibilityLabel("\(count) \(label)")
+            .accessibilityLabel("\(count) certificates")
     }
 
     private var _dashboard: some View {
