@@ -32,12 +32,18 @@ struct CertificatesCellView: View {
 
         return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: needsAttention ? "exclamationmark.shield" : "checkmark.shield")
-                    .font(.system(size: 21, weight: .medium))
-                    .foregroundStyle(needsAttention ? Color.orange : Color.accentColor)
+                Image(systemName: needsAttention ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(
+                        needsAttention
+                            ? Color(uiColor: UIColor(displayP3Red: 0.96, green: 0.23, blue: 0.27, alpha: 1))
+                            : Color(uiColor: UIColor(displayP3Red: 0.12, green: 0.83, blue: 0.34, alpha: 1))
+                    )
                     .frame(width: 46, height: 46)
                     .background(
-                        (needsAttention ? Color.orange : Color.accentColor).opacity(0.10),
+                        needsAttention
+                            ? Color(uiColor: UIColor(displayP3Red: 0.30, green: 0.10, blue: 0.13, alpha: 1))
+                            : Color(uiColor: UIColor(displayP3Red: 0.08, green: 0.26, blue: 0.14, alpha: 1)),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
 
