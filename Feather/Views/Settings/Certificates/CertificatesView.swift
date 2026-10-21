@@ -315,14 +315,16 @@ extension CertificatesView {
     private func _metric(_ value: Int, title: String, icon: String,
                          activeTint: Color, numberTint: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            HStack(alignment: .center, spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(value == 0 ? Color.secondary : activeTint)
+                    .frame(width: 22, height: 25, alignment: .center)
                 Text(value.formatted())
                     .font(.system(size: 21, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(value == 0 ? Color.primary : numberTint)
+                    .frame(height: 25, alignment: .center)
             }
             Text(title)
                 .font(.system(size: 11, weight: .medium))
