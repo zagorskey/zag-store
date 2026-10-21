@@ -156,6 +156,42 @@ struct SettingsView: View {
 	@State private var _routeInstallationDiagnostics = false
 	@State private var _routeRPPairingDiagnostics = false
 	@State private var _routeUpdateDiagnostics = false
+    @State private var _settingsSearchText = ""
+    @State private var _settingsDictationAvailable = false
+
+    private var _settingsSearchQuery: String {
+        _settingsSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func _settingsSearchMatches(_ terms: String) -> Bool {
+        _settingsSearchQuery.isEmpty ||
+        terms.localizedCaseInsensitiveContains(_settingsSearchQuery)
+    }
+
+    private func _probeSettingsDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            _settingsDictationAvailable = false
+            return
+        }
+        _settingsDictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func _startSettingsDictation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+                  cls.responds(to: NSSelectorFromString("sharedInstance")),
+                  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+            else { return }
+            let preheat = NSSelectorFromString("preheatIfNecessary")
+            if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+            let start = NSSelectorFromString("startDictation")
+            if controller.responds(to: start) { _ = controller.perform(start) }
+        }
+    }
+
 	
 	// MARK: Fetch
 	@FetchRequest(
@@ -189,6 +225,9 @@ struct SettingsView: View {
 						Text("Reorder Sections")
 					}
 				} else {
+                    if !_settingsSearchQuery.isEmpty {
+                        _settingsSearchResults
+                    } else {
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
@@ -197,6 +236,7 @@ struct SettingsView: View {
 					if _advancedSettingsUnlocked {
 						_advancedSettingsSections
 					}
+                    }
 
 					// MARK: Zag Store Running Build Footer
 					Section {
@@ -215,9 +255,19 @@ struct SettingsView: View {
 					}
 				}
 			}
-			.safeAreaInset(edge: .bottom) {
-				Color.clear.frame(height: 48)
-			}
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ZagCertificatesNativeBottomSearch(
+                    text: $_settingsSearchText,
+                    prompt: "Search Settings",
+                    dictationAvailable: _settingsDictationAvailable,
+                    startDictation: _startSettingsDictation
+                )
+                .frame(height: 50)
+                .zagSearchGlass()
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+            }
 
 			.tint(Color(hex: userTintColor))
 			.toggleStyle(ZagThemeTintToggleStyle())
@@ -240,6 +290,7 @@ struct SettingsView: View {
 			}
 			.onAppear {
 				_loadSettingsSectionOrder()
+                _probeSettingsDictation()
 				_refreshPhotoAuthorizationStatus()
 				if let route = ZagStoreRouter.pendingRoute {
 					_handleZagStoreRoute(route)
