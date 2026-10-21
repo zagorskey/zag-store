@@ -594,6 +594,7 @@ private struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.autocapitalizationType = .none
         field.returnKeyType = .search
         field.clearButtonMode = .whileEditing
+        // Match the native Apps/Sources search placeholder styling.
         field.attributedPlaceholder = NSAttributedString(
             string: "Search Certificates",
             attributes: [
