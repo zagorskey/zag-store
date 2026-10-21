@@ -24,7 +24,7 @@ struct CertificatesView: View {
     @State private var _searchText = ""
     @State private var _filter: LibraryFilter = .all
     @State private var _dictationAvailable = false
-    @FocusState private var _searchFieldFocused: Bool
+    @State private var _isSearchActive = false
 
     private enum LibraryFilter: String, CaseIterable {
         case all = "All"
@@ -159,24 +159,19 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
-        .searchable(
-            text: $_searchText,
-            placement: .platform(),
-            prompt: Text("Search Certificates")
-        )
-        .modifier(
-            ZagRepositorySearchFocusModifier(
-                isFocused: $_searchFieldFocused
-            )
-        )
-        .background {
-            ZagNativeSearchMicInstaller(
-                isAvailable: _dictationAvailable,
-                action: _startDictationFromSearchMic,
+        // Keep search permanently at the bottom; native .searchable moves it to the top.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ZagLiquidGlassSearchBar(
+                text: $_searchText,
+                isActive: $_isSearchActive,
+                isPinned: true,
                 prompt: "Search Certificates",
-                activePrompt: "Search Certificates"
+                activePrompt: "Search Certificates",
+                onMicTap: _startDictationFromSearchMic
             )
-            .frame(width: 0, height: 0)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
@@ -364,7 +359,6 @@ extension CertificatesView {
     }
 
     private func _startDictationFromSearchMic() {
-        _searchFieldFocused = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             _startSystemDictation()
         }
