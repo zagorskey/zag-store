@@ -349,22 +349,10 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 			}
 
 			if installedField !== field || button == nil {
-				let mic = UIButton(type: .system)
-				mic.setImage(
-					UIImage(
-						systemName: "mic",
-						withConfiguration: UIImage.SymbolConfiguration(
-							pointSize: 20,
-							weight: .regular,
-							scale: .medium
-						)
-					),
-					for: .normal
-				)
-				mic.tintColor = .label
-				mic.frame = CGRect(x: 0, y: 0, width: 36, height: 36)
-				mic.addTarget(self, action: #selector(micPressed), for: .touchUpInside)
-				mic.accessibilityLabel = "Start Dictation"
+				let mic = ZagNativeSearchMicInstaller.makeMicrophoneButton(
+                    target: self,
+                    action: #selector(micPressed)
+                )
 
 				field.rightView = mic
 				field.rightViewMode = .always
