@@ -11,6 +11,8 @@ import NimbleViews
 // MARK: - View
 struct CertificatesView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
+    @AppStorage("Feather.userTintColor") private var _themeColorHex = "#0090FF"
+    private var _themeTint: Color { Color(hex: _themeColorHex) }
 	
 	@State private var _isAddingPresenting = false
 	@State private var _isRenamingPresenting = false
@@ -75,7 +77,8 @@ struct CertificatesView: View {
 	
 	// MARK: Body
     var body: some View {
-        List {
+        // Use the same native top inset as the main Settings Form.
+        Form {
             if !_certificates.isEmpty {
                 Section {
                     _dashboard
@@ -133,14 +136,19 @@ struct CertificatesView: View {
                     NavigationLink {
                         ZagCertificateToolsView()
                     } label: {
-                        Label("Certificate Health & Tools", systemImage: "checkmark.shield")
+                        Label {
+                            Text("Certificate Health & Tools")
+                        } icon: {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(_themeTint)
+                        }
                     }
                 } header: {
                     Text("Certificate Utilities")
                 }
             }
         }
-		.listStyle(.plain)
+        .tint(_themeTint)
 		.scrollContentBackground(.hidden)
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
@@ -255,11 +263,11 @@ extension CertificatesView {
         }.count
 
         return HStack(spacing: 8) {
-            _metric("\(_certificates.count)", title: "Stored", icon: "square.stack.3d.up", tint: .accentColor)
+            _metric("\(_certificates.count)", title: "Stored", icon: "square.stack.3d.up", tint: _themeTint)
             _metric("\(attentionCount)", title: "Attention", icon: "exclamationmark.shield",
-                    tint: attentionCount > 0 ? .orange : .secondary)
+                    tint: attentionCount > 0 ? .orange : _themeTint)
             _metric("\(expiring)", title: "Expiring Soon", icon: "calendar.badge.clock",
-                    tint: expiring > 0 ? .orange : .secondary)
+                    tint: expiring > 0 ? .orange : _themeTint)
         }
     }
 
@@ -325,16 +333,16 @@ extension CertificatesView {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(_themeTint)
                     .frame(width: 42, height: 42)
-                    .background(Color.accentColor.opacity(0.12),
+                    .background(_themeTint.opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: 14))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("SELECTED FOR SIGNING")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .tracking(1.2)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(_themeTint)
                     Text(cert.nickname ?? profile?.Name ?? "Signing Certificate")
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(2)
@@ -356,7 +364,7 @@ extension CertificatesView {
                 HStack(spacing: 8) {
                     Label(_activeStatus(for: cert, profile: profile),
                           systemImage: attention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(attention ? Color.orange : Color.accentColor)
+                        .foregroundStyle(attention ? Color.orange : _themeTint)
                     Spacer(minLength: 4)
                     if let expiry = profile?.ExpirationDate {
                         let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
@@ -380,7 +388,7 @@ extension CertificatesView {
                     Image(systemName: "arrow.up.right")
                 }
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(_themeTint)
             }
             .buttonStyle(.plain)
         }
@@ -391,7 +399,7 @@ extension CertificatesView {
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
                 .overlay {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.18), lineWidth: 0.75)
+                        .strokeBorder(_themeTint.opacity(0.18), lineWidth: 0.75)
                 }
         }
     }
@@ -437,7 +445,7 @@ extension CertificatesView {
 			.overlay(
 				RoundedRectangle(cornerRadius: cornerRadius)
 					.strokeBorder(
-						_selectedCertBinding.wrappedValue == index ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.06),
+						_selectedCertBinding.wrappedValue == index ? _themeTint.opacity(0.55) : Color.primary.opacity(0.06),
 						lineWidth: 1
 					)
 			)
