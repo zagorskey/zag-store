@@ -23,6 +23,8 @@ struct CertificatesView: View {
 	@State private var _pendingCertificateDelete: CertificatePair?
     @State private var _searchText = ""
     @State private var _filter: LibraryFilter = .all
+    @State private var _dictationAvailable = false
+    @FocusState private var _searchFieldFocused: Bool
 
     private enum LibraryFilter: String, CaseIterable {
         case all = "All"
@@ -102,7 +104,7 @@ struct CertificatesView: View {
 
             if !_certificates.isEmpty {
                 Section {
-                    if _certificates.count > 1 || !_searchText.isEmpty || _filter != .all {
+                    if _certificates.count > 1 || _filter != .all {
                         _libraryControls
                             .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 6, trailing: 20))
                             .listRowSeparator(.hidden)
@@ -157,6 +159,25 @@ struct CertificatesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .modifier(ZagCertificatesTopInset())
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 48)
+        }
+        // Reuse the native, bottom-positioned Liquid Glass search from Apps and Sources.
+        .searchable(
+            text: $_searchText,
+            placement: .platform(),
+            prompt: Text("Search Certificates")
+        )
+        .modifier(ZagRepositorySearchFocusModifier(isFocused: $_searchFieldFocused))
+        .background {
+            ZagNativeSearchMicInstaller(
+                isAvailable: _dictationAvailable,
+                action: _startDictationFromSearchMic,
+                prompt: "Search Certificates",
+                activePrompt: "Search Certificates"
+            )
+            .frame(width: 0, height: 0)
+        }
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
 			if _certificates.isEmpty {
@@ -187,6 +208,7 @@ struct CertificatesView: View {
 			}
 		}
         .task {
+            _probeSystemDictation()
             await ZagCertificateExpiryNotifications.refresh()
         }
         .onChange(of: _certificates.count) { _ in
@@ -322,34 +344,41 @@ extension CertificatesView {
     }
 
     private var _libraryControls: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search certificates or teams", text: $_searchText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                if !_searchText.isEmpty {
-                    Button {
-                        _searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel("Clear search")
-                }
+        Picker("Certificate Filter", selection: $_filter) {
+            ForEach(LibraryFilter.allCases, id: \.self) { filter in
+                Text(filter.rawValue).tag(filter)
             }
-            .padding(.horizontal, 14)
-            .frame(height: 44)
-            .background(Color(uiColor: .secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            Picker("Certificate Filter", selection: $_filter) {
-                ForEach(LibraryFilter.allCases, id: \.self) { filter in
-                    Text(filter.rawValue).tag(filter)
-                }
-            }
-            .pickerStyle(.segmented)
         }
+        .pickerStyle(.segmented)
+    }
+
+    private func _probeSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            _dictationAvailable = false
+            return
+        }
+        _dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func _startDictationFromSearchMic() {
+        _searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            _startSystemDictation()
+        }
+    }
+
+    private func _startSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else { return }
+        let preheat = NSSelectorFromString("preheatIfNecessary")
+        if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+        let start = NSSelectorFromString("startDictation")
+        if controller.responds(to: start) { _ = controller.perform(start) }
     }
 
     private func _activeCertificateCard(_ cert: CertificatePair) -> some View {
