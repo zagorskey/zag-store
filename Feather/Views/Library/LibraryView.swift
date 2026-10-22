@@ -3224,6 +3224,24 @@ final class ZagUpdateTransactionManager: ObservableObject {
     }
 
 
+    // A shared entry point for signing and installation workflows outside
+    // the update coordinator. Use the operation UUID, not the bundle ID,
+    // so separate operations remain separate in Activity.
+    @MainActor
+    func recordExternalOperation(id: String, status: String, appName: String?, bundleID: String?) {
+        let record = ActivityRecord(
+            id: UUID(), updateID: id, status: status,
+            detail: bundleID, timestamp: Date(), appName: appName
+        )
+        activityHistory.insert(record, at: 0)
+        if activityHistory.count > 100 {
+            activityHistory = Array(activityHistory.prefix(100))
+        }
+        if let data = try? JSONEncoder().encode(activityHistory) {
+            UserDefaults.standard.set(data, forKey: historyKey)
+        }
+    }
+
     private func recordActivity(updateID: String, status: String, detail: String? = nil, appName: String? = nil) {
         let record = ActivityRecord(id: UUID(), updateID: updateID, status: status,
                                     detail: detail, timestamp: Date(), appName: appName,
