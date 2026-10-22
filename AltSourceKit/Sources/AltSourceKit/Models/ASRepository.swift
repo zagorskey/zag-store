@@ -209,14 +209,14 @@ extension ASRepository {
 
 			public init(from decoder: any Decoder) throws {
 				if let assets = try? decoder.singleValueContainer().decode([ScreenshotAsset].self) {
-					iPhone = assets.compactMap(\\.url)
+					iPhone = assets.compactMap(\.url)
 					iPad = []
 					return
 				}
 
 				if let groups = try? decoder.container(keyedBy: CodingKeys.self) {
-					iPhone = (try? groups.decode([ScreenshotAsset].self, forKey: .iPhone))?.compactMap(\\.url) ?? []
-					iPad = (try? groups.decode([ScreenshotAsset].self, forKey: .iPad))?.compactMap(\\.url) ?? []
+					iPhone = (try? groups.decode([ScreenshotAsset].self, forKey: .iPhone))?.compactMap(\.url) ?? []
+					iPad = (try? groups.decode([ScreenshotAsset].self, forKey: .iPad))?.compactMap(\.url) ?? []
 					return
 				}
 
