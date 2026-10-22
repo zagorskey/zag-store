@@ -31,7 +31,14 @@ struct DownloadHeaderView: View {
 							}
 						}
 					}
-					.padding(.horizontal)
+					.padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    }
+                    .padding(.horizontal, 14)
 				}
 				.transition(.move(edge: .top).combined(with: .opacity))
 			}
@@ -53,8 +60,8 @@ struct DownloadItemView: View {
 				.font(.subheadline)
 				.lineLimit(1)
 			
-			ProgressView(value: overallProgress)
-				.progressViewStyle(.linear)
+            ZagImportGradientProgress(progress: overallProgress)
+                .frame(height: 5)
 			
 			HStack {
 				Text(verbatim: "\(Int(overallProgress * 100))%")
@@ -80,4 +87,43 @@ struct DownloadItemView: View {
 			? unpackageProgress
 			: (0.3 * unpackageProgress) + (0.7 * progress)
 	}
+}
+
+private struct ZagImportGradientProgress: View {
+    let progress: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shimmer = false
+
+    private let colors: [Color] = [
+        Color(red: 0, green: 0.86, blue: 1),
+        Color(red: 0.05, green: 0.37, blue: 1),
+        Color(red: 0.42, green: 0.18, blue: 1),
+        Color(red: 0.95, green: 0.16, blue: 0.89),
+        Color(red: 0, green: 0.86, blue: 1)
+    ]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let fraction = min(max(progress, 0), 1)
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule()
+                    .fill(LinearGradient(
+                        colors: colors,
+                        startPoint: shimmer ? .trailing : .leading,
+                        endPoint: shimmer ? .leading : .trailing
+                    ))
+                    .frame(width: geometry.size.width * fraction)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: progress)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                shimmer = true
+            }
+        }
+        .accessibilityLabel("Import progress")
+        .accessibilityValue("\(Int(min(max(progress, 0), 1) * 100)) percent")
+    }
 }
