@@ -714,11 +714,16 @@ private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
     @State private var historyFilter = "All"
+    @State private var selectedHistoryRecord: ZagUpdateTransactionManager.ActivityRecord?
     @State private var showRepositoryDetails = false
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
     ) private var sources: FetchedResults<AltSource>
+
+    private var filteredHistory: [ZagUpdateTransactionManager.ActivityRecord] {
+        updateTransactions.activityHistory.filter { historyFilter == "All" || $0.status == historyFilter }
+    }
 
     private var loadedRepositories: Int {
         sources.reduce(0) { $0 + (sourcesModel.sources[$1] == nil ? 0 : 1) }
@@ -814,7 +819,10 @@ private struct ZagActivityPage: View {
                             }
                             .pickerStyle(.segmented)
                             LazyVStack(spacing: 0) {
-                                ForEach(updateTransactions.activityHistory.filter { historyFilter == "All" || $0.status == historyFilter }) { record in
+                                ForEach(filteredHistory) { record in
+                                    Button {
+                                        selectedHistoryRecord = record
+                                    } label: {
                                     HStack(alignment: .top, spacing: 12) {
                                         Image(systemName: record.status == "Failed" ? "exclamationmark.triangle.fill" : (record.status == "Installed" ? "checkmark.circle.fill" : "arrow.down.circle"))
                                             .font(.system(size: 18, weight: .medium))
@@ -844,7 +852,20 @@ private struct ZagActivityPage: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     .padding(14)
-                                    Divider().padding(.leading, 62)
+                                    }
+                                    .buttonStyle(.plain)
+                                    if record.id != filteredHistory.last?.id {
+                                        Divider().padding(.leading, 62)
+                                    }
+                                }
+                            }
+                            .overlay {
+                                if filteredHistory.isEmpty {
+                                    Text("No \(historyFilter.lowercased()) events")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(24)
                                 }
                             }
                             .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 22))
@@ -908,6 +929,29 @@ private struct ZagActivityPage: View {
                 .padding(.bottom, 90)
             }
             .zagWallpaperSurface()
+            .sheet(item: $selectedHistoryRecord) { record in
+                NavigationStack {
+                    Form {
+                        Section("Operation") {
+                            LabeledContent("Status", value: record.status)
+                            LabeledContent("App", value: record.appName ?? record.updateID)
+                            LabeledContent("Identifier", value: record.updateID)
+                            LabeledContent("Date", value: record.timestamp.formatted(date: .abbreviated, time: .shortened))
+                        }
+                        if let detail = record.detail, !detail.isEmpty {
+                            Section("Details") {
+                                Text(detail).textSelection(.enabled)
+                            }
+                        }
+                    }
+                    .navigationTitle("Activity Details")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { selectedHistoryRecord = nil }
+                        }
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                 ToolbarItem(placement: .topBarTrailing) {
