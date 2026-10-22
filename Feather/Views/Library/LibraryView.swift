@@ -3199,6 +3199,31 @@ final class ZagUpdateTransactionManager: ObservableObject {
 	}
 
 	@Published private(set) var stages: [String: Stage] = [:]
+    struct ActivityRecord: Codable, Identifiable {
+        let id: UUID
+        let updateID: String
+        let status: String
+        let detail: String?
+        let timestamp: Date
+    }
+
+    @Published private(set) var activityHistory: [ActivityRecord] = []
+
+    private let historyKey = "zagStore.updateActivityHistory.v1"
+
+    private func recordActivity(updateID: String, status: String, detail: String? = nil) {
+        let record = ActivityRecord(id: UUID(), updateID: updateID, status: status,
+                                    detail: detail, timestamp: Date())
+        activityHistory.insert(record, at: 0)
+        if activityHistory.count > 100 {
+            activityHistory = Array(activityHistory.prefix(100))
+        }
+        if let data = try? JSONEncoder().encode(activityHistory) {
+            UserDefaults.standard.set(data, forKey: historyKey)
+        }
+    }
+
+
 
 	private struct PendingUpdate {
 		let updateID: String
@@ -3209,7 +3234,12 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 	private var pendingBySignedUUID: [String: PendingUpdate] = [:]
 
-	private init() {}
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: historyKey),
+           let records = try? JSONDecoder().decode([ActivityRecord].self, from: data) {
+            activityHistory = Array(records.prefix(100))
+        }
+    }
 
 	func stage(for update: UpdateManager.AvailableUpdate) -> Stage? {
 		stages[update.id]
@@ -3226,6 +3256,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		guard let downloadURL = update.app.currentDownloadUrl else {
 			let error = ZagUpdateTransactionError.missingDownloadURL
 			stages[update.id] = .failed(error.localizedDescription)
+            recordActivity(updateID: update.id, status: "Failed", detail: error.localizedDescription)
 			completion(.failure(error))
 			return
 		}
@@ -3322,6 +3353,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 				try? FileManager.default.removeItem(at: localURL)
 
 				stages[update.id] = .readyToInstall
+                recordActivity(updateID: update.id, status: "Ready to Install")
 				completion(.success(signingHandler.uuid))
 			} catch {
 				if let downloadedFile {
@@ -3329,6 +3361,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 				}
 
 				stages[update.id] = .failed(error.localizedDescription)
+                recordActivity(updateID: update.id, status: "Failed", detail: error.localizedDescription)
 				completion(.failure(error))
 			}
 		}
@@ -3392,6 +3425,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		}
 
 		stages[pending.updateID] = nil
+        recordActivity(updateID: pending.updateID, status: "Installed")
 
 		// The signed update is now the authoritative local copy. Reconcile the
 		// repository snapshot immediately so build-only updates disappear from
@@ -3406,6 +3440,7 @@ final class ZagUpdateTransactionManager: ObservableObject {
 		error: Error
 	) {
 		stages[update.id] = .failed(error.localizedDescription)
+        recordActivity(updateID: update.id, status: "Failed", detail: error.localizedDescription)
 	}
 
 	func reset(_ update: UpdateManager.AvailableUpdate) {
