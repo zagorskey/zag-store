@@ -970,6 +970,34 @@ private struct ZagActivityPage: View {
             .sheet(item: $selectedHistoryRecord) { record in
                 NavigationStack {
                     Form {
+                        Section {
+                            HStack(spacing: 15) {
+                                if let iconURL = record.iconURL.flatMap(URL.init(string:)) {
+                                    LazyImage(url: iconURL) { state in
+                                        if let image = state.image {
+                                            image.appIconStyle(size: 70)
+                                        } else {
+                                            Image("App_Unknown").appIconStyle(size: 70)
+                                        }
+                                    }
+                                } else {
+                                    Image("App_Unknown").appIconStyle(size: 70)
+                                }
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(record.appName ?? record.updateID)
+                                        .font(.title3.weight(.semibold))
+                                        .lineLimit(2)
+                                    Label(record.status, systemImage: record.status == "Failed" ? "xmark.circle.fill" : (record.status == "Installed" ? "checkmark.circle.fill" : (record.status == "Signed" ? "checkmark.seal.fill" : "clock.arrow.circlepath")))
+                                        .font(.subheadline)
+                                        .foregroundStyle(record.status == "Failed" ? Color.red : Color.accentColor)
+                                    Text(activityDateLabel(record.timestamp))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, 8)
+                        }
                         Section("Operation") {
                             LabeledContent("Status", value: record.status)
                             LabeledContent("App", value: record.appName ?? record.updateID)
@@ -978,10 +1006,16 @@ private struct ZagActivityPage: View {
                         }
                         Section("Timeline") {
                             ForEach(milestones(for: record)) { milestone in
-                                HStack {
+                                HStack(spacing: 12) {
+                                    Image(systemName: milestone.status == "Failed" ? "xmark.circle.fill" : (milestone.status == "Installed" ? "checkmark.circle.fill" : (milestone.status == "Signed" ? "checkmark.seal.fill" : "circle.fill")))
+                                        .font(.subheadline)
+                                        .foregroundStyle(milestone.status == "Failed" ? Color.red : Color.accentColor)
+                                        .frame(width: 20)
                                     Text(milestone.status)
+                                        .font(.subheadline.weight(.medium))
                                     Spacer()
                                     Text(milestone.timestamp.formatted(date: .omitted, time: .shortened))
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 if let detail = milestone.detail, !detail.isEmpty {
