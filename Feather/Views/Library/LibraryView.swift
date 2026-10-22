@@ -3228,10 +3228,10 @@ final class ZagUpdateTransactionManager: ObservableObject {
     // the update coordinator. Use the operation UUID, not the bundle ID,
     // so separate operations remain separate in Activity.
     @MainActor
-    func recordExternalOperation(id: String, status: String, appName: String?, bundleID: String?) {
+    func recordExternalOperation(id: String, status: String, appName: String?, bundleID: String?, iconURL: String? = nil) {
         let record = ActivityRecord(
             id: UUID(), updateID: id, status: status,
-            detail: bundleID, timestamp: Date(), appName: appName
+            detail: bundleID, timestamp: Date(), appName: appName, iconURL: iconURL
         )
         activityHistory.insert(record, at: 0)
         if activityHistory.count > 100 {
