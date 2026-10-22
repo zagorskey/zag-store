@@ -162,64 +162,93 @@ private struct ZagDiscoverPage: View {
         }.sorted { $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending }.prefix(12))
     }
 
+    private var spotlight: [Entry] {
+        var seen = Set<String>()
+        return Array(recent.filter { entry in
+            guard let id = entry.app.id, !id.isEmpty else { return false }
+            guard let description = entry.app.currentDescription ?? entry.app.localizedDescription,
+                  description.trimmingCharacters(in: .whitespacesAndNewlines).count > 40 else { return false }
+            return seen.insert(id.lowercased()).inserted
+        }.prefix(5))
+    }
+
     var body: some View {
         NBNavigationView("Discover") {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Explore Your Sources")
-                            .font(.title2.bold())
-                        Text("\(sources.count) repositories · \(entries.count.formatted()) available entries")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+                LazyVStack(alignment: .leading, spacing: 28) {
                     if entries.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "square.stack.3d.up")
                                 .font(.system(size: 36, weight: .light))
                                 .foregroundStyle(.secondary)
-                            Text("No Repository Apps Yet")
-                                .font(.headline)
-                            Text("Add repositories in Sources to populate Discover.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            Text("Your Discover Starts Here").font(.headline)
+                            Text("Add repositories in Sources to explore their apps.")
+                                .font(.subheadline).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 48)
+                        .frame(maxWidth: .infinity).padding(.vertical, 65)
                     } else {
-                        section("Recently Updated", entries: recent)
-                        section("Available from Multiple Sources", entries: acrossSources)
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Explore Repositories").font(.title2.bold())
-                            ForEach(sources, id: \.objectID) { source in
-                                if let repository = viewModel.sources[source] {
-                                    NavigationLink {
-                                        SourceAppsView(object: [source], viewModel: viewModel)
-                                    } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(repository.name ?? source.name ?? "Repository")
-                                                .font(.headline)
-                                            Text("\(repository.apps.count.formatted()) apps")
-                                                .foregroundStyle(.secondary)
-                                                .font(.subheadline)
+                        if !spotlight.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("IN THE SPOTLIGHT")
+                                        .font(.caption.weight(.bold))
+                                        .tracking(1.4)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("Fresh from your sources")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    LazyHStack(spacing: 14) {
+                                        ForEach(spotlight, id: \.id) { entry in
+                                            Button { selectedApp = entry } label: {
+                                                spotlightCard(entry)
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        Spacer()
-                                        Image(systemName: "square.stack.3d.up").foregroundStyle(.secondary)
                                     }
-                                    .padding(14)
-                                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                        rail("Fresh Releases", subtitle: "Recently updated across your repositories", entries: recent)
+                        rail("More Places to Get It", subtitle: "Apps available from multiple sources", entries: acrossSources)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Your Repositories").font(.title2.bold())
+                            Text("Explore collections from sources you've added")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                LazyHStack(spacing: 12) {
+                                    ForEach(sources, id: \.objectID) { source in
+                                        if let repository = viewModel.sources[source] {
+                                            NavigationLink {
+                                                SourceAppsView(object: [source], viewModel: viewModel)
+                                            } label: {
+                                                VStack(alignment: .leading, spacing: 10) {
+                                                    Image(systemName: "square.stack.3d.up.fill")
+                                                        .font(.title2)
+                                                        .foregroundStyle(.tint)
+                                                    Spacer(minLength: 0)
+                                                    Text(repository.name ?? source.name ?? "Repository")
+                                                        .font(.headline).lineLimit(2)
+                                                    Text("\(repository.apps.count.formatted()) apps")
+                                                        .font(.caption).foregroundStyle(.secondary)
+                                                }
+                                                .frame(width: 155, height: 125, alignment: .leading)
+                                                .padding(16)
+                                                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 20))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.top, 18)
                 .padding(.bottom, 90)
             }
             .background {
@@ -253,31 +282,56 @@ private struct ZagDiscoverPage: View {
         }
     }
 
+    private func spotlightCard(_ entry: Entry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                ZagRepositoryAppIconView(app: entry.app, size: 74)
+                Spacer()
+                Image(systemName: "arrow.up.right").foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Text(entry.app.currentName)
+                .font(.title2.bold()).lineLimit(1)
+            Text(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
+                .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            Text(entry.source.name ?? "Repository")
+                .font(.caption.weight(.semibold)).foregroundStyle(.tint).lineLimit(1)
+        }
+        .padding(20)
+        .frame(width: 285, height: 245, alignment: .leading)
+        .background(
+            LinearGradient(
+                colors: [Color.accentColor.opacity(0.20), Color.accentColor.opacity(0.045)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 24)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.accentColor.opacity(0.16)))
+    }
+
     @ViewBuilder
-    private func section(_ title: String, entries: [Entry]) -> some View {
+    private func rail(_ title: String, subtitle: String, entries: [Entry]) -> some View {
         if !entries.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title).font(.title2.bold())
-                ForEach(entries, id: \.id) { entry in
-                    Button {
-                        selectedApp = entry
-                    } label: {
-                    HStack(spacing: 12) {
-                        ZagRepositoryAppIconView(app: entry.app, size: 54)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(entry.app.currentName).font(.headline).lineLimit(1)
-                            Text(entry.source.name ?? "Repository")
-                                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        if let date = entry.app.currentDate?.date {
-                            Text(date, style: .date).font(.caption).foregroundStyle(.secondary)
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(entries, id: \.id) { entry in
+                            Button { selectedApp = entry } label: {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ZagRepositoryAppIconView(app: entry.app, size: 72)
+                                    Text(entry.app.currentName)
+                                        .font(.subheadline.weight(.semibold)).lineLimit(2)
+                                    Text(entry.source.name ?? "Repository")
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                .frame(width: 112, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(14)
-                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
-                    }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 3)
                 }
             }
         }
