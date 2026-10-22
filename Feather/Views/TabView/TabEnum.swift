@@ -177,8 +177,12 @@ private struct ZagDiscoverPage: View {
     // Group visible saved rows by normalized display name, while retaining
     // every existing saved identifier for backwards compatibility.
     private func savedDisplayKey(_ entry: Entry) -> String {
-        let name = entry.app.currentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? saveKey(entry) : name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        // Collapse punctuation and whitespace too: "The Piano" and "ThePiano"
+        // are the same saved title, despite differing manifest display names.
+        let name = entry.app.currentName.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let normalized = name.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        let key = String(String.UnicodeScalarView(normalized))
+        return key.isEmpty ? saveKey(entry) : key
     }
 
     private var uniqueSavedEntries: [Entry] {
@@ -525,8 +529,8 @@ private struct ZagDiscoverPage: View {
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showSaved = true } label: {
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: 18, weight: .medium))
+                        Image(systemName: "bookmark")
+                            .font(.system(size: 19, weight: .regular))
                             .frame(width: 24, height: 24)
                     }
                     .foregroundStyle(.primary)
