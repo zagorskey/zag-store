@@ -445,7 +445,7 @@ struct ZagAccountPopup: View {
     @State private var accountPath: [AccountDestination] = []
 
     private enum AccountDestination: Hashable {
-        case profile, updates, certificates, installation, signing, notifications, selfUpdate, settings
+        case profile, updates, certificates, installation, signing, notifications, devices, selfUpdate, settings
     }
 
     private var themeTint: Color { Color(hex: themeColorHex) }
@@ -515,6 +515,9 @@ struct ZagAccountPopup: View {
                     NavigationLink(value: AccountDestination.notifications) {
                         Text("Notifications")
                     }
+                    NavigationLink(value: AccountDestination.devices) {
+                        Text("Devices")
+                    }
                 }
                 Section {
                     NavigationLink(value: AccountDestination.selfUpdate) {
@@ -570,6 +573,7 @@ struct ZagAccountPopup: View {
                     case .installation: InstallationView()
                     case .signing: ConfigurationView()
                     case .notifications: ZagAccountNotificationsView()
+                    case .devices: ZagDevicesPage()
                     case .selfUpdate: ZagSelfUpdateStatusView()
                     case .settings:
                         SettingsView(
