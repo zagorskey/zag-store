@@ -189,23 +189,45 @@ extension ASRepository {
 			public var iPhone: [URL]?
 			public var iPad: [URL]?
 
-			public init(from decoder: any Decoder) throws {
-				// theres a bunch of ways this shit can be formatted
-				// 1. an array of urls (strings)
-				// 2. an array of dictionaries that contain url, width, height.
-				// 3. a mix of 1 and 2, having urls or dictionaries
-				// 4. a dictionary with properties for iphone and ipad, which are arrays of above types
+			// AltStore repositories may provide URL strings, URL objects
+			// containing dimensions, or a mixture of both.
+			private struct ScreenshotAsset: Decodable {
+				let url: URL?
 
-				#warning("implement screenshots decoding")
+				private enum CodingKeys: String, CodingKey { case url }
 
-				self.iPad = []
-				self.iPhone = []
+				init(from decoder: any Decoder) throws {
+					if let direct = try? decoder.singleValueContainer().decode(URL.self) {
+						url = direct
+					} else if let object = try? decoder.container(keyedBy: CodingKeys.self) {
+						url = try? object.decode(URL.self, forKey: .url)
+					} else {
+						url = nil
+					}
+				}
 			}
 
-			public enum CodingKeys: String, CodingKey {
+			public init(from decoder: any Decoder) throws {
+				if let assets = try? decoder.singleValueContainer().decode([ScreenshotAsset].self) {
+					iPhone = assets.compactMap(\\.url)
+					iPad = []
+					return
+				}
+
+				if let groups = try? decoder.container(keyedBy: CodingKeys.self) {
+					iPhone = (try? groups.decode([ScreenshotAsset].self, forKey: .iPhone))?.compactMap(\\.url) ?? []
+					iPad = (try? groups.decode([ScreenshotAsset].self, forKey: .iPad))?.compactMap(\\.url) ?? []
+					return
+				}
+
+				// Malformed optional screenshot metadata must not reject the app.
+				iPhone = []
+				iPad = []
+			}
+
+			private enum CodingKeys: String, CodingKey {
 				case iPhone = "iphone"
 				case iPad = "ipad"
-				case url
 			}
 		}
 
@@ -384,6 +406,20 @@ extension ASRepository {
 		
 		public var currentDescription: String? {
 			subtitle ?? localizedDescription
+		}
+
+		// Consolidate the two supported manifest screenshot formats for
+		// the game storefront and the existing app detail gallery.
+		public var currentScreenshotURLs: [URL] {
+			let candidates = (screenshotURLs ?? [])
+				+ (screenshots?.iPhone ?? [])
+				+ (screenshots?.iPad ?? [])
+			var seen = Set<URL>()
+			return candidates.filter { url in
+				guard let scheme = url.scheme?.lowercased(),
+					["http", "https"].contains(scheme) else { return false }
+				return seen.insert(url).inserted
+			}
 		}
 		
 		// "UNIQUE" hahaha
