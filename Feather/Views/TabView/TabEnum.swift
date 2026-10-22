@@ -334,18 +334,30 @@ private struct ZagDiscoverPage: View {
                                                 SourceAppsView(object: [source], viewModel: viewModel)
                                             } label: {
                                                 VStack(alignment: .leading, spacing: 10) {
-                                                    Image(systemName: "square.stack.3d.up.fill")
-                                                        .font(.title2)
-                                                        .foregroundStyle(.tint)
-                                                    Spacer(minLength: 0)
+                                                    HStack {
+                                                        Image(systemName: "square.stack.3d.up.fill")
+                                                            .font(.title2)
+                                                            .foregroundStyle(.tint)
+                                                            .frame(width: 42, height: 42)
+                                                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 13))
+                                                        Spacer()
+                                                        Image(systemName: "arrow.up.right")
+                                                            .font(.caption.weight(.semibold))
+                                                            .foregroundStyle(.secondary)
+                                                    }
+                                                    Spacer(minLength: 8)
                                                     Text(repository.name ?? source.name ?? "Repository")
                                                         .font(.headline).lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
                                                     Text("\(repository.apps.count.formatted()) apps")
-                                                        .font(.caption).foregroundStyle(.secondary)
+                                                        .font(.caption.weight(.medium))
+                                                        .foregroundStyle(.secondary)
                                                 }
-                                                .frame(width: 155, height: 125, alignment: .leading)
+                                                .frame(width: 165, height: 142, alignment: .leading)
                                                 .padding(16)
-                                                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 20))
+                                                .background(Color.accentColor.opacity(0.065), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                                    .strokeBorder(Color.accentColor.opacity(0.13)))
                                             }
                                             .buttonStyle(.plain)
                                         }
@@ -466,14 +478,27 @@ private struct ZagDiscoverPage: View {
                     LazyHStack(alignment: .top, spacing: 12) {
                         ForEach(entries, id: \.id) { entry in
                             Button { selectedApp = entry } label: {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ZagRepositoryAppIconView(app: entry.app, size: 72)
+                                VStack(alignment: .leading, spacing: 9) {
+                                    HStack {
+                                        ZagRepositoryAppIconView(app: entry.app, size: 74)
+                                        Spacer(minLength: 0)
+                                    }
                                     Text(entry.app.currentName)
-                                        .font(.subheadline.weight(.semibold)).lineLimit(2)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     Text(entry.source.name ?? "Repository")
-                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .frame(width: 112, alignment: .leading)
+                                .frame(width: 124, height: 148, alignment: .topLeading)
+                                .padding(12)
+                                .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous)
+                                    .strokeBorder(Color.secondary.opacity(0.09)))
                             }
                             .buttonStyle(.plain)
                         }
