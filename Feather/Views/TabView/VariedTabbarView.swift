@@ -183,6 +183,24 @@ private final class ZagProfileBadgeCoordinator {
     private var visibleStates: [ObjectIdentifier: Bool] = [:]
     private var updatesSheetPresented = false
     private var launchSplashVisible = true
+    // The avatar can move when iOS inserts a temporary transfer banner.
+    // Window-level labels must follow its presentation position, not only
+    // SwiftUI layout passes (which may not run during ancestor animation).
+    private var trackingLink: CADisplayLink?
+    private var stableFrames = 0
+    private var lastFrames: [ObjectIdentifier: CGRect] = [:]
+
+    private func ensureTracking() {
+        guard trackingLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(trackBadgePosition))
+        link.add(to: .main, forMode: .common)
+        trackingLink = link
+        stableFrames = 0
+    }
+
+    @objc private func trackBadgePosition() {
+        refresh()
+    }
 
     private init() {
         NotificationCenter.default.addObserver(
@@ -212,6 +230,7 @@ private final class ZagProfileBadgeCoordinator {
 
     func update(_ anchor: UIView, count: Int, hidden: Bool) {
         entries[ObjectIdentifier(anchor)] = Entry(anchor: anchor, count: count, hidden: hidden)
+        ensureTracking()
         refresh()
     }
     func remove(_ anchor: UIView) {
@@ -266,9 +285,26 @@ private final class ZagProfileBadgeCoordinator {
                 label.text = count.description
                 setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented && !launchSplashVisible, for: key, label: label)
                 let width = max(23.5, CGFloat(count.description.count * 8) + 8.5)
-                label.frame = CGRect(x: chosen.2.maxX - width + 7,
-                                     y: chosen.2.minY - 7, width: width, height: 18)
+                let targetFrame = CGRect(x: chosen.2.maxX - width + 7,
+                                         y: chosen.2.minY - 7, width: width, height: 18)
+                if label.frame != targetFrame {
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    label.frame = targetFrame
+                    CATransaction.commit()
+                    stableFrames = 0
+                }
+                lastFrames[key] = targetFrame
                 window.bringSubviewToFront(label)
+            }
+        }
+        // Track geometry for a short settling window after each SwiftUI
+        // update. No permanent display link runs while the interface is idle.
+        if trackingLink != nil {
+            stableFrames += 1
+            if stableFrames > 24 {
+                trackingLink?.invalidate()
+                trackingLink = nil
             }
         }
     }
