@@ -720,6 +720,8 @@ private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
+    @FocusState private var searchFieldFocused: Bool
+    @State private var dictationAvailable = false
     @State private var selectedCategory = "Games"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
@@ -739,6 +741,31 @@ private struct ZagGamesPage: View {
         "mame", "melonds", "inds", "ad boy", "play!",
         "emu4ios", "gearboy", "gearsystem", "gpsphone", "gba4ios", "snes9x", "scummvm"
     ]
+
+    private func probeSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            dictationAvailable = false
+            return
+        }
+        dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func startDictationFromSearchMic() {
+        searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+                  cls.responds(to: NSSelectorFromString("sharedInstance")),
+                  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+            else { return }
+            let preheat = NSSelectorFromString("preheatIfNecessary")
+            if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+            let start = NSSelectorFromString("startDictation")
+            if controller.responds(to: start) { _ = controller.perform(start) }
+        }
+    }
 
     private func normalizedName(_ name: String) -> String {
         name.lowercased()
@@ -860,20 +887,6 @@ private struct ZagGamesPage: View {
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
-
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField("Search games and emulators", text: $searchText)
-                            .autocorrectionDisabled()
-                        if !searchText.isEmpty {
-                            Button { searchText = "" } label: {
-                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(13)
-                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
 
                     Picker("Gaming Category", selection: $selectedCategory) {
                         Text("Games").tag("Games")
@@ -997,6 +1010,23 @@ private struct ZagGamesPage: View {
                 .padding(.bottom, 90)
             }
             .zagWallpaperSurface()
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .searchable(
+                text: $searchText,
+                placement: .platform(),
+                prompt: Text("Games and Emulators")
+            )
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Games and Emulators",
+                    activePrompt: "Games and Emulators"
+                )
+                .frame(width: 0, height: 0)
+            }
+            .onAppear(perform: probeSystemDictation)
             .onAppear(perform: rebuildIndexIfNeeded)
             .onReceive(sourcesModel.objectWillChange) { _ in
                 // Defer indexing until the repository model finishes publishing.
