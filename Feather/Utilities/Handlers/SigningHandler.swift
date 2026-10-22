@@ -181,6 +181,9 @@ final class SigningHandler: NSObject {
         if activityIcon == nil, let iconName = signedBundle?.iconFileName {
             let iconPath = appUrl.appendingPathComponent(iconName)
             activityIcon = UIImage(contentsOfFile: iconPath.path)
+            if activityIcon == nil, let signedBundle {
+                activityIcon = UIImage(named: iconName, in: signedBundle, compatibleWith: nil)
+            }
             if activityIcon == nil && !iconName.lowercased().hasSuffix(".png") {
                 activityIcon = UIImage(contentsOfFile: iconPath.path + ".png")
             }
