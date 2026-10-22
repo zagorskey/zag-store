@@ -722,7 +722,8 @@ private struct ZagGamesPage: View {
     @State private var searchText = ""
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
-    @State private var selectedCategory = "All"
+    @State private var selectedCategory = "Games"
+    @State private var searchScope = "All"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexSignature = ""
@@ -870,7 +871,16 @@ private struct ZagGamesPage: View {
         NBNavigationView("Games") {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    if selectedCategory == "All" || selectedCategory == "Emulators" {
+                    Picker("Gaming Category", selection: $selectedCategory) {
+                        Text("Games").tag("Games")
+                        Text("Emulators").tag("Emulators")
+                    }
+                    .pickerStyle(.segmented)
+                    .opacity(searchFieldFocused ? 0 : 1)
+                    .frame(height: searchFieldFocused ? 0 : nil)
+                    .clipped()
+
+                    if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Emulators", count: emulators.count)
                         Text("Known emulators found in your loaded repositories")
@@ -925,7 +935,7 @@ private struct ZagGamesPage: View {
                     }
 
                     }
-                    if selectedCategory == "All" || selectedCategory == "Games" {
+                    if searchFieldFocused ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Games", count: games.count)
                         Text("Identified using game-specific repository descriptions; incomplete metadata may omit titles")
@@ -992,7 +1002,7 @@ private struct ZagGamesPage: View {
                 .frame(width: 0, height: 0)
             }
             .onAppear(perform: probeSystemDictation)
-            .compatSearchScopes($selectedCategory) {
+            .compatSearchScopes($searchScope) {
                 Text("All").tag("All")
                 Text("Games").tag("Games")
                 Text("Emulators").tag("Emulators")
