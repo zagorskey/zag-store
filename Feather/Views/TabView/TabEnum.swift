@@ -712,6 +712,7 @@ private struct ZagDiscoverPage: View {
 // remain untouched while Activity and device registration are developed.
 private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
+    @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -781,13 +782,55 @@ private struct ZagActivityPage: View {
                     .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent Operations").font(.title2.bold())
+                        HStack {
+                            Text("Update Operations").font(.title2.bold())
+                            Spacer()
+                            if !updateTransactions.stages.isEmpty {
+                                Text("\(updateTransactions.stages.count)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        if !updateTransactions.stages.isEmpty {
+                            LazyVStack(spacing: 0) {
+                                ForEach(updateTransactions.stages.keys.sorted(), id: \.self) { identifier in
+                                    if let stage = updateTransactions.stages[identifier] {
+                                        HStack(spacing: 13) {
+                                            Image(systemName: operationSymbol(stage))
+                                                .font(.title3)
+                                                .foregroundStyle(operationIsFailure(stage) ? Color.red : Color.accentColor)
+                                                .frame(width: 38, height: 38)
+                                                .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(stage.title).font(.subheadline.weight(.semibold))
+                                                Text(identifier)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                                if case .failed(let message) = stage {
+                                                    Text(message)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.red)
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                }
+                                            }
+                                            Spacer(minLength: 0)
+                                            if operationIsInProgress(stage) {
+                                                ProgressView().controlSize(.small)
+                                            }
+                                        }
+                                        .padding(14)
+                                    }
+                                }
+                            }
+                            .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 20))
+                        } else {
                         VStack(spacing: 12) {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.system(size: 30, weight: .light))
                                 .foregroundStyle(.secondary)
-                            Text("No recorded operations yet").font(.headline)
-                            Text("Installation, signing and download events will appear here when the existing managers expose a reliable history. Live repository status is shown above.")
+                            Text("No active update operations").font(.headline)
+                            Text("Download, import, signing and installation stages will appear here while an app update is being prepared. Completed operations are not yet stored as history.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -796,6 +839,7 @@ private struct ZagActivityPage: View {
                         .padding(.horizontal, 24)
                         .padding(.vertical, 35)
                         .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -811,6 +855,29 @@ private struct ZagActivityPage: View {
                         .padding(.trailing, -2)
                 }
             }
+        }
+    }
+
+    private func operationIsFailure(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
+        if case .failed = stage { return true }
+        return false
+    }
+
+    private func operationIsInProgress(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
+        switch stage {
+        case .downloading, .importing, .signing, .installing: return true
+        default: return false
+        }
+    }
+
+    private func operationSymbol(_ stage: ZagUpdateTransactionManager.Stage) -> String {
+        switch stage {
+        case .downloading: return "arrow.down.circle"
+        case .importing: return "square.and.arrow.down"
+        case .signing: return "signature"
+        case .readyToInstall: return "checkmark.circle"
+        case .installing: return "square.and.arrow.down.on.square"
+        case .failed: return "exclamationmark.triangle"
         }
     }
 
