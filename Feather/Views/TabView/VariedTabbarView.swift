@@ -182,6 +182,7 @@ private final class ZagProfileBadgeCoordinator {
     private var labels: [ObjectIdentifier: UILabel] = [:]
     private var visibleStates: [ObjectIdentifier: Bool] = [:]
     private var updatesSheetPresented = false
+    private var importBannerPresented = false
     private var launchSplashVisible = true
     // The avatar can move when iOS inserts a temporary transfer banner.
     // Window-level labels must follow its presentation position, not only
@@ -208,6 +209,13 @@ private final class ZagProfileBadgeCoordinator {
         ) { [weak self] notification in
             guard let self else { return }
             self.updatesSheetPresented = notification.userInfo?["presented"] as? Bool ?? false
+            self.refresh()
+        }
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("ZagStore.importBannerVisibilityDidChange"), object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            self.importBannerPresented = notification.userInfo?["visible"] as? Bool ?? false
             self.refresh()
         }
         NotificationCenter.default.addObserver(
@@ -283,7 +291,7 @@ private final class ZagProfileBadgeCoordinator {
                 }
                 let count = chosen.1.count
                 label.text = count.description
-                setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented && !launchSplashVisible, for: key, label: label)
+                setBadgeVisible(count > 0 && !chosen.1.hidden && !updatesSheetPresented && !importBannerPresented && !launchSplashVisible, for: key, label: label)
                 let width = max(23.5, CGFloat(count.description.count * 8) + 8.5)
                 let targetFrame = CGRect(x: chosen.2.maxX - width + 7,
                                          y: chosen.2.minY - 7, width: width, height: 18)
