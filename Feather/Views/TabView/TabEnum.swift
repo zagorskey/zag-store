@@ -119,7 +119,7 @@ private struct ZagDiscoverPage: View {
     @State private var searchText = ""
     @FetchRequest(
         entity: AltSource.entity(),
-        sortDescriptors: [NSSortDescriptor(keyPath: \\AltSource.name, ascending: true)]
+        sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
     ) private var sources: FetchedResults<AltSource>
 
     private typealias Entry = SourceAppsView.SourceAppRoute
@@ -165,7 +165,7 @@ private struct ZagDiscoverPage: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Explore Your Sources")
                             .font(.title2.bold())
-                        Text("\\(sources.count) repositories · \\(entries.count.formatted()) available entries")
+                        Text("\(sources.count) repositories · \\(entries.count.formatted()) available entries")
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,7 +184,7 @@ private struct ZagDiscoverPage: View {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(repository.name ?? source.name ?? "Repository")
                                                 .font(.headline)
-                                            Text("\\(repository.apps.count.formatted()) apps")
+                                            Text("\(repository.apps.count.formatted()) apps")
                                                 .foregroundStyle(.secondary)
                                                 .font(.subheadline)
                                         }
