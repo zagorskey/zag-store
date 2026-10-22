@@ -36,6 +36,7 @@ enum ZagPageStartupPolicy {
 enum TabEnum: String, CaseIterable, Hashable {
 	case discover
 	case activity
+	case games
 	case devices
 	case sources
 	case library
@@ -53,6 +54,7 @@ enum TabEnum: String, CaseIterable, Hashable {
         case "sources": return .sources
         case "apps", "library": return .library
         case "activity": return .activity
+        case "games": return .games
         case "devices": return .devices
         default: return nil
         }
@@ -62,6 +64,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch self {
 		case .discover:		return "Discover"
 		case .activity:		return "Activity"
+        case .games:          return "Games"
 		case .devices:		return "Devices"
 		case .sources:     	return .localized("Sources")
 		case .library: 		return .localized("Apps")
@@ -74,6 +77,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch self {
 		case .discover:		return "safari.fill"
 		case .activity:		return "clock.arrow.circlepath"
+        case .games:          return "gamecontroller.fill"
 		case .devices:		return "iphone"
 		case .sources: 		return "atom"
 		case .library: 		return "square.stack.3d.up.fill"
@@ -87,6 +91,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch tab {
 		case .discover: ZagDiscoverPage()
 		case .activity: ZagActivityPage()
+        case .games: ZagGamesPage()
 		case .devices: ZagDevicesPage()
 		case .sources: SourcesView()
 		case .library: LibraryView()
@@ -100,8 +105,8 @@ enum TabEnum: String, CaseIterable, Hashable {
 			.discover,
 			.sources,
 			.library,
-			.activity,
-			.devices
+			.games,
+			.activity
 		]
 	}
 	
@@ -1138,7 +1143,7 @@ private struct ZagActivityPage: View {
     }
 }
 
-private struct ZagDevicesPage: View {
+struct ZagDevicesPage: View {
     @State private var batteryLevel: Float = -1
     @State private var batteryState: UIDevice.BatteryState = .unknown
     @State private var storageAvailable: Int64?
