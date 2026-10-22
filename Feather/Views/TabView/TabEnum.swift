@@ -716,6 +716,148 @@ private struct ZagDiscoverPage: View {
 
 // Initial dedicated destinations; the existing Apps and RPPairing workflows
 // remain untouched while Activity and device registration are developed.
+private struct ZagGamesPage: View {
+    @StateObject private var sourcesModel = SourcesViewModel.shared
+    @State private var selectedApp: SourceAppsView.SourceAppRoute?
+    @State private var searchText = ""
+    @FetchRequest(
+        entity: AltSource.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
+    ) private var sources: FetchedResults<AltSource>
+
+    // Verified emulator name matches, not guessed rankings or console support.
+    private let emulatorNames = ["delta", "retroarch", "ppsspp", "provenance", "flycast", "dolphinios", "folium", "ignited", "utm", "gamma", "sameboy", "mame", "melonds"]
+
+    private var emulators: [SourceAppsView.SourceAppRoute] {
+        var seen = Set<String>()
+        return sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
+            guard let repository = sourcesModel.sources[source] else { return [] }
+            return repository.apps.filter { app in
+                let name = app.currentName.lowercased()
+                return emulatorNames.contains { name == $0 || name.hasPrefix($0 + " ") || name.hasPrefix($0 + "-") }
+            }.map { SourceAppsView.SourceAppRoute(source: repository, app: $0) }
+        }
+        .filter { seen.insert($0.app.currentName.lowercased()).inserted }
+        .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
+        .prefix(60)
+        .map { $0 }
+    }
+
+    var body: some View {
+        NBNavigationView("Games") {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    HStack(spacing: 15) {
+                        Image(systemName: "gamecontroller.fill")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.tint)
+                            .frame(width: 64, height: 64)
+                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Gaming on Zag Store")
+                                .font(.title2.bold())
+                            Text("Emulators available from your repositories")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        TextField("Search emulators", text: $searchText)
+                            .autocorrectionDisabled()
+                        if !searchText.isEmpty {
+                            Button { searchText = "" } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(13)
+                    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Emulators").font(.title2.bold())
+                            Spacer()
+                            Text("\(emulators.count)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("Available entries from your added sources")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        if emulators.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "gamecontroller")
+                                    .font(.system(size: 35, weight: .light))
+                                    .foregroundStyle(.secondary)
+                                Text(searchText.isEmpty ? "No emulators indexed yet" : "No matching emulators")
+                                    .font(.headline)
+                                Text("Add or refresh a repository containing emulators to see them here.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(28)
+                            .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 20))
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach(emulators, id: \.id) { entry in
+                                    Button { selectedApp = entry } label: {
+                                        HStack(spacing: 13) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(entry.app.currentName)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(.primary)
+                                                Text(entry.source.name ?? "Repository")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        .padding(12)
+                                    }
+                                    .buttonStyle(.plain)
+                                    Divider().padding(.leading, 78)
+                                }
+                            }
+                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
+                        }
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 90)
+            }
+            .zagWallpaperSurface()
+            .navigationDestination(
+                isPresented: Binding(
+                    get: { selectedApp != nil },
+                    set: { if !$0 { selectedApp = nil } }
+                )
+            ) {
+                if let selectedApp {
+                    SourceAppsDetailView(source: selectedApp.source, app: selectedApp.app)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+            }
+        }
+    }
+}
+
 private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
