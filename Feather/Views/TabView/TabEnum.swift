@@ -7,6 +7,7 @@
 
 import SwiftUI
 import NimbleViews
+import NukeUI
 
 enum ZagPageStartupPolicy {
 	static let rememberLastPageKey = "zagStore.navigation.rememberLastPage"
@@ -839,11 +840,32 @@ private struct ZagActivityPage: View {
                                         selectedHistoryRecord = record
                                     } label: {
                                     HStack(alignment: .top, spacing: 12) {
-                                        Image(systemName: record.status == "Failed" ? "exclamationmark.triangle.fill" : (record.status == "Installed" ? "checkmark.circle.fill" : "arrow.down.circle"))
-                                            .font(.system(size: 18, weight: .medium))
-                                            .foregroundStyle(record.status == "Failed" ? Color.red : Color.accentColor)
-                                            .frame(width: 36, height: 36)
-                                            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
+                                        ZStack(alignment: .bottomLeading) {
+                                            if let iconURL = record.iconURL.flatMap(URL.init(string:)) {
+                                                LazyImage(url: iconURL) { state in
+                                                    if let image = state.image {
+                                                        image.appIconStyle(size: 62)
+                                                    } else {
+                                                        Image("App_Unknown").appIconStyle(size: 62)
+                                                    }
+                                                }
+                                            } else {
+                                                Image("App_Unknown").appIconStyle(size: 62)
+                                            }
+                                            if let sourceURL = record.sourceIconURL.flatMap(URL.init(string:)) {
+                                                LazyImage(url: sourceURL) { state in
+                                                    if let image = state.image {
+                                                        image.appIconStyle(
+                                                            size: 20,
+                                                            isCircle: true,
+                                                            background: Color(uiColor: .secondarySystemBackground)
+                                                        )
+                                                        .offset(x: 46, y: 4)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .frame(width: 66, height: 66)
                                         VStack(alignment: .leading, spacing: 5) {
                                             Text(record.status).font(.subheadline.weight(.semibold))
                                             Text(record.appName ?? record.updateID)
