@@ -720,10 +720,12 @@ private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
-    @State private var selectedCategory = "Emulators"
+    @State private var selectedCategory = "Games"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexSignature = ""
+    @State private var indexedGameCount = 0
+    @State private var indexedEmulatorCount = 0
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -734,7 +736,8 @@ private struct ZagGamesPage: View {
     private let emulatorNames = [
         "delta", "retroarch", "ppsspp", "provenance", "flycast",
         "dolphinios", "folium", "ignited", "gamma", "sameboy",
-        "mame", "melonds", "inds", "ad boy", "play!"
+        "mame", "melonds", "inds", "ad boy", "play!",
+        "emu4ios", "gearboy", "gearsystem", "gpsphone", "gba4ios", "snes9x", "scummvm"
     ]
 
     private func normalizedName(_ name: String) -> String {
@@ -802,6 +805,8 @@ private struct ZagGamesPage: View {
         }
         indexedEmulators = newEmulators
         indexedGames = newGames
+        indexedEmulatorCount = newEmulators.count
+        indexedGameCount = newGames.count
     }
 
     var body: some View {
@@ -841,8 +846,8 @@ private struct ZagGamesPage: View {
                     .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
 
                     Picker("Gaming Category", selection: $selectedCategory) {
-                        Text("Emulators").tag("Emulators")
                         Text("Games").tag("Games")
+                        Text("Emulators").tag("Emulators")
                     }
                     .pickerStyle(.segmented)
 
@@ -855,7 +860,7 @@ private struct ZagGamesPage: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("Available entries from your added sources")
+                        Text("Known emulators found in your loaded repositories")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -912,7 +917,7 @@ private struct ZagGamesPage: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("Titles identified from repository metadata")
+                        Text("Identified using game-specific repository descriptions; incomplete metadata may omit titles")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if games.isEmpty {
