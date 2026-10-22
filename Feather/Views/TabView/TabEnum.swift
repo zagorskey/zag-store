@@ -711,15 +711,126 @@ private struct ZagDiscoverPage: View {
 // Initial dedicated destinations; the existing Apps and RPPairing workflows
 // remain untouched while Activity and device registration are developed.
 private struct ZagActivityPage: View {
+    @StateObject private var sourcesModel = SourcesViewModel.shared
+    @FetchRequest(
+        entity: AltSource.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
+    ) private var sources: FetchedResults<AltSource>
+
+    private var loadedRepositories: Int {
+        sources.reduce(0) { $0 + (sourcesModel.sources[$1] == nil ? 0 : 1) }
+    }
+
+    private var loadedApps: Int {
+        sources.reduce(0) { $0 + (sourcesModel.sources[$1]?.apps.count ?? 0) }
+    }
+
+    private func refreshRepositories() {
+        guard !sourcesModel.isRefreshing else { return }
+        Task {
+            await sourcesModel.fetchSources(Array(sources), refresh: true)
+        }
+    }
+
     var body: some View {
         NBNavigationView("Activity") {
-            ZagEmptyDestination(title: "No Recent Activity", symbol: "clock.arrow.circlepath",
-                message: "App installation, signing and refresh activity will appear here.")
-                .toolbar {
-                    ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                    ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("OVERVIEW")
+                            .font(.caption.weight(.bold))
+                            .tracking(1.3)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            activityMetric("Repositories", value: "\(loadedRepositories)/\(sources.count)", symbol: "square.stack.3d.up")
+                            activityMetric("Indexed Apps", value: loadedApps.formatted(), symbol: "square.grid.2x2")
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("Repository Activity").font(.title2.bold())
+                            Spacer()
+                            if sourcesModel.isRefreshing {
+                                ProgressView().controlSize(.small)
+                            }
+                        }
+                        HStack(spacing: 13) {
+                            Image(systemName: sourcesModel.isRefreshing ? "arrow.triangle.2.circlepath" : "checkmark.arrow.trianglehead.counterclockwise")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 44, height: 44)
+                                .background(Color.accentColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 14))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(sourcesModel.isRefreshing ? "Refreshing repositories" : "Repository catalogue")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(sourcesModel.isRefreshing ? "Fetching updated source metadata" : "\(loadedRepositories) of \(sources.count) repositories loaded")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        Button(action: refreshRepositories) {
+                            Label(sourcesModel.isRefreshing ? "Refreshing…" : "Refresh Repositories",
+                                  systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(sourcesModel.isRefreshing || sources.isEmpty)
+                    }
+                    .padding(17)
+                    .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Recent Operations").font(.title2.bold())
+                        VStack(spacing: 12) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 30, weight: .light))
+                                .foregroundStyle(.secondary)
+                            Text("No recorded operations yet").font(.headline)
+                            Text("Installation, signing and download events will appear here when the existing managers expose a reliable history. Live repository status is shown above.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 35)
+                        .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 90)
+            }
+            .zagWallpaperSurface()
+            .toolbar {
+                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
+                }
+            }
         }
+    }
+
+    private func activityMetric(_ title: String, value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(.tint)
+            Text(value)
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.accentColor.opacity(0.085), in: RoundedRectangle(cornerRadius: 20))
     }
 }
 
