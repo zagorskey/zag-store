@@ -885,7 +885,7 @@ private struct ZagGamesPage: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 13)
             }
-            .frame(width: 280)
+            .frame(width: 304)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
@@ -902,17 +902,17 @@ private struct ZagGamesPage: View {
         ZStack {
             Circle()
                 .fill(Color.white.opacity(0.12))
-                .frame(width: 205, height: 205)
+                .frame(width: 225, height: 225)
                 .blur(radius: 12)
                 .offset(x: 112, y: -65)
             Circle()
                 .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.5)
                 .frame(width: 176, height: 176)
                 .offset(x: -110, y: 74)
-            ZagRepositoryAppIconView(app: entry.app, size: 108)
+            ZagRepositoryAppIconView(app: entry.app, size: 120)
                 .shadow(color: .black.opacity(0.30), radius: 18, x: 0, y: 10)
         }
-        .frame(width: 280, height: 176)
+        .frame(width: 304, height: 216)
     }
 
     private func featuredArtwork(for entry: SourceAppsView.SourceAppRoute) -> some View {
@@ -933,7 +933,7 @@ private struct ZagGamesPage: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 280, height: 176)
+                            .frame(width: 304, height: 216)
                             .clipped()
                     } else {
                         featuredArtworkFallback(for: entry)
@@ -949,7 +949,7 @@ private struct ZagGamesPage: View {
                 endPoint: .bottom
             )
         }
-        .frame(width: 280, height: 176)
+        .frame(width: 304, height: 216)
         .clipped()
         .overlay(alignment: .topLeading) {
             Text(entry.app.currentScreenshotURLs.isEmpty ? "GAME SPOTLIGHT" : "GAME PREVIEW")
