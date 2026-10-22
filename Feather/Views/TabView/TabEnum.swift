@@ -759,17 +759,47 @@ private struct ZagGamesPage: View {
         }
     }
 
+    // Curated platform families, not claims about the specific IPA build.
+    // Version-specific JIT and device compatibility belong in verified metadata.
+    private func emulatorPlatform(_ name: String) -> String {
+        let key = normalizedName(name)
+        if key.hasPrefix("delta") || key.hasPrefix("ignited") { return "Nintendo systems" }
+        if key.hasPrefix("retroarch") { return "Multi-system" }
+        if key.hasPrefix("provenance") { return "Multi-system" }
+        if key.hasPrefix("ppsspp") { return "PlayStation Portable" }
+        if key.hasPrefix("dolphinios") { return "GameCube · Wii" }
+        if key.hasPrefix("flycast") { return "Dreamcast" }
+        if key.hasPrefix("folium") { return "Nintendo systems" }
+        if key.hasPrefix("gamma") { return "PlayStation" }
+        if key.hasPrefix("sameboy") || key.hasPrefix("gearboy") { return "Game Boy" }
+        if key.hasPrefix("gearsystem") { return "Master System · Game Gear" }
+        if key.hasPrefix("melonds") || key.hasPrefix("inds") { return "Nintendo DS" }
+        if key.hasPrefix("mame") { return "Arcade" }
+        if key.hasPrefix("snes9x") { return "Super Nintendo" }
+        if key.hasPrefix("gba4ios") || key.hasPrefix("gpsphone") { return "Game Boy Advance" }
+        if key.hasPrefix("scummvm") { return "Classic adventure games" }
+        if key.hasPrefix("play") { return "PlayStation 2" }
+        return "Emulator"
+    }
+
+    private func matchesSearch(_ entry: SourceAppsView.SourceAppRoute) -> Bool {
+        entry.app.currentName.localizedCaseInsensitiveContains(searchText)
+        || (entry.source.name?.localizedCaseInsensitiveContains(searchText) ?? false)
+        || (entry.app.currentDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+        || (entry.app.localizedDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+    }
+
     private var emulators: [SourceAppsView.SourceAppRoute] {
         guard !searchText.isEmpty else { return indexedEmulators }
         return indexedEmulators.filter {
-            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
+            matchesSearch($0)
         }
     }
 
     private var games: [SourceAppsView.SourceAppRoute] {
         guard !searchText.isEmpty else { return indexedGames }
         return indexedGames.filter {
-            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
+            matchesSearch($0)
         }
     }
 
@@ -889,6 +919,9 @@ private struct ZagGamesPage: View {
                                                 Text(entry.app.currentName)
                                                     .font(.subheadline.weight(.semibold))
                                                     .foregroundStyle(.primary)
+                                                Text(emulatorPlatform(entry.app.currentName))
+                                                    .font(.caption)
+                                                    .foregroundStyle(.tint)
                                                 Text(entry.source.name ?? "Repository")
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
