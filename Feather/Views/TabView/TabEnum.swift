@@ -880,6 +880,51 @@ private struct ZagGamesPage: View {
         return selected
     }
 
+    // Kept outside the main tab body so SwiftUI needn't type-check an
+    // additional large nested card hierarchy with every section.
+    private func featuredCard(for entry: SourceAppsView.SourceAppRoute) -> some View {
+        Button { selectedApp = entry } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                featuredArtwork(for: entry)
+
+                HStack(spacing: 11) {
+                    ZagRepositoryAppIconView(app: entry.app, size: 44)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.app.currentName)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
+                                Text(genre)
+                                    .foregroundStyle(.tint)
+                                    .lineLimit(1)
+                            }
+                            Text(entry.source.name ?? "Repository")
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .font(.caption2)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+            }
+            .frame(width: 280)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     // No screenshots? Present the app's authentic icon as editorial-style art.
     // The same fallback is used if a remote preview has not loaded or fails.
     private func featuredArtworkFallback(for entry: SourceAppsView.SourceAppRoute) -> some View {
@@ -1010,45 +1055,7 @@ private struct ZagGamesPage: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 LazyHStack(spacing: 12) {
                                     ForEach(featuredGames, id: \.id) { entry in
-                                        Button { selectedApp = entry } label: {
-                                            VStack(alignment: .leading, spacing: 0) {
-                                                featuredArtwork(for: entry)
-                                                HStack(spacing: 11) {
-                                                    ZagRepositoryAppIconView(app: entry.app, size: 44)
-                                                    VStack(alignment: .leading, spacing: 4) {
-                                                        Text(entry.app.currentName)
-                                                            .font(.subheadline.weight(.bold))
-                                                            .foregroundStyle(.primary)
-                                                            .lineLimit(1)
-                                                        HStack(spacing: 5) {
-                                                            if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
-                                                                Text(genre)
-                                                                    .foregroundStyle(.tint)
-                                                                    .lineLimit(1)
-                                                            }
-                                                            Text(entry.source.name ?? "Repository")
-                                                                .foregroundStyle(.secondary)
-                                                                .lineLimit(1)
-                                                        }
-                                                        .font(.caption2)
-                                                    }
-                                                    Spacer(minLength: 0)
-                                                    Image(systemName: "arrow.up.right")
-                                                        .font(.caption.weight(.semibold))
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                                .padding(.horizontal, 14)
-                                                .padding(.vertical, 13)
-                                            }
-                                            .frame(width: 280)
-                                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                                            .overlay {
-                                                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
+                                        featuredCard(for: entry)
                                     }
                                 }
                                 .padding(.vertical, 2)
