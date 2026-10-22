@@ -796,6 +796,7 @@ private struct ZagActivityPage: View {
                             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 20))
                         }
                     }
+                    }
                     if !updateTransactions.activityHistory.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
