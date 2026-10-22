@@ -907,7 +907,7 @@ private struct ZagGamesPage: View {
                 }
                 .padding(20)
             }
-            .frame(width: 320, height: 420)
+            .frame(width: 354, height: 270)
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -928,15 +928,15 @@ private struct ZagGamesPage: View {
             )
             Circle()
                 .fill(.white.opacity(0.10))
-                .frame(width: 310, height: 310)
+                .frame(width: 260, height: 260)
                 .blur(radius: 35)
                 .offset(x: 120, y: -105)
-            ZagRepositoryAppIconView(app: entry.app, size: 154)
+            ZagRepositoryAppIconView(app: entry.app, size: 116)
                 .rotationEffect(.degrees(-8))
                 .shadow(color: .black.opacity(0.55), radius: 30, x: 0, y: 20)
-                .offset(y: -38)
+                .offset(x: 76, y: -20)
         }
-        .frame(width: 320, height: 420)
+        .frame(width: 354, height: 270)
     }
 
     private func featuredArtwork(for entry: SourceAppsView.SourceAppRoute) -> some View {
@@ -948,13 +948,13 @@ private struct ZagGamesPage: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 320, height: 420)
+                            .frame(width: 354, height: 270)
                             .clipped()
                     }
                 }
             }
         }
-        .frame(width: 320, height: 420)
+        .frame(width: 354, height: 270)
         .clipped()
     }
 
