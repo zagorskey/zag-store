@@ -28,14 +28,16 @@ struct FeatherApp: App {
 			ZStack {
 				ZagWallpaperBackground()
 
-				VStack {
-					DownloadHeaderView(downloadManager: downloadManager)
-						.transition(.move(edge: .top).combined(with: .opacity))
-					VariedTabbarView()
-						.environment(\.managedObjectContext, storage.context)
-						.onOpenURL(perform: _handleURL)
-						.transition(.move(edge: .top).combined(with: .opacity))
-				}
+				VariedTabbarView()
+					.environment(\.managedObjectContext, storage.context)
+					.onOpenURL(perform: _handleURL)
+					.overlay(alignment: .top) {
+						// Manual transfers float above the app rather than
+						// resizing the tab/navigation hierarchy.
+						DownloadHeaderView(downloadManager: downloadManager)
+							.padding(.top, 4)
+							.transition(.move(edge: .top).combined(with: .opacity))
+						}
 				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
