@@ -1143,6 +1143,7 @@ private struct ZagDevicesPage: View {
     @State private var batteryState: UIDevice.BatteryState = .unknown
     @State private var storageAvailable: Int64?
     @State private var storageTotal: Int64?
+    @State private var showTechnicalDetails = false
 
     private var hardwareIdentifier: String {
         var info = utsname()
@@ -1151,6 +1152,11 @@ private struct ZagDevicesPage: View {
         return withUnsafeBytes(of: machine) { bytes in
             String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
         }
+    }
+
+    private var storageFraction: Double {
+        guard let available = storageAvailable, let total = storageTotal, total > 0 else { return 0 }
+        return min(1, max(0, Double(total - available) / Double(total)))
     }
 
     private var storageDescription: String {
@@ -1195,6 +1201,60 @@ private struct ZagDevicesPage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 
+                    HStack(spacing: 12) {
+                        deviceMetric(
+                            "Battery",
+                            value: batteryLevel >= 0 ? "\(Int((batteryLevel * 100).rounded()))%" : "—",
+                            symbol: "battery.100",
+                            caption: batteryState == .charging ? "Charging" : batteryState == .full ? "Fully charged" : "Current level"
+                        )
+                        deviceMetric(
+                            "Storage",
+                            value: storageTotal != nil ? "\(Int((storageFraction * 100).rounded()))%" : "—",
+                            symbol: "internaldrive",
+                            caption: "Used capacity"
+                        )
+                    }
+
+                    if storageTotal != nil {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Storage").font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(storageDescription).font(.caption).foregroundStyle(.secondary)
+                            }
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.primary.opacity(0.09))
+                                    Capsule()
+                                        .fill(Color.accentColor.gradient)
+                                        .frame(width: geometry.size.width * storageFraction)
+                                }
+                            }
+                            .frame(height: 7)
+                        }
+                        .padding(16)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                    }
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showTechnicalDetails.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Label("Device Information", systemImage: "info.circle")
+                            Spacer()
+                            Image(systemName: showTechnicalDetails ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(15)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+
+                    if showTechnicalDetails {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("DEVICE INFORMATION")
                             .font(.caption.weight(.semibold))
@@ -1208,6 +1268,8 @@ private struct ZagDevicesPage: View {
                             detailRow("Device Type", value: UIDevice.current.localizedModel, symbol: "iphone")
                         }
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -1240,6 +1302,29 @@ private struct ZagDevicesPage: View {
                 ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
             }
         }
+    }
+
+    private func deviceMetric(_ title: String, value: String, symbol: String, caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                Spacer()
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(value)
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .contentTransition(.numericText())
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
     }
 
     private func detailRow(_ title: String, value: String, symbol: String) -> some View {
