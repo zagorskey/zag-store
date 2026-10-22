@@ -494,9 +494,14 @@ private struct ZagDiscoverPage: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showSaved = true } label: {
                         Image(systemName: "bookmark")
+                            .font(.system(size: 19, weight: .regular))
+                            .frame(width: 24, height: 24)
                     }
+                    .foregroundStyle(.primary)
                     .accessibilityLabel("Saved Apps")
                     ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
                 }
             }
             .sheet(isPresented: $showFilters) {
