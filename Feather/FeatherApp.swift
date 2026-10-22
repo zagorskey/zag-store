@@ -41,6 +41,20 @@ struct FeatherApp: App {
 				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
+            .onAppear {
+                NotificationCenter.default.post(
+                    name: Notification.Name("ZagStore.importBannerVisibilityDidChange"),
+                    object: nil,
+                    userInfo: ["visible": !downloadManager.manualDownloads.isEmpty]
+                )
+            }
+            .onChange(of: downloadManager.manualDownloads.isEmpty) { isEmpty in
+                NotificationCenter.default.post(
+                    name: Notification.Name("ZagStore.importBannerVisibilityDidChange"),
+                    object: nil,
+                    userInfo: ["visible": !isEmpty]
+                )
+            }
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
 				DispatchQueue.main.async {
 					UIAlertController.showAlertWithOk(
