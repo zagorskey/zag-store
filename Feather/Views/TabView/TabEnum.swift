@@ -853,114 +853,109 @@ private struct ZagGamesPage: View {
 
     // Kept outside the main tab body so SwiftUI needn't type-check an
     // additional large nested card hierarchy with every section.
+    // Artwork-first editorial card. The image and copy share one canvas.
+    // Repository screenshots are shown only when supplied by the source.
     private func featuredCard(for entry: SourceAppsView.SourceAppRoute) -> some View {
         Button { selectedApp = entry } label: {
-            VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
                 featuredArtwork(for: entry)
 
-                HStack(spacing: 11) {
-                    ZagRepositoryAppIconView(app: entry.app, size: 44)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(entry.app.currentName)
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        HStack(spacing: 5) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black.opacity(0.10), location: 0.36),
+                        .init(color: .black.opacity(0.82), location: 0.76),
+                        .init(color: .black.opacity(0.94), location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("FROM YOUR REPOSITORIES")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.4)
+                        .foregroundStyle(.white.opacity(0.86))
+                    Spacer(minLength: 0)
+                    Text(entry.app.currentName)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+
+                    HStack(spacing: 11) {
+                        ZagRepositoryAppIconView(app: entry.app, size: 48)
+                        VStack(alignment: .leading, spacing: 4) {
                             if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
                                 Text(genre)
-                                    .foregroundStyle(.tint)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
                                     .lineLimit(1)
                             }
                             Text(entry.source.name ?? "Repository")
-                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.78))
                                 .lineLimit(1)
                         }
-                        .font(.caption2)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(.white.opacity(0.22), in: Circle())
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
+                .padding(20)
             }
-            .frame(width: 304)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .frame(width: 320, height: 420)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
             }
+            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 
-    // No screenshots? Present the app's authentic icon as editorial-style art.
-    // The same fallback is used if a remote preview has not loaded or fails.
+    // Honest fallback: authentic app icon, never invented game artwork.
     private func featuredArtworkFallback(for entry: SourceAppsView.SourceAppRoute) -> some View {
         ZStack {
+            LinearGradient(
+                colors: [Color.accentColor.opacity(0.7), Color.indigo.opacity(0.55), Color.black],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
             Circle()
-                .fill(Color.white.opacity(0.12))
-                .frame(width: 225, height: 225)
-                .blur(radius: 12)
-                .offset(x: 112, y: -65)
-            Circle()
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.5)
-                .frame(width: 176, height: 176)
-                .offset(x: -110, y: 74)
-            ZagRepositoryAppIconView(app: entry.app, size: 120)
-                .shadow(color: .black.opacity(0.30), radius: 18, x: 0, y: 10)
+                .fill(.white.opacity(0.10))
+                .frame(width: 310, height: 310)
+                .blur(radius: 35)
+                .offset(x: 120, y: -105)
+            ZagRepositoryAppIconView(app: entry.app, size: 154)
+                .rotationEffect(.degrees(-8))
+                .shadow(color: .black.opacity(0.55), radius: 30, x: 0, y: 20)
+                .offset(y: -38)
         }
-        .frame(width: 304, height: 216)
+        .frame(width: 320, height: 420)
     }
 
     private func featuredArtwork(for entry: SourceAppsView.SourceAppRoute) -> some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color.accentColor.opacity(0.75),
-                    Color.indigo.opacity(0.70),
-                    Color.black.opacity(0.70)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
+            featuredArtworkFallback(for: entry)
             if let screenshot = entry.app.currentScreenshotURLs.first {
                 LazyImage(url: screenshot) { state in
                     if let image = state.image {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 304, height: 216)
+                            .frame(width: 320, height: 420)
                             .clipped()
-                    } else {
-                        featuredArtworkFallback(for: entry)
                     }
                 }
-            } else {
-                featuredArtworkFallback(for: entry)
             }
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.34)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
         }
-        .frame(width: 304, height: 216)
+        .frame(width: 320, height: 420)
         .clipped()
-        .overlay(alignment: .topLeading) {
-            Text(entry.app.currentScreenshotURLs.isEmpty ? "GAME SPOTLIGHT" : "GAME PREVIEW")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .tracking(0.9)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.black.opacity(0.50), in: Capsule())
-                .padding(12)
-        }
     }
 
     private func rebuildIndexIfNeeded() {
