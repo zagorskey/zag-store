@@ -937,7 +937,7 @@ private struct ZagGamesPage: View {
                                 }
                                 .padding(.vertical, 2)
                             }
-                            .contentMargins(.trailing, 18)
+                            .padding(.trailing, 18)
                         }
                     }
 
