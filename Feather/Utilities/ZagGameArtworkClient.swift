@@ -33,7 +33,9 @@ enum ZagGameArtworkError: Error {
 /// An isolated, opt-in network layer; no UI or repository-refresh coupling.
 /// A production endpoint must be explicitly supplied after server rollout.
 actor ZagGameArtworkClient {
-    static let shared = ZagGameArtworkClient()
+    static let shared = ZagGameArtworkClient(
+        endpoint: URL(string: "https://zagstore.app/wp-json/zag/v1/game-artwork")
+    )
 
     private struct CacheEntry {
         let value: ZagGameArtworkResponse
