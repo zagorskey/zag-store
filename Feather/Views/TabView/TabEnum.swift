@@ -1003,7 +1003,7 @@ private struct ZagGamesPage: View {
                                     }
                                     .padding(.vertical, 2)
                                 }
-                                .scrollClipDisabled()
+                                .modifier(ZagGamesScrollClipModifier())
                             }
                             .frame(height: 254)
                         }
@@ -1883,5 +1883,17 @@ private struct ZagEmptyDestination: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+
+private struct ZagGamesScrollClipModifier: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.scrollClipDisabled()
+        } else {
+            content
+        }
     }
 }
