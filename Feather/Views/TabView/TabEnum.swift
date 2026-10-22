@@ -1006,7 +1006,7 @@ private struct ZagGamesPage: View {
                         artworkCountBySource[sourceKey, default: 0] += 1
                     }
                 }
-                if newEmulators.count >= 60 && newGames.count >= 60 { break }
+                // Keep scanning for Featured artwork even when both visible lists are full.
             }
         }
         // Prefer different repositories in Featured, then fill remaining
