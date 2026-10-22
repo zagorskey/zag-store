@@ -860,10 +860,15 @@ private struct ZagActivityPage: View {
                                             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
                                         VStack(alignment: .leading, spacing: 5) {
                                             Text(record.status).font(.subheadline.weight(.semibold))
-                                            Text(record.updateID)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                            Text(record.appName ?? record.updateID)
+                                                .font(.subheadline.weight(.medium))
                                                 .lineLimit(2)
+                                            if record.appName != nil {
+                                                Text(record.updateID)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
                                             if let detail = record.detail {
                                                 Text(detail)
                                                     .font(.caption)
