@@ -573,7 +573,7 @@ struct ZagAccountPopup: View {
                     case .installation: InstallationView()
                     case .signing: ConfigurationView()
                     case .notifications: ZagAccountNotificationsView()
-                    case .devices: ZagDevicesPage()
+                    case .devices: ZagDevicesPage().tint(themeTint)
                     case .selfUpdate: ZagSelfUpdateStatusView()
                     case .settings:
                         SettingsView(
@@ -598,7 +598,6 @@ struct ZagAccountPopup: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
-        .tint(themeTint)
         .toggleStyle(ZagThemeTintToggleStyle())
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
