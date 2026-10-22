@@ -120,6 +120,7 @@ private struct ZagDiscoverPage: View {
     @State private var selectedInterest: String?
     @State private var selectedApp: Entry?
     @State private var indexedEntries: [Entry] = []
+    @State private var indexRevision = 0
     @State private var hasBuiltIndex = false
     @State private var indexedSourceSignature = ""
     @State private var displayedRecent: [Entry] = []
@@ -151,7 +152,9 @@ private struct ZagDiscoverPage: View {
         indexedSourceSignature = signature
         indexedEntries = sources.flatMap { source in
             guard let repository = viewModel.sources[source] else { return [Entry]() }
-            return repository.apps.map { Entry(source: repository, app: $0) }
+            // A storefront needs a bounded preview, not a full inventory of gigantic manifests.
+            // Full repository browsing remains available through Sources.
+            return repository.apps.prefix(400).map { Entry(source: repository, app: $0) }
         }
         updateCollections()
     }
@@ -345,17 +348,24 @@ private struct ZagDiscoverPage: View {
                 .frame(width: 0, height: 0)
                 .opacity(0)
             }
-            .onAppear {
-                if !hasBuiltIndex { rebuildIndex() }
+            // Let the tab transition finish before building the storefront preview.
+            // Cancels an obsolete build when repository loading changes again.
+            .task(id: indexRevision) {
+                do {
+                    try await Task.sleep(nanoseconds: 450_000_000)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                rebuildIndex()
             }
             .onChange(of: searchText) { _ in updateCollections() }
             .onChange(of: viewModel.isFinished) { _ in
-                // A completed refresh may replace app metadata without changing counts.
                 hasBuiltIndex = false
-                rebuildIndex()
+                indexRevision += 1
             }
-            .onChange(of: viewModel.sources.count) { _ in rebuildIndex() }
-            .onChange(of: sources.count) { _ in rebuildIndex() }
+            .onChange(of: viewModel.sources.count) { _ in indexRevision += 1 }
+            .onChange(of: sources.count) { _ in indexRevision += 1 }
             .searchable(text: $searchText, placement: .platform(), prompt: "Search Discover")
             .zagWallpaperSurface()
             .toolbar {
