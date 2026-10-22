@@ -120,6 +120,10 @@ private struct ZagDiscoverPage: View {
     @State private var selectedInterest: String?
     @State private var selectedApp: Entry?
     @State private var indexedEntries: [Entry] = []
+    @State private var displayedRecent: [Entry] = []
+    @State private var displayedAcross: [Entry] = []
+    @State private var displayedSpotlight: [Entry] = []
+    @State private var interestCounts: [String: Int] = [:]
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -128,54 +132,56 @@ private struct ZagDiscoverPage: View {
     private typealias Entry = SourceAppsView.SourceAppRoute
 
     private var entries: [Entry] { indexedEntries }
+    private var recent: [Entry] { displayedRecent }
+    private var acrossSources: [Entry] { displayedAcross }
+    private var spotlight: [Entry] { displayedSpotlight }
 
     private func rebuildIndex() {
         indexedEntries = sources.flatMap { source in
             guard let repository = viewModel.sources[source] else { return [Entry]() }
             return repository.apps.map { Entry(source: repository, app: $0) }
         }
+        updateCollections()
     }
 
-    private var matching: [Entry] {
-        guard !searchText.isEmpty || selectedInterest != nil else { return entries }
+    // Expensive sorting, deduplication and keyword matching run only when
+    // source data or a Discover filter changes, never during body evaluation.
+    private func updateCollections() {
         let terms = interests.first { $0.name == selectedInterest }?.terms ?? []
-        return entries.filter { entry in
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var filtered: [Entry] = []
+        var counts: [String: Int] = [:]
+        for entry in indexedEntries {
             let name = entry.app.currentName.lowercased()
             let description = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
-            let interestMatch = terms.isEmpty || terms.contains { name.contains($0) || description.contains($0) }
-            return interestMatch && (searchText.isEmpty || (
-            entry.app.currentName.localizedCaseInsensitiveContains(searchText)
-            || (entry.app.id?.localizedCaseInsensitiveContains(searchText) ?? false)
-            || (entry.app.currentDescription?.localizedCaseInsensitiveContains(searchText) ?? false)))
+            for interest in interests where interest.terms.contains(where: { name.contains($0) || description.contains($0) }) {
+                counts[interest.name, default: 0] += 1
+            }
+            guard terms.isEmpty || terms.contains(where: { name.contains($0) || description.contains($0) }) else { continue }
+            guard query.isEmpty || name.contains(query) || description.contains(query) || (entry.app.id?.lowercased().contains(query) ?? false) else { continue }
+            filtered.append(entry)
         }
-    }
-
-    private var recent: [Entry] {
-        Array(matching.filter { $0.app.currentDate?.date != nil }
+        interestCounts = counts
+        let sorted = filtered.filter { $0.app.currentDate?.date != nil }
             .sorted { ($0.app.currentDate?.date ?? .distantPast) > ($1.app.currentDate?.date ?? .distantPast) }
-            .prefix(15))
-    }
-
-    private var acrossSources: [Entry] {
-        let grouped = Dictionary(grouping: matching.compactMap { entry -> (String, Entry)? in
-            guard let id = entry.app.id, !id.isEmpty else { return nil }
-            return (id.lowercased(), entry)
-        }, by: { $0.0 })
-        return Array(grouped.values.filter {
-            Set($0.map { $0.1.source.id ?? $0.1.source.name ?? "" }).count > 1
-        }.compactMap { group in
-            group.map(\.1).max { ($0.app.currentDate?.date ?? .distantPast) < ($1.app.currentDate?.date ?? .distantPast) }
-        }.sorted { $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending }.prefix(12))
-    }
-
-    private var spotlight: [Entry] {
+        displayedRecent = Array(sorted.prefix(15))
         var seen = Set<String>()
-        return Array(recent.filter { entry in
-            guard let id = entry.app.id, !id.isEmpty else { return false }
-            guard let description = entry.app.currentDescription ?? entry.app.localizedDescription,
-                  description.trimmingCharacters(in: .whitespacesAndNewlines).count > 40 else { return false }
+        displayedSpotlight = Array(sorted.filter { entry in
+            guard let id = entry.app.id, !id.isEmpty,
+                  let description = entry.app.currentDescription ?? entry.app.localizedDescription,
+                  description.count > 40 else { return false }
             return seen.insert(id.lowercased()).inserted
         }.prefix(5))
+        var grouped: [String: [Entry]] = [:]
+        for entry in filtered {
+            guard let id = entry.app.id, !id.isEmpty else { continue }
+            grouped[id.lowercased(), default: []].append(entry)
+        }
+        displayedAcross = Array(grouped.values.compactMap { group -> Entry? in
+            let uniqueSources = Set(group.map { $0.source.id ?? $0.source.name ?? "" })
+            guard uniqueSources.count > 1 else { return nil }
+            return group.max { ($0.app.currentDate?.date ?? .distantPast) < ($1.app.currentDate?.date ?? .distantPast) }
+        }.sorted { $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending }.prefix(12))
     }
 
     // Interest collections are keyword matches, not repository-provided genres.
@@ -193,17 +199,6 @@ private struct ZagDiscoverPage: View {
         Interest(name: "Utilities", symbol: "wrench.and.screwdriver.fill", terms: ["utility", "tools", "network", "vpn", "file manager"]),
         Interest(name: "Developer", symbol: "chevron.left.forwardslash.chevron.right", terms: ["developer", "terminal", "code editor", "github", "debug"])
     ]
-
-    private func interestMatches(_ interest: Interest) -> [Entry] {
-        var seen = Set<String>()
-        return Array(matching.filter { entry in
-            let name = entry.app.currentName.lowercased()
-            let description = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
-            let matched = interest.terms.contains { name.contains($0) || description.contains($0) }
-            let key = (entry.app.id ?? entry.id).lowercased()
-            return matched && seen.insert(key).inserted
-        }.prefix(12))
-    }
 
     var body: some View {
         NBNavigationView("Discover") {
@@ -252,10 +247,10 @@ private struct ZagDiscoverPage: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 LazyHStack(spacing: 10) {
                                     ForEach(interests, id: \.name) { interest in
-                                        let matches = interestMatches(interest)
-                                        if !matches.isEmpty {
+                                        if (interestCounts[interest.name] ?? 0) > 0 {
                                             Button {
                                                 selectedInterest = selectedInterest == interest.name ? nil : interest.name
+                                                updateCollections()
                                             } label: {
                                                 HStack(spacing: 8) {
                                                     Image(systemName: interest.symbol)
@@ -275,6 +270,7 @@ private struct ZagDiscoverPage: View {
                         if let selectedInterest {
                             Button {
                                 self.selectedInterest = nil
+                                updateCollections()
                             } label: {
                                 Label("Clear \\(selectedInterest) filter", systemImage: "xmark.circle.fill")
                                     .font(.subheadline)
@@ -338,6 +334,7 @@ private struct ZagDiscoverPage: View {
                 .opacity(0)
             }
             .onAppear(perform: rebuildIndex)
+            .onChange(of: searchText) { _ in updateCollections() }
             .onChange(of: viewModel.isFinished) { _ in rebuildIndex() }
             .onChange(of: viewModel.sources.count) { _ in rebuildIndex() }
             .onChange(of: sources.count) { _ in rebuildIndex() }
