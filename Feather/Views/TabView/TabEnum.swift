@@ -84,16 +84,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 	@ViewBuilder
 	static func view(for tab: TabEnum) -> some View {
 		switch tab {
-		case .discover: NBNavigationView("Discover") {
-			Color.clear
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
-				.zagWallpaperSurface()
-				.toolbar {
-					ToolbarItem(placement: .topBarTrailing) {
-						ZagProfileToolbarButton()
-					}
-				}
-		}
+		case .discover: ZagDiscoverPage()
 		case .activity: ZagActivityPage()
 		case .devices: ZagDevicesPage()
 		case .sources: SourcesView()
@@ -120,6 +111,130 @@ enum TabEnum: String, CaseIterable, Hashable {
 	}
 }
 
+
+// Discover v1: index the repositories already loaded by Sources.
+// No additional manifest fetches, no synthetic rankings, and stable source identities.
+private struct ZagDiscoverPage: View {
+    @StateObject private var viewModel = SourcesViewModel.shared
+    @State private var searchText = ""
+    @FetchRequest(
+        entity: AltSource.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \\AltSource.name, ascending: true)]
+    ) private var sources: FetchedResults<AltSource>
+
+    private typealias Entry = SourceAppsView.SourceAppRoute
+
+    private var entries: [Entry] {
+        sources.flatMap { source in
+            guard let repository = viewModel.sources[source] else { return [Entry]() }
+            return repository.apps.map { Entry(source: repository, app: $0) }
+        }
+    }
+
+    private var matching: [Entry] {
+        guard !searchText.isEmpty else { return entries }
+        return entries.filter {
+            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
+            || ($0.app.id?.localizedCaseInsensitiveContains(searchText) ?? false)
+            || ($0.app.currentDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+        }
+    }
+
+    private var recent: [Entry] {
+        Array(matching.filter { $0.app.currentDate?.date != nil }
+            .sorted { ($0.app.currentDate?.date ?? .distantPast) > ($1.app.currentDate?.date ?? .distantPast) }
+            .prefix(15))
+    }
+
+    private var acrossSources: [Entry] {
+        let grouped = Dictionary(grouping: matching.compactMap { entry -> (String, Entry)? in
+            guard let id = entry.app.id, !id.isEmpty else { return nil }
+            return (id.lowercased(), entry)
+        }, by: { $0.0 })
+        return Array(grouped.values.filter {
+            Set($0.map { $0.1.source.id ?? $0.1.source.name ?? "" }).count > 1
+        }.compactMap { group in
+            group.map(\.1).max { ($0.app.currentDate?.date ?? .distantPast) < ($1.app.currentDate?.date ?? .distantPast) }
+        }.sorted { $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending }.prefix(12))
+    }
+
+    var body: some View {
+        NBNavigationView("Discover") {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Explore Your Sources")
+                            .font(.title2.bold())
+                        Text("\\(sources.count) repositories · \\(entries.count.formatted()) available entries")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if entries.isEmpty {
+                        ContentUnavailableView("No Repository Apps Yet", systemImage: "square.stack.3d.up",
+                            description: Text("Add repositories in Sources to populate Discover."))
+                    } else {
+                        section("Recently Updated", entries: recent)
+                        section("Available from Multiple Sources", entries: acrossSources)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Explore Repositories").font(.title2.bold())
+                            ForEach(sources, id: \.objectID) { source in
+                                if let repository = viewModel.sources[source] {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(repository.name ?? source.name ?? "Repository")
+                                                .font(.headline)
+                                            Text("\\(repository.apps.count.formatted()) apps")
+                                                .foregroundStyle(.secondary)
+                                                .font(.subheadline)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "square.stack.3d.up").foregroundStyle(.secondary)
+                                    }
+                                    .padding(14)
+                                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 90)
+            }
+            .searchable(text: $searchText, placement: .platform(), prompt: "Search Discover")
+            .zagWallpaperSurface()
+            .toolbar {
+                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, entries: [Entry]) -> some View {
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(title).font(.title2.bold())
+                ForEach(entries, id: \.id) { entry in
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(entry.app.currentName).font(.headline).lineLimit(1)
+                            Text(entry.source.name ?? "Repository")
+                                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer()
+                        if let date = entry.app.currentDate?.date {
+                            Text(date, style: .date).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(14)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+        }
+    }
+}
 
 // Initial dedicated destinations; the existing Apps and RPPairing workflows
 // remain untouched while Activity and device registration are developed.
