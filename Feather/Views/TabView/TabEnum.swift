@@ -1002,7 +1002,7 @@ private struct ZagGamesPage: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     // Eight featured entries at most: eager layout
                                     // avoids late-appearing cards while scrolling.
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: 10.5) {
                                         ForEach(featuredGames, id: \.id) { entry in
                                             featuredCard(
                                                 for: entry,
