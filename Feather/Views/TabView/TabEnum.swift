@@ -781,6 +781,40 @@ private struct ZagActivityPage: View {
                     .padding(17)
                     .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
 
+                    if !updateTransactions.activityHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("History").font(.title2.bold())
+                            LazyVStack(spacing: 0) {
+                                ForEach(updateTransactions.activityHistory) { record in
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Image(systemName: record.status == "Failed" ? "exclamationmark.circle" : "checkmark.circle")
+                                            .foregroundStyle(record.status == "Failed" ? Color.red : Color.accentColor)
+                                            .frame(width: 28)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(record.status).font(.subheadline.weight(.semibold))
+                                            Text(record.updateID)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                            if let detail = record.detail {
+                                                Text(detail)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        Spacer(minLength: 0)
+                                        Text(record.timestamp, style: .relative)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(14)
+                                    Divider().padding(.leading, 54)
+                                }
+                            }
+                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Update Operations").font(.title2.bold())
