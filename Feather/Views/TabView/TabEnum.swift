@@ -117,6 +117,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
+    @State private var selectedInterest: String?
     @State private var selectedApp: Entry?
     @State private var indexedEntries: [Entry] = []
     @FetchRequest(
@@ -136,11 +137,16 @@ private struct ZagDiscoverPage: View {
     }
 
     private var matching: [Entry] {
-        guard !searchText.isEmpty else { return entries }
-        return entries.filter {
-            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
-            || ($0.app.id?.localizedCaseInsensitiveContains(searchText) ?? false)
-            || ($0.app.currentDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+        guard !searchText.isEmpty || selectedInterest != nil else { return entries }
+        let terms = interests.first { $0.name == selectedInterest }?.terms ?? []
+        return entries.filter { entry in
+            let name = entry.app.currentName.lowercased()
+            let description = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
+            let interestMatch = terms.isEmpty || terms.contains { name.contains($0) || description.contains($0) }
+            return interestMatch && (searchText.isEmpty || (
+            entry.app.currentName.localizedCaseInsensitiveContains(searchText)
+            || (entry.app.id?.localizedCaseInsensitiveContains(searchText) ?? false)
+            || (entry.app.currentDescription?.localizedCaseInsensitiveContains(searchText) ?? false)))
         }
     }
 
@@ -249,7 +255,7 @@ private struct ZagDiscoverPage: View {
                                         let matches = interestMatches(interest)
                                         if !matches.isEmpty {
                                             Button {
-                                                searchText = interest.terms.first ?? ""
+                                                selectedInterest = selectedInterest == interest.name ? nil : interest.name
                                             } label: {
                                                 HStack(spacing: 8) {
                                                     Image(systemName: interest.symbol)
@@ -264,6 +270,14 @@ private struct ZagDiscoverPage: View {
                                         }
                                     }
                                 }
+                            }
+                        }
+                        if let selectedInterest {
+                            Button {
+                                self.selectedInterest = nil
+                            } label: {
+                                Label("Clear \\(selectedInterest) filter", systemImage: "xmark.circle.fill")
+                                    .font(.subheadline)
                             }
                         }
                         rail("Fresh Releases", subtitle: "Recently updated across your repositories", entries: recent)
