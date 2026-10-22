@@ -117,7 +117,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
-    @State private var searchFieldFocused = false
+    @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
     @State private var selectedInterest: String?
     @State private var selectedApp: Entry?
