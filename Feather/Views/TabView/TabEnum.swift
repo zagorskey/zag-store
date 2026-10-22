@@ -117,6 +117,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
+    @State private var selectedApp: Entry?
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -191,6 +192,9 @@ private struct ZagDiscoverPage: View {
                             Text("Explore Repositories").font(.title2.bold())
                             ForEach(sources, id: \.objectID) { source in
                                 if let repository = viewModel.sources[source] {
+                                    NavigationLink {
+                                        SourceAppsView(object: [source], viewModel: viewModel)
+                                    } label: {
                                     HStack {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(repository.name ?? source.name ?? "Repository")
@@ -204,6 +208,8 @@ private struct ZagDiscoverPage: View {
                                     }
                                     .padding(14)
                                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -212,6 +218,24 @@ private struct ZagDiscoverPage: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, 90)
+            }
+            .background {
+                NavigationLink(
+                    isActive: Binding(
+                        get: { selectedApp != nil },
+                        set: { if !$0 { selectedApp = nil } }
+                    )
+                ) {
+                    if let selectedApp {
+                        SourceAppsDetailView(source: selectedApp.source, app: selectedApp.app)
+                    } else {
+                        EmptyView()
+                    }
+                } label: {
+                    EmptyView()
+                }
+                .frame(width: 0, height: 0)
+                .opacity(0)
             }
             .searchable(text: $searchText, placement: .platform(), prompt: "Search Discover")
             .zagWallpaperSurface()
@@ -228,6 +252,9 @@ private struct ZagDiscoverPage: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title).font(.title2.bold())
                 ForEach(entries, id: \.id) { entry in
+                    Button {
+                        selectedApp = entry
+                    } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.app.currentName).font(.headline).lineLimit(1)
@@ -241,6 +268,8 @@ private struct ZagDiscoverPage: View {
                     }
                     .padding(14)
                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
