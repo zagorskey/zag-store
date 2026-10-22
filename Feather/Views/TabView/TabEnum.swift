@@ -728,7 +728,7 @@ private struct ZagActivityPage: View {
     private func refreshRepositories() {
         guard !sourcesModel.isRefreshing else { return }
         Task {
-            await sourcesModel.fetchSources(Array(sources), refresh: true)
+            await sourcesModel.fetchSources(sources, refresh: true)
         }
     }
 
