@@ -851,111 +851,49 @@ private struct ZagGamesPage: View {
         indexedFeaturedGames.isEmpty ? Array(indexedGames.prefix(8)) : indexedFeaturedGames
     }
 
-    // Kept outside the main tab body so SwiftUI needn't type-check an
-    // additional large nested card hierarchy with every section.
-    // Artwork-first editorial card. The image and copy share one canvas.
-    // Repository screenshots are shown only when supplied by the source.
+    // Match the App Store's landscape editorial format, with one compact app icon.
     private func featuredCard(for entry: SourceAppsView.SourceAppRoute) -> some View {
         Button { selectedApp = entry } label: {
             ZStack(alignment: .bottomLeading) {
-                featuredArtwork(for: entry)
-
+                ZagFeaturedGameArtwork(
+                    bundleID: entry.app.id,
+                    name: entry.app.currentName,
+                    repositoryScreenshot: entry.app.currentScreenshotURLs.first
+                )
                 LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black.opacity(0.10), location: 0.36),
-                        .init(color: .black.opacity(0.82), location: 0.76),
-                        .init(color: .black.opacity(0.94), location: 1)
-                    ],
+                    colors: [.clear, .black.opacity(0.06), .black.opacity(0.82)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("FROM YOUR REPOSITORIES")
-                        .font(.system(size: 10, weight: .bold))
-                        .tracking(1.4)
-                        .foregroundStyle(.white.opacity(0.86))
-                    Spacer(minLength: 0)
-                    Text(entry.app.currentName)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    HStack(spacing: 11) {
-                        ZagRepositoryAppIconView(app: entry.app, size: 48)
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
-                                Text(genre)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                            }
-                            Text(entry.source.name ?? "Repository")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.78))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right")
-                            .font(.system(size: 13, weight: .bold))
+                HStack(alignment: .bottom, spacing: 10) {
+                    ZagRepositoryAppIconView(app: entry.app, size: 44)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.app.currentName)
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(.white.opacity(0.22), in: Circle())
+                            .lineLimit(1)
+                        Text(entry.source.name ?? "Repository")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(1)
                     }
+                    Spacer(minLength: 4)
+                    Text("Get")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 21)
+                        .frame(height: 34)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .environment(\.colorScheme, .dark)
                 }
-                .padding(20)
+                .padding(14)
             }
-            .frame(width: 354, height: 270)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .frame(width: 354, height: 228)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
-    }
-
-    // Honest fallback: authentic app icon, never invented game artwork.
-    private func featuredArtworkFallback(for entry: SourceAppsView.SourceAppRoute) -> some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color.accentColor.opacity(0.7), Color.indigo.opacity(0.55), Color.black],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Circle()
-                .fill(.white.opacity(0.10))
-                .frame(width: 260, height: 260)
-                .blur(radius: 35)
-                .offset(x: 120, y: -105)
-            ZagRepositoryAppIconView(app: entry.app, size: 116)
-                .rotationEffect(.degrees(-8))
-                .shadow(color: .black.opacity(0.55), radius: 30, x: 0, y: 20)
-                .offset(x: 76, y: -20)
-        }
-        .frame(width: 354, height: 270)
-    }
-
-    private func featuredArtwork(for entry: SourceAppsView.SourceAppRoute) -> some View {
-        ZStack {
-            featuredArtworkFallback(for: entry)
-            if let screenshot = entry.app.currentScreenshotURLs.first {
-                LazyImage(url: screenshot) { state in
-                    if let image = state.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 354, height: 270)
-                            .clipped()
-                    }
-                }
-            }
-        }
-        .frame(width: 354, height: 270)
-        .clipped()
+        .accessibilityHint("Opens game details and installation options")
     }
 
     private func rebuildIndexIfNeeded() {
@@ -1063,7 +1001,8 @@ private struct ZagGamesPage: View {
                                 }
                                 .padding(.vertical, 2)
                             }
-                            .padding(.trailing, 18)
+                            .padding(.leading, -18)
+                            .padding(.trailing, -18)
                         }
                     }
 
@@ -1243,6 +1182,45 @@ private struct ZagGamesPage: View {
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                 ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
             }
+        }
+    }
+}
+
+// Requests verified artwork only for visible featured cards. The API currently
+// returns empty artwork_urls; keep a neutral fallback rather than a giant icon.
+private struct ZagFeaturedGameArtwork: View {
+    let bundleID: String?
+    let name: String
+    let repositoryScreenshot: URL?
+    @State private var verifiedArtwork: URL?
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.indigo.opacity(0.75), Color.blue.opacity(0.4), .black],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            if let url = verifiedArtwork ?? repositoryScreenshot {
+                LazyImage(url: url) { state in
+                    if let image = state.image {
+                        image.resizable()
+                            .scaledToFill()
+                            .frame(width: 354, height: 228)
+                            .clipped()
+                    }
+                }
+            }
+        }
+        .frame(width: 354, height: 228)
+        .clipped()
+        .task(id: bundleID) {
+            verifiedArtwork = nil
+            guard let bundleID, !bundleID.isEmpty else { return }
+            guard let response = try? await ZagGameArtworkClient.shared.lookup(
+                bundleID: bundleID, name: name
+            ), response.isVerified else { return }
+            verifiedArtwork = response.artworkURLs.first
         }
     }
 }
