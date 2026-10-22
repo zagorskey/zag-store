@@ -720,6 +720,9 @@ private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
+    @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
+    @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
+    @State private var indexSignature = ""
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -752,36 +755,52 @@ private struct ZagGamesPage: View {
         }
     }
 
-    private var catalogue: [SourceAppsView.SourceAppRoute] {
-        sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
-            guard let repository = sourcesModel.sources[source] else { return [] }
-            return repository.apps.map {
-                SourceAppsView.SourceAppRoute(source: repository, app: $0)
-            }
+    private var emulators: [SourceAppsView.SourceAppRoute] {
+        guard !searchText.isEmpty else { return indexedEmulators }
+        return indexedEmulators.filter {
+            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
         }
     }
 
-    private var emulators: [SourceAppsView.SourceAppRoute] {
-        var seen = Set<String>()
-        return catalogue
-            .filter { isEmulator($0.app.currentName) }
-            .filter { seen.insert(normalizedName($0.app.currentName)).inserted }
-            .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
-            .prefix(60)
-            .map { $0 }
+    private var games: [SourceAppsView.SourceAppRoute] {
+        guard !searchText.isEmpty else { return indexedGames }
+        return indexedGames.filter {
+            $0.app.currentName.localizedCaseInsensitiveContains(searchText)
+        }
     }
 
-    private var games: [SourceAppsView.SourceAppRoute] {
-        var seen = Set<String>()
-        return catalogue
-            .filter { entry in
-                !isEmulator(entry.app.currentName)
-                && isGameDescription(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
+    private func rebuildIndexIfNeeded() {
+        let signature = sources.map { source in
+            let key = source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
+            return key + ":" + String(sourcesModel.sources[source]?.apps.count ?? -1)
+        }.joined(separator: "|")
+        guard signature != indexSignature else { return }
+        indexSignature = signature
+
+        var seenEmulators = Set<String>()
+        var seenGames = Set<String>()
+        var newEmulators: [SourceAppsView.SourceAppRoute] = []
+        var newGames: [SourceAppsView.SourceAppRoute] = []
+
+        for source in sources {
+            guard let repository = sourcesModel.sources[source] else { continue }
+            for app in repository.apps {
+                let name = app.currentName
+                let key = normalizedName(name)
+                if isEmulator(name) {
+                    if seenEmulators.insert(key).inserted && newEmulators.count < 60 {
+                        newEmulators.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
+                    }
+                } else if newGames.count < 60
+                    && isGameDescription(app.currentDescription ?? app.localizedDescription ?? "")
+                    && seenGames.insert(key).inserted {
+                    newGames.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
+                }
+                if newEmulators.count >= 60 && newGames.count >= 60 { break }
             }
-            .filter { seen.insert(normalizedName($0.app.currentName)).inserted }
-            .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
-            .prefix(60)
-            .map { $0 }
+        }
+        indexedEmulators = newEmulators
+        indexedGames = newGames
     }
 
     var body: some View {
@@ -930,6 +949,11 @@ private struct ZagGamesPage: View {
                 .padding(.bottom, 90)
             }
             .zagWallpaperSurface()
+            .onAppear(perform: rebuildIndexIfNeeded)
+            .onReceive(sourcesModel.objectWillChange) { _ in
+                // Defer indexing until the repository model finishes publishing.
+                DispatchQueue.main.async { rebuildIndexIfNeeded() }
+            }
             .navigationDestination(
                 isPresented: Binding(
                     get: { selectedApp != nil },
