@@ -852,13 +852,14 @@ private struct ZagGamesPage: View {
     }
 
     // Match the App Store's landscape editorial format, with one compact app icon.
-    private func featuredCard(for entry: SourceAppsView.SourceAppRoute) -> some View {
+    private func featuredCard(for entry: SourceAppsView.SourceAppRoute, width: CGFloat) -> some View {
         Button { selectedApp = entry } label: {
             ZStack(alignment: .bottomLeading) {
                 ZagFeaturedGameArtwork(
                     bundleID: entry.app.id,
                     name: entry.app.currentName,
-                    repositoryScreenshot: entry.app.currentScreenshotURLs.first
+                    repositoryScreenshot: entry.app.currentScreenshotURLs.first,
+                    width: width
                 )
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.06), .black.opacity(0.82)],
@@ -888,7 +889,7 @@ private struct ZagGamesPage: View {
                 }
                 .padding(14)
             }
-            .frame(width: 354, height: 228)
+            .frame(width: width, height: 228)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
@@ -993,16 +994,17 @@ private struct ZagGamesPage: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                LazyHStack(spacing: 12) {
-                                    ForEach(featuredGames, id: \.id) { entry in
-                                        featuredCard(for: entry)
+                            GeometryReader { geometry in
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    LazyHStack(spacing: 12) {
+                                        ForEach(featuredGames, id: \.id) { entry in
+                                            featuredCard(for: entry, width: geometry.size.width)
+                                        }
                                     }
+                                    .padding(.vertical, 2)
                                 }
-                                .padding(.vertical, 2)
                             }
-                            .padding(.leading, -18)
-                            .padding(.trailing, -18)
+                            .frame(height: 232)
                         }
                     }
 
@@ -1192,6 +1194,7 @@ private struct ZagFeaturedGameArtwork: View {
     let bundleID: String?
     let name: String
     let repositoryScreenshot: URL?
+    let width: CGFloat
     @State private var verifiedArtwork: URL?
 
     var body: some View {
@@ -1206,13 +1209,13 @@ private struct ZagFeaturedGameArtwork: View {
                     if let image = state.image {
                         image.resizable()
                             .scaledToFill()
-                            .frame(width: 354, height: 228)
+                            .frame(width: width, height: 228)
                             .clipped()
                     }
                 }
             }
         }
-        .frame(width: 354, height: 228)
+        .frame(width: width, height: 228)
         .clipped()
         .task(id: bundleID) {
             verifiedArtwork = nil
