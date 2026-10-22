@@ -866,8 +866,8 @@ private struct ZagGamesPage: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                HStack(alignment: .bottom, spacing: 10) {
-                    ZagRepositoryAppIconView(app: entry.app, size: 44)
+                HStack(alignment: .bottom, spacing: 9) {
+                    ZagRepositoryAppIconView(app: entry.app, size: 32)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(entry.app.currentName)
                             .font(.system(size: 16, weight: .bold))
@@ -882,14 +882,14 @@ private struct ZagGamesPage: View {
                     Text("Get")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 21)
-                        .frame(height: 34)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(.horizontal, 19)
+                        .frame(height: 32)
+                        .background(.white.opacity(0.36), in: Capsule())
                         .environment(\.colorScheme, .dark)
                 }
                 .padding(14)
             }
-            .frame(width: width, height: 228)
+            .frame(width: width, height: 250)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
@@ -996,15 +996,16 @@ private struct ZagGamesPage: View {
 
                             GeometryReader { geometry in
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    LazyHStack(spacing: 12) {
+                                    LazyHStack(spacing: 8) {
                                         ForEach(featuredGames, id: \.id) { entry in
                                             featuredCard(for: entry, width: geometry.size.width)
                                         }
                                     }
                                     .padding(.vertical, 2)
                                 }
+                                .scrollClipDisabled()
                             }
-                            .frame(height: 232)
+                            .frame(height: 254)
                         }
                     }
 
@@ -1209,13 +1210,13 @@ private struct ZagFeaturedGameArtwork: View {
                     if let image = state.image {
                         image.resizable()
                             .scaledToFill()
-                            .frame(width: width, height: 228)
+                            .frame(width: width, height: 250)
                             .clipped()
                     }
                 }
             }
         }
-        .frame(width: width, height: 228)
+        .frame(width: width, height: 250)
         .clipped()
         .task(id: bundleID) {
             verifiedArtwork = nil
