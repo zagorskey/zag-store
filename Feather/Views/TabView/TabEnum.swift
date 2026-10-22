@@ -173,6 +173,18 @@ private struct ZagDiscoverPage: View {
         (entry.app.id ?? entry.id).lowercased()
     }
 
+    // One row per saved bundle identifier, even when repositories expose
+    // multiple versions or duplicate records for the same app.
+    private var uniqueSavedEntries: [Entry] {
+        var seen = Set<String>()
+        return indexedEntries.filter { entry in
+            let key = saveKey(entry)
+            return savedKeys.contains(key) && seen.insert(key).inserted
+        }.sorted {
+            $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending
+        }
+    }
+
     private func toggleSaved(_ entry: Entry) {
         var keys = savedKeys
         let key = saveKey(entry)
@@ -493,8 +505,8 @@ private struct ZagDiscoverPage: View {
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showSaved = true } label: {
-                        Image(systemName: "bookmark")
-                            .font(.system(size: 19, weight: .regular))
+                        Image(systemName: "bookmark.fill")
+                            .font(.system(size: 18, weight: .medium))
                             .frame(width: 24, height: 24)
                     }
                     .foregroundStyle(.primary)
@@ -531,7 +543,7 @@ private struct ZagDiscoverPage: View {
             .sheet(isPresented: $showSaved) {
                 NavigationStack {
                     List {
-                        ForEach(indexedEntries.filter { savedKeys.contains(saveKey($0)) }, id: \.id) { entry in
+                        ForEach(uniqueSavedEntries, id: \.id) { entry in
                             Button {
                                 showSaved = false
                                 selectedApp = entry
@@ -553,7 +565,7 @@ private struct ZagDiscoverPage: View {
                         }
                     }
                     .overlay {
-                        if !indexedEntries.contains(where: { savedKeys.contains(saveKey($0)) }) {
+                        if uniqueSavedEntries.isEmpty {
                             Text("No saved apps yet. Long-press an app in Discover to save it.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
