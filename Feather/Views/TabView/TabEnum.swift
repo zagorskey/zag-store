@@ -171,8 +171,19 @@ private struct ZagDiscoverPage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     if entries.isEmpty {
-                        ContentUnavailableView("No Repository Apps Yet", systemImage: "square.stack.3d.up",
-                            description: Text("Add repositories in Sources to populate Discover."))
+                        VStack(spacing: 12) {
+                            Image(systemName: "square.stack.3d.up")
+                                .font(.system(size: 36, weight: .light))
+                                .foregroundStyle(.secondary)
+                            Text("No Repository Apps Yet")
+                                .font(.headline)
+                            Text("Add repositories in Sources to populate Discover.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 48)
                     } else {
                         section("Recently Updated", entries: recent)
                         section("Available from Multiple Sources", entries: acrossSources)
