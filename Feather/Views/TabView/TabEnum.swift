@@ -173,22 +173,42 @@ private struct ZagDiscoverPage: View {
         (entry.app.id ?? entry.id).lowercased()
     }
 
-    // One row per saved bundle identifier, even when repositories expose
-    // multiple versions or duplicate records for the same app.
+    // Manifests can use different identifiers for versions of the same app.
+    // Group visible saved rows by normalized display name, while retaining
+    // every existing saved identifier for backwards compatibility.
+    private func savedDisplayKey(_ entry: Entry) -> String {
+        let name = entry.app.currentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? saveKey(entry) : name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
     private var uniqueSavedEntries: [Entry] {
-        var seen = Set<String>()
-        return indexedEntries.filter { entry in
-            let key = saveKey(entry)
-            return savedKeys.contains(key) && seen.insert(key).inserted
-        }.sorted {
+        var best: [String: Entry] = [:]
+        for entry in indexedEntries where savedKeys.contains(saveKey(entry)) {
+            let key = savedDisplayKey(entry)
+            if let previous = best[key] {
+                if (entry.app.currentDate?.date ?? .distantPast) > (previous.app.currentDate?.date ?? .distantPast) {
+                    best[key] = entry
+                }
+            } else {
+                best[key] = entry
+            }
+        }
+        return best.values.sorted {
             $0.app.currentName.localizedStandardCompare($1.app.currentName) == .orderedAscending
         }
     }
 
     private func toggleSaved(_ entry: Entry) {
         var keys = savedKeys
-        let key = saveKey(entry)
-        if !keys.insert(key).inserted { keys.remove(key) }
+        let nameKey = savedDisplayKey(entry)
+        let matchingKeys = Set(indexedEntries.filter {
+            savedDisplayKey($0) == nameKey
+        }.map { saveKey($0) })
+        if !keys.isDisjoint(with: matchingKeys) {
+            keys.subtract(matchingKeys)
+        } else {
+            keys.insert(saveKey(entry))
+        }
         savedAppIDs = keys.sorted().joined(separator: "\n")
     }
 
