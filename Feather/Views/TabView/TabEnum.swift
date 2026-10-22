@@ -118,6 +118,7 @@ private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
     @State private var selectedApp: Entry?
+    @State private var indexedEntries: [Entry] = []
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -125,8 +126,10 @@ private struct ZagDiscoverPage: View {
 
     private typealias Entry = SourceAppsView.SourceAppRoute
 
-    private var entries: [Entry] {
-        sources.flatMap { source in
+    private var entries: [Entry] { indexedEntries }
+
+    private func rebuildIndex() {
+        indexedEntries = sources.flatMap { source in
             guard let repository = viewModel.sources[source] else { return [Entry]() }
             return repository.apps.map { Entry(source: repository, app: $0) }
         }
@@ -166,7 +169,7 @@ private struct ZagDiscoverPage: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Explore Your Sources")
                             .font(.title2.bold())
-                        Text("\(sources.count) repositories · \\(entries.count.formatted()) available entries")
+                        Text("\(sources.count) repositories · \(entries.count.formatted()) available entries")
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,6 +240,10 @@ private struct ZagDiscoverPage: View {
                 .frame(width: 0, height: 0)
                 .opacity(0)
             }
+            .onAppear(perform: rebuildIndex)
+            .onChange(of: viewModel.isFinished) { _ in rebuildIndex() }
+            .onChange(of: viewModel.sources.count) { _ in rebuildIndex() }
+            .onChange(of: sources.count) { _ in rebuildIndex() }
             .searchable(text: $searchText, placement: .platform(), prompt: "Search Discover")
             .zagWallpaperSurface()
             .toolbar {
@@ -256,6 +263,7 @@ private struct ZagDiscoverPage: View {
                         selectedApp = entry
                     } label: {
                     HStack(spacing: 12) {
+                        ZagRepositoryAppIconView(app: entry.app, size: 54)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.app.currentName).font(.headline).lineLimit(1)
                             Text(entry.source.name ?? "Repository")
