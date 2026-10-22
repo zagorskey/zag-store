@@ -977,6 +977,7 @@ private struct ZagGamesPage: View {
         var newGames: [SourceAppsView.SourceAppRoute] = []
         var artworkCandidates: [SourceAppsView.SourceAppRoute] = []
         var seenArtwork = Set<String>()
+        var artworkCountBySource: [String: Int] = [:]
 
         for source in sources {
             guard let repository = sourcesModel.sources[source] else { continue }
@@ -996,10 +997,13 @@ private struct ZagGamesPage: View {
                     }
                     // Continue checking the catalogue for genuine artwork even
                     // after the 60 visible Games slots have been filled.
+                    let sourceKey = repository.id ?? repository.name ?? "Repository"
                     if artworkCandidates.count < 48
+                        && (artworkCountBySource[sourceKey] ?? 0) < 6
                         && !app.currentScreenshotURLs.isEmpty
                         && seenArtwork.insert(key).inserted {
                         artworkCandidates.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
+                        artworkCountBySource[sourceKey, default: 0] += 1
                     }
                 }
                 if newEmulators.count >= 60 && newGames.count >= 60 { break }
