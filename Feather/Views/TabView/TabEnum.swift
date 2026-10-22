@@ -866,8 +866,8 @@ private struct ZagGamesPage: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                HStack(alignment: .bottom, spacing: 9) {
-                    ZagRepositoryAppIconView(app: entry.app, size: 32)
+                HStack(alignment: .center, spacing: 9) {
+                    ZagRepositoryAppIconView(app: entry.app, size: 36)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(entry.app.currentName)
                             .font(.system(size: 16, weight: .bold))
@@ -995,14 +995,26 @@ private struct ZagGamesPage: View {
                             }
 
                             GeometryReader { geometry in
+                                // Match the native search field's inset. Extend the
+                                // viewport to the screen edge so the next card
+                                // is visible without scrolling.
+                                let cardInset: CGFloat = 7
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    LazyHStack(spacing: 8) {
+                                    // Eight featured entries at most: eager layout
+                                    // avoids late-appearing cards while scrolling.
+                                    HStack(spacing: 8) {
                                         ForEach(featuredGames, id: \.id) { entry in
-                                            featuredCard(for: entry, width: geometry.size.width)
+                                            featuredCard(
+                                                for: entry,
+                                                width: geometry.size.width - cardInset * 2
+                                            )
                                         }
                                     }
+                                    .padding(.leading, cardInset)
+                                    .padding(.trailing, 18)
                                     .padding(.vertical, 2)
                                 }
+                                .frame(width: geometry.size.width + 18, alignment: .leading)
                                 .modifier(ZagGamesScrollClipModifier())
                             }
                             .frame(height: 254)
