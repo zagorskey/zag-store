@@ -713,6 +713,8 @@ private struct ZagDiscoverPage: View {
 private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
+    @State private var historyFilter = "All"
+    @State private var showRepositoryDetails = false
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -748,42 +750,10 @@ private struct ZagActivityPage: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Repository Activity").font(.title2.bold())
-                            Spacer()
-                            if sourcesModel.isRefreshing {
-                                ProgressView().controlSize(.small)
-                            }
-                        }
-                        HStack(spacing: 13) {
-                            Image(systemName: sourcesModel.isRefreshing ? "arrow.triangle.2.circlepath" : "checkmark.arrow.trianglehead.counterclockwise")
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-                                .frame(width: 44, height: 44)
-                                .background(Color.accentColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 14))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(sourcesModel.isRefreshing ? "Refreshing repositories" : "Repository catalogue")
-                                    .font(.subheadline.weight(.semibold))
-                                Text(sourcesModel.isRefreshing ? "Fetching updated source metadata" : "\(loadedRepositories) of \(sources.count) repositories loaded")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        Button(action: refreshRepositories) {
-                            Label(sourcesModel.isRefreshing ? "Refreshing…" : "Refresh Repositories",
-                                  systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(sourcesModel.isRefreshing || sources.isEmpty)
-                    }
-                    .padding(17)
-                    .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
-
+                    if !updateTransactions.stages.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Live Operations").font(.title2.bold())
+                            Text("In Progress").font(.title2.bold())
                             Spacer()
                             if !updateTransactions.stages.isEmpty {
                                 Text("\(updateTransactions.stages.count)")
@@ -824,21 +794,6 @@ private struct ZagActivityPage: View {
                                 }
                             }
                             .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 20))
-                        } else {
-                        VStack(spacing: 12) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 25, weight: .light))
-                                .foregroundStyle(.secondary)
-                            Text("All caught up").font(.subheadline.weight(.semibold))
-                            Text("New update operations will appear here. Completed and failed updates are saved in History.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 22)
-                        .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
                         }
                     }
                     if !updateTransactions.activityHistory.isEmpty {
@@ -850,8 +805,15 @@ private struct ZagActivityPage: View {
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
+                            Picker("History Filter", selection: $historyFilter) {
+                                Text("All").tag("All")
+                                Text("Installed").tag("Installed")
+                                Text("Prepared").tag("Ready to Install")
+                                Text("Failed").tag("Failed")
+                            }
+                            .pickerStyle(.segmented)
                             LazyVStack(spacing: 0) {
-                                ForEach(updateTransactions.activityHistory) { record in
+                                ForEach(updateTransactions.activityHistory.filter { historyFilter == "All" || $0.status == historyFilter }) { record in
                                     HStack(alignment: .top, spacing: 12) {
                                         Image(systemName: record.status == "Failed" ? "exclamationmark.triangle.fill" : (record.status == "Installed" ? "checkmark.circle.fill" : "arrow.down.circle"))
                                             .font(.system(size: 18, weight: .medium))
@@ -888,6 +850,56 @@ private struct ZagActivityPage: View {
                         }
                     }
 
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { showRepositoryDetails.toggle() }
+                    } label: {
+                        HStack {
+                            Label("Repository Activity", systemImage: "square.stack.3d.up")
+                            Spacer()
+                            Text("\(loadedRepositories)/\(sources.count)")
+                                .foregroundStyle(.secondary)
+                            Image(systemName: showRepositoryDetails ? "chevron.up" : "chevron.down")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(15)
+                        .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+                    if showRepositoryDetails || sourcesModel.isRefreshing {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Text("Repository Activity").font(.title2.bold())
+                            Spacer()
+                            if sourcesModel.isRefreshing {
+                                ProgressView().controlSize(.small)
+                            }
+                        }
+                        HStack(spacing: 13) {
+                            Image(systemName: sourcesModel.isRefreshing ? "arrow.triangle.2.circlepath" : "checkmark.arrow.trianglehead.counterclockwise")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 44, height: 44)
+                                .background(Color.accentColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 14))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(sourcesModel.isRefreshing ? "Refreshing repositories" : "Repository catalogue")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(sourcesModel.isRefreshing ? "Fetching updated source metadata" : "\(loadedRepositories) of \(sources.count) repositories loaded")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        Button(action: refreshRepositories) {
+                            Label(sourcesModel.isRefreshing ? "Refreshing…" : "Refresh Repositories",
+                                  systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(sourcesModel.isRefreshing || sources.isEmpty)
+                    }
+                    .padding(17)
+                    .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
+
+                    }
 
                 }
                 .padding(.horizontal, 20)
