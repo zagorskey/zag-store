@@ -105,21 +105,34 @@ private struct ZagImportGradientProgress: View {
     var body: some View {
         GeometryReader { geometry in
             let fraction = min(max(progress, 0), 1)
+            let filledWidth = geometry.size.width * fraction
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.12))
-                Capsule()
-                    .fill(LinearGradient(
-                        colors: colors,
-                        startPoint: shimmer ? .trailing : .leading,
-                        endPoint: shimmer ? .leading : .trailing
-                    ))
-                    .frame(width: geometry.size.width * fraction)
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LinearGradient(
+                            colors: colors,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ))
+                    if !reduceMotion {
+                        LinearGradient(
+                            colors: [.clear, .white.opacity(0.36), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: max(28, filledWidth * 0.38))
+                        .offset(x: shimmer ? filledWidth : -max(28, filledWidth * 0.38))
+                    }
+                }
+                .frame(width: filledWidth)
+                .clipShape(Capsule())
             }
         }
         .animation(.easeOut(duration: 0.2), value: progress)
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+            withAnimation(.linear(duration: 2.1).repeatForever(autoreverses: false)) {
                 shimmer = true
             }
         }
