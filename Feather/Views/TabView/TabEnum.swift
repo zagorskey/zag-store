@@ -810,6 +810,17 @@ private struct ZagGamesPage: View {
         return "Emulator"
     }
 
+    // Genre labels are derived only from descriptions supplied by repositories.
+    private func gameGenre(_ description: String) -> String? {
+        let description = description.lowercased()
+        let genres: [(String, String)] = [
+            ("puzzle", "Puzzle"), ("racing", "Racing"), ("strategy", "Strategy"),
+            ("role-playing", "RPG"), ("arcade", "Arcade"), ("adventure", "Adventure"),
+            ("simulation", "Simulation"), ("sports", "Sports")
+        ]
+        return genres.first { description.contains($0.0) }?.1
+    }
+
     private func matchesSearch(_ entry: SourceAppsView.SourceAppRoute) -> Bool {
         entry.app.currentName.localizedCaseInsensitiveContains(searchText)
         || (entry.source.name?.localizedCaseInsensitiveContains(searchText) ?? false)
@@ -914,8 +925,11 @@ private struct ZagGamesPage: View {
                                                     .lineLimit(1)
                                                     .foregroundStyle(.primary)
                                                 Text(emulatorPlatform(entry.app.currentName))
-                                                    .font(.caption)
+                                                    .font(.system(size: 11, weight: .semibold))
                                                     .foregroundStyle(.tint)
+                                                    .padding(.horizontal, 9)
+                                                    .padding(.vertical, 4)
+                                                    .background(Color.accentColor.opacity(0.10), in: Capsule())
                                                 Text(entry.source.name ?? "Repository")
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
@@ -967,9 +981,20 @@ private struct ZagGamesPage: View {
                                                     .font(.system(size: 16, weight: .semibold))
                                                     .lineLimit(1)
                                                     .foregroundStyle(.primary)
-                                                Text(entry.source.name ?? "Repository")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                                HStack(spacing: 7) {
+                                                    if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
+                                                        Text(genre)
+                                                            .font(.system(size: 11, weight: .semibold))
+                                                            .foregroundStyle(.tint)
+                                                            .padding(.horizontal, 9)
+                                                            .padding(.vertical, 4)
+                                                            .background(Color.accentColor.opacity(0.10), in: Capsule())
+                                                    }
+                                                    Text(entry.source.name ?? "Repository")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                        .lineLimit(1)
+                                                }
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right")
