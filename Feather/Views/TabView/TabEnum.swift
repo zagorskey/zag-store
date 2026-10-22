@@ -720,6 +720,7 @@ private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
+    @State private var selectedCategory = "Emulators"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexSignature = ""
@@ -839,6 +840,13 @@ private struct ZagGamesPage: View {
                     .padding(13)
                     .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
 
+                    Picker("Gaming Category", selection: $selectedCategory) {
+                        Text("Emulators").tag("Emulators")
+                        Text("Games").tag("Games")
+                    }
+                    .pickerStyle(.segmented)
+
+                    if selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("Emulators").font(.title2.bold())
@@ -895,6 +903,7 @@ private struct ZagGamesPage: View {
                         }
                     }
 
+                    } else {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("Games").font(.title2.bold())
@@ -942,6 +951,7 @@ private struct ZagGamesPage: View {
                             }
                             .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
                         }
+                    }
                     }
                 }
                 .padding(.horizontal, 18)
