@@ -722,7 +722,7 @@ private struct ZagGamesPage: View {
     @State private var searchText = ""
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
-    @State private var selectedCategory = "Games"
+    @State private var selectedCategory = "All"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexSignature = ""
@@ -870,39 +870,9 @@ private struct ZagGamesPage: View {
         NBNavigationView("Games") {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    HStack(spacing: 15) {
-                        Image(systemName: "gamecontroller.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.tint)
-                            .frame(width: 64, height: 64)
-                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Gaming on Zag Store")
-                                .font(.title2.bold())
-                            Text("Games and emulators from your repositories")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
-
-                    Picker("Gaming Category", selection: $selectedCategory) {
-                        Text("Games").tag("Games")
-                        Text("Emulators").tag("Emulators")
-                    }
-                    .pickerStyle(.segmented)
-
-                    if selectedCategory == "Emulators" {
+                    if selectedCategory == "All" || selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Emulators").font(.title2.bold())
-                            Spacer()
-                            Text("\(emulators.count)")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
+                        ZagSectionHeader(title: "Emulators", count: emulators.count)
                         Text("Known emulators found in your loaded repositories")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -954,15 +924,10 @@ private struct ZagGamesPage: View {
                         }
                     }
 
-                    } else {
+                    }
+                    if selectedCategory == "All" || selectedCategory == "Games" {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Games").font(.title2.bold())
-                            Spacer()
-                            Text("\(games.count)")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
+                        ZagSectionHeader(title: "Games", count: games.count)
                         Text("Identified using game-specific repository descriptions; incomplete metadata may omit titles")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -1014,19 +979,24 @@ private struct ZagGamesPage: View {
             .searchable(
                 text: $searchText,
                 placement: .platform(),
-                prompt: Text("Games and Emulators")
+                prompt: Text("Games, Emulators and More")
             )
             .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
             .background {
                 ZagNativeSearchMicInstaller(
                     isAvailable: dictationAvailable,
                     action: startDictationFromSearchMic,
-                    prompt: "Games and Emulators",
-                    activePrompt: "Games and Emulators"
+                    prompt: "Games, Emulators and More",
+                    activePrompt: "Games, Emulators and More"
                 )
                 .frame(width: 0, height: 0)
             }
             .onAppear(perform: probeSystemDictation)
+            .compatSearchScopes($selectedCategory) {
+                Text("All").tag("All")
+                Text("Games").tag("Games")
+                Text("Emulators").tag("Emulators")
+            }
             .onAppear(perform: rebuildIndexIfNeeded)
             .onReceive(sourcesModel.objectWillChange) { _ in
                 // Defer indexing until the repository model finishes publishing.
