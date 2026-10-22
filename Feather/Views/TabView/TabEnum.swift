@@ -842,6 +842,40 @@ private struct ZagGamesPage: View {
         }
     }
 
+    // Stable, varied selection from the already cached catalogue. No extra
+    // repository traversal, network requests, or invented popularity rankings.
+    private var featuredGames: [SourceAppsView.SourceAppRoute] {
+        var selected: [SourceAppsView.SourceAppRoute] = []
+        var usedGenres = Set<String>()
+        var usedSources = Set<String>()
+        var usedIDs = Set<String>()
+
+        for entry in indexedGames {
+            let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
+            let source = entry.source.name ?? "Repository"
+            guard let genre, !usedGenres.contains(genre), !usedSources.contains(source) else { continue }
+            selected.append(entry)
+            usedIDs.insert(entry.id)
+            usedGenres.insert(genre)
+            usedSources.insert(source)
+            if selected.count == 8 { return selected }
+        }
+
+        for entry in indexedGames where selected.count < 8 {
+            let source = entry.source.name ?? "Repository"
+            guard !usedIDs.contains(entry.id), !usedSources.contains(source) else { continue }
+            selected.append(entry)
+            usedIDs.insert(entry.id)
+            usedSources.insert(source)
+        }
+
+        for entry in indexedGames where selected.count < 8 {
+            guard usedIDs.insert(entry.id).inserted else { continue }
+            selected.append(entry)
+        }
+        return selected
+    }
+
     private func rebuildIndexIfNeeded() {
         let signature = sources.map { source in
             let key = source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
@@ -904,7 +938,7 @@ private struct ZagGamesPage: View {
 
                             ScrollView(.horizontal, showsIndicators: false) {
                                 LazyHStack(spacing: 12) {
-                                    ForEach(Array(indexedGames.prefix(8)), id: \.id) { entry in
+                                    ForEach(featuredGames, id: \.id) { entry in
                                         Button { selectedApp = entry } label: {
                                             VStack(alignment: .leading, spacing: 12) {
                                                 HStack(alignment: .center, spacing: 12) {
@@ -919,10 +953,18 @@ private struct ZagGamesPage: View {
                                                     .font(.headline)
                                                     .foregroundStyle(.primary)
                                                     .lineLimit(2)
-                                                Text(entry.source.name ?? "Repository")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
+                                                HStack(spacing: 6) {
+                                                    if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
+                                                        Text(genre)
+                                                            .font(.caption2.weight(.semibold))
+                                                            .foregroundStyle(.tint)
+                                                            .lineLimit(1)
+                                                    }
+                                                    Text(entry.source.name ?? "Repository")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                        .lineLimit(1)
+                                                }
                                             }
                                             .padding(16)
                                             .frame(width: 200, height: 172, alignment: .leading)
