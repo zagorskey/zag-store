@@ -172,6 +172,33 @@ private struct ZagDiscoverPage: View {
         }.prefix(5))
     }
 
+    // Interest collections are keyword matches, not repository-provided genres.
+    // Only show collections that actually contain matching apps.
+    private struct Interest {
+        let name: String
+        let symbol: String
+        let terms: [String]
+    }
+
+    private let interests: [Interest] = [
+        Interest(name: "Games", symbol: "gamecontroller.fill", terms: ["game", "arcade", "emulator", "retro", "minecraft"]),
+        Interest(name: "Entertainment", symbol: "play.rectangle.fill", terms: ["video", "movie", "stream", "music", "player", "youtube"]),
+        Interest(name: "Social", symbol: "bubble.left.and.bubble.right.fill", terms: ["social", "chat", "messenger", "instagram", "telegram"]),
+        Interest(name: "Utilities", symbol: "wrench.and.screwdriver.fill", terms: ["utility", "tools", "network", "vpn", "file manager"]),
+        Interest(name: "Developer", symbol: "chevron.left.forwardslash.chevron.right", terms: ["developer", "terminal", "code editor", "github", "debug"])
+    ]
+
+    private func interestMatches(_ interest: Interest) -> [Entry] {
+        var seen = Set<String>()
+        return Array(matching.filter { entry in
+            let name = entry.app.currentName.lowercased()
+            let description = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
+            let matched = interest.terms.contains { name.contains($0) || description.contains($0) }
+            let key = (entry.app.id ?? entry.id).lowercased()
+            return matched && seen.insert(key).inserted
+        }.prefix(12))
+    }
+
     var body: some View {
         NBNavigationView("Discover") {
             ScrollView {
@@ -209,6 +236,33 @@ private struct ZagDiscoverPage: View {
                                         }
                                     }
                                     .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Explore by Interest").font(.title2.bold())
+                            Text("Collections based on app names and descriptions")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                LazyHStack(spacing: 10) {
+                                    ForEach(interests, id: \.name) { interest in
+                                        let matches = interestMatches(interest)
+                                        if !matches.isEmpty {
+                                            Button {
+                                                searchText = interest.terms.first ?? ""
+                                            } label: {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: interest.symbol)
+                                                        .foregroundStyle(.tint)
+                                                    Text(interest.name).font(.subheadline.weight(.semibold))
+                                                }
+                                                .padding(.horizontal, 15)
+                                                .padding(.vertical, 13)
+                                                .background(.quaternary.opacity(0.4), in: Capsule())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
                                 }
                             }
                         }
