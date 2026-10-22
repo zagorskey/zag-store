@@ -512,11 +512,11 @@ struct ZagAccountPopup: View {
                     NavigationLink(value: AccountDestination.signing) {
                         Text("Signing")
                     }
-                    NavigationLink(value: AccountDestination.notifications) {
-                        Text("Notifications")
-                    }
                     NavigationLink(value: AccountDestination.devices) {
                         Text("Devices")
+                    }
+                    NavigationLink(value: AccountDestination.notifications) {
+                        Text("Notifications")
                     }
                 }
                 Section {
