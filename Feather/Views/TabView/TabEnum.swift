@@ -781,43 +781,9 @@ private struct ZagActivityPage: View {
                     .padding(17)
                     .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 22))
 
-                    if !updateTransactions.activityHistory.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("History").font(.title2.bold())
-                            LazyVStack(spacing: 0) {
-                                ForEach(updateTransactions.activityHistory) { record in
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Image(systemName: record.status == "Failed" ? "exclamationmark.circle" : "checkmark.circle")
-                                            .foregroundStyle(record.status == "Failed" ? Color.red : Color.accentColor)
-                                            .frame(width: 28)
-                                        VStack(alignment: .leading, spacing: 5) {
-                                            Text(record.status).font(.subheadline.weight(.semibold))
-                                            Text(record.updateID)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(2)
-                                            if let detail = record.detail {
-                                                Text(detail)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        Spacer(minLength: 0)
-                                        Text(record.timestamp, style: .relative)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(14)
-                                    Divider().padding(.leading, 54)
-                                }
-                            }
-                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
-                        }
-                    }
-
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Update Operations").font(.title2.bold())
+                            Text("Live Operations").font(.title2.bold())
                             Spacer()
                             if !updateTransactions.stages.isEmpty {
                                 Text("\(updateTransactions.stages.count)")
@@ -861,20 +827,63 @@ private struct ZagActivityPage: View {
                         } else {
                         VStack(spacing: 12) {
                             Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 30, weight: .light))
+                                .font(.system(size: 25, weight: .light))
                                 .foregroundStyle(.secondary)
-                            Text("No active update operations").font(.headline)
-                            Text("Download, import, signing and installation stages will appear here while an app update is being prepared. Completed operations are not yet stored as history.")
+                            Text("All caught up").font(.subheadline.weight(.semibold))
+                            Text("New update operations will appear here. Completed and failed updates are saved in History.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 24)
-                        .padding(.vertical, 35)
+                        .padding(.vertical, 22)
                         .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 22))
                         }
                     }
+                    if !updateTransactions.activityHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("History").font(.title2.bold())
+                                Spacer()
+                                Text("\(updateTransactions.activityHistory.count) events")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            LazyVStack(spacing: 0) {
+                                ForEach(updateTransactions.activityHistory) { record in
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Image(systemName: record.status == "Failed" ? "exclamationmark.triangle.fill" : (record.status == "Installed" ? "checkmark.circle.fill" : "arrow.down.circle"))
+                                            .font(.system(size: 18, weight: .medium))
+                                            .foregroundStyle(record.status == "Failed" ? Color.red : Color.accentColor)
+                                            .frame(width: 36, height: 36)
+                                            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(record.status).font(.subheadline.weight(.semibold))
+                                            Text(record.updateID)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                            if let detail = record.detail {
+                                                Text(detail)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        Spacer(minLength: 0)
+                                        Text(activityDateLabel(record.timestamp))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(14)
+                                    Divider().padding(.leading, 62)
+                                }
+                            }
+                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 22))
+                        }
+                    }
+
+
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -890,6 +899,14 @@ private struct ZagActivityPage: View {
                 }
             }
         }
+    }
+
+    private func activityDateLabel(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDateInToday(date) { return "Today, " + time }
+        if calendar.isDateInYesterday(date) { return "Yesterday, " + time }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 
     private func operationIsFailure(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
