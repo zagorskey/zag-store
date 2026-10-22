@@ -891,6 +891,56 @@ private struct ZagGamesPage: View {
                     .frame(height: searchFieldFocused ? 0 : nil)
                     .clipped()
 
+                    if !searchFieldFocused && selectedCategory == "Games" && !indexedGames.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Featured")
+                                    .font(.title3.weight(.bold))
+                                Spacer()
+                                Text("From your repositories")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                LazyHStack(spacing: 12) {
+                                    ForEach(Array(indexedGames.prefix(8)), id: \.id) { entry in
+                                        Button { selectedApp = entry } label: {
+                                            VStack(alignment: .leading, spacing: 12) {
+                                                HStack(alignment: .center, spacing: 12) {
+                                                    ZagRepositoryAppIconView(app: entry.app, size: 76)
+                                                    Spacer(minLength: 0)
+                                                    Image(systemName: "arrow.up.right")
+                                                        .font(.caption.weight(.semibold))
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Spacer(minLength: 0)
+                                                Text(entry.app.currentName)
+                                                    .font(.headline)
+                                                    .foregroundStyle(.primary)
+                                                    .lineLimit(2)
+                                                Text(entry.source.name ?? "Repository")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                            .padding(16)
+                                            .frame(width: 200, height: 172, alignment: .leading)
+                                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            .contentMargins(.trailing, 18)
+                        }
+                    }
+
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Emulators", count: emulators.count)
