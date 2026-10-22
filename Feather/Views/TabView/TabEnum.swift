@@ -726,9 +726,19 @@ private struct ZagActivityPage: View {
     // The transaction manager records milestones separately. Present one
     // outcome per update ID while preserving all underlying history records.
     private var consolidatedHistory: [ZagUpdateTransactionManager.ActivityRecord] {
-        var seen = Set<String>()
+        // Signing uses a unique operation ID. Update milestones share an
+        // identifier, so collapse only adjacent milestones in a short window.
+        // This keeps separate updates of the same app visible in History.
+        var latestByIdentifier: [String: Date] = [:]
         return updateTransactions.activityHistory.filter { record in
-            seen.insert(record.updateID.lowercased()).inserted
+            if record.status == "Signed" { return true }
+            let key = record.updateID.lowercased()
+            if let latest = latestByIdentifier[key],
+               latest.timeIntervalSince(record.timestamp) < 30 * 60 {
+                return false
+            }
+            latestByIdentifier[key] = record.timestamp
+            return true
         }
     }
 
@@ -746,7 +756,10 @@ private struct ZagActivityPage: View {
 
     private func milestones(for record: ZagUpdateTransactionManager.ActivityRecord) -> [ZagUpdateTransactionManager.ActivityRecord] {
         updateTransactions.activityHistory
-            .filter { $0.updateID.caseInsensitiveCompare(record.updateID) == .orderedSame }
+            .filter {
+                $0.updateID.caseInsensitiveCompare(record.updateID) == .orderedSame
+                && abs($0.timestamp.timeIntervalSince(record.timestamp)) < 30 * 60
+            }
             .sorted { $0.timestamp < $1.timestamp }
     }
 
@@ -832,7 +845,7 @@ private struct ZagActivityPage: View {
                             HStack {
                                 Text("History").font(.title2.bold())
                                 Spacer()
-                                Text("\(consolidatedHistory.count) updates")
+                                Text("\(consolidatedHistory.count) operations")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
@@ -927,7 +940,7 @@ private struct ZagActivityPage: View {
                             }
                             .overlay {
                                 if filteredHistory.isEmpty {
-                                    Text(historySearchText.isEmpty ? "No \(historyFilter.lowercased()) updates" : "No matching activity")
+                                    Text(historySearchText.isEmpty ? "No \(historyFilter.lowercased()) operations" : "No matching activity")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity)
