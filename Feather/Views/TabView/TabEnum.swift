@@ -717,6 +717,7 @@ private struct ZagActivityPage: View {
     @State private var historyFilter = "All"
     @State private var selectedHistoryRecord: ZagUpdateTransactionManager.ActivityRecord?
     @State private var showRepositoryDetails = false
+    @State private var historySearchText = ""
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -732,7 +733,15 @@ private struct ZagActivityPage: View {
     }
 
     private var filteredHistory: [ZagUpdateTransactionManager.ActivityRecord] {
-        consolidatedHistory.filter { historyFilter == "All" || $0.status == historyFilter }
+        let statusFiltered = consolidatedHistory.filter { historyFilter == "All" || $0.status == historyFilter }
+        let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return statusFiltered }
+        return statusFiltered.filter { record in
+            (record.appName?.localizedCaseInsensitiveContains(query) ?? false)
+            || record.updateID.localizedCaseInsensitiveContains(query)
+            || (record.detail?.localizedCaseInsensitiveContains(query) ?? false)
+            || record.status.localizedCaseInsensitiveContains(query)
+        }
     }
 
     private func milestones(for record: ZagUpdateTransactionManager.ActivityRecord) -> [ZagUpdateTransactionManager.ActivityRecord] {
@@ -835,6 +844,25 @@ private struct ZagActivityPage: View {
                                 Text("Failed").tag("Failed")
                             }
                             .pickerStyle(.segmented)
+                            HStack(spacing: 10) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                TextField("Search activity", text: $historySearchText)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                if !historySearchText.isEmpty {
+                                    Button {
+                                        historySearchText = ""
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 13)
+                            .frame(height: 42)
+                            .background(Color.secondary.opacity(0.085), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             LazyVStack(spacing: 0) {
                                 ForEach(filteredHistory) { record in
                                     Button {
@@ -899,7 +927,7 @@ private struct ZagActivityPage: View {
                             }
                             .overlay {
                                 if filteredHistory.isEmpty {
-                                    Text("No \(historyFilter.lowercased()) updates")
+                                    Text(historySearchText.isEmpty ? "No \(historyFilter.lowercased()) updates" : "No matching activity")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity)
