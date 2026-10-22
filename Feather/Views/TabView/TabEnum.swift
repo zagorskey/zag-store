@@ -906,8 +906,8 @@ private struct ZagGamesPage: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(emulators, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
-                                        HStack(spacing: 14) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 60)
+                                        HStack(spacing: 13) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
                                                     .font(.system(size: 16, weight: .semibold))
@@ -931,7 +931,7 @@ private struct ZagGamesPage: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    Divider().padding(.leading, 88)
+                                    Divider().padding(.leading, 78)
                                 }
                             }
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -960,8 +960,8 @@ private struct ZagGamesPage: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(games, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
-                                        HStack(spacing: 14) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 60)
+                                        HStack(spacing: 13) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
                                                     .font(.system(size: 16, weight: .semibold))
@@ -983,7 +983,7 @@ private struct ZagGamesPage: View {
                                     }
                                     .buttonStyle(.plain)
                                     if entry.id != games.last?.id {
-                                        Divider().padding(.leading, 88)
+                                        Divider().padding(.leading, 78)
                                     }
                                 }
                             }
