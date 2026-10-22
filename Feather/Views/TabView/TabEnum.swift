@@ -830,6 +830,7 @@ private struct ZagActivityPage: View {
                             Picker("History Filter", selection: $historyFilter) {
                                 Text("All").tag("All")
                                 Text("Installed").tag("Installed")
+                                Text("Signed").tag("Signed")
                                 Text("Prepared").tag("Ready to Install")
                                 Text("Failed").tag("Failed")
                             }
@@ -972,7 +973,7 @@ private struct ZagActivityPage: View {
                         Section("Operation") {
                             LabeledContent("Status", value: record.status)
                             LabeledContent("App", value: record.appName ?? record.updateID)
-                            LabeledContent("Identifier", value: record.updateID)
+                            LabeledContent("Identifier", value: record.status == "Signed" ? (record.detail ?? record.updateID) : record.updateID)
                             LabeledContent("Date", value: record.timestamp.formatted(date: .abbreviated, time: .shortened))
                         }
                         Section("Timeline") {
