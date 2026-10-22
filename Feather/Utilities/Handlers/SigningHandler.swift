@@ -174,11 +174,36 @@ final class SigningHandler: NSObject {
         // Persist the signing milestone without retaining the app binary.
         // The operation UUID distinguishes separate signing attempts.
         let signedBundle = Bundle(url: appUrl)
+        // Signing can originate from a local IPA with no repository URL.
+        // Snapshot its icon into Application Support so Activity survives
+        // the temporary signing directory being removed.
+        var activityIcon = appIcon
+        if activityIcon == nil, let iconName = signedBundle?.iconFileName {
+            let iconPath = appUrl.appendingPathComponent(iconName)
+            activityIcon = UIImage(contentsOfFile: iconPath.path)
+            if activityIcon == nil && !iconName.lowercased().hasSuffix(".png") {
+                activityIcon = UIImage(contentsOfFile: iconPath.path + ".png")
+            }
+        }
+        var activityIconURL: String?
+        if let imageData = activityIcon?.pngData(),
+           let support = _fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let directory = support.appendingPathComponent("ZagActivityIcons", isDirectory: true)
+            do {
+                try _fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+                let destination = directory.appendingPathComponent(_uuid + ".png")
+                try imageData.write(to: destination, options: .atomic)
+                activityIconURL = destination.absoluteString
+            } catch {
+                Logger.signing.error("Unable to save Activity icon: \(error.localizedDescription)")
+            }
+        }
         await ZagUpdateTransactionManager.shared.recordExternalOperation(
             id: _uuid,
             status: "Signed",
             appName: signedBundle?.name,
-            bundleID: signedBundle?.bundleIdentifier
+            bundleID: signedBundle?.bundleIdentifier,
+            iconURL: activityIconURL
         )
 	}
 	
