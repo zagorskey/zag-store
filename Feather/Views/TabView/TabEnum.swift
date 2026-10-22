@@ -907,7 +907,7 @@ private struct ZagGamesPage: View {
                                 ForEach(emulators, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
                                         HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                            ZagRepositoryAppIconView(app: entry.app, size: 62)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
                                                     .font(.system(size: 16, weight: .semibold))
@@ -931,7 +931,7 @@ private struct ZagGamesPage: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    Divider().padding(.leading, 78)
+                                    Divider().padding(.leading, 86)
                                 }
                             }
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -961,7 +961,7 @@ private struct ZagGamesPage: View {
                                 ForEach(games, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
                                         HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                            ZagRepositoryAppIconView(app: entry.app, size: 62)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
                                                     .font(.system(size: 16, weight: .semibold))
@@ -983,7 +983,7 @@ private struct ZagGamesPage: View {
                                     }
                                     .buttonStyle(.plain)
                                     if entry.id != games.last?.id {
-                                        Divider().padding(.leading, 78)
+                                        Divider().padding(.leading, 86)
                                     }
                                 }
                             }
