@@ -171,6 +171,15 @@ final class SigningHandler: NSObject {
 				continuation.resume()
 			}
 		}
+        // Persist the signing milestone without retaining the app binary.
+        // The operation UUID distinguishes separate signing attempts.
+        let signedBundle = Bundle(url: appUrl)
+        await ZagUpdateTransactionManager.shared.recordExternalOperation(
+            id: _uuid,
+            status: "Signed",
+            appName: signedBundle?.name,
+            bundleID: signedBundle?.bundleIdentifier
+        )
 	}
 	
 	private func _directory() async throws -> URL {
