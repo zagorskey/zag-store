@@ -179,14 +179,40 @@ private struct ZagDiscoverPage: View {
         interestCounts = counts
         let sorted = filtered.filter { $0.app.currentDate?.date != nil }
             .sorted { ($0.app.currentDate?.date ?? .distantPast) > ($1.app.currentDate?.date ?? .distantPast) }
-        displayedRecent = Array(sorted.prefix(15))
-        var seen = Set<String>()
-        displayedSpotlight = Array(sorted.filter { entry in
+        // Editorial-style variety: prefer distinct repositories in the hero,
+        // then fill remaining slots with unique apps. No invented rankings.
+        var heroCandidates: [Entry] = []
+        var seenApps = Set<String>()
+        for entry in sorted {
             guard let id = entry.app.id, !id.isEmpty,
                   let description = entry.app.currentDescription ?? entry.app.localizedDescription,
-                  description.count > 40 else { return false }
-            return seen.insert(id.lowercased()).inserted
-        }.prefix(5))
+                  description.count > 40,
+                  seenApps.insert(id.lowercased()).inserted else { continue }
+            heroCandidates.append(entry)
+            if heroCandidates.count >= 80 { break }
+        }
+        var selectedHeroes: [Entry] = []
+        var seenSources = Set<String>()
+        for entry in heroCandidates {
+            let sourceID = entry.source.id ?? entry.source.name ?? ""
+            if seenSources.insert(sourceID).inserted {
+                selectedHeroes.append(entry)
+                if selectedHeroes.count == 5 { break }
+            }
+        }
+        if selectedHeroes.count < 5 {
+            let chosen = Set(selectedHeroes.map { ($0.app.id ?? $0.id).lowercased() })
+            for entry in heroCandidates where !chosen.contains((entry.app.id ?? entry.id).lowercased()) {
+                selectedHeroes.append(entry)
+                if selectedHeroes.count == 5 { break }
+            }
+        }
+        displayedSpotlight = selectedHeroes
+        let heroIDs = Set(selectedHeroes.compactMap { $0.app.id?.lowercased() })
+        displayedRecent = Array(sorted.filter {
+            guard let id = $0.app.id else { return true }
+            return !heroIDs.contains(id.lowercased())
+        }.prefix(15))
         var grouped: [String: [Entry]] = [:]
         for entry in filtered {
             guard let id = entry.app.id, !id.isEmpty else { continue }
@@ -271,10 +297,13 @@ private struct ZagDiscoverPage: View {
                                                     Image(systemName: interest.symbol)
                                                         .foregroundStyle(.tint)
                                                     Text(interest.name).font(.subheadline.weight(.semibold))
+                                                    Text("\(interestCounts[interest.name] ?? 0)")
+                                                        .font(.caption.monospacedDigit())
+                                                        .foregroundStyle(.secondary)
                                                 }
                                                 .padding(.horizontal, 15)
                                                 .padding(.vertical, 13)
-                                                .background(.quaternary.opacity(0.4), in: Capsule())
+                                                .background(selectedInterest == interest.name ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.12), in: Capsule())
                                             }
                                             .buttonStyle(.plain)
                                         }
