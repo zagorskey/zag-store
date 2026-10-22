@@ -194,13 +194,14 @@ extension ASRepository {
 			private struct ScreenshotAsset: Decodable {
 				let url: URL?
 
-				private enum CodingKeys: String, CodingKey { case url }
+				private enum CodingKeys: String, CodingKey { case url, imageURL }
 
 				init(from decoder: any Decoder) throws {
 					if let direct = try? decoder.singleValueContainer().decode(URL.self) {
 						url = direct
 					} else if let object = try? decoder.container(keyedBy: CodingKeys.self) {
-						url = try? object.decode(URL.self, forKey: .url)
+						url = (try? object.decode(URL.self, forKey: .imageURL))
+							?? (try? object.decode(URL.self, forKey: .url))
 					} else {
 						url = nil
 					}
@@ -312,8 +313,15 @@ extension ASRepository {
 				forKey: .screenshots
 			)
 
-			self.screenshotURLs =
-				try container.decodeIfPresent([URL].self, forKey: .screenshotURLs)
+			// Accept both conventional arrays and older device-keyed URL maps.
+			if let urls = try? container.decode([URL].self, forKey: .screenshotURLs) {
+				self.screenshotURLs = urls
+			} else if let grouped = try? container.decode([String: [URL]].self, forKey: .screenshotURLs) {
+				let preferred = ["iphone-edgeToEdge", "iphone-standard", "iphone", "ipad"]
+				self.screenshotURLs = preferred.flatMap { grouped[$0] ?? [] }
+			} else {
+				self.screenshotURLs = nil
+			}
 			
 			if
 				let marketplaceID = try container.decodeIfPresent(String.self, forKey: .marketplaceID)?
