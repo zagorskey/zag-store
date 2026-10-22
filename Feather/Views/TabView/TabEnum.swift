@@ -725,51 +725,63 @@ private struct ZagGamesPage: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
     ) private var sources: FetchedResults<AltSource>
 
-    // Verified emulator name matches, not guessed rankings or console support.
-    private let emulatorNames = ["delta", "retroarch", "ppsspp", "provenance", "flycast", "dolphinios", "folium", "ignited", "utm", "gamma", "sameboy", "mame", "melonds"]
+    // Classify by normalized product identity rather than a description keyword
+    // that can describe an emulator as a "video game" application.
+    private let emulatorNames = [
+        "delta", "retroarch", "ppsspp", "provenance", "flycast",
+        "dolphinios", "folium", "ignited", "gamma", "sameboy",
+        "mame", "melonds", "inds", "ad boy", "play!"
+    ]
+
+    private func normalizedName(_ name: String) -> String {
+        name.lowercased()
+            .folding(options: [.diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func isEmulator(_ name: String) -> Bool {
+        let normalized = normalizedName(name)
+        return emulatorNames.contains { normalized.hasPrefix(normalizedName($0)) }
+    }
+
+    private func isGameDescription(_ description: String) -> Bool {
+        let description = description.lowercased()
+        return ["mobile game", "video game", "arcade game", "puzzle game",
+                "role-playing game", "racing game", "strategy game"].contains {
+            description.contains($0)
+        }
+    }
+
+    private var catalogue: [SourceAppsView.SourceAppRoute] {
+        sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
+            guard let repository = sourcesModel.sources[source] else { return [] }
+            return repository.apps.map {
+                SourceAppsView.SourceAppRoute(source: repository, app: $0)
+            }
+        }
+    }
 
     private var emulators: [SourceAppsView.SourceAppRoute] {
         var seen = Set<String>()
-        return sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
-            guard let repository = sourcesModel.sources[source] else { return [] }
-            return repository.apps.filter { app in
-                let name = app.currentName.lowercased()
-                return emulatorNames.contains { name == $0 || name.hasPrefix($0 + " ") || name.hasPrefix($0 + "-") }
-            }.map { SourceAppsView.SourceAppRoute(source: repository, app: $0) }
-        }
-        .filter { seen.insert($0.app.currentName.lowercased()).inserted }
-        .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
-        .prefix(60)
-        .map { $0 }
+        return catalogue
+            .filter { isEmulator($0.app.currentName) }
+            .filter { seen.insert(normalizedName($0.app.currentName)).inserted }
+            .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
+            .prefix(60)
+            .map { $0 }
     }
 
-    // Only classify an entry as a game when its metadata explicitly says so.
-    // Avoid guessing based on generic words in app names.
     private var games: [SourceAppsView.SourceAppRoute] {
         var seen = Set<String>()
-        return sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
-            guard let repository = sourcesModel.sources[source] else { return [] }
-            return repository.apps.prefix(1500).filter { app in
-                let description = (app.currentDescription ?? app.localizedDescription ?? "").lowercased()
-                let name = app.currentName.lowercased()
-                let isEmulator = emulatorNames.contains {
-                    name == $0 || name.hasPrefix($0 + " ") || name.hasPrefix($0 + "-")
-                }
-                return !isEmulator && (
-                    description.contains("mobile game")
-                    || description.contains("video game")
-                    || description.contains("arcade game")
-                    || description.contains("puzzle game")
-                    || description.contains("role-playing game")
-                    || description.contains("racing game")
-                    || description.contains("strategy game")
-                )
-            }.map { SourceAppsView.SourceAppRoute(source: repository, app: $0) }
-        }
-        .filter { seen.insert($0.app.currentName.lowercased()).inserted }
-        .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
-        .prefix(60)
-        .map { $0 }
+        return catalogue
+            .filter { entry in
+                !isEmulator(entry.app.currentName)
+                && isGameDescription(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
+            }
+            .filter { seen.insert(normalizedName($0.app.currentName)).inserted }
+            .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
+            .prefix(60)
+            .map { $0 }
     }
 
     var body: some View {
@@ -872,7 +884,7 @@ private struct ZagGamesPage: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("Titles identified by game-specific repository descriptions")
+                        Text("Titles identified from repository metadata")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if games.isEmpty {
