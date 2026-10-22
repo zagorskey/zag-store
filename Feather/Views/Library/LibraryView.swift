@@ -3206,21 +3206,28 @@ final class ZagUpdateTransactionManager: ObservableObject {
         let detail: String?
         let timestamp: Date
         var appName: String? = nil
+        var iconURL: String? = nil
+        var sourceIconURL: String? = nil
     }
 
     @Published private(set) var activityHistory: [ActivityRecord] = []
 
     private let historyKey = "zagStore.updateActivityHistory.v1"
     private var updateNames: [String: String] = [:]
+    private var updateIconURLs: [String: String] = [:]
+    private var updateSourceIconURLs: [String: String] = [:]
 
     private func rememberName(_ update: UpdateManager.AvailableUpdate) {
         updateNames[update.id] = update.app.currentName
+        updateIconURLs[update.id] = update.app.iconURL?.absoluteString
+        updateSourceIconURLs[update.id] = update.source.currentIconURL?.absoluteString
     }
 
 
     private func recordActivity(updateID: String, status: String, detail: String? = nil, appName: String? = nil) {
         let record = ActivityRecord(id: UUID(), updateID: updateID, status: status,
-                                    detail: detail, timestamp: Date(), appName: appName)
+                                    detail: detail, timestamp: Date(), appName: appName,
+                                    iconURL: updateIconURLs[updateID], sourceIconURL: updateSourceIconURLs[updateID])
         activityHistory.insert(record, at: 0)
         if activityHistory.count > 100 {
             activityHistory = Array(activityHistory.prefix(100))
