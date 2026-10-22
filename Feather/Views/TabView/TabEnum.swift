@@ -870,7 +870,7 @@ private struct ZagGamesPage: View {
     var body: some View {
         NBNavigationView("Games") {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 22) {
                     Picker("Gaming Category", selection: $selectedCategory) {
                         Text("Games").tag("Games")
                         Text("Emulators").tag("Emulators")
@@ -883,7 +883,7 @@ private struct ZagGamesPage: View {
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Emulators", count: emulators.count)
-                        Text("Known emulators found in your loaded repositories")
+                        Text("Explore platforms from your repositories")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -906,11 +906,12 @@ private struct ZagGamesPage: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(emulators, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
-                                        HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                        HStack(spacing: 14) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 60)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
-                                                    .font(.subheadline.weight(.semibold))
+                                                    .font(.system(size: 16, weight: .semibold))
+                                                    .lineLimit(1)
                                                     .foregroundStyle(.primary)
                                                 Text(emulatorPlatform(entry.app.currentName))
                                                     .font(.caption)
@@ -921,16 +922,23 @@ private struct ZagGamesPage: View {
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right")
-                                                .font(.caption.weight(.semibold))
+                                                .font(.system(size: 12, weight: .semibold))
                                                 .foregroundStyle(.tertiary)
+                                                .padding(.trailing, 3)
                                         }
-                                        .padding(12)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 13)
+                                        .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    Divider().padding(.leading, 78)
+                                    Divider().padding(.leading, 88)
                                 }
                             }
-                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
+                            }
                         }
                     }
 
@@ -938,7 +946,7 @@ private struct ZagGamesPage: View {
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Games", count: games.count)
-                        Text("Identified using game-specific repository descriptions; incomplete metadata may omit titles")
+                        Text("Discover titles from your repositories")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if games.isEmpty {
@@ -952,11 +960,12 @@ private struct ZagGamesPage: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(games, id: \.id) { entry in
                                     Button { selectedApp = entry } label: {
-                                        HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                        HStack(spacing: 14) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 60)
                                             VStack(alignment: .leading, spacing: 4) {
                                                 Text(entry.app.currentName)
-                                                    .font(.subheadline.weight(.semibold))
+                                                    .font(.system(size: 16, weight: .semibold))
+                                                    .lineLimit(1)
                                                     .foregroundStyle(.primary)
                                                 Text(entry.source.name ?? "Repository")
                                                     .font(.caption)
@@ -964,18 +973,25 @@ private struct ZagGamesPage: View {
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right")
-                                                .font(.caption.weight(.semibold))
+                                                .font(.system(size: 12, weight: .semibold))
                                                 .foregroundStyle(.tertiary)
+                                                .padding(.trailing, 3)
                                         }
-                                        .padding(12)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 13)
+                                        .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     if entry.id != games.last?.id {
-                                        Divider().padding(.leading, 78)
+                                        Divider().padding(.leading, 88)
                                     }
                                 }
                             }
-                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
+                            }
                         }
                     }
                     }
