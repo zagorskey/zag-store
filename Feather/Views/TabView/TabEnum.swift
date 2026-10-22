@@ -117,6 +117,8 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
+    @State private var searchFieldFocused = false
+    @State private var dictationAvailable = false
     @State private var selectedInterest: String?
     @State private var selectedApp: Entry?
     @State private var indexedEntries: [Entry] = []
@@ -133,6 +135,31 @@ private struct ZagDiscoverPage: View {
     ) private var sources: FetchedResults<AltSource>
 
     private typealias Entry = SourceAppsView.SourceAppRoute
+
+    private func probeSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            dictationAvailable = false
+            return
+        }
+        dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func startDictationFromSearchMic() {
+        searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+                  cls.responds(to: NSSelectorFromString("sharedInstance")),
+                  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+            else { return }
+            let preheat = NSSelectorFromString("preheatIfNecessary")
+            if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+            let start = NSSelectorFromString("startDictation")
+            if controller.responds(to: start) { _ = controller.perform(start) }
+        }
+    }
 
     private var entries: [Entry] { indexedEntries }
     private var recent: [Entry] { displayedRecent }
@@ -407,7 +434,18 @@ private struct ZagDiscoverPage: View {
             }
             .onChange(of: viewModel.sources.count) { _ in indexRevision += 1 }
             .onChange(of: sources.count) { _ in indexRevision += 1 }
-            .searchable(text: $searchText, placement: .platform(), prompt: "Search Discover")
+            .searchable(text: $searchText, placement: .platform(), prompt: Text("Apps, Games and More"))
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Apps, Games and More",
+                    activePrompt: "Apps, Games and More"
+                )
+                .frame(width: 0, height: 0)
+            }
+            .onAppear(perform: probeSystemDictation)
             .zagWallpaperSurface()
             .toolbar {
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
