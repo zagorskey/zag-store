@@ -721,8 +721,23 @@ private struct ZagActivityPage: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
     ) private var sources: FetchedResults<AltSource>
 
+    // The transaction manager records milestones separately. Present one
+    // outcome per update ID while preserving all underlying history records.
+    private var consolidatedHistory: [ZagUpdateTransactionManager.ActivityRecord] {
+        var seen = Set<String>()
+        return updateTransactions.activityHistory.filter { record in
+            seen.insert(record.updateID.lowercased()).inserted
+        }
+    }
+
     private var filteredHistory: [ZagUpdateTransactionManager.ActivityRecord] {
-        updateTransactions.activityHistory.filter { historyFilter == "All" || $0.status == historyFilter }
+        consolidatedHistory.filter { historyFilter == "All" || $0.status == historyFilter }
+    }
+
+    private func milestones(for record: ZagUpdateTransactionManager.ActivityRecord) -> [ZagUpdateTransactionManager.ActivityRecord] {
+        updateTransactions.activityHistory
+            .filter { $0.updateID.caseInsensitiveCompare(record.updateID) == .orderedSame }
+            .sorted { $0.timestamp < $1.timestamp }
     }
 
     private var loadedRepositories: Int {
@@ -807,7 +822,7 @@ private struct ZagActivityPage: View {
                             HStack {
                                 Text("History").font(.title2.bold())
                                 Spacer()
-                                Text("\(updateTransactions.activityHistory.count) events")
+                                Text("\(consolidatedHistory.count) updates")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
@@ -861,7 +876,7 @@ private struct ZagActivityPage: View {
                             }
                             .overlay {
                                 if filteredHistory.isEmpty {
-                                    Text("No \(historyFilter.lowercased()) events")
+                                    Text("No \(historyFilter.lowercased()) updates")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity)
@@ -938,9 +953,20 @@ private struct ZagActivityPage: View {
                             LabeledContent("Identifier", value: record.updateID)
                             LabeledContent("Date", value: record.timestamp.formatted(date: .abbreviated, time: .shortened))
                         }
-                        if let detail = record.detail, !detail.isEmpty {
-                            Section("Details") {
-                                Text(detail).textSelection(.enabled)
+                        Section("Timeline") {
+                            ForEach(milestones(for: record)) { milestone in
+                                HStack {
+                                    Text(milestone.status)
+                                    Spacer()
+                                    Text(milestone.timestamp.formatted(date: .omitted, time: .shortened))
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let detail = milestone.detail, !detail.isEmpty {
+                                    Text(detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                }
                             }
                         }
                     }
