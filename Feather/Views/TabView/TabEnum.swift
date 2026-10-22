@@ -405,30 +405,55 @@ private struct ZagDiscoverPage: View {
     }
 
     private func spotlightCard(_ entry: Entry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                ZagRepositoryAppIconView(app: entry.app, size: 74)
-                Spacer()
-                Image(systemName: "arrow.up.right").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                ZagRepositoryAppIconView(app: entry.app, size: 82)
+                    .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.12), in: Circle())
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 18)
+            Text(entry.source.name ?? "REPOSITORY")
+                .font(.caption2.weight(.bold))
+                .tracking(1.2)
+                .foregroundStyle(.tint)
+                .lineLimit(1)
+                .padding(.bottom, 7)
             Text(entry.app.currentName)
-                .font(.title2.bold()).lineLimit(1)
-            Text(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
-                .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-            Text(entry.source.name ?? "Repository")
-                .font(.caption.weight(.semibold)).foregroundStyle(.tint).lineLimit(1)
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .padding(.bottom, 7)
+            Text(entry.app.currentDescription ?? entry.app.localizedDescription ?? "Explore this app")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
         }
         .padding(20)
-        .frame(width: 285, height: 245, alignment: .leading)
+        .frame(width: 292, height: 264, alignment: .leading)
         .background(
             LinearGradient(
-                colors: [Color.accentColor.opacity(0.20), Color.accentColor.opacity(0.045)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
+                colors: [
+                    Color.accentColor.opacity(0.22),
+                    Color.accentColor.opacity(0.08),
+                    Color.secondary.opacity(0.035)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: 24)
+            in: RoundedRectangle(cornerRadius: 26, style: .continuous)
         )
-        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.accentColor.opacity(0.16)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.19), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.app.currentName), from \(entry.source.name ?? "repository")")
     }
 
     @ViewBuilder
