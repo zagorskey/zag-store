@@ -842,15 +842,19 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // Stable, varied selection from the already cached catalogue. No extra
-    // repository traversal, network requests, or invented popularity rankings.
+    // Prioritize genuine repository screenshots, then vary source and genre.
+    // This only processes the existing 60-item cache, never the full catalogue.
     private var featuredGames: [SourceAppsView.SourceAppRoute] {
+        let artwork = indexedGames.filter { !$0.app.currentScreenshotURLs.isEmpty }
+        let withoutArtwork = indexedGames.filter { $0.app.currentScreenshotURLs.isEmpty }
+        let candidates = artwork + withoutArtwork
+
         var selected: [SourceAppsView.SourceAppRoute] = []
         var usedGenres = Set<String>()
         var usedSources = Set<String>()
         var usedIDs = Set<String>()
 
-        for entry in indexedGames {
+        for entry in candidates {
             let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "")
             let source = entry.source.name ?? "Repository"
             guard let genre, !usedGenres.contains(genre), !usedSources.contains(source) else { continue }
@@ -861,7 +865,7 @@ private struct ZagGamesPage: View {
             if selected.count == 8 { return selected }
         }
 
-        for entry in indexedGames where selected.count < 8 {
+        for entry in candidates where selected.count < 8 {
             let source = entry.source.name ?? "Repository"
             guard !usedIDs.contains(entry.id), !usedSources.contains(source) else { continue }
             selected.append(entry)
@@ -869,11 +873,78 @@ private struct ZagGamesPage: View {
             usedSources.insert(source)
         }
 
-        for entry in indexedGames where selected.count < 8 {
+        for entry in candidates where selected.count < 8 {
             guard usedIDs.insert(entry.id).inserted else { continue }
             selected.append(entry)
         }
         return selected
+    }
+
+    // No screenshots? Present the app's authentic icon as editorial-style art.
+    // The same fallback is used if a remote preview has not loaded or fails.
+    private func featuredArtworkFallback(for entry: SourceAppsView.SourceAppRoute) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 205, height: 205)
+                .blur(radius: 12)
+                .offset(x: 112, y: -65)
+            Circle()
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1.5)
+                .frame(width: 176, height: 176)
+                .offset(x: -110, y: 74)
+            ZagRepositoryAppIconView(app: entry.app, size: 108)
+                .shadow(color: .black.opacity(0.30), radius: 18, x: 0, y: 10)
+        }
+        .frame(width: 280, height: 176)
+    }
+
+    private func featuredArtwork(for entry: SourceAppsView.SourceAppRoute) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.accentColor.opacity(0.75),
+                    Color.indigo.opacity(0.70),
+                    Color.black.opacity(0.70)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            if let screenshot = entry.app.currentScreenshotURLs.first {
+                LazyImage(url: screenshot) { state in
+                    if let image = state.image {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 280, height: 176)
+                            .clipped()
+                    } else {
+                        featuredArtworkFallback(for: entry)
+                    }
+                }
+            } else {
+                featuredArtworkFallback(for: entry)
+            }
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.34)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+        }
+        .frame(width: 280, height: 176)
+        .clipped()
+        .overlay(alignment: .topLeading) {
+            Text(entry.app.currentScreenshotURLs.isEmpty ? "GAME SPOTLIGHT" : "GAME PREVIEW")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.9)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.50), in: Capsule())
+                .padding(12)
+        }
     }
 
     private func rebuildIndexIfNeeded() {
@@ -940,35 +1011,38 @@ private struct ZagGamesPage: View {
                                 LazyHStack(spacing: 12) {
                                     ForEach(featuredGames, id: \.id) { entry in
                                         Button { selectedApp = entry } label: {
-                                            VStack(alignment: .leading, spacing: 12) {
-                                                HStack(alignment: .center, spacing: 12) {
-                                                    ZagRepositoryAppIconView(app: entry.app, size: 76)
+                                            VStack(alignment: .leading, spacing: 0) {
+                                                featuredArtwork(for: entry)
+                                                HStack(spacing: 11) {
+                                                    ZagRepositoryAppIconView(app: entry.app, size: 44)
+                                                    VStack(alignment: .leading, spacing: 4) {
+                                                        Text(entry.app.currentName)
+                                                            .font(.subheadline.weight(.bold))
+                                                            .foregroundStyle(.primary)
+                                                            .lineLimit(1)
+                                                        HStack(spacing: 5) {
+                                                            if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
+                                                                Text(genre)
+                                                                    .foregroundStyle(.tint)
+                                                                    .lineLimit(1)
+                                                            }
+                                                            Text(entry.source.name ?? "Repository")
+                                                                .foregroundStyle(.secondary)
+                                                                .lineLimit(1)
+                                                        }
+                                                        .font(.caption2)
+                                                    }
                                                     Spacer(minLength: 0)
                                                     Image(systemName: "arrow.up.right")
                                                         .font(.caption.weight(.semibold))
                                                         .foregroundStyle(.secondary)
                                                 }
-                                                Spacer(minLength: 0)
-                                                Text(entry.app.currentName)
-                                                    .font(.headline)
-                                                    .foregroundStyle(.primary)
-                                                    .lineLimit(2)
-                                                HStack(spacing: 6) {
-                                                    if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
-                                                        Text(genre)
-                                                            .font(.caption2.weight(.semibold))
-                                                            .foregroundStyle(.tint)
-                                                            .lineLimit(1)
-                                                    }
-                                                    Text(entry.source.name ?? "Repository")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                        .lineLimit(1)
-                                                }
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 13)
                                             }
-                                            .padding(16)
-                                            .frame(width: 200, height: 172, alignment: .leading)
+                                            .frame(width: 280)
                                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                                             .overlay {
                                                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                                                     .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
