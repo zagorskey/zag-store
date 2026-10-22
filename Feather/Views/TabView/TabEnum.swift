@@ -92,7 +92,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		case .discover: ZagDiscoverPage()
 		case .activity: ZagActivityPage()
         case .games: ZagGamesPage()
-		case .devices: ZagDevicesPage()
+		case .devices: NavigationStack { ZagDevicesPage() }
 		case .sources: SourcesView()
 		case .library: LibraryView()
 		case .settings: SettingsView()
@@ -1324,8 +1324,7 @@ struct ZagDevicesPage: View {
     }
 
     var body: some View {
-        NBNavigationView("Devices") {
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack(spacing: 18) {
                         Image(systemName: UIDevice.current.userInterfaceIdiom == .pad ? "ipad.gen2" : "iphone.gen3")
@@ -1444,11 +1443,8 @@ struct ZagDevicesPage: View {
             .zagWallpaperSurface()
             .onAppear(perform: refreshInformation)
             .refreshable { refreshInformation() }
-            .toolbar {
-                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
-            }
-        }
+            .navigationTitle("Devices")
+            .navigationBarTitleDisplayMode(.inline)
     }
 
     private func deviceMetric(_ title: String, value: String, symbol: String, caption: String) -> some View {
