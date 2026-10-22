@@ -117,6 +117,10 @@ enum TabEnum: String, CaseIterable, Hashable {
 private struct ZagDiscoverPage: View {
     @StateObject private var viewModel = SourcesViewModel.shared
     @State private var searchText = ""
+    @State private var showFilters = false
+    @State private var showSaved = false
+    @State private var selectedRepository = "All"
+    @AppStorage("ZagDiscover.savedAppIDs") private var savedAppIDs = ""
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
     @State private var selectedInterest: String?
@@ -161,6 +165,26 @@ private struct ZagDiscoverPage: View {
         }
     }
 
+    private var savedKeys: Set<String> {
+        Set(savedAppIDs.split(separator: "\n").map(String.init))
+    }
+
+    private func saveKey(_ entry: Entry) -> String {
+        (entry.app.id ?? entry.id).lowercased()
+    }
+
+    private func toggleSaved(_ entry: Entry) {
+        var keys = savedKeys
+        let key = saveKey(entry)
+        if !keys.insert(key).inserted { keys.remove(key) }
+        savedAppIDs = keys.sorted().joined(separator: "\n")
+    }
+
+    private func surpriseMe() {
+        let pool = displayedRecent.isEmpty ? indexedEntries : displayedRecent
+        if let entry = pool.randomElement() { selectedApp = entry }
+    }
+
     private var entries: [Entry] { indexedEntries }
     private var recent: [Entry] { displayedRecent }
     private var acrossSources: [Entry] { displayedAcross }
@@ -199,6 +223,7 @@ private struct ZagDiscoverPage: View {
             for interest in interests where interest.terms.contains(where: { name.contains($0) || description.contains($0) }) {
                 counts[interest.name, default: 0] += 1
             }
+            guard selectedRepository == "All" || (entry.source.name ?? "Repository") == selectedRepository else { continue }
             guard terms.isEmpty || terms.contains(where: { name.contains($0) || description.contains($0) }) else { continue }
             guard query.isEmpty || name.contains(query) || description.contains(query) || (entry.app.id?.lowercased().contains(query) ?? false) else { continue }
             filtered.append(entry)
@@ -302,6 +327,12 @@ private struct ZagDiscoverPage: View {
                                                 spotlightCard(entry)
                                             }
                                             .buttonStyle(.plain)
+                                            .contextMenu {
+                                                Button(savedKeys.contains(saveKey(entry)) ? "Remove from Saved" : "Save App",
+                                                       systemImage: savedKeys.contains(saveKey(entry)) ? "bookmark.slash" : "bookmark") {
+                                                    toggleSaved(entry)
+                                                }
+                                            }
                                         }
                                     }
                                     .padding(.vertical, 2)
@@ -448,8 +479,90 @@ private struct ZagDiscoverPage: View {
             .onAppear(perform: probeSystemDictation)
             .zagWallpaperSurface()
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button { showFilters = true } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Discover Filters")
+                    Button(action: surpriseMe) {
+                        Image(systemName: "shuffle")
+                    }
+                    .disabled(indexedEntries.isEmpty)
+                    .accessibilityLabel("Surprise Me")
+                }
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showSaved = true } label: {
+                        Image(systemName: "bookmark")
+                    }
+                    .accessibilityLabel("Saved Apps")
+                    ZagProfileToolbarButton()
+                }
+            }
+            .sheet(isPresented: $showFilters) {
+                NavigationStack {
+                    Form {
+                        Picker("Repository", selection: $selectedRepository) {
+                            Text("All Repositories").tag("All")
+                            ForEach(Array(Set(indexedEntries.map { $0.source.name ?? "Repository" })).sorted(), id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                        Button("Clear Filters") {
+                            selectedRepository = "All"
+                            selectedInterest = nil
+                            searchText = ""
+                            updateCollections()
+                        }
+                    }
+                    .navigationTitle("Discover Filters")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showFilters = false; updateCollections() }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showSaved) {
+                NavigationStack {
+                    List {
+                        ForEach(indexedEntries.filter { savedKeys.contains(saveKey($0)) }, id: \.id) { entry in
+                            Button {
+                                showSaved = false
+                                selectedApp = entry
+                            } label: {
+                                HStack(spacing: 12) {
+                                    ZagRepositoryAppIconView(app: entry.app, size: 44)
+                                    VStack(alignment: .leading) {
+                                        Text(entry.app.currentName).font(.headline)
+                                        Text(entry.source.name ?? "Repository")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .contextMenu {
+                                Button("Remove from Saved", systemImage: "bookmark.slash") {
+                                    toggleSaved(entry)
+                                }
+                            }
+                        }
+                    }
+                    .overlay {
+                        if !indexedEntries.contains(where: { savedKeys.contains(saveKey($0)) }) {
+                            Text("No saved apps yet. Long-press an app in Discover to save it.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding()
+                        }
+                    }
+                    .navigationTitle("Saved Apps")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSaved = false }
+                        }
+                    }
+                }
             }
         }
     }
@@ -539,6 +652,12 @@ private struct ZagDiscoverPage: View {
                                     .strokeBorder(Color.secondary.opacity(0.09)))
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(savedKeys.contains(saveKey(entry)) ? "Remove from Saved" : "Save App",
+                                       systemImage: savedKeys.contains(saveKey(entry)) ? "bookmark.slash" : "bookmark") {
+                                    toggleSaved(entry)
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 3)
