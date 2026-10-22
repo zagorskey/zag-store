@@ -598,6 +598,7 @@ struct ZagAccountPopup: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        .tint(themeTint)
         .toggleStyle(ZagThemeTintToggleStyle())
         .environment(\.zagInsideAccountPopup, true)
         .environment(\.zagAccountClose, onClose)
