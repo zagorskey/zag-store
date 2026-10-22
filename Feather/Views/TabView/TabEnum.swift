@@ -743,6 +743,35 @@ private struct ZagGamesPage: View {
         .map { $0 }
     }
 
+    // Only classify an entry as a game when its metadata explicitly says so.
+    // Avoid guessing based on generic words in app names.
+    private var games: [SourceAppsView.SourceAppRoute] {
+        var seen = Set<String>()
+        return sources.flatMap { source -> [SourceAppsView.SourceAppRoute] in
+            guard let repository = sourcesModel.sources[source] else { return [] }
+            return repository.apps.prefix(1500).filter { app in
+                let description = (app.currentDescription ?? app.localizedDescription ?? "").lowercased()
+                let name = app.currentName.lowercased()
+                let isEmulator = emulatorNames.contains {
+                    name == $0 || name.hasPrefix($0 + " ") || name.hasPrefix($0 + "-")
+                }
+                return !isEmulator && (
+                    description.contains("mobile game")
+                    || description.contains("video game")
+                    || description.contains("arcade game")
+                    || description.contains("puzzle game")
+                    || description.contains("role-playing game")
+                    || description.contains("racing game")
+                    || description.contains("strategy game")
+                )
+            }.map { SourceAppsView.SourceAppRoute(source: repository, app: $0) }
+        }
+        .filter { seen.insert($0.app.currentName.lowercased()).inserted }
+        .filter { searchText.isEmpty || $0.app.currentName.localizedCaseInsensitiveContains(searchText) }
+        .prefix(60)
+        .map { $0 }
+    }
+
     var body: some View {
         NBNavigationView("Games") {
             ScrollView {
@@ -756,7 +785,7 @@ private struct ZagGamesPage: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Gaming on Zag Store")
                                 .font(.title2.bold())
-                            Text("Emulators available from your repositories")
+                            Text("Games and emulators from your repositories")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -767,7 +796,7 @@ private struct ZagGamesPage: View {
 
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField("Search emulators", text: $searchText)
+                        TextField("Search games and emulators", text: $searchText)
                             .autocorrectionDisabled()
                         if !searchText.isEmpty {
                             Button { searchText = "" } label: {
@@ -829,6 +858,55 @@ private struct ZagGamesPage: View {
                                     }
                                     .buttonStyle(.plain)
                                     Divider().padding(.leading, 78)
+                                }
+                            }
+                            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Games").font(.title2.bold())
+                            Spacer()
+                            Text("\(games.count)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("Titles identified by game-specific repository descriptions")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        if games.isEmpty {
+                            Text(searchText.isEmpty ? "No games identified in loaded repositories yet." : "No matching games.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(20)
+                                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach(games, id: \.id) { entry in
+                                    Button { selectedApp = entry } label: {
+                                        HStack(spacing: 13) {
+                                            ZagRepositoryAppIconView(app: entry.app, size: 54)
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(entry.app.currentName)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(.primary)
+                                                Text(entry.source.name ?? "Repository")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        .padding(12)
+                                    }
+                                    .buttonStyle(.plain)
+                                    if entry.id != games.last?.id {
+                                        Divider().padding(.leading, 78)
+                                    }
                                 }
                             }
                             .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 20))
