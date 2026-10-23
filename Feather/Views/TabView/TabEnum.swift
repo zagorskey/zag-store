@@ -1001,7 +1001,7 @@ private struct ZagGamesPage: View {
                                 // Match the native search field's inset. Extend the
                                 // viewport to the screen edge so the next card
                                 // is visible without scrolling.
-                                let cardInset: CGFloat = 7
+                                let cardInset: CGFloat = 0
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     // Eight featured entries at most: eager layout
                                     // avoids late-appearing cards while scrolling.
@@ -1334,31 +1334,28 @@ private struct ZagFeaturedGameArtwork: View {
         .task(id: (bundleID ?? name) + "|" + (repositoryScreenshots.first?.absoluteString ?? "")) {
             hero = nil
 
-            // Start Apple's identity/title lookup immediately, in parallel
-            // with repository screenshot downloads. A slow or dead repository
-            // image must not postpone artwork from the App Store.
-            if let bundleID, !bundleID.isEmpty {
-                async let lookup: ZagGameArtworkResponse? =
-                    try? await ZagGameArtworkClient.shared.lookup(
-                        bundleID: bundleID, name: name
-                    )
+            // Resolve each source independently. A stalled repository image
+            // must never block a valid catalogue screenshot, and apps without
+            // bundle identifiers can still be matched by their title.
+            async let repositoryArt = resolveArtwork(repositoryScreenshots)
+            async let catalogueArt: ZagFeaturedHero? = {
+                guard let response = try? await ZagGameArtworkClient.shared.lookup(
+                    bundleID: bundleID ?? "", name: name
+                ), !response.artworkURLs.isEmpty else { return nil }
+                return await resolveArtwork(response.artworkURLs)
+            }()
 
-                if let repositoryArt = await resolveArtwork(repositoryScreenshots) {
-                    guard !Task.isCancelled else { return }
-                    hero = repositoryArt
-                    if case .landscape = repositoryArt { return }
+            if let art = await catalogueArt, !Task.isCancelled {
+                hero = art
+            }
+            if let art = await repositoryArt, !Task.isCancelled {
+                // Prefer repository-provided landscape artwork, otherwise
+                // retain a successfully resolved catalogue image.
+                if case .landscape = art {
+                    hero = art
+                } else if hero == nil {
+                    hero = art
                 }
-
-                guard !Task.isCancelled,
-                      let response = await lookup,
-                      !response.artworkURLs.isEmpty else { return }
-
-                if let catalogueArt = await resolveArtwork(response.artworkURLs),
-                   !Task.isCancelled {
-                    hero = catalogueArt
-                }
-            } else {
-                hero = await resolveArtwork(repositoryScreenshots)
             }
         }
     }
