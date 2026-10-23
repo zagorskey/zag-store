@@ -412,3 +412,98 @@ actor ZagFeaturedImageCache {
         return hdURL == url ? [url] : [hdURL, url]
     }
 }
+
+
+/// A Featured card exists only after authentic screenshots have been fetched,
+/// decoded and checked for usable dimensions.
+struct ZagVerifiedFeaturedArtwork: Sendable {
+    enum Layout: Sendable {
+        case landscape
+        case portraits
+        case landscapeStrips
+    }
+    let layout: Layout
+    let images: [ZagFeaturedImageBytes]
+}
+
+/// Resolve repository screenshots and exact-identity/title App Store images
+/// independently. Failed entries are skipped instead of featured as gradients.
+actor ZagFeaturedArtworkResolver {
+    static let shared = ZagFeaturedArtworkResolver()
+
+    func resolve(
+        bundleID: String?,
+        name: String,
+        repositoryScreenshots: [URL]
+    ) async -> ZagVerifiedFeaturedArtwork? {
+        await withTaskGroup(of: ZagVerifiedFeaturedArtwork?.self) { group in
+            if !repositoryScreenshots.isEmpty {
+                group.addTask { await Self.resolveImages(repositoryScreenshots) }
+            }
+            group.addTask {
+                guard let response = try? await ZagGameArtworkClient.shared.lookup(
+                    bundleID: bundleID ?? "", name: name
+                ), !response.artworkURLs.isEmpty else { return nil }
+                return await Self.resolveImages(response.artworkURLs)
+            }
+
+            for await artwork in group {
+                if Task.isCancelled {
+                    group.cancelAll()
+                    return nil
+                }
+                if let artwork {
+                    group.cancelAll()
+                    return artwork
+                }
+            }
+            return nil
+        }
+    }
+
+    private static func resolveImages(_ urls: [URL]) async -> ZagVerifiedFeaturedArtwork? {
+        var seen = Set<URL>()
+        let candidates = Array(urls.filter { seen.insert($0).inserted }.prefix(8))
+        guard !candidates.isEmpty else { return nil }
+
+        return await withTaskGroup(
+            of: ZagFeaturedImageBytes?.self,
+            returning: ZagVerifiedFeaturedArtwork?.self
+        ) { group in
+            for url in candidates {
+                group.addTask { await ZagFeaturedImageCache.shared.load(url) }
+            }
+            var portraits: [ZagFeaturedImageBytes] = []
+            var landscapes: [ZagFeaturedImageBytes] = []
+
+            for await candidate in group {
+                if Task.isCancelled {
+                    group.cancelAll()
+                    return nil
+                }
+                guard let candidate, candidate.height > 0 else { continue }
+                let ratio = Double(candidate.width) / Double(candidate.height)
+
+                if ratio >= 1.25 {
+                    if candidate.width >= 850 && candidate.height >= 420 {
+                        group.cancelAll()
+                        return ZagVerifiedFeaturedArtwork(layout: .landscape, images: [candidate])
+                    }
+                    if candidate.width >= 320 && candidate.height >= 175 {
+                        landscapes.append(candidate)
+                    }
+                } else if (0.35...0.90).contains(ratio),
+                          candidate.width >= 320 && candidate.height >= 550 {
+                    portraits.append(candidate)
+                }
+            }
+            if !portraits.isEmpty {
+                return ZagVerifiedFeaturedArtwork(layout: .portraits, images: Array(portraits.prefix(3)))
+            }
+            if !landscapes.isEmpty {
+                return ZagVerifiedFeaturedArtwork(layout: .landscapeStrips, images: Array(landscapes.prefix(3)))
+            }
+            return nil
+        }
+    }
+}
