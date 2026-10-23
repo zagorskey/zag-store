@@ -11,9 +11,9 @@ import NukeUI
 struct ScreenshotPreviewView: View {
 	@Environment(\.dismiss) var dismiss
 	@State private var currentIndex: Int
+	@State private var _loadedPreviewImages: [URL: UIImage]
     
 	let screenshotURLs: [URL]
-	let highResolutionImages: [URL: UIImage]
     
 	init(
 		screenshotURLs: [URL],
@@ -21,13 +21,16 @@ struct ScreenshotPreviewView: View {
 		highResolutionImages: [URL: UIImage] = [:]
 	) {
 		self.screenshotURLs = screenshotURLs
-		self.highResolutionImages = highResolutionImages
+		self._loadedPreviewImages = State(initialValue: highResolutionImages)
 		self._currentIndex = State(initialValue: initialIndex)
 	}
     
 	var body: some View {
 		NavigationStack {
 			_imageScrollView()
+				.task(id: currentIndex) {
+					await _loadCurrentAndAdjacentScreenshots()
+				}
 				.toolbar {
 					ToolbarItem(placement: .topBarTrailing) {
 						if #available(iOS 26.0, *) {
@@ -60,6 +63,25 @@ struct ScreenshotPreviewView: View {
 			.frame(width: 92, height: 36)
 			.accessibilityLabel("Screenshot \(currentIndex + 1) of \(screenshotURLs.count)")
 	}
+	// When the user jumps to a screenshot before the background gallery pass
+	// reaches it, request its original high-resolution bytes immediately.
+	// Both views use the same coalescing image cache, so there is no duplicate
+	// network transfer. Prefetch the adjacent image for a smoother swipe.
+	@MainActor
+	private func _loadCurrentAndAdjacentScreenshots() async {
+		guard screenshotURLs.indices.contains(currentIndex) else { return }
+		let indices = [currentIndex, currentIndex + 1, currentIndex - 1]
+		for index in indices where screenshotURLs.indices.contains(index) {
+			guard !Task.isCancelled else { return }
+			let url = screenshotURLs[index]
+			if _loadedPreviewImages[url] != nil { continue }
+			guard let bytes = await ZagFeaturedImageCache.shared.load(url),
+				!Task.isCancelled,
+				let image = UIImage(data: bytes.data) else { continue }
+			_loadedPreviewImages[url] = image
+		}
+	}
+
 }
 
 extension ScreenshotPreviewView {
@@ -68,7 +90,7 @@ extension ScreenshotPreviewView {
 		TabView(selection: $currentIndex) {
 			ForEach(screenshotURLs.indices, id: \.self) { index in
 				Group {
-					if let highResolution = highResolutionImages[screenshotURLs[index]] {
+					if let highResolution = _loadedPreviewImages[screenshotURLs[index]] {
 						Image(uiImage: highResolution)
 							.resizable()
 							.aspectRatio(contentMode: .fit)
