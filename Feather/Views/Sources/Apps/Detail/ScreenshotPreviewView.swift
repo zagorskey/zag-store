@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import NukeUI
 
 struct ScreenshotPreviewView: View {
 	@Environment(\.dismiss) var dismiss
@@ -132,48 +131,13 @@ struct ScreenshotPreviewView: View {
 }
 
 extension ScreenshotPreviewView {
-	@ViewBuilder
 	private func _imageScrollView() -> some View {
-		GeometryReader { geometry in
-			TabView(selection: $currentIndex) {
-				ForEach(screenshotURLs.indices, id: \.self) { index in
-					ZStack {
-						Color.clear
-						Group {
-							if let highResolution = loadedPreviewImages[screenshotURLs[index]] {
-								Image(uiImage: highResolution)
-									.resizable()
-									.scaledToFit()
-							} else if let thumbnail = thumbnailImages[screenshotURLs[index]] {
-								Image(uiImage: thumbnail)
-									.resizable()
-									.scaledToFit()
-							} else {
-								LazyImage(url: screenshotURLs[index]) { state in
-									if let image = state.image {
-										image.resizable().scaledToFit()
-									} else {
-										ProgressView()
-									}
-								}
-							}
-						}
-						.frame(
-							width: max(0, geometry.size.width - 32),
-							height: geometry.size.height
-						)
-						.clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-						.overlay {
-							RoundedRectangle(cornerRadius: 32, style: .continuous)
-								.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
-						}
-					}
-					.frame(width: geometry.size.width, height: geometry.size.height)
-					.tag(index) // Tag the full-width page, never the padded image.
-				}
-			}
-			.tabViewStyle(.page(indexDisplayMode: .never))
-			.frame(width: geometry.size.width, height: geometry.size.height)
-		}
+		ZagScreenshotPagerView(
+			selectedIndex: $currentIndex,
+			urls: screenshotURLs,
+			thumbnails: thumbnailImages,
+			previews: loadedPreviewImages
+		)
+		.ignoresSafeArea(edges: .horizontal)
 	}
 }
