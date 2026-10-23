@@ -11,7 +11,7 @@ import NukeUI
 struct ScreenshotPreviewView: View {
 	@Environment(\.dismiss) var dismiss
 	@State private var currentIndex: Int
-	@State private var _loadedPreviewImages: [URL: UIImage]
+	@State private var loadedPreviewImages: [URL: UIImage]
     
 	let screenshotURLs: [URL]
     
@@ -74,11 +74,11 @@ struct ScreenshotPreviewView: View {
 		for index in indices where screenshotURLs.indices.contains(index) {
 			guard !Task.isCancelled else { return }
 			let url = screenshotURLs[index]
-			if _loadedPreviewImages[url] != nil { continue }
+			if loadedPreviewImages[url] != nil { continue }
 			guard let bytes = await ZagFeaturedImageCache.shared.load(url),
 				!Task.isCancelled,
 				let image = UIImage(data: bytes.data) else { continue }
-			_loadedPreviewImages[url] = image
+			loadedPreviewImages[url] = image
 		}
 	}
 
@@ -90,7 +90,7 @@ extension ScreenshotPreviewView {
 		TabView(selection: $currentIndex) {
 			ForEach(screenshotURLs.indices, id: \.self) { index in
 				Group {
-					if let highResolution = _loadedPreviewImages[screenshotURLs[index]] {
+					if let highResolution = loadedPreviewImages[screenshotURLs[index]] {
 						Image(uiImage: highResolution)
 							.resizable()
 							.aspectRatio(contentMode: .fit)
