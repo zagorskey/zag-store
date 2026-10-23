@@ -2,13 +2,11 @@
 //  ZagSynthesizedAppHeroView.swift
 //  Feather
 //
-//  Editorial fallback for app-detail headers that do not have a real
-//  promotional banner. Uses verified, already-downloaded screenshots without
-//  enlarging an app icon or turning a portrait into a stretched background.
+//  Editorial fallback when no independent promotional artwork is available.
+//  Never duplicates the gallery or the app icon shown below the header.
 //
 
 import SwiftUI
-import NukeUI
 
 struct ZagSynthesizedAppHeroView: View {
     let appName: String
@@ -36,6 +34,14 @@ struct ZagSynthesizedAppHeroView: View {
                     endPoint: .trailing
                 )
                 .allowsHitTesting(false)
+
+                if screenshots.isEmpty {
+                    Text(String(appName.prefix(1)).uppercased())
+                        .font(.system(size: 220, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.09))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                        .offset(x: 30, y: 20)
+                }
 
                 _identity
             }
@@ -118,12 +124,6 @@ struct ZagSynthesizedAppHeroView: View {
         VStack(alignment: .leading, spacing: 10) {
             Spacer(minLength: 0)
 
-            // The app icon is only a fallback when no real screenshots exist.
-            // On apps with screenshots, avoid duplicating the icon below.
-            if screenshots.isEmpty {
-                _icon
-            }
-
             Text(appName)
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.white)
@@ -136,24 +136,4 @@ struct ZagSynthesizedAppHeroView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 
-    @ViewBuilder
-    private var _icon: some View {
-        if let iconURL {
-            LazyImage(url: iconURL) { state in
-                if let image = state.image {
-                    image.resizable().scaledToFit()
-                } else {
-                    Image("App_Unknown").resizable().scaledToFit()
-                }
-            }
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        } else {
-            Image("App_Unknown")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 70, height: 70)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }
-    }
 }
