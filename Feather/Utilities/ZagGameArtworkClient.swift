@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// Decodes Zag Store's versioned artwork metadata contract.
 /// The preview endpoint is administrator-only; this client never uses it.
@@ -211,5 +212,62 @@ actor ZagGameArtworkClient {
               let height = Int(parts[1].prefix(while: { $0.isNumber })),
               height > 0 else { return false }
         return Double(width) / Double(height) >= 1.25
+    }
+}
+
+/// Compressed image bytes and pixel metadata safely cross actor boundaries.
+struct ZagFeaturedImageBytes: Sendable {
+    let data: Data
+    let width: Int
+    let height: Int
+}
+
+/// Validates actual downloaded image dimensions before using them as hero art.
+/// A network error never prevents the app-specific editorial background.
+actor ZagFeaturedImageCache {
+    static let shared = ZagFeaturedImageCache()
+
+    private var cached: [URL: ZagFeaturedImageBytes] = [:]
+    private var cacheOrder: [URL] = []
+    private var retryAfter: [URL: Date] = [:]
+
+    func load(_ url: URL) async -> ZagFeaturedImageBytes? {
+        guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
+        if let result = cached[url] { return result }
+        if let retry = retryAfter[url], retry > Date() { return nil }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.cachePolicy = .returnCacheDataElseLoad
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard !Task.isCancelled,
+                  let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  data.count >= 2_048,
+                  data.count <= 8_000_000,
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+                  let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
+                  let height = (properties[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
+                  width >= 550, height >= 450 else {
+                retryAfter[url] = Date().addingTimeInterval(180)
+                return nil
+            }
+
+            let result = ZagFeaturedImageBytes(data: data, width: width, height: height)
+            cached[url] = result
+            cacheOrder.append(url)
+            if cacheOrder.count > 10 {
+                cached.removeValue(forKey: cacheOrder.removeFirst())
+            }
+            return result
+        } catch {
+            if !Task.isCancelled {
+                retryAfter[url] = Date().addingTimeInterval(90)
+            }
+            return nil
+        }
     }
 }

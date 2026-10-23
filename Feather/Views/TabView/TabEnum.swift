@@ -8,6 +8,7 @@
 import SwiftUI
 import NimbleViews
 import NukeUI
+import UIKit
 
 enum ZagPageStartupPolicy {
 	static let rememberLastPageKey = "zagStore.navigation.rememberLastPage"
@@ -858,7 +859,8 @@ private struct ZagGamesPage: View {
                 ZagFeaturedGameArtwork(
                     bundleID: entry.app.id,
                     name: entry.app.currentName,
-                    repositoryScreenshot: entry.app.currentScreenshotURLs.first,
+                    iconURL: entry.app.iconURL,
+                    repositoryScreenshots: entry.app.currentScreenshotURLs,
                     width: width
                 )
                 LinearGradient(
@@ -956,6 +958,12 @@ private struct ZagGamesPage: View {
             if featured.count == 8 { break }
         }
         for entry in artworkCandidates where featured.count < 8 {
+            guard featuredIDs.insert(entry.id).inserted else { continue }
+            featured.append(entry)
+        }
+        // Every featured card has its own game-specific editorial fallback,
+        // so games without repository screenshots can still be featured.
+        for entry in newGames where featured.count < 8 {
             guard featuredIDs.insert(entry.id).inserted else { continue }
             featured.append(entry)
         }
@@ -1197,54 +1205,180 @@ private struct ZagGamesPage: View {
     }
 }
 
-// Requests verified artwork only for visible featured cards. The API currently
-// returns empty artwork_urls; keep a neutral fallback rather than a giant icon.
+/// Full-bleed artwork, high-resolution screenshot strips, or an immediate
+/// game-specific editorial cover. Never show an empty or pixelated hero slot.
+private enum ZagFeaturedHero {
+    case landscape(UIImage)
+    case portraits([UIImage])
+}
+
 private struct ZagFeaturedGameArtwork: View {
     let bundleID: String?
     let name: String
-    let repositoryScreenshot: URL?
+    let iconURL: URL?
+    let repositoryScreenshots: [URL]
     let width: CGFloat
-    @State private var verifiedArtwork: URL?
 
-    var body: some View {
-        ZStack {
+    @State private var hero: ZagFeaturedHero?
+
+    private var tintHue: Double {
+        let identifier = bundleID ?? name
+        let seed = identifier.unicodeScalars.reduce(UInt64(5381)) { value, scalar in
+            (value &* 33 &+ UInt64(scalar.value)) % 360
+        }
+        return Double(seed) / 360.0
+    }
+
+    private var editorialFallback: some View {
+        ZStack(alignment: .topLeading) {
             LinearGradient(
-                colors: [Color.indigo.opacity(0.75), Color.blue.opacity(0.4), .black],
+                colors: [
+                    Color(hue: tintHue, saturation: 0.76, brightness: 0.67),
+                    Color(
+                        hue: (tintHue + 0.12).truncatingRemainder(dividingBy: 1),
+                        saturation: 0.82, brightness: 0.34
+                    ),
+                    Color(hue: tintHue, saturation: 0.46, brightness: 0.14)
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            // Keep the repository image as an independent fallback: a verified
-            // URL may still fail to download or decode on a particular network.
-            if let repositoryScreenshot {
-                LazyImage(url: repositoryScreenshot) { state in
-                    if let image = state.image {
-                        image.resizable()
-                            .scaledToFill()
-                            .frame(width: width, height: 250)
-                            .clipped()
-                    }
+            Circle()
+                .fill(.white.opacity(0.11))
+                .frame(width: width * 0.8, height: width * 0.8)
+                .blur(radius: 28)
+                .offset(x: width * 0.58, y: -135)
+            Circle()
+                .fill(.black.opacity(0.20))
+                .frame(width: width * 0.7, height: width * 0.7)
+                .blur(radius: 35)
+                .offset(x: -width * 0.26, y: 145)
+
+            // A soft, moderately sized app-specific illustration. Never
+            // enlarge an icon to the entire hero image.
+            LazyImage(url: iconURL) { state in
+                if let image = state.image {
+                    image.resizable()
+                        .scaledToFill()
+                        .frame(width: 155, height: 155)
+                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
                 }
             }
-            if let verifiedArtwork, verifiedArtwork != repositoryScreenshot {
-                LazyImage(url: verifiedArtwork) { state in
-                    if let image = state.image {
-                        image.resizable()
-                            .scaledToFill()
-                            .frame(width: width, height: 250)
-                            .clipped()
+            .rotationEffect(.degrees(14))
+            .blur(radius: 9)
+            .opacity(0.65)
+            .offset(x: width * 0.52, y: 13)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("ZAG STORE  /  FEATURED")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .tracking(2)
+                    .foregroundStyle(.white.opacity(0.82))
+                Spacer(minLength: 16)
+                Text(name)
+                    .font(.system(size: 31, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.65)
+                    .frame(maxWidth: width * 0.75, alignment: .leading)
+                    .shadow(color: .black.opacity(0.23), radius: 6, y: 2)
+                Spacer().frame(height: 65)
+            }
+            .padding(22)
+        }
+        .frame(width: width, height: 250)
+        .clipped()
+    }
+
+    var body: some View {
+        ZStack {
+            editorialFallback
+
+            if let hero {
+                switch hero {
+                case .landscape(let image):
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: 250)
+                        .clipped()
+
+                case .portraits(let images):
+                    // Portrait screenshots remain sharp as three side-by-side
+                    // captures instead of being cropped and magnified.
+                    HStack(spacing: 2) {
+                        ForEach(0..<3, id: \.self) { index in
+                            Image(uiImage: images[index % images.count])
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: (width - 4) / 3, height: 250)
+                                .clipped()
+                        }
                     }
+                    .frame(width: width, height: 250)
+                    .clipped()
                 }
             }
         }
         .frame(width: width, height: 250)
         .clipped()
-        .task(id: bundleID) {
-            verifiedArtwork = nil
-            guard let bundleID, !bundleID.isEmpty else { return }
+        .task(id: (bundleID ?? name) + "|" + (repositoryScreenshots.first?.absoluteString ?? "")) {
+            hero = nil
+
+            if let repositoryArt = await resolveArtwork(repositoryScreenshots) {
+                guard !Task.isCancelled else { return }
+                hero = repositoryArt
+                if case .landscape = repositoryArt { return }
+            }
+
+            guard let bundleID, !bundleID.isEmpty, !Task.isCancelled else { return }
             guard let response = try? await ZagGameArtworkClient.shared.lookup(
-                bundleID: bundleID, name: name
+                bundleID: bundleID,
+                name: name
             ), response.isVerified else { return }
-            verifiedArtwork = response.artworkURLs.first
+
+            if let catalogueArt = await resolveArtwork(response.artworkURLs), !Task.isCancelled {
+                hero = catalogueArt
+            }
+        }
+    }
+
+    @MainActor
+    private func resolveArtwork(_ urls: [URL]) async -> ZagFeaturedHero? {
+        var seen = Set<URL>()
+        let candidates = Array(urls.filter { seen.insert($0).inserted }.prefix(6))
+        guard !candidates.isEmpty else { return nil }
+
+        return await withTaskGroup(of: ZagFeaturedImageBytes?.self, returning: ZagFeaturedHero?.self) { group in
+            for url in candidates {
+                group.addTask { await ZagFeaturedImageCache.shared.load(url) }
+            }
+
+            var portraits: [UIImage] = []
+            for await candidate in group {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    return nil
+                }
+                guard let candidate,
+                      let image = UIImage(data: candidate.data),
+                      candidate.height > 0 else { continue }
+
+                let ratio = Double(candidate.width) / Double(candidate.height)
+                if candidate.width >= 850 && candidate.height >= 450 && ratio >= 1.25 {
+                    group.cancelAll()
+                    return .landscape(image)
+                }
+                if candidate.width >= 550 && candidate.height >= 850 &&
+                    ratio >= 0.35 && ratio <= 0.9 {
+                    portraits.append(image)
+                    if portraits.count >= 3 {
+                        group.cancelAll()
+                        return .portraits(portraits)
+                    }
+                }
+            }
+            return portraits.isEmpty ? nil : .portraits(portraits)
         }
     }
 }
