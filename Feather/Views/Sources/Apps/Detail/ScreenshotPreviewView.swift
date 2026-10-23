@@ -72,6 +72,9 @@ struct ScreenshotPreviewView: View {
 	@MainActor
 	private func _loadCurrentAndAdjacentScreenshots() async {
 		guard screenshotURLs.indices.contains(currentIndex) else { return }
+		let started = ZagPerformanceMonitor.now()
+		let currentURL = screenshotURLs[currentIndex]
+		let wasPreloaded = loadedPreviewImages[currentURL] != nil
 		let indices = [currentIndex, currentIndex + 1, currentIndex - 1]
 			.filter { screenshotURLs.indices.contains($0) }
 
@@ -91,6 +94,13 @@ struct ScreenshotPreviewView: View {
 				let image = UIImage(data: bytes.data) else { continue }
 			loadedPreviewImages[url] = image
 		}
+		guard !Task.isCancelled else { return }
+		ZagPerformanceMonitor.shared.record(
+			.previewFullResolution,
+			since: started,
+			result: loadedPreviewImages[currentURL] == nil
+				? "unavailable" : (wasPreloaded ? "prefetched" : "loaded")
+		)
 
 	}
 
