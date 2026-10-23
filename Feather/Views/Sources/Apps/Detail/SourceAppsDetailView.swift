@@ -30,6 +30,11 @@ struct SourceAppsDetailView: View {
 		return repositoryImages.isEmpty ? _catalogueScreenshotURLs : repositoryImages
 	}
 
+	// Share the decoded, high-resolution gallery assets with the hero.
+	private var _heroImages: [UIImage] {
+		Array(_galleryScreenshotURLs.compactMap { _highResolutionScreenshots[$0] }.prefix(2))
+	}
+
 	// Screenshots belong in the gallery; only an explicitly provided
 	// promotional banner can replace the top header.
 	private var _headerArtworkKey: String {
@@ -70,10 +75,10 @@ struct SourceAppsDetailView: View {
 				ToolbarItemGroup(placement: .topBarTrailing) {
 					Button {
 						let sharedString = """
-						\\(app.currentName) - \\(app.currentVersion ?? "0")
-						\\(app.currentDescription ?? .localized("An awesome application"))
+						\(app.currentName) - \(app.currentVersion ?? "0")
+						\(app.currentDescription ?? .localized("An awesome application"))
 						---
-						\\(source.website?.absoluteString ?? source.name ?? "")
+						\(source.website?.absoluteString ?? source.name ?? "")
 						"""
 						UIActivityViewController.show(activityItems: [sharedString])
 					} label: {
@@ -552,30 +557,18 @@ extension SourceAppsDetailView {
 	@available(iOS 18.0, *)
 	@ViewBuilder
 	private func _header() -> some View {
-		ZStack {
-			if let image = _promotionalHeaderImage {
-				// Only a real, high-resolution promotional banner is full bleed.
-				// Portrait and landscape screenshots stay in Screenshots below.
-				ZagAppDetailHeaderImage(hero: .landscape(image))
-			} else {
-				// No promotional banner exists for this app. Use a restrained,
-				// theme-aware editorial surface rather than enlarging a small
-				// repository icon or misusing device screenshots.
-				ZStack {
-					Color.black
-					LinearGradient(
-						colors: [
-							(source.tintColor ?? .accentColor).opacity(0.38),
-							(source.tintColor ?? .accentColor).opacity(0.12),
-							.black
-						],
-						startPoint: .topLeading,
-						endPoint: .bottomTrailing
-					)
-				}
-					.frame(maxWidth: .infinity, maxHeight: .infinity)
-					.accessibilityHidden(true)
-			}
+		if let image = _promotionalHeaderImage {
+			// Prefer genuine promotional banners when the repository has one.
+			ZagAppDetailHeaderImage(hero: .landscape(image))
+		} else {
+			// Present sharp screenshots as editorial cards, never as a
+			// stretched full-bleed screenshot or oversized app icon.
+			ZagSynthesizedAppHeroView(
+				appName: app.currentName,
+				iconURL: app.iconURL,
+				screenshots: _heroImages,
+				tint: source.tintColor ?? .accentColor
+			)
 		}
 	}
 	
