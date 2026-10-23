@@ -16,7 +16,7 @@ struct LibraryInfoView: View {
 	var app: AppInfoPresentable
 	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedRepositorySource: AltSource?
-	@State private var verifiedHeaderHero: ZagAppDetailHeaderHero?
+	@State private var promotionalHeaderImage: UIImage?
 
 	// Use a repository entry only when the installed/imported app can be
 	// linked to its actual source. Otherwise use Apple's exact identity or
@@ -34,7 +34,7 @@ struct LibraryInfoView: View {
 			app.identifier ?? "",
 			app.name ?? "",
 			artworkRepositoryApp?.currentUniqueId ?? "",
-			artworkRepositoryApp?.currentScreenshotURLs.first?.absoluteString ?? ""
+			artworkRepositoryApp?.currentPromotionalArtworkURL?.absoluteString ?? ""
 		].joined(separator: "|")
 	}
 	
@@ -44,8 +44,8 @@ struct LibraryInfoView: View {
 			List {
 				Section {} header: {
 					VStack(spacing: 14) {
-						if let hero = verifiedHeaderHero {
-							ZagAppDetailHeaderImage(hero: hero)
+						if let image = promotionalHeaderImage {
+							ZagAppDetailHeaderImage(hero: .landscape(image))
 								.frame(height: 190)
 								.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 								.padding(.horizontal, 6)
@@ -86,19 +86,13 @@ struct LibraryInfoView: View {
 				NBToolbarButton(role: .close)
 			}
 			.task(id: artworkRequestKey) {
-				verifiedHeaderHero = nil
-				let repositoryApp = artworkRepositoryApp
-				let title = repositoryApp?.currentName ?? app.name ?? ""
-				guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-					return
-				}
-				let artwork = await ZagFeaturedArtworkResolver.shared.resolve(
-					bundleID: repositoryApp?.id ?? app.identifier,
-					name: title,
-					repositoryScreenshots: repositoryApp?.currentScreenshotURLs ?? []
-				)
+				promotionalHeaderImage = nil
+				guard let url = artworkRepositoryApp?.currentPromotionalArtworkURL,
+					let image = await ZagFeaturedImageCache.shared.load(url),
+					image.width >= 850, image.height >= 420,
+					Double(image.width) / Double(image.height) >= 1.25 else { return }
 				guard !Task.isCancelled else { return }
-				verifiedHeaderHero = artwork.flatMap(ZagAppDetailHeaderHero.init)
+				promotionalHeaderImage = UIImage(data: image.data)
 			}
 		}
 	}
