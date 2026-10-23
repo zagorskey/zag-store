@@ -471,35 +471,23 @@ extension SourceAppsDetailView {
 				// Portrait and landscape screenshots stay in Screenshots below.
 				ZagAppDetailHeaderImage(hero: .landscape(image))
 			} else {
-				// No genuine artwork has resolved yet. Preserve the existing
-				// repository header rather than enlarging a small app icon.
-				if let iconURL = source.currentIconURL {
-					LazyImage(url: iconURL) { state in
-						if let image = state.image {
-							image.resizable()
-								.aspectRatio(contentMode: .fill)
-								.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-								.clipped()
-						} else {
-							standardHeader
-						}
-					}
-				} else {
-					standardHeader
-				}
-
-				NBVariableBlurView()
-					.rotationEffect(.degrees(-180))
-					.overlay(
-						LinearGradient(
-							gradient: Gradient(colors: [
-								Color.black.opacity(0.8),
-								Color.black.opacity(0)
-							]),
-							startPoint: .top,
-							endPoint: .bottom
-						)
+				// No promotional banner exists for this app. Use a restrained,
+				// theme-aware editorial surface rather than enlarging a small
+				// repository icon or misusing device screenshots.
+				ZStack {
+					Color.black
+					LinearGradient(
+						colors: [
+							(source.tintColor ?? .accentColor).opacity(0.38),
+							(source.tintColor ?? .accentColor).opacity(0.12),
+							.black
+						],
+						startPoint: .topLeading,
+						endPoint: .bottomTrailing
 					)
+				}
+					.frame(maxWidth: .infinity, maxHeight: .infinity)
+					.accessibilityHidden(true)
 			}
 		}
 	}
