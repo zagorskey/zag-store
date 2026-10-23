@@ -116,7 +116,7 @@ struct SourceAppsDetailView: View {
 	}
 
 	private var _screenshotTaskKey: String {
-		app.currentUniqueId + "|screenshots|" + _galleryScreenshotURLs.map(\\.absoluteString).joined(separator: "|")
+		app.currentUniqueId + "|screenshots|" + _galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")
 	}
 
 	private var _catalogueTaskKey: String {
