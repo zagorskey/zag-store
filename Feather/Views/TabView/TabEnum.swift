@@ -1209,6 +1209,7 @@ private struct ZagGamesPage: View {
 private enum ZagFeaturedHero {
     case landscape(UIImage)
     case portraits([UIImage])
+    case landscapeStrips([UIImage])
 }
 
 private struct ZagFeaturedGameArtwork: View {
@@ -1289,20 +1290,42 @@ private struct ZagFeaturedGameArtwork: View {
                         .clipped()
 
                 case .portraits(let images):
-                    // Portrait screenshots remain sharp as three side-by-side
-                    // captures instead of being cropped and magnified.
+                    // Apple's 392x696 preview is sharp when confined to a
+                    // narrow gallery panel. Never multiply one screenshot.
                     HStack(spacing: 2) {
-                        ForEach(0..<3, id: \.self) { index in
-                            Image(uiImage: images[index % images.count])
+                        ForEach(images.indices, id: \.self) { index in
+                            Image(uiImage: images[index])
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: (width - 4) / 3, height: 250)
+                                .frame(
+                                    width: images.count == 1 ? width * 0.48 :
+                                        (width - CGFloat(images.count - 1) * 2) / CGFloat(images.count),
+                                    height: 250
+                                )
                                 .clipped()
                         }
                     }
-                    .frame(width: width, height: 250)
+                    .frame(width: width, height: 250, alignment: images.count == 1 ? .trailing : .center)
                     .clipped()
-                }
+
+                case .landscapeStrips(let images):
+                    // Low-resolution landscape screenshots remain sharp when
+                    // shown in small horizontal bands, not stretched full-card.
+                    VStack(spacing: 2) {
+                        ForEach(images.indices, id: \.self) { index in
+                            Image(uiImage: images[index])
+                                .resizable()
+                                .scaledToFill()
+                                .frame(
+                                    width: images.count == 1 ? width * 0.70 : width,
+                                    height: images.count == 1 ? 165 :
+                                        (250 - CGFloat(images.count - 1) * 2) / CGFloat(images.count)
+                                )
+                                .clipped()
+                        }
+                    }
+                    .frame(width: width, height: 250, alignment: .center)
+                    .clipped()
             }
         }
         .frame(width: width, height: 250)
@@ -1339,33 +1362,41 @@ private struct ZagFeaturedGameArtwork: View {
                 group.addTask { await ZagFeaturedImageCache.shared.load(url) }
             }
 
-            var portraits: [UIImage] = []
+            var portraits: [ZagFeaturedImageBytes] = []
+            var landscapes: [ZagFeaturedImageBytes] = []
             for await candidate in group {
                 guard !Task.isCancelled else {
                     group.cancelAll()
                     return nil
                 }
-                guard let candidate,
-                      let image = UIImage(data: candidate.data),
-                      candidate.height > 0 else { continue }
-
+                guard let candidate, candidate.height > 0 else { continue }
                 let ratio = Double(candidate.width) / Double(candidate.height)
-                if candidate.width >= 850 && candidate.height >= 450 && ratio >= 1.25 {
-                    group.cancelAll()
-                    return .landscape(image)
-                }
-                if candidate.width >= 550 && candidate.height >= 850 &&
-                    ratio >= 0.35 && ratio <= 0.9 {
-                    portraits.append(image)
-                    if portraits.count >= 3 {
+
+                if ratio >= 1.25 {
+                    if candidate.width >= 850 && candidate.height >= 420,
+                       let image = UIImage(data: candidate.data) {
                         group.cancelAll()
-                        return .portraits(portraits)
+                        return .landscape(image)
                     }
+                    if candidate.width >= 320 && candidate.height >= 175 {
+                        landscapes.append(candidate)
+                    }
+                } else if (0.35...0.90).contains(ratio),
+                          candidate.width >= 320 && candidate.height >= 550 {
+                    portraits.append(candidate)
                 }
             }
-            // Never repeat a single screenshot three times in a feature card.
-            // When fewer than three distinct images load, retain the designed
-            // background rather than generating a misleading collage.
+            // The original code discarded 392x696 previews and rejected
+            // galleries with fewer than three images. Accept one genuine
+            // screenshot, without cloning it to fill the other panels.
+            if !portraits.isEmpty {
+                let images = portraits.prefix(3).compactMap { UIImage(data: $0.data) }
+                if !images.isEmpty { return .portraits(images) }
+            }
+            if !landscapes.isEmpty {
+                let images = landscapes.prefix(3).compactMap { UIImage(data: $0.data) }
+                if !images.isEmpty { return .landscapeStrips(images) }
+            }
             return nil
         }
     }

@@ -304,38 +304,60 @@ actor ZagFeaturedImageCache {
         if let result = cached[url] { return result }
         if let retry = retryAfter[url], retry > Date() { return nil }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        request.cachePolicy = .returnCacheDataElseLoad
+        // A 392x696bb.png Apple URL is a thumbnail request, not a maximum
+        // resolution. Ask Apple's CDN for the larger rendition first, then
+        // always try the exact supplied URL if that request fails.
+        for candidateURL in Self.imageVariants(for: url) {
+            guard !Task.isCancelled else { return nil }
+            var request = URLRequest(url: candidateURL)
+            request.timeoutInterval = 8
+            request.cachePolicy = .returnCacheDataElseLoad
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard !Task.isCancelled,
-                  let http = response as? HTTPURLResponse,
-                  (200..<300).contains(http.statusCode),
-                  data.count >= 2_048,
-                  data.count <= 8_000_000,
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-                  let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
-                  let height = (properties[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
-                  width >= 550, height >= 450 else {
-                retryAfter[url] = Date().addingTimeInterval(180)
-                return nil
-            }
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse,
+                      (200..<300).contains(http.statusCode),
+                      data.count >= 2_048, data.count <= 12_000_000,
+                      let source = CGImageSourceCreateWithData(data as CFData, nil),
+                      let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+                      let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
+                      let height = (properties[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
+                      width >= 300, height >= 170 else { continue }
 
-            let result = ZagFeaturedImageBytes(data: data, width: width, height: height)
-            cached[url] = result
-            cacheOrder.append(url)
-            if cacheOrder.count > 10 {
-                cached.removeValue(forKey: cacheOrder.removeFirst())
+                let result = ZagFeaturedImageBytes(data: data, width: width, height: height)
+                cached[url] = result
+                cacheOrder.append(url)
+                if cacheOrder.count > 12 {
+                    cached.removeValue(forKey: cacheOrder.removeFirst())
+                }
+                retryAfter[url] = nil
+                return result
+            } catch {
+                // A blocked or unsupported CDN size does not block the
+                // original screenshot from loading.
+                continue
             }
-            return result
-        } catch {
-            if !Task.isCancelled {
-                retryAfter[url] = Date().addingTimeInterval(90)
-            }
-            return nil
         }
+        if !Task.isCancelled {
+            retryAfter[url] = Date().addingTimeInterval(90)
+        }
+        return nil
+    }
+
+    private static func imageVariants(for url: URL) -> [URL] {
+        guard let host = url.host?.lowercased(),
+              (host == "mzstatic.com" || host.hasSuffix(".mzstatic.com")),
+              url.path.contains("/image/thumb/") else { return [url] }
+
+        let filename = url.lastPathComponent
+        guard filename.range(
+            of: #"^\d+x\d+(?:bb|w|ss)\.(?:png|jpg|jpeg|webp)$"#,
+            options: .regularExpression
+        ) != nil else { return [url] }
+
+        let ext = String(filename.split(separator: ".").last ?? "png")
+        let hdURL = url.deletingLastPathComponent()
+            .appendingPathComponent("1200x0w." + ext)
+        return hdURL == url ? [url] : [hdURL, url]
     }
 }
