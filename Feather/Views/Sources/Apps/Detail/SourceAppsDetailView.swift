@@ -722,8 +722,19 @@ extension SourceAppsDetailView {
 			}
 			.compatScrollTargetLayout()
 		}
-		.scrollTargetBehavior(.paging)
+		.zagScreenshotPaging()
 		.modifier(ZagGalleryScrollMetricsModifier())
 		.padding(.horizontal, -16)
+	}
+}
+
+private extension View {
+	@ViewBuilder
+	func zagScreenshotPaging() -> some View {
+		if #available(iOS 17.0, *) {
+			self.scrollTargetBehavior(.paging)
+		} else {
+			self
+		}
 	}
 }
