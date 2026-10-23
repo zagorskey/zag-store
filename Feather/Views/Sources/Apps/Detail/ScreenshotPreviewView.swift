@@ -14,14 +14,16 @@ struct ScreenshotPreviewView: View {
 	@State private var loadedPreviewImages: [URL: UIImage]
     
 	let screenshotURLs: [URL]
+	let thumbnailImages: [URL: UIImage]
     
 	init(
 		screenshotURLs: [URL],
 		initialIndex: Int = 0,
-		highResolutionImages: [URL: UIImage] = [:]
+		thumbnailImages: [URL: UIImage] = [:]
 	) {
 		self.screenshotURLs = screenshotURLs
-		self._loadedPreviewImages = State(initialValue: highResolutionImages)
+		self.thumbnailImages = thumbnailImages
+		self._loadedPreviewImages = State(initialValue: [:])
 		self._currentIndex = State(initialValue: initialIndex)
 	}
     
@@ -71,7 +73,16 @@ struct ScreenshotPreviewView: View {
 	private func _loadCurrentAndAdjacentScreenshots() async {
 		guard screenshotURLs.indices.contains(currentIndex) else { return }
 		let indices = [currentIndex, currentIndex + 1, currentIndex - 1]
-		for index in indices where screenshotURLs.indices.contains(index) {
+			.filter { screenshotURLs.indices.contains($0) }
+
+		// At most three decoded full-resolution images live in preview memory.
+		// A previously seen image can be restored quickly from the shared cache.
+		let nearbyURLs = Set(indices.map { screenshotURLs[$0] })
+		loadedPreviewImages = loadedPreviewImages.filter {
+			nearbyURLs.contains($0.key)
+		}
+
+		for index in indices {
 			guard !Task.isCancelled else { return }
 			let url = screenshotURLs[index]
 			if loadedPreviewImages[url] != nil { continue }
@@ -80,6 +91,7 @@ struct ScreenshotPreviewView: View {
 				let image = UIImage(data: bytes.data) else { continue }
 			loadedPreviewImages[url] = image
 		}
+
 	}
 
 }
@@ -92,6 +104,10 @@ extension ScreenshotPreviewView {
 				Group {
 					if let highResolution = loadedPreviewImages[screenshotURLs[index]] {
 						Image(uiImage: highResolution)
+							.resizable()
+							.aspectRatio(contentMode: .fit)
+					} else if let thumbnail = thumbnailImages[screenshotURLs[index]] {
+						Image(uiImage: thumbnail)
 							.resizable()
 							.aspectRatio(contentMode: .fit)
 					} else {
