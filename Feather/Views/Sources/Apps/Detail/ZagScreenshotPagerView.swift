@@ -233,6 +233,9 @@ final class ZagScreenshotPagingCollection: UIView {
 final class ZagScreenshotPageCell: UICollectionViewCell {
     static let reuseID = "ZagScreenshotPageCell"
 
+    // A calm, inset card lets both light and dark screenshots look at home
+    // without adding shadows, blur effects, or layers over the scrolling view.
+    private let cardView = UIView()
     private let imageView = UIImageView()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var representedURL: URL?
@@ -243,23 +246,36 @@ final class ZagScreenshotPageCell: UICollectionViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
 
+        cardView.translatesAutoresizingMaskIntoConstraints = false
+        cardView.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.40)
+        cardView.layer.cornerRadius = 22
+        cardView.layer.cornerCurve = .continuous
+        cardView.layer.borderWidth = 0.5
+        cardView.layer.borderColor = UIColor.separator.withAlphaComponent(0.24).cgColor
+        contentView.addSubview(cardView)
+
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 24
+        imageView.layer.cornerRadius = 22
         imageView.layer.cornerCurve = .continuous
-        contentView.addSubview(imageView)
+        cardView.addSubview(imageView)
 
         spinner.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(spinner)
+        spinner.color = .secondaryLabel
+        cardView.addSubview(spinner)
 
         NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            spinner.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+            cardView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            cardView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 6),
+            cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            imageView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: cardView.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: cardView.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: cardView.bottomAnchor),
+            spinner.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: cardView.centerYAnchor)
         ])
     }
 
