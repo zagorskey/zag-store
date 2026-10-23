@@ -299,6 +299,9 @@ actor ZagFeaturedImageCache {
     private var cached: [URL: ZagFeaturedImageBytes] = [:]
     private var cacheOrder: [URL] = []
     private var retryAfter: [URL: Date] = [:]
+    // Coalesce concurrent requests for one image across Games, app details,
+    // gallery thumbnails, and full-screen preview.
+    private var inFlight: [URL: Task<ZagFeaturedImageBytes?, Never>] = [:]
 
     // Persistent verified bytes; iOS may purge this cache whenever it needs space.
     private static let diskDirectory: URL = {
@@ -353,6 +356,24 @@ actor ZagFeaturedImageCache {
     }
 
     func load(_ url: URL) async -> ZagFeaturedImageBytes? {
+        guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
+        if let result = cached[url] { return result }
+
+        if let pending = inFlight[url] {
+            return await pending.value
+        }
+
+        // A detached network request would duplicate the actor's memory/disk
+        // cache bookkeeping. Keep the existing validated loader actor-isolated,
+        // but share its single task with all concurrent callers.
+        let request = Task { await self.loadUnshared(url) }
+        inFlight[url] = request
+        let image = await request.value
+        inFlight[url] = nil
+        return image
+    }
+
+    private func loadUnshared(_ url: URL) async -> ZagFeaturedImageBytes? {
         guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
         if let result = cached[url] { return result }
         let file = Self.fileURL(for: url)
