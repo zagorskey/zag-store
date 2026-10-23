@@ -19,12 +19,12 @@ struct SourcesCellView: View {
 	var showsSeparator: Bool = true
 	var repository: ASRepository?
 	var isRefreshing: Bool = false
-	var stableAppCount: Int? = nil
 
+	@State private var refreshDotCount = 0
 
 
  	private var appCount: Int {
-		stableAppCount ?? repository?.apps.count ?? 0
+		repository?.apps.count ?? 0
 	}
 
 	private enum RepositoryKind {
@@ -128,10 +128,18 @@ struct SourcesCellView: View {
 				.lineLimit(1)
 
 				if isRefreshing {
-					Text("Updated: Refreshing")
+					Text("Updated: Refreshing" + String(repeating: ".", count: refreshDotCount))
 						.font(.system(size: 15, weight: .regular))
 						.foregroundStyle(Color(uiColor: .secondaryLabel))
 						.lineLimit(1)
+						.task(id: isRefreshing) {
+							refreshDotCount = 0
+							while !Task.isCancelled && isRefreshing {
+								try? await Task.sleep(for: .milliseconds(380))
+								guard !Task.isCancelled && isRefreshing else { break }
+								refreshDotCount = (refreshDotCount + 1) % 4
+							}
+						}
 				} else {
 					Text(lastUpdatedText)
 						.font(.system(size: 15, weight: .regular))
