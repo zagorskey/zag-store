@@ -503,7 +503,7 @@ extension SettingsView {
                 case .features:
                     return _settingsSearchMatches("Features Installation Signing Options Archive Compression Photos Access")
                 case .diagnostics:
-                    return _settingsSearchMatches("Diagnostics Installation Diagnostics Update Diagnostics Repo Performance")
+                    return _settingsSearchMatches("Diagnostics Installation Diagnostics Update Diagnostics Repo Performance Performance Loading Times Metrics")
                 case .health:
                     return _settingsSearchMatches("Health Health Checks")
                 case .refreshingApps:
@@ -651,6 +651,9 @@ extension SettingsView {
 				}
 				NavigationLink(destination: ZagRepositoryPerformanceView().zagSettingsDestinationAvatar()) {
 					Label("Repo Performance", systemImage: "speedometer")
+				}
+				NavigationLink(destination: ZagPerformanceDiagnosticsView().zagSettingsDestinationAvatar()) {
+					Label("Performance", systemImage: "chart.xyaxis.line")
 				}
 			} header: {
 				Text("Diagnostics")
