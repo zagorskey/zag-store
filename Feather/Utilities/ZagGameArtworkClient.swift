@@ -90,7 +90,15 @@ actor ZagGameArtworkClient {
 
         // Only a catalogue entry whose bundle ID matches exactly can supply art.
         // Never substitute an unrelated game found by title search, or an app icon.
-        let appleResult = try? await fetchAppleScreenshots(bundle: bundle, country: storefront)
+        var appleResult = try? await fetchAppleScreenshots(bundle: bundle, country: storefront)
+        // Some games are not listed in the UK storefront, or publish screenshots
+        // only in the US catalogue. Retry once without fuzzy title matching.
+        if (appleResult?.artworkURLs.isEmpty ?? true) && storefront != "us" {
+            if let usResult = try? await fetchAppleScreenshots(bundle: bundle, country: "us"),
+               !usResult.artworkURLs.isEmpty {
+                appleResult = usResult
+            }
+        }
         let result = appleResult ?? bridgeResult ?? ZagGameArtworkResponse(
             schemaVersion: 1,
             status: "unmatched",
