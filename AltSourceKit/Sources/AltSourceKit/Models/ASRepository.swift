@@ -186,6 +186,9 @@ extension ASRepository {
 		// Optional promotional artwork, independent of device screenshots.
 		public var bannerURL: URL?
 		public var headerURL: URL?
+		public var promotionalImageURL: URL?
+		public var featureGraphicURL: URL?
+		public var heroImageURL: URL?
 		
 		public var marketplaceID: String?
 
@@ -314,6 +317,9 @@ extension ASRepository {
 
 			self.bannerURL = try? container.decode(URL.self, forKey: .bannerURL)
 			self.headerURL = try? container.decode(URL.self, forKey: .headerURL)
+			self.promotionalImageURL = try? container.decode(URL.self, forKey: .promotionalImageURL)
+			self.featureGraphicURL = try? container.decode(URL.self, forKey: .featureGraphicURL)
+			self.heroImageURL = try? container.decode(URL.self, forKey: .heroImageURL)
 
 			self.screenshots = try container.decodeIfPresent(
 				Screenshots.self,
@@ -393,6 +399,7 @@ extension ASRepository {
 			     localizedDescription, iconURL, tintColor, size, category, beta
 			case permissions, appPermissions
 			case screenshots, screenshotURLs, bannerURL, headerURL
+			case promotionalImageURL, featureGraphicURL, heroImageURL
 			case marketplaceID
 		}
 		
@@ -430,7 +437,7 @@ extension ASRepository {
 
 		// Never treat screenshots as promotional header artwork.
 		public var currentPromotionalArtworkURL: URL? {
-			let candidates = [bannerURL, headerURL].compactMap { $0 }
+			let candidates = [bannerURL, headerURL, promotionalImageURL, featureGraphicURL, heroImageURL].compactMap { $0 }
 			return candidates.first { $0.scheme?.lowercased() == "https" && $0.host != nil }
 		}
 
