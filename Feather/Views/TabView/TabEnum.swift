@@ -1333,20 +1333,31 @@ private struct ZagFeaturedGameArtwork: View {
         .task(id: (bundleID ?? name) + "|" + (repositoryScreenshots.first?.absoluteString ?? "")) {
             hero = nil
 
-            if let repositoryArt = await resolveArtwork(repositoryScreenshots) {
-                guard !Task.isCancelled else { return }
-                hero = repositoryArt
-                if case .landscape = repositoryArt { return }
-            }
+            // Start Apple's identity/title lookup immediately, in parallel
+            // with repository screenshot downloads. A slow or dead repository
+            // image must not postpone artwork from the App Store.
+            if let bundleID, !bundleID.isEmpty {
+                async let lookup: ZagGameArtworkResponse? =
+                    try? await ZagGameArtworkClient.shared.lookup(
+                        bundleID: bundleID, name: name
+                    )
 
-            guard let bundleID, !bundleID.isEmpty, !Task.isCancelled else { return }
-            guard let response = try? await ZagGameArtworkClient.shared.lookup(
-                bundleID: bundleID,
-                name: name
-            ), !response.artworkURLs.isEmpty else { return }
+                if let repositoryArt = await resolveArtwork(repositoryScreenshots) {
+                    guard !Task.isCancelled else { return }
+                    hero = repositoryArt
+                    if case .landscape = repositoryArt { return }
+                }
 
-            if let catalogueArt = await resolveArtwork(response.artworkURLs), !Task.isCancelled {
-                hero = catalogueArt
+                guard !Task.isCancelled,
+                      let response = await lookup,
+                      !response.artworkURLs.isEmpty else { return }
+
+                if let catalogueArt = await resolveArtwork(response.artworkURLs),
+                   !Task.isCancelled {
+                    hero = catalogueArt
+                }
+            } else {
+                hero = await resolveArtwork(repositoryScreenshots)
             }
         }
     }

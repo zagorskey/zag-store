@@ -83,43 +83,40 @@ actor ZagGameArtworkClient {
         let key = storefront + ":" + bundle.lowercased() + ":" + name
         if let hit = cache[key], hit.expires > Date() { return hit.value }
 
-        // The current production bridge confirms identities but intentionally
-        // returns artwork_urls: []. Do not treat that empty list as a final result.
-        let bridgeResult = try? await fetchFromBridge(bundle: bundle, name: name, country: storefront)
-        if let bridgeResult, bridgeResult.isVerified, !bridgeResult.artworkURLs.isEmpty {
-            cache[key] = CacheEntry(value: bridgeResult, expires: Date().addingTimeInterval(6 * 3600))
-            return bridgeResult
-        }
-
-        // Only a catalogue entry whose bundle ID matches exactly can supply art.
-        // Never substitute an unrelated game found by title search, or an app icon.
-        var appleResult = try? await fetchAppleScreenshots(bundle: bundle, country: storefront)
-        // Some games are not listed in the UK storefront, or publish screenshots
-        // only in the US catalogue. Retry once without fuzzy title matching.
-        if (appleResult?.artworkURLs.isEmpty ?? true) && storefront != "us" {
-            if let usResult = try? await fetchAppleScreenshots(bundle: bundle, country: "us"),
-               !usResult.artworkURLs.isEmpty {
-                appleResult = usResult
-            }
-        }
-        // Resigned repository IPAs frequently use a different bundle ID from
-        // the original game. Use exactly ONE full-title match, not fuzzy search.
-        if appleResult?.artworkURLs.isEmpty ?? true {
-            var titleResult = try? await fetchAppleScreenshotsByExactTitle(
+        // Resolve the game's official bundle identity and its exact title
+        // concurrently. The production Zag bridge currently returns no URLs,
+        // so do not block the Apple lookup waiting for that endpoint.
+        async let exactPrimary: ZagGameArtworkResponse? =
+            try? await fetchAppleScreenshots(bundle: bundle, country: storefront)
+        async let titlePrimary: ZagGameArtworkResponse? =
+            try? await fetchAppleScreenshotsByExactTitle(
                 bundle: bundle, name: name, country: storefront
             )
-            if (titleResult?.artworkURLs.isEmpty ?? true) && storefront != "us" {
-                if let usResult = try? await fetchAppleScreenshotsByExactTitle(
+
+        let primaryResults = [await exactPrimary, await titlePrimary]
+        var found = primaryResults.compactMap { $0 }.first {
+            !$0.artworkURLs.isEmpty
+        }
+
+        // A title may exist only in the US storefront. Still insist on an
+        // exact title match: never show artwork from a similarly named app.
+        if found == nil && storefront != "us" {
+            async let exactUS: ZagGameArtworkResponse? =
+                try? await fetchAppleScreenshots(bundle: bundle, country: "us")
+            async let titleUS: ZagGameArtworkResponse? =
+                try? await fetchAppleScreenshotsByExactTitle(
                     bundle: bundle, name: name, country: "us"
-                ), !usResult.artworkURLs.isEmpty {
-                    titleResult = usResult
-                }
-            }
-            if let titleResult, !titleResult.artworkURLs.isEmpty {
-                appleResult = titleResult
+                )
+            found = [await exactUS, await titleUS].compactMap { $0 }.first {
+                !$0.artworkURLs.isEmpty
             }
         }
-        let result = appleResult ?? bridgeResult ?? ZagGameArtworkResponse(
+
+        // Retain support for a future curated Zag artwork catalogue, without
+        // letting today's empty production response delay ordinary screenshots.
+        let bridgeResult: ZagGameArtworkResponse? = found == nil ?
+            (try? await fetchFromBridge(bundle: bundle, name: name, country: storefront)) : nil
+        let result = found ?? bridgeResult ?? ZagGameArtworkResponse(
             schemaVersion: 1,
             status: "unmatched",
             bundleID: bundle,
