@@ -87,7 +87,8 @@ final class SourcesViewModel: ObservableObject {
 		// queries when the Apps tab requests its own refresh concurrently.
 		let inventoryStartedAt = ZagPerformanceMonitor.now()
 		let inventoryTask = Task { @MainActor in
-			await self._obtainInstalledInventory()
+			guard !diagnosticSkipReconciliation else { return false }
+			return await self._obtainInstalledInventory()
 		}
 
 		defer {
@@ -219,7 +220,7 @@ final class SourcesViewModel: ObservableObject {
 		let updatesStartedAt = CFAbsoluteTimeGetCurrent()
 		let inventoryAvailable = await inventoryTask.value
 		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryStartedAt)
-		if inventoryAvailable {
+		if inventoryAvailable && !Task.isCancelled {
 			UpdateManager.shared.refresh(repositories: completedRepositories)
 		}
 		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
