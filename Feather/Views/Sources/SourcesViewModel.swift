@@ -36,6 +36,7 @@ final class SourcesViewModel: ObservableObject {
 	) async {
 		guard isFinished else { return }
 		let diagnosticStart = CFAbsoluteTimeGetCurrent()
+		let metricStart = ZagPerformanceMonitor.now()
 		print("[Zag Refresh Diagnostic] Begin — skip reconciliation: \(diagnosticSkipReconciliation)")
 
 		let currentSourceURLs = Set(
@@ -174,6 +175,11 @@ final class SourcesViewModel: ObservableObject {
 			}
 		}
 
+		ZagPerformanceMonitor.shared.record(
+			.repositoriesFetch,
+			since: metricStart,
+			result: "completed"
+		)
 		print("[Zag Refresh Diagnostic] Repository fetch + publication — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
 		let completedSources = refreshedSources
 		let completedRepositories = Array(completedSources.values)
@@ -190,7 +196,9 @@ final class SourcesViewModel: ObservableObject {
 		}
 
 		let originsStartedAt = CFAbsoluteTimeGetCurrent()
+		let originsMetricStartedAt = ZagPerformanceMonitor.now()
 		reconcileRepositoryOrigins()
+		ZagPerformanceMonitor.shared.record(.repositoryOrigins, since: originsMetricStartedAt)
 		let originsElapsed = CFAbsoluteTimeGetCurrent() - originsStartedAt
 		print(
 			"[Zag Store Sources] Origin reconciliation — " +
@@ -198,9 +206,11 @@ final class SourcesViewModel: ObservableObject {
 		)
 
 		let updatesStartedAt = CFAbsoluteTimeGetCurrent()
+		let inventoryMetricStartedAt = ZagPerformanceMonitor.now()
 		await _refreshUpdatesUsingInstalledInventory(
 			repositories: completedRepositories
 		)
+		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryMetricStartedAt)
 		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
 		let finalizationElapsed = CFAbsoluteTimeGetCurrent() - reconciliationStartedAt
 		print(
