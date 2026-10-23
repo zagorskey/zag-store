@@ -10,24 +10,11 @@ import NimbleViews
 import NukeUI
 import AltSourceKit
 
-// MARK: - View
-
-struct SourcesCellView: View {
-	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-	var source: AltSource
-	var showsSeparator: Bool = true
-	var repository: ASRepository?
-	var isRefreshing: Bool = false
-
-	@State private var refreshDotCount = 0
-
-
- 	private var appCount: Int {
-		repository?.apps.count ?? 0
-	}
-
-	private enum RepositoryKind {
+// A repository's app list can contain tens of thousands of records.
+// Build this summary once on a fetch worker, never during SwiftUI body updates
+// or while the per-row refresh indicator is animating.
+struct ZagSourceRowMetadata: Sendable {
+	enum RepositoryKind: Sendable {
 		case classic
 		case pal
 		case mixed
@@ -41,25 +28,59 @@ struct SourcesCellView: View {
 		}
 	}
 
-	private var repositoryKind: RepositoryKind {
-		guard let apps = repository?.apps, !apps.isEmpty else {
-			return .classic
-		}
-		let palCount = apps.reduce(into: 0) { count, app in
+	let appCount: Int
+	let kind: RepositoryKind
+	let lastUpdated: Date?
+
+	init(repository: ASRepository) {
+		appCount = repository.apps.count
+		var palCount = 0
+		var mostRecent: Date?
+		for app in repository.apps {
 			if let marketplaceID = app.marketplaceID,
 			   !marketplaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-				count += 1
+				palCount += 1
+			}
+			if let date = app.currentDate?.date,
+			   mostRecent.map({ date > $0 }) ?? true {
+				mostRecent = date
 			}
 		}
-		if palCount == 0 { return .classic }
-		if palCount == apps.count { return .pal }
-		return .mixed
+		lastUpdated = mostRecent
+		if palCount == 0 {
+			kind = .classic
+		} else if palCount == appCount {
+			kind = .pal
+		} else {
+			kind = .mixed
+		}
+	}
+}
+
+// MARK: - View
+
+struct SourcesCellView: View {
+	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+	var source: AltSource
+	var showsSeparator: Bool = true
+	var repository: ASRepository?
+	var isRefreshing: Bool = false
+	var rowMetadata: ZagSourceRowMetadata? = nil
+
+	@State private var refreshDotCount = 0
+
+
+ 	private var appCount: Int {
+		rowMetadata?.appCount ?? repository?.apps.count ?? 0
+	}
+
+	private var repositoryKind: ZagSourceRowMetadata.RepositoryKind {
+		rowMetadata?.kind ?? .classic
 	}
 
 	private var lastUpdatedDate: Date? {
-		repository?.apps
-			.compactMap { $0.currentDate?.date }
-			.max()
+		rowMetadata?.lastUpdated
 	}
 
 	private var lastUpdatedText: String {
