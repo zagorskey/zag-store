@@ -1363,7 +1363,10 @@ private struct ZagFeaturedGameArtwork: View {
                     }
                 }
             }
-            return portraits.isEmpty ? nil : .portraits(portraits)
+            // Never repeat a single screenshot three times in a feature card.
+            // When fewer than three distinct images load, retain the designed
+            // background rather than generating a misleading collage.
+            return nil
         }
     }
 }
