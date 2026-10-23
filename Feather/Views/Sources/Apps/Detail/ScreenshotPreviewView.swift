@@ -75,24 +75,23 @@ struct ScreenshotPreviewView: View {
 		let started = ZagPerformanceMonitor.now()
 		let currentURL = screenshotURLs[currentIndex]
 		let wasPreloaded = loadedPreviewImages[currentURL] != nil
-		let indices = [currentIndex, currentIndex + 1, currentIndex - 1]
+		let nearby = [currentIndex, currentIndex + 1, currentIndex - 1]
 			.filter { screenshotURLs.indices.contains($0) }
+		let nearbyURLs = Set(nearby.map { screenshotURLs[$0] })
 
-		// At most three decoded full-resolution images live in preview memory.
-		// A previously seen image can be restored quickly from the shared cache.
-		let nearbyURLs = Set(indices.map { screenshotURLs[$0] })
+		// Only keep decoded full-resolution frames near the currently visible
+		// page. The shared compressed-byte cache preserves all other images.
 		loadedPreviewImages = loadedPreviewImages.filter {
 			nearbyURLs.contains($0.key)
 		}
 
-		for index in indices {
-			guard !Task.isCancelled else { return }
-			let url = screenshotURLs[index]
-			if loadedPreviewImages[url] != nil { continue }
-			guard let bytes = await ZagFeaturedImageCache.shared.load(url),
-				!Task.isCancelled,
-				let image = UIImage(data: bytes.data) else { continue }
-			loadedPreviewImages[url] = image
+		// Record time to the SELECTED full-resolution image, not the time
+		// spent prefetching its neighbours afterward.
+		if !wasPreloaded,
+		   let bytes = await ZagFeaturedImageCache.shared.load(currentURL),
+		   !Task.isCancelled,
+		   let image = UIImage(data: bytes.data) {
+			loadedPreviewImages[currentURL] = image
 		}
 		guard !Task.isCancelled else { return }
 		ZagPerformanceMonitor.shared.record(
@@ -101,6 +100,19 @@ struct ScreenshotPreviewView: View {
 			result: loadedPreviewImages[currentURL] == nil
 				? "unavailable" : (wasPreloaded ? "prefetched" : "loaded")
 		)
+
+		// Once the selected image is ready, prefetch the next and previous
+		// screenshots for smoother swipes without delaying the measurement.
+		for index in [currentIndex + 1, currentIndex - 1]
+			where screenshotURLs.indices.contains(index) {
+			guard !Task.isCancelled else { return }
+			let url = screenshotURLs[index]
+			if loadedPreviewImages[url] != nil { continue }
+			guard let bytes = await ZagFeaturedImageCache.shared.load(url),
+				!Task.isCancelled,
+				let image = UIImage(data: bytes.data) else { continue }
+			loadedPreviewImages[url] = image
+		}
 
 	}
 
