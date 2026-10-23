@@ -317,12 +317,12 @@ extension ASRepository {
 			// including device-keyed groups. Malformed optional media must
 			// never cause the application itself to fail decoding.
 			if let assets = try? container.decode([Screenshots.ScreenshotAsset].self, forKey: .screenshotURLs) {
-				self.screenshotURLs = assets.compactMap(\\.url)
+				self.screenshotURLs = assets.compactMap(\.url)
 			} else if let grouped = try? container.decode([String: [Screenshots.ScreenshotAsset]].self, forKey: .screenshotURLs) {
 				let preferred = ["iphone-edgeToEdge", "iphone-standard", "iphone", "ipad"]
 				let remaining = grouped.keys.filter { !preferred.contains($0) }.sorted()
 				self.screenshotURLs = (preferred + remaining).flatMap { key in
-					(grouped[key] ?? []).compactMap(\\.url)
+					(grouped[key] ?? []).compactMap(\.url)
 				}
 			} else {
 				self.screenshotURLs = nil
