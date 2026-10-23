@@ -69,14 +69,16 @@ actor ZagGameArtworkClient {
     }
 
     func lookup(bundleID: String, name: String, country: String = "gb") async throws -> ZagGameArtworkResponse {
-        let bundle = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suppliedBundle = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A modified or malformed sideload identifier is not evidence of an
+        // App Store identity. Fall back to the unique exact-title search.
+        let validBundle = suppliedBundle.count <= 255 && suppliedBundle.contains(".") &&
+            !suppliedBundle.contains(where: {
+                !$0.isASCII || !($0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-")
+            })
+        let bundle = validBundle ? suppliedBundle : ""
         let storefront = country.lowercased()
-        // An absent bundle ID is permitted only for exact-title lookups.
-        guard (bundle.isEmpty || (bundle.count <= 255 && bundle.contains(".") &&
-              !bundle.contains(where: {
-                  !$0.isASCII || !($0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-")
-              }))),
-              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               storefront.count == 2,
               storefront.allSatisfy({ $0.isASCII && $0.isLetter }) else {
             throw ZagGameArtworkError.invalidBundleID
