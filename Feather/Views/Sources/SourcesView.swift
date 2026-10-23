@@ -136,7 +136,9 @@ struct SourcesView: View {
 		source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
 	}
 	private func _lastUpdated(_ source: AltSource) -> Date {
-		viewModel.sources[source]?.apps.compactMap { $0.currentDate?.date }.max() ?? .distantPast
+		// Constant-time lookup; sorting must not rescan giant app arrays
+		// during refresh-dot updates or the live numeric count animation.
+		viewModel.rowMetadata(for: source)?.lastUpdated ?? .distantPast
 	}
 	private func _sorted(_ sources: [AltSource]) -> [AltSource] {
 		switch _sortMode {
@@ -876,7 +878,8 @@ struct SourcesView: View {
 							],
 						isRefreshing: source.sourceURL.map {
 							viewModel.refreshingSourceURLs.contains($0.absoluteString)
-						} ?? false
+						} ?? false,
+						rowMetadata: viewModel.rowMetadata(for: source)
 					)
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
