@@ -1285,210 +1285,80 @@ private struct ZagGamesPage: View {
     }
 }
 
-/// Full-bleed artwork, high-resolution screenshot strips, or an immediate
-/// game-specific editorial cover. Never show an empty or pixelated hero slot.
+/// The Featured collection receives only artwork downloaded and validated by
+/// ZagFeaturedArtworkResolver. It never draws empty geometric hero cards.
 private enum ZagFeaturedHero {
     case landscape(UIImage)
     case portraits([UIImage])
     case landscapeStrips([UIImage])
+
+    @MainActor
+    static func make(from payload: ZagVerifiedFeaturedArtwork) -> ZagFeaturedHero? {
+        let images = payload.images.compactMap { UIImage(data: $0.data) }
+        guard !images.isEmpty else { return nil }
+        switch payload.layout {
+        case .landscape: return .landscape(images[0])
+        case .portraits: return .portraits(images)
+        case .landscapeStrips: return .landscapeStrips(images)
+        }
+    }
 }
 
 private struct ZagFeaturedGameArtwork: View {
-    let bundleID: String?
-    let name: String
-    let repositoryScreenshots: [URL]
+    let hero: ZagFeaturedHero
     let width: CGFloat
-
-    @State private var hero: ZagFeaturedHero?
-
-    private var tintHue: Double {
-        let identifier = bundleID ?? name
-        let seed = identifier.unicodeScalars.reduce(UInt64(5381)) { value, scalar in
-            (value &* 33 &+ UInt64(scalar.value)) % 360
-        }
-        return Double(seed) / 360.0
-    }
-
-    // There is exactly ONE app icon and ONE app name in the card's footer.
-    // Until genuine artwork arrives, this crisp geometric background keeps
-    // the visual area intentional without pretending an enlarged icon is art.
-    private var editorialFallback: some View {
-        GeometryReader { geometry in
-            let cardWidth = geometry.size.width
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(hue: tintHue, saturation: 0.77, brightness: 0.48),
-                        Color(hue: (tintHue + 0.10).truncatingRemainder(dividingBy: 1),
-                              saturation: 0.78, brightness: 0.24),
-                        Color(hue: tintHue, saturation: 0.44, brightness: 0.12)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                RoundedRectangle(cornerRadius: 25, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.14), .white.opacity(0.01)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: cardWidth * 0.78, height: 96)
-                    .rotationEffect(.degrees(-30))
-                    .offset(x: cardWidth * 0.24, y: -74)
-
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(.white.opacity(0.15), lineWidth: 1)
-                    .frame(width: cardWidth * 0.95, height: 140)
-                    .rotationEffect(.degrees(-30))
-                    .offset(x: cardWidth * 0.19, y: 32)
-
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(.white.opacity(0.07))
-                    .frame(width: cardWidth * 0.56, height: 22)
-                    .rotationEffect(.degrees(-30))
-                    .offset(x: -cardWidth * 0.22, y: -58)
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
-        }
-        .frame(width: width, height: 250)
-    }
 
     var body: some View {
         ZStack {
-            editorialFallback
-
-            if let hero {
-                switch hero {
-                case .landscape(let image):
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: width, height: 250)
-                        .clipped()
-
-                case .portraits(let images):
-                    // Apple's 392x696 preview is sharp when confined to a
-                    // narrow gallery panel. Never multiply one screenshot.
-                    HStack(spacing: 2) {
-                        ForEach(images.indices, id: \.self) { index in
-                            Image(uiImage: images[index])
-                                .resizable()
-                                .scaledToFill()
-                                .frame(
-                                    width: images.count == 1 ? width * 0.48 :
-                                        (width - CGFloat(images.count - 1) * 2) / CGFloat(images.count),
-                                    height: 250
-                                )
-                                .clipped()
-                        }
-                    }
-                    .frame(width: width, height: 250, alignment: images.count == 1 ? .trailing : .center)
+            Color.black
+            switch hero {
+            case .landscape(let image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width, height: 250)
                     .clipped()
 
-                case .landscapeStrips(let images):
-                    // Low-resolution landscape screenshots remain sharp when
-                    // shown in small horizontal bands, not stretched full-card.
-                    VStack(spacing: 2) {
-                        ForEach(images.indices, id: \.self) { index in
-                            Image(uiImage: images[index])
-                                .resizable()
-                                .scaledToFill()
-                                .frame(
-                                    width: images.count == 1 ? width * 0.70 : width,
-                                    height: images.count == 1 ? 165 :
-                                        (250 - CGFloat(images.count - 1) * 2) / CGFloat(images.count)
-                                )
-                                .clipped()
-                        }
+            case .portraits(let images):
+                // Do not inflate a single small portrait to the entire card
+                // or copy it repeatedly to pretend other screenshots exist.
+                HStack(spacing: 2) {
+                    ForEach(images.indices, id: \.self) { index in
+                        Image(uiImage: images[index])
+                            .resizable()
+                            .scaledToFill()
+                            .frame(
+                                width: images.count == 1 ? width * 0.48 :
+                                    (width - CGFloat(images.count - 1) * 2) / CGFloat(images.count),
+                                height: 250
+                            )
+                            .clipped()
                     }
-                    .frame(width: width, height: 250, alignment: .center)
-                    .clipped()
                 }
+                .frame(width: width, height: 250,
+                       alignment: images.count == 1 ? .trailing : .center)
+                .clipped()
+
+            case .landscapeStrips(let images):
+                VStack(spacing: 2) {
+                    ForEach(images.indices, id: \.self) { index in
+                        Image(uiImage: images[index])
+                            .resizable()
+                            .scaledToFill()
+                            .frame(
+                                width: images.count == 1 ? width * 0.70 : width,
+                                height: images.count == 1 ? 165 :
+                                    (250 - CGFloat(images.count - 1) * 2) / CGFloat(images.count)
+                            )
+                            .clipped()
+                    }
+                }
+                .frame(width: width, height: 250)
+                .clipped()
             }
         }
         .frame(width: width, height: 250)
         .clipped()
-        .task(id: (bundleID ?? name) + "|" + (repositoryScreenshots.first?.absoluteString ?? "")) {
-            hero = nil
-
-            // Resolve each source independently. A stalled repository image
-            // must never block a valid catalogue screenshot, and apps without
-            // bundle identifiers can still be matched by their title.
-            async let repositoryArt = resolveArtwork(repositoryScreenshots)
-            async let catalogueArt: ZagFeaturedHero? = {
-                guard let response = try? await ZagGameArtworkClient.shared.lookup(
-                    bundleID: bundleID ?? "", name: name
-                ), !response.artworkURLs.isEmpty else { return nil }
-                return await resolveArtwork(response.artworkURLs)
-            }()
-
-            if let art = await catalogueArt, !Task.isCancelled {
-                hero = art
-            }
-            if let art = await repositoryArt, !Task.isCancelled {
-                // Prefer repository-provided landscape artwork, otherwise
-                // retain a successfully resolved catalogue image.
-                if case .landscape = art {
-                    hero = art
-                } else if hero == nil {
-                    hero = art
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func resolveArtwork(_ urls: [URL]) async -> ZagFeaturedHero? {
-        var seen = Set<URL>()
-        let candidates = Array(urls.filter { seen.insert($0).inserted }.prefix(6))
-        guard !candidates.isEmpty else { return nil }
-
-        return await withTaskGroup(of: ZagFeaturedImageBytes?.self, returning: ZagFeaturedHero?.self) { group in
-            for url in candidates {
-                group.addTask { await ZagFeaturedImageCache.shared.load(url) }
-            }
-
-            var portraits: [ZagFeaturedImageBytes] = []
-            var landscapes: [ZagFeaturedImageBytes] = []
-            for await candidate in group {
-                guard !Task.isCancelled else {
-                    group.cancelAll()
-                    return nil
-                }
-                guard let candidate, candidate.height > 0 else { continue }
-                let ratio = Double(candidate.width) / Double(candidate.height)
-
-                if ratio >= 1.25 {
-                    if candidate.width >= 850 && candidate.height >= 420,
-                       let image = UIImage(data: candidate.data) {
-                        group.cancelAll()
-                        return .landscape(image)
-                    }
-                    if candidate.width >= 320 && candidate.height >= 175 {
-                        landscapes.append(candidate)
-                    }
-                } else if (0.35...0.90).contains(ratio),
-                          candidate.width >= 320 && candidate.height >= 550 {
-                    portraits.append(candidate)
-                }
-            }
-            // The original code discarded 392x696 previews and rejected
-            // galleries with fewer than three images. Accept one genuine
-            // screenshot, without cloning it to fill the other panels.
-            if !portraits.isEmpty {
-                let images = portraits.prefix(3).compactMap { UIImage(data: $0.data) }
-                if !images.isEmpty { return .portraits(images) }
-            }
-            if !landscapes.isEmpty {
-                let images = landscapes.prefix(3).compactMap { UIImage(data: $0.data) }
-                if !images.isEmpty { return .landscapeStrips(images) }
-            }
-            return nil
-        }
     }
 }
 
