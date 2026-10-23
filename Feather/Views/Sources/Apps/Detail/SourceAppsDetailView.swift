@@ -138,8 +138,20 @@ struct SourceAppsDetailView: View {
 
 	@MainActor
 	private func _loadScreenshots() async {
+		// Keep the existing clear-on-app-change behavior, but prioritize
+		// screenshots visible immediately instead of starting 12 full-size
+		// downloads at once and competing with the header artwork.
 		_highResolutionScreenshots = [:]
 		let urls = Array(_galleryScreenshotURLs.prefix(12))
+		for start in stride(from: 0, to: urls.count, by: 3) {
+			guard !Task.isCancelled else { return }
+			let end = min(start + 3, urls.count)
+			await _loadScreenshotBatch(Array(urls[start..<end]))
+		}
+	}
+
+	@MainActor
+	private func _loadScreenshotBatch(_ urls: [URL]) async {
 		await withTaskGroup(of: (URL, UIImage?).self) { group in
 			for url in urls {
 				group.addTask {
@@ -180,8 +192,9 @@ struct SourceAppsDetailView: View {
 
 	@MainActor
 	private func _loadVerifiedFeaturedArtwork() async {
-		// The Games storefront may have already decoded this exact artwork.
-		// Render it immediately instead of resetting the header to a placeholder.
+		// Games Featured already verified the artwork: don't run the resolver
+		// again merely because the user opened that game.
+		guard prefetchedFeaturedHero == nil else { return }
 		guard !_galleryScreenshotURLs.isEmpty else { return }
 		guard let verified = await ZagFeaturedArtworkResolver.shared.resolve(
 			bundleID: app.id,
