@@ -182,6 +182,10 @@ extension ASRepository {
 		public var screenshots: Screenshots?
 
 		public var screenshotURLs: [URL]?
+
+		// Optional promotional artwork, independent of device screenshots.
+		public var bannerURL: URL?
+		public var headerURL: URL?
 		
 		public var marketplaceID: String?
 
@@ -308,6 +312,9 @@ extension ASRepository {
 				forKey: .appPermissions
 			)
 
+			self.bannerURL = try? container.decode(URL.self, forKey: .bannerURL)
+			self.headerURL = try? container.decode(URL.self, forKey: .headerURL)
+
 			self.screenshots = try container.decodeIfPresent(
 				Screenshots.self,
 				forKey: .screenshots
@@ -385,7 +392,7 @@ extension ASRepository {
 			case versions, version, versionDate, date, versionDescription, downloadURL,
 			     localizedDescription, iconURL, tintColor, size, category, beta
 			case permissions, appPermissions
-			case screenshots, screenshotURLs
+			case screenshots, screenshotURLs, bannerURL, headerURL
 			case marketplaceID
 		}
 		
@@ -419,6 +426,12 @@ extension ASRepository {
 		
 		public var currentDescription: String? {
 			subtitle ?? localizedDescription
+		}
+
+		// Never treat screenshots as promotional header artwork.
+		public var currentPromotionalArtworkURL: URL? {
+			let candidates = [bannerURL, headerURL].compactMap { $0 }
+			return candidates.first { $0.scheme?.lowercased() == "https" && $0.host != nil }
 		}
 
 		// Consolidate the two supported manifest screenshot formats for
