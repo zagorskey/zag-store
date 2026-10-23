@@ -44,6 +44,7 @@ struct SourceAppsDetailView: View {
 	
 	var source: ASRepository
 	var app: ASRepository.App
+	var prefetchedFeaturedHero: ZagAppDetailHeaderHero? = nil
 	
 	var body: some View {
 		_detailPresented
@@ -179,7 +180,8 @@ struct SourceAppsDetailView: View {
 
 	@MainActor
 	private func _loadVerifiedFeaturedArtwork() async {
-		_verifiedFeaturedHero = nil
+		// The Games storefront may have already decoded this exact artwork.
+		// Render it immediately instead of resetting the header to a placeholder.
 		guard !_galleryScreenshotURLs.isEmpty else { return }
 		guard let verified = await ZagFeaturedArtworkResolver.shared.resolve(
 			bundleID: app.id,
@@ -581,7 +583,7 @@ extension SourceAppsDetailView {
 		if let image = _promotionalHeaderImage {
 			// Independent publisher banner has priority over gallery media.
 			ZagPromotionalBannerView(image: image)
-		} else if let featured = _verifiedFeaturedHero {
+		} else if let featured = _verifiedFeaturedHero ?? prefetchedFeaturedHero {
 			// Match the working Games artwork selection and display layout
 			// whenever independent promotional art cannot be found.
 			ZagAppDetailHeaderImage(hero: featured)
