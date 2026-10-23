@@ -681,47 +681,48 @@ extension SourceAppsDetailView {
 	
 	@ViewBuilder
 	private func _screenshots(screenshotURLs: [URL]) -> some View {
+		// A page is exactly the width of the horizontal viewport. Variable
+		// screenshot aspect ratios must never change its scroll target width:
+		// otherwise snapping can land on the gap between two screenshots.
+		let pageWidth = UIScreen.main.bounds.width
+		let imageWidth = pageWidth - 32
+
 		ScrollView(.horizontal, showsIndicators: false) {
-			LazyHStack(spacing: 12) {
+			LazyHStack(spacing: 0) {
 				ForEach(screenshotURLs.indices, id: \.self) { index in
 					let url = screenshotURLs[index]
-					if let image = _galleryThumbnailImages[url] {
-						Image(uiImage: image)
-							.resizable()
+					Group {
+						if let thumbnail = _galleryThumbnailImages[url] {
+							Image(uiImage: thumbnail)
+								.resizable()
 								.aspectRatio(contentMode: .fit)
-								.frame(
-									maxWidth: UIScreen.main.bounds.width - 32,
-									maxHeight: 400
-								)
-								.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-								.overlay {
-									RoundedRectangle(cornerRadius: 16, style: .continuous)
-										.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
+						} else {
+							LazyImage(url: url) { state in
+								if let image = state.image {
+									image.resizable().aspectRatio(contentMode: .fit)
+								} else {
+									ProgressView()
 								}
-								.onTapGesture {
-									_selectedScreenshotIndex = index
-									_isScreenshotPreviewPresented = true
-								}
-					} else {
-						LazyImage(url: url) { state in
-							if let image = state.image {
-								image.resizable()
-									.aspectRatio(contentMode: .fit)
-									.frame(maxWidth: UIScreen.main.bounds.width - 32, maxHeight: 400)
-									.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-									.onTapGesture {
-										_selectedScreenshotIndex = index
-										_isScreenshotPreviewPresented = true
-									}
 							}
 						}
 					}
+					.frame(width: imageWidth, height: 400)
+					.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+					.overlay {
+						RoundedRectangle(cornerRadius: 16, style: .continuous)
+							.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
+					}
+					.frame(width: pageWidth, height: 400, alignment: .center)
+					.contentShape(Rectangle())
+					.onTapGesture {
+						_selectedScreenshotIndex = index
+						_isScreenshotPreviewPresented = true
+					}
 				}
 			}
-			.padding(.horizontal)
 			.compatScrollTargetLayout()
 		}
-		.compatScrollTargetBehavior()
+		.scrollTargetBehavior(.paging)
 		.modifier(ZagGalleryScrollMetricsModifier())
 		.padding(.horizontal, -16)
 	}
