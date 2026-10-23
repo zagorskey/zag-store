@@ -361,10 +361,10 @@ private extension SourceAppsDetailView {
 	}
 }
 
-// MARK: - Verified screenshot hero for app-detail pages
+// MARK: - Shared verified screenshot hero for all app information pages
 // Keep decoded UIImages in view state so scrolling never repeatedly decodes
 // multi-megabyte screenshots. Only the verified artwork pipeline creates these.
-private enum ZagAppDetailHeaderHero {
+enum ZagAppDetailHeaderHero {
 	case landscape(UIImage)
 	case portraits([UIImage])
 	case landscapeStrips([UIImage])
@@ -383,7 +383,7 @@ private enum ZagAppDetailHeaderHero {
 	}
 }
 
-private struct ZagAppDetailHeaderImage: View {
+struct ZagAppDetailHeaderImage: View {
 	let hero: ZagAppDetailHeaderHero
 
 	var body: some View {
