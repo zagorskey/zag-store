@@ -65,55 +65,68 @@ struct ScreenshotPreviewView: View {
 			.frame(width: 92, height: 36)
 			.accessibilityLabel("Screenshot \(currentIndex + 1) of \(screenshotURLs.count)")
 	}
-	// When the user jumps to a screenshot before the background gallery pass
-	// reaches it, request its original high-resolution bytes immediately.
-	// Both views use the same coalescing image cache, so there is no duplicate
-	// network transfer. Prefetch the adjacent image for a smoother swipe.
+	// The gallery already supplies a downsampled thumbnail for immediate
+	// display. Do not decode or change image state during an interactive swipe:
+	// wait for the page to settle, then decode a screen-sized rendition on a
+	// background executor. This avoids main-thread UIImage(data:) decoding.
 	@MainActor
 	private func _loadCurrentAndAdjacentScreenshots() async {
 		guard screenshotURLs.indices.contains(currentIndex) else { return }
-		let started = ZagPerformanceMonitor.now()
-		let currentURL = screenshotURLs[currentIndex]
-		let wasPreloaded = loadedPreviewImages[currentURL] != nil
-		let nearby = [currentIndex, currentIndex + 1, currentIndex - 1]
+		let selectedIndex = currentIndex
+		let selectedURL = screenshotURLs[selectedIndex]
+
+		// A swipe changes currentIndex and cancels the previous .task. Do not
+		// start disk access or publish new UIImages during that transition.
+		try? await Task.sleep(for: .milliseconds(220))
+		guard !Task.isCancelled, currentIndex == selectedIndex else { return }
+
+		let nearbyIndices = [selectedIndex, selectedIndex - 1, selectedIndex + 1]
 			.filter { screenshotURLs.indices.contains($0) }
-		let nearbyURLs = Set(nearby.map { screenshotURLs[$0] })
+		let nearbyURLs = Set(nearbyIndices.map { screenshotURLs[$0] })
 
-		// Only keep decoded full-resolution frames near the currently visible
-		// page. The shared compressed-byte cache preserves all other images.
-		loadedPreviewImages = loadedPreviewImages.filter {
-			nearbyURLs.contains($0.key)
-		}
+		// At most three screen-sized bitmaps are retained at once.
+		loadedPreviewImages = loadedPreviewImages.filter { nearbyURLs.contains($0.key) }
 
-		// Record time to the SELECTED full-resolution image, not the time
-		// spent prefetching its neighbours afterward.
-		if !wasPreloaded,
-		   let bytes = await ZagFeaturedImageCache.shared.load(currentURL),
-		   !Task.isCancelled,
-		   let image = UIImage(data: bytes.data) {
-			loadedPreviewImages[currentURL] = image
+		let started = ZagPerformanceMonitor.now()
+		let wasReady = loadedPreviewImages[selectedURL] != nil
+		if !wasReady {
+			if let image = await _decodePreview(selectedURL),
+			   !Task.isCancelled, currentIndex == selectedIndex {
+				loadedPreviewImages[selectedURL] = image
+			}
 		}
-		guard !Task.isCancelled else { return }
+		guard !Task.isCancelled, currentIndex == selectedIndex else { return }
 		ZagPerformanceMonitor.shared.record(
 			.previewFullResolution,
 			since: started,
-			result: loadedPreviewImages[currentURL] == nil
-				? "unavailable" : (wasPreloaded ? "prefetched" : "loaded")
+			result: loadedPreviewImages[selectedURL] == nil
+				? "unavailable" : (wasReady ? "prefetched" : "loaded")
 		)
 
-		// Once the selected image is ready, prefetch the next and previous
-		// screenshots for smoother swipes without delaying the measurement.
-		for index in [currentIndex + 1, currentIndex - 1]
+		// Only after the selected frame is ready do we prepare neighbours.
+		// The shared byte cache coalesces requests with the detail-page gallery.
+		for index in [selectedIndex + 1, selectedIndex - 1]
 			where screenshotURLs.indices.contains(index) {
-			guard !Task.isCancelled else { return }
+			guard !Task.isCancelled, currentIndex == selectedIndex else { return }
 			let url = screenshotURLs[index]
 			if loadedPreviewImages[url] != nil { continue }
-			guard let bytes = await ZagFeaturedImageCache.shared.load(url),
-				!Task.isCancelled,
-				let image = UIImage(data: bytes.data) else { continue }
-			loadedPreviewImages[url] = image
+			if let image = await _decodePreview(url),
+			   !Task.isCancelled, currentIndex == selectedIndex {
+				loadedPreviewImages[url] = image
+			}
 		}
+	}
 
+	// ImageIO forces the bitmap to be decoded before the UIImage reaches
+	// SwiftUI. A 2200px maximum still looks sharp on a Pro Max display
+	// without holding several original 4K+ screenshot buffers in memory.
+	private func _decodePreview(_ url: URL) async -> UIImage? {
+		guard let bytes = await ZagFeaturedImageCache.shared.load(url),
+		      !Task.isCancelled else { return nil }
+		let data = bytes.data
+		return await Task.detached(priority: .utility) {
+			ZagScreenshotThumbnailDecoder.decode(data, maxPixelSize: 2200)
+		}.value
 	}
 
 }
