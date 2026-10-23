@@ -409,9 +409,14 @@ actor ZagFeaturedImageCache {
         ) != nil else { return [url] }
 
         let ext = String(filename.split(separator: ".").last ?? "png")
-        let hdURL = url.deletingLastPathComponent()
-            .appendingPathComponent("1200x0w." + ext)
-        return hdURL == url ? [url] : [hdURL, url]
+        let directory = url.deletingLastPathComponent()
+        let ultraHD = directory.appendingPathComponent("2048x0w." + ext)
+        let hd = directory.appendingPathComponent("1200x0w." + ext)
+        // Prefer a larger original CDN rendition when supported. Some
+        // image endpoints only support 1200px or the supplied URL.
+        return [ultraHD, hd, url].reduce(into: [URL]()) { urls, candidate in
+            if !urls.contains(candidate) { urls.append(candidate) }
+        }
     }
 }
 
