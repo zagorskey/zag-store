@@ -29,14 +29,14 @@ struct ScreenshotPreviewView: View {
 		NavigationStack {
 			_imageScrollView()
 				.toolbar {
-					ToolbarItem(placement: .topBarLeading) {
+					ToolbarItem(placement: .topBarTrailing) {
 						if #available(iOS 26.0, *) {
 							Button(role: .close) { dismiss() }
 						} else {
 							Button(.localized("Close"), role: .cancel) { dismiss() }
 						}
 					}
-					ToolbarItem(placement: .topBarTrailing) {
+					ToolbarItem(placement: .topBarLeading) {
 						if #available(iOS 26.0, *) {
 							Text(verbatim: "\(currentIndex + 1) / \(screenshotURLs.count)")
 								.font(.subheadline)
