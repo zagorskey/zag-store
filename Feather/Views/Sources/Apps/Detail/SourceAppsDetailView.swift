@@ -211,107 +211,124 @@ struct SourceAppsDetailView: View {
 				Divider()
 			}
                 
-			NBSection(.localized("Information")) {
-				VStack(spacing: 12) {
-					if let sourceName = source.name {
-						_infoRow(title: .localized("Source"), value: sourceName)
-					}
+			_informationSection
+			_metadataSection
+			_permissionsSection
+		}
+	}
+
+	@ViewBuilder
+	private var _informationSection: some View {
+		NBSection(.localized("Information")) {
+			VStack(spacing: 12) {
+				if let sourceName = source.name {
+					_infoRow(title: .localized("Source"), value: sourceName)
+				}
                         
-					if let developer = app.developer {
-						_infoRow(title: .localized("Developer"), value: developer)
-					}
-					
-					if let size = app.size {
-						_infoRow(title: .localized("Size"), value: size.formattedByteCount)
-					}
-					
-					if let category = app.category {
-						_infoRow(title: .localized("Category"), value: category.capitalized)
-					}
-					
-					if let version = app.currentVersion {
-						_infoRow(title: .localized("Version"), value: version)
-					}
+				if let developer = app.developer {
+					_infoRow(title: .localized("Developer"), value: developer)
+				}
+				
+				if let size = app.size {
+					_infoRow(title: .localized("Size"), value: size.formattedByteCount)
+				}
+				
+				if let category = app.category {
+					_infoRow(title: .localized("Category"), value: category.capitalized)
+				}
+				
+				if let version = app.currentVersion {
+					_infoRow(title: .localized("Version"), value: version)
+				}
 
-					if
-						let bundleID = app.id,
-						let installed = pairingCore.installedAppInfo(bundleID: bundleID)
-					{
-						if let installedVariant = _installedVariantLabel(bundleID: bundleID) {
-							_infoRow(
-								title: .localized("Installed Variant"),
-								value: installedVariant
-							)
-						}
-
-						let installedValue = installed.build.isEmpty
-							? installed.version
-							: "\(installed.version) (\(installed.build))"
+				if
+					let bundleID = app.id,
+					let installed = pairingCore.installedAppInfo(bundleID: bundleID)
+				{
+					if let installedVariant = _installedVariantLabel(bundleID: bundleID) {
 						_infoRow(
-							title: .localized("Installed"),
-							value: installedValue
+							title: .localized("Installed Variant"),
+							value: installedVariant
 						)
 					}
-					
-					if let date = app.currentDate?.date {
-						_infoRow(title: .localized("Updated"), value: DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none))
-					}
-					
-					if let bundleId = app.id {
-						_infoRow(title: .localized("Identifier"), value: bundleId)
-					}
-				}
-			}
-			
-			if _showInternalMetadata {
-				Divider()
-				NBSection("Developer Metadata") {
-					VStack(spacing: 12) {
-						_infoRow(title: "Bundle ID", value: app.id ?? "Unknown")
-						_infoRow(title: "Unique ID", value: app.currentUniqueId)
-						_infoRow(title: "Variant Identity", value: UpdateManager.variantIdentity(for: app))
-						_infoRow(title: "Repository ID", value: source.id ?? "Unknown")
-						_infoRow(title: "Tracked Repository", value: _trackedRepositoryValue())
-						_infoRow(title: "Tracked App Identity", value: _trackedAppIdentityValue())
-						_infoRow(title: "Tracked Variant", value: _trackedVariantValue())
-						_infoRow(title: "Device Inventory", value: _deviceInventoryValue())
-						_infoRow(title: "Download Host", value: app.currentDownloadUrl?.host ?? "Unknown")
-					}
-				}
-			}
 
-			if let appPermissions = app.appPermissions {
-				NBSection(.localized("Permissions")) {
-					Group {
-						if let entitlements = appPermissions.entitlements {
-							NBTitleWithSubtitleView(
-								title: .localized("Entitlements"),
-								subtitle: entitlements.map(\.name).joined(separator: "\n")
-							)
-						} else {
-							Text(.localized("No Entitlements listed."))
-								.font(.subheadline)
-								.foregroundStyle(.secondary)
-						}
-						if let privacyItems = appPermissions.privacy {
-							ForEach(privacyItems, id: \.self) { item in
-								NBTitleWithSubtitleView(
-									title: item.name,
-									subtitle: item.usageDescription
-								)
-							}
-						} else {
-							Text(.localized("No Privacy Permissions listed."))
-								.font(.subheadline)
-								.foregroundStyle(.secondary)
-						}
-					}
-					.padding()
-					.background(
-						RoundedRectangle(cornerRadius: 18, style: .continuous)
-							.fill(Color(.quaternarySystemFill))
+					let installedValue = installed.build.isEmpty
+						? installed.version
+						: "\(installed.version) (\(installed.build))"
+					_infoRow(
+						title: .localized("Installed"),
+						value: installedValue
 					)
 				}
+				
+				if let date = app.currentDate?.date {
+					_infoRow(title: .localized("Updated"), value: DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none))
+				}
+				
+				if let bundleId = app.id {
+					_infoRow(title: .localized("Identifier"), value: bundleId)
+				}
+			}
+		}
+		
+	}
+
+	@ViewBuilder
+	private var _metadataSection: some View {
+
+		if _showInternalMetadata {
+			Divider()
+			NBSection("Developer Metadata") {
+				VStack(spacing: 12) {
+					_infoRow(title: "Bundle ID", value: app.id ?? "Unknown")
+					_infoRow(title: "Unique ID", value: app.currentUniqueId)
+					_infoRow(title: "Variant Identity", value: UpdateManager.variantIdentity(for: app))
+					_infoRow(title: "Repository ID", value: source.id ?? "Unknown")
+					_infoRow(title: "Tracked Repository", value: _trackedRepositoryValue())
+					_infoRow(title: "Tracked App Identity", value: _trackedAppIdentityValue())
+					_infoRow(title: "Tracked Variant", value: _trackedVariantValue())
+					_infoRow(title: "Device Inventory", value: _deviceInventoryValue())
+					_infoRow(title: "Download Host", value: app.currentDownloadUrl?.host ?? "Unknown")
+				}
+			}
+		}
+
+	}
+
+	@ViewBuilder
+	private var _permissionsSection: some View {
+
+		if let appPermissions = app.appPermissions {
+			NBSection(.localized("Permissions")) {
+				Group {
+					if let entitlements = appPermissions.entitlements {
+						NBTitleWithSubtitleView(
+							title: .localized("Entitlements"),
+							subtitle: entitlements.map(\.name).joined(separator: "\n")
+						)
+					} else {
+						Text(.localized("No Entitlements listed."))
+							.font(.subheadline)
+							.foregroundStyle(.secondary)
+					}
+					if let privacyItems = appPermissions.privacy {
+						ForEach(privacyItems, id: \.self) { item in
+							NBTitleWithSubtitleView(
+								title: item.name,
+								subtitle: item.usageDescription
+							)
+						}
+					} else {
+						Text(.localized("No Privacy Permissions listed."))
+							.font(.subheadline)
+							.foregroundStyle(.secondary)
+					}
+				}
+				.padding()
+				.background(
+					RoundedRectangle(cornerRadius: 18, style: .continuous)
+						.fill(Color(.quaternarySystemFill))
+				)
 			}
 		}
 	}
