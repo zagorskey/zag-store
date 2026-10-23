@@ -156,7 +156,7 @@ actor ZagPromotionalArtworkResolver {
     }
 
     private func websiteBanner(_ website: URL, name: String) async -> URL? {
-        let key = website.absoluteString
+        let key = website.absoluteString + "|" + Self.normalized(name)
         if let cached = websiteCache[key], cached.expires > Date() {
             return cached.imageURL
         }
