@@ -953,6 +953,10 @@ private struct ZagGamesPage: View {
                 guard verifiedFeaturedGames.count < 8,
                       let hero = ZagFeaturedHero.make(from: payload) else { continue }
                 let entry = candidates[index]
+                let nameKey = normalizedName(entry.app.currentName)
+                guard !verifiedFeaturedGames.contains(where: {
+                    normalizedName($0.app.currentName) == nameKey
+                }) else { continue }
                 verifiedArtwork[entry.id] = hero
                 verifiedFeaturedGames.append(entry)
             }
@@ -996,7 +1000,9 @@ private struct ZagGamesPage: View {
                     // Continue checking the catalogue for genuine artwork even
                     // after the 60 visible Games slots have been filled.
                     let sourceKey = repository.id ?? repository.name ?? "Repository"
-                    if seenArtwork.insert(key).inserted {
+                    // A different source may have working images for the
+                    // same game even if an earlier source has broken links.
+                    if seenArtwork.insert(sourceKey + "::" + key).inserted {
                         let entry = SourceAppsView.SourceAppRoute(source: repository, app: app)
                         if !app.currentScreenshotURLs.isEmpty {
                             if artworkCandidates.count < 72 &&
