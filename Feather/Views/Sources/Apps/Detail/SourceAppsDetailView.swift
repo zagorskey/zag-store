@@ -24,7 +24,7 @@ struct SourceAppsDetailView: View {
 	@State private var _promotionalHeaderImage: UIImage?
 	@State private var _verifiedFeaturedHero: ZagAppDetailHeaderHero?
 	@State private var _catalogueScreenshotURLs: [URL] = []
-	@State private var _highResolutionScreenshots: [URL: UIImage] = [:]
+	@State private var _galleryThumbnailImages: [URL: UIImage] = [:]
 
 	private var _galleryScreenshotURLs: [URL] {
 		let repositoryImages = app.currentScreenshotURLs
@@ -115,7 +115,7 @@ struct SourceAppsDetailView: View {
 					ScreenshotPreviewView(
 						screenshotURLs: _galleryScreenshotURLs,
 						initialIndex: _selectedScreenshotIndex,
-						highResolutionImages: _highResolutionScreenshots
+						thumbnailImages: _galleryThumbnailImages
 					)
 				}
 			}
@@ -138,10 +138,10 @@ struct SourceAppsDetailView: View {
 
 	@MainActor
 	private func _loadScreenshots() async {
-		// Keep the existing clear-on-app-change behavior, but prioritize
-		// screenshots visible immediately instead of starting 12 full-size
-		// downloads at once and competing with the header artwork.
-		_highResolutionScreenshots = [:]
+		// Keep the existing clear-on-app-change behavior. Prioritize
+		// visible thumbnails and retain only 1200px-decoded images here;
+		// compressed full-resolution bytes stay in the shared cache.
+		_galleryThumbnailImages = [:]
 		let urls = Array(_galleryScreenshotURLs.prefix(12))
 		for start in stride(from: 0, to: urls.count, by: 3) {
 			guard !Task.isCancelled else { return }
@@ -156,12 +156,12 @@ struct SourceAppsDetailView: View {
 			for url in urls {
 				group.addTask {
 					let bytes = await ZagFeaturedImageCache.shared.load(url)
-					return (url, bytes.flatMap { UIImage(data: $0.data) })
+					return (url, bytes.flatMap { ZagScreenshotThumbnailDecoder.decode($0.data) })
 				}
 			}
 			for await (url, image) in group {
 				guard !Task.isCancelled else { return }
-				if let image { _highResolutionScreenshots[url] = image }
+				if let image { _galleryThumbnailImages[url] = image }
 			}
 		}
 	}
@@ -651,10 +651,10 @@ extension SourceAppsDetailView {
 	@ViewBuilder
 	private func _screenshots(screenshotURLs: [URL]) -> some View {
 		ScrollView(.horizontal, showsIndicators: false) {
-			HStack(spacing: 12) {
+			LazyHStack(spacing: 12) {
 				ForEach(screenshotURLs.indices, id: \.self) { index in
 					let url = screenshotURLs[index]
-					if let image = _highResolutionScreenshots[url] {
+					if let image = _galleryThumbnailImages[url] {
 						Image(uiImage: image)
 							.resizable()
 								.aspectRatio(contentMode: .fit)
