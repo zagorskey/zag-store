@@ -1326,6 +1326,7 @@ private struct ZagFeaturedGameArtwork: View {
                     }
                     .frame(width: width, height: 250, alignment: .center)
                     .clipped()
+                }
             }
         }
         .frame(width: width, height: 250)
