@@ -52,6 +52,8 @@ actor ZagGameArtworkClient {
     private struct AppleApp: Decodable {
         let bundleId: String?
         let kind: String?
+        let trackName: String?
+        let artistName: String?
         let screenshotUrls: [String]?
         let ipadScreenshotUrls: [String]?
     }
@@ -98,6 +100,23 @@ actor ZagGameArtworkClient {
             if let usResult = try? await fetchAppleScreenshots(bundle: bundle, country: "us"),
                !usResult.artworkURLs.isEmpty {
                 appleResult = usResult
+            }
+        }
+        // Resigned repository IPAs frequently use a different bundle ID from
+        // the original game. Use exactly ONE full-title match, not fuzzy search.
+        if appleResult?.artworkURLs.isEmpty ?? true {
+            var titleResult = try? await fetchAppleScreenshotsByExactTitle(
+                bundle: bundle, name: name, country: storefront
+            )
+            if (titleResult?.artworkURLs.isEmpty ?? true) && storefront != "us" {
+                if let usResult = try? await fetchAppleScreenshotsByExactTitle(
+                    bundle: bundle, name: name, country: "us"
+                ), !usResult.artworkURLs.isEmpty {
+                    titleResult = usResult
+                }
+            }
+            if let titleResult, !titleResult.artworkURLs.isEmpty {
+                appleResult = titleResult
             }
         }
         let result = appleResult ?? bridgeResult ?? ZagGameArtworkResponse(
@@ -178,21 +197,70 @@ actor ZagGameArtworkClient {
             ($0.kind == nil || $0.kind == "software")
         }) else { return nil }
 
+        return Self.artworkResponse(app, requestedBundle: bundle, status: "verified")
+    }
+
+    private func fetchAppleScreenshotsByExactTitle(
+        bundle: String, name: String, country: String
+    ) async throws -> ZagGameArtworkResponse? {
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (2...100).contains(title.count) else { return nil }
+
+        var components = URLComponents(string: "https://itunes.apple.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "term", value: title),
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "entity", value: "software"),
+            URLQueryItem(name: "limit", value: "30")
+        ]
+        guard let url = components?.url else {
+            throw ZagGameArtworkError.unexpectedResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              data.count <= 1_500_000 else {
+            throw ZagGameArtworkError.unexpectedResponse
+        }
+
+        let catalogue = try JSONDecoder().decode(AppleLookup.self, from: data)
+        let matches = catalogue.results.filter {
+            ($0.kind == nil || $0.kind == "software") &&
+            Self.normalizedTitle($0.trackName ?? "") == Self.normalizedTitle(title) &&
+            !Self.normalizedTitle(title).isEmpty &&
+            !(($0.screenshotUrls ?? []) + ($0.ipadScreenshotUrls ?? [])).isEmpty
+        }
+
+        // A unique, exact title is necessary when the sideloaded bundle ID
+        // does not match Apple's. Never silently choose an unrelated search hit.
+        guard matches.count == 1, let app = matches.first else { return nil }
+        return Self.artworkResponse(app, requestedBundle: bundle, status: "title_matched")
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .unicodeScalars.filter(CharacterSet.alphanumerics.contains)
+            .map(String.init).joined()
+    }
+
+    private static func artworkResponse(
+        _ app: AppleApp, requestedBundle: String, status: String
+    ) -> ZagGameArtworkResponse {
         let candidates = (app.screenshotUrls ?? []) + (app.ipadScreenshotUrls ?? [])
         var seen = Set<URL>()
         let images = candidates.compactMap(URL.init(string:)).filter {
-            Self.isTrustedImageURL($0) && seen.insert($0).inserted
+            isTrustedImageURL($0) && seen.insert($0).inserted
         }
-
-        // Featured cards are landscape. Prefer actual landscape screenshots
-        // and preserve original ordering if only portrait captures exist.
-        let ordered = images.filter(Self.isLandscapeScreenshot)
-            + images.filter { !Self.isLandscapeScreenshot($0) }
+        let ordered = images.filter(isLandscapeScreenshot) +
+            images.filter { !isLandscapeScreenshot($0) }
 
         return ZagGameArtworkResponse(
             schemaVersion: 1,
-            status: "verified",
-            bundleID: bundle,
+            status: status,
+            bundleID: requestedBundle,
             appleID: nil,
             screenshotsAvailable: images.count,
             artworkURLs: Array(ordered.prefix(12))

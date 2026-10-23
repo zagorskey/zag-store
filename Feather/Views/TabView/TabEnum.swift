@@ -859,7 +859,6 @@ private struct ZagGamesPage: View {
                 ZagFeaturedGameArtwork(
                     bundleID: entry.app.id,
                     name: entry.app.currentName,
-                    iconURL: entry.app.iconURL,
                     repositoryScreenshots: entry.app.currentScreenshotURLs,
                     width: width
                 )
@@ -1215,7 +1214,6 @@ private enum ZagFeaturedHero {
 private struct ZagFeaturedGameArtwork: View {
     let bundleID: String?
     let name: String
-    let iconURL: URL?
     let repositoryScreenshots: [URL]
     let width: CGFloat
 
@@ -1229,65 +1227,52 @@ private struct ZagFeaturedGameArtwork: View {
         return Double(seed) / 360.0
     }
 
+    // There is exactly ONE app icon and ONE app name in the card's footer.
+    // Until genuine artwork arrives, this crisp geometric background keeps
+    // the visual area intentional without pretending an enlarged icon is art.
     private var editorialFallback: some View {
-        ZStack(alignment: .topLeading) {
-            LinearGradient(
-                colors: [
-                    Color(hue: tintHue, saturation: 0.76, brightness: 0.67),
-                    Color(
-                        hue: (tintHue + 0.12).truncatingRemainder(dividingBy: 1),
-                        saturation: 0.82, brightness: 0.34
-                    ),
-                    Color(hue: tintHue, saturation: 0.46, brightness: 0.14)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Circle()
-                .fill(.white.opacity(0.11))
-                .frame(width: width * 0.8, height: width * 0.8)
-                .blur(radius: 28)
-                .offset(x: width * 0.58, y: -135)
-            Circle()
-                .fill(.black.opacity(0.20))
-                .frame(width: width * 0.7, height: width * 0.7)
-                .blur(radius: 35)
-                .offset(x: -width * 0.26, y: 145)
+        GeometryReader { geometry in
+            let cardWidth = geometry.size.width
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(hue: tintHue, saturation: 0.77, brightness: 0.48),
+                        Color(hue: (tintHue + 0.10).truncatingRemainder(dividingBy: 1),
+                              saturation: 0.78, brightness: 0.24),
+                        Color(hue: tintHue, saturation: 0.44, brightness: 0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
 
-            // A soft, moderately sized app-specific illustration. Never
-            // enlarge an icon to the entire hero image.
-            LazyImage(url: iconURL) { state in
-                if let image = state.image {
-                    image.resizable()
-                        .scaledToFill()
-                        .frame(width: 155, height: 155)
-                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-                }
-            }
-            .rotationEffect(.degrees(14))
-            .blur(radius: 9)
-            .opacity(0.65)
-            .offset(x: width * 0.52, y: 13)
+                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.14), .white.opacity(0.01)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: cardWidth * 0.78, height: 96)
+                    .rotationEffect(.degrees(-30))
+                    .offset(x: cardWidth * 0.24, y: -74)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ZAG STORE  /  FEATURED")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .tracking(2)
-                    .foregroundStyle(.white.opacity(0.82))
-                Spacer(minLength: 16)
-                Text(name)
-                    .font(.system(size: 31, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.65)
-                    .frame(maxWidth: width * 0.75, alignment: .leading)
-                    .shadow(color: .black.opacity(0.23), radius: 6, y: 2)
-                Spacer().frame(height: 65)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                    .frame(width: cardWidth * 0.95, height: 140)
+                    .rotationEffect(.degrees(-30))
+                    .offset(x: cardWidth * 0.19, y: 32)
+
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(.white.opacity(0.07))
+                    .frame(width: cardWidth * 0.56, height: 22)
+                    .rotationEffect(.degrees(-30))
+                    .offset(x: -cardWidth * 0.22, y: -58)
             }
-            .padding(22)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
         }
         .frame(width: width, height: 250)
-        .clipped()
     }
 
     var body: some View {
@@ -1335,7 +1320,7 @@ private struct ZagFeaturedGameArtwork: View {
             guard let response = try? await ZagGameArtworkClient.shared.lookup(
                 bundleID: bundleID,
                 name: name
-            ), response.isVerified else { return }
+            ), !response.artworkURLs.isEmpty else { return }
 
             if let catalogueArt = await resolveArtwork(response.artworkURLs), !Task.isCancelled {
                 hero = catalogueArt
