@@ -107,6 +107,9 @@ struct VariedTabbarView: View {
 			await ZagLaunchGate.shared.waitUntilSplashFinishes()
 			await updateManager.requestBadgePermission()
 			await sourcesViewModel.fetchSources(sources, refresh: true)
+			await MainActor.run {
+				ZagPerformanceMonitor.shared.markSourcesCompleted()
+			}
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
 			// SourcesViewModel commits repository and update state together.
