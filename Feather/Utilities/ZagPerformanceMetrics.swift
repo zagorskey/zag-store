@@ -20,6 +20,7 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
     case launchInteractive
     case launchSources
     case promotionalArtwork
+    case catalogueLookup
     case featuredArtwork
     case galleryFirst
     case galleryComplete
@@ -31,6 +32,7 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
         case .launchInteractive: return "Launch → Interactive"
         case .launchSources: return "Launch → Sources"
         case .promotionalArtwork: return "Promotional Artwork"
+        case .catalogueLookup: return "Apple Catalogue"
         case .featuredArtwork: return "Featured Artwork"
         case .galleryFirst: return "First 3 Screenshots"
         case .galleryComplete: return "Screenshot Gallery"
