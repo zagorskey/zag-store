@@ -960,12 +960,9 @@ private struct ZagGamesPage: View {
             guard featuredIDs.insert(entry.id).inserted else { continue }
             featured.append(entry)
         }
-        // Every featured card has its own game-specific editorial fallback,
-        // so games without repository screenshots can still be featured.
-        for entry in newGames where featured.count < 8 {
-            guard featuredIDs.insert(entry.id).inserted else { continue }
-            featured.append(entry)
-        }
+        // Do not pad Featured with games that have no repository screenshot
+        // candidates. Those games remain discoverable in the Games list.
+        // A URL is only a candidate, not proof that the image will download.
         indexedFeaturedGames = featured
         indexedEmulators = newEmulators
         indexedGames = newGames
