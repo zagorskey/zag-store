@@ -45,92 +45,124 @@ struct SourceAppsDetailView: View {
 	var app: ASRepository.App
 	
 	var body: some View {
+		_detailPresented
+	}
+
+	private var _detailScroll: some View {
 		ScrollView {
 			if #available(iOS 18, *) {
 				_header().flexibleHeaderContent()
 			}
-			
 			_detailContent
-			.padding([.horizontal, .bottom])
-			.padding(.top, {
-				if #available(iOS 18, *) {
-					8
-				} else {
-					0
-				}
-			}())
+				.padding([.horizontal, .bottom])
+				.padding(.top, {
+					if #available(iOS 18, *) { return CGFloat(8) }
+					return CGFloat(0)
+				}())
 		}
 		.flexibleHeaderScrollView()
 		.shouldSetInset()
-		.toolbar {
-			ToolbarItemGroup(placement: .topBarTrailing) {
-				Button {
-					let sharedString = """
-					\(app.currentName) - \(app.currentVersion ?? "0")
-					\(app.currentDescription ?? .localized("An awesome application"))
-					---
-					\(source.website?.absoluteString ?? source.name ?? "")
-					"""
-					UIActivityViewController.show(activityItems: [sharedString])
-				} label: {
-					Image(systemName: "square.and.arrow.up")
-				}
-				ZagProfileToolbarButton()
-					.tint(.primary)
-					.padding(.trailing, -2)
-			}
-		}
-		.onAppear {
-			_refreshInstalledState()
-		}
-		.task(id: app.currentUniqueId + "|screenshots|" + _galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")) {
-			_highResolutionScreenshots = [:]
-			let urls = Array(_galleryScreenshotURLs.prefix(12))
-			await withTaskGroup(of: (URL, UIImage?).self) { group in
-				for url in urls {
-					group.addTask {
-						let bytes = await ZagFeaturedImageCache.shared.load(url)
-						return (url, bytes.flatMap { UIImage(data: $0.data) })
+	}
+
+	private var _detailWithToolbar: some View {
+		_detailScroll
+			.toolbar {
+				ToolbarItemGroup(placement: .topBarTrailing) {
+					Button {
+						let sharedString = """
+						\\(app.currentName) - \\(app.currentVersion ?? "0")
+						\\(app.currentDescription ?? .localized("An awesome application"))
+						---
+						\\(source.website?.absoluteString ?? source.name ?? "")
+						"""
+						UIActivityViewController.show(activityItems: [sharedString])
+					} label: {
+						Image(systemName: "square.and.arrow.up")
 					}
-				}
-				for await (url, image) in group {
-					guard !Task.isCancelled else { return }
-					if let image { _highResolutionScreenshots[url] = image }
+					ZagProfileToolbarButton()
+						.tint(.primary)
+						.padding(.trailing, -2)
 				}
 			}
-		}
-		.task(id: app.currentUniqueId + "|gallery|" + app.currentName) {
-			_catalogueScreenshotURLs = []
-			guard app.currentScreenshotURLs.isEmpty else { return }
-			guard let catalogue = try? await ZagGameArtworkClient.shared.lookup(
-				bundleID: app.id ?? "", name: app.currentName
-			) else { return }
-			guard !Task.isCancelled else { return }
-			_catalogueScreenshotURLs = catalogue.artworkURLs
-		}
-		.task(id: _headerArtworkKey) {
-			_promotionalHeaderImage = nil
-			guard let url = app.currentPromotionalArtworkURL,
-				let image = await ZagFeaturedImageCache.shared.load(url),
-				image.width >= 850, image.height >= 420,
-				Double(image.width) / Double(image.height) >= 1.25 else { return }
-			guard !Task.isCancelled else { return }
-			_promotionalHeaderImage = UIImage(data: image.data)
-		}
-		.onChange(of: scenePhase) { phase in
-			guard phase == .active else { return }
-			_refreshInstalledState()
-		}
-		.fullScreenCover(isPresented: $_isScreenshotPreviewPresented) {
-			if !_galleryScreenshotURLs.isEmpty {
-				ScreenshotPreviewView(
-					screenshotURLs: _galleryScreenshotURLs,
-					initialIndex: _selectedScreenshotIndex
-				)
+			.onAppear(perform: _refreshInstalledState)
+	}
+
+	private var _detailWithTasks: some View {
+		_detailWithToolbar
+			.task(id: _screenshotTaskKey) {
+				await _loadScreenshots()
+			}
+			.task(id: _catalogueTaskKey) {
+				await _loadCatalogue()
+			}
+			.task(id: _headerArtworkKey) {
+				await _loadPromotionalHeader()
+			}
+	}
+
+	private var _detailPresented: some View {
+		_detailWithTasks
+			.onChange(of: scenePhase) { phase in
+				if phase == .active { _refreshInstalledState() }
+			}
+			.fullScreenCover(isPresented: $_isScreenshotPreviewPresented) {
+				if !_galleryScreenshotURLs.isEmpty {
+					ScreenshotPreviewView(
+						screenshotURLs: _galleryScreenshotURLs,
+						initialIndex: _selectedScreenshotIndex
+					)
+				}
+			}
+	}
+
+	private var _screenshotTaskKey: String {
+		app.currentUniqueId + "|screenshots|" + _galleryScreenshotURLs.map(\\.absoluteString).joined(separator: "|")
+	}
+
+	private var _catalogueTaskKey: String {
+		app.currentUniqueId + "|gallery|" + app.currentName
+	}
+
+	@MainActor
+	private func _loadScreenshots() async {
+		_highResolutionScreenshots = [:]
+		let urls = Array(_galleryScreenshotURLs.prefix(12))
+		await withTaskGroup(of: (URL, UIImage?).self) { group in
+			for url in urls {
+				group.addTask {
+					let bytes = await ZagFeaturedImageCache.shared.load(url)
+					return (url, bytes.flatMap { UIImage(data: $0.data) })
+				}
+			}
+			for await (url, image) in group {
+				guard !Task.isCancelled else { return }
+				if let image { _highResolutionScreenshots[url] = image }
 			}
 		}
 	}
-	
+
+	@MainActor
+	private func _loadCatalogue() async {
+		_catalogueScreenshotURLs = []
+		guard app.currentScreenshotURLs.isEmpty else { return }
+		guard let catalogue = try? await ZagGameArtworkClient.shared.lookup(
+			bundleID: app.id ?? "", name: app.currentName
+		) else { return }
+		guard !Task.isCancelled else { return }
+		_catalogueScreenshotURLs = catalogue.artworkURLs
+	}
+
+	@MainActor
+	private func _loadPromotionalHeader() async {
+		_promotionalHeaderImage = nil
+		guard let url = app.currentPromotionalArtworkURL,
+			let image = await ZagFeaturedImageCache.shared.load(url),
+			image.width >= 850, image.height >= 420,
+			Double(image.width) / Double(image.height) >= 1.25 else { return }
+		guard !Task.isCancelled else { return }
+		_promotionalHeaderImage = UIImage(data: image.data)
+	}
+
 	// Keep the large detail-page builder separate from the scroll-view modifiers.
 	private var _detailContent: some View {
 		VStack(alignment: .leading, spacing: 10) {
