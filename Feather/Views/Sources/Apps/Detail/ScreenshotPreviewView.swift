@@ -38,23 +38,27 @@ struct ScreenshotPreviewView: View {
 					}
 					ToolbarItem(placement: .topBarLeading) {
 						if #available(iOS 26.0, *) {
-							Text(verbatim: "\(currentIndex + 1) / \(screenshotURLs.count)")
-								.font(.subheadline)
-								.padding(.horizontal, 12)
-								.padding(.vertical, 6)
+							_counterLabel
 						} else {
-							Text(verbatim: "\(currentIndex + 1) / \(screenshotURLs.count)")
-								.font(.subheadline)
-								.padding(.horizontal, 12)
-								.padding(.vertical, 6)
+							_counterLabel
 								.background(
-									Capsule()
-										.fill(.ultraThinMaterial)
+									Capsule().fill(.ultraThinMaterial)
 								)
 						}
 					}
 				}
 		}
+	}
+	// Reserve the whole counter's width inside the navigation toolbar.
+	// iOS 26/27 can otherwise compress a flexible Text into just "3".
+	private var _counterLabel: some View {
+		Text(verbatim: "\(currentIndex + 1) / \(screenshotURLs.count)")
+			.font(.subheadline.weight(.medium))
+			.monospacedDigit()
+			.lineLimit(1)
+			.fixedSize(horizontal: true, vertical: false)
+			.frame(width: 92, height: 36)
+			.accessibilityLabel("Screenshot \(currentIndex + 1) of \(screenshotURLs.count)")
 	}
 }
 
