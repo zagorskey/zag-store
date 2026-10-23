@@ -22,7 +22,6 @@ struct SourceAppsDetailView: View {
 	@State private var _isScreenshotPreviewPresented: Bool = false
 	@State private var _selectedScreenshotIndex: Int = 0
 	@State private var _promotionalHeaderImage: UIImage?
-	@State private var _verifiedFeaturedHero: ZagAppDetailHeaderHero?
 	@State private var _catalogueScreenshotURLs: [URL] = []
 	@State private var _highResolutionScreenshots: [URL: UIImage] = [:]
 
@@ -31,16 +30,12 @@ struct SourceAppsDetailView: View {
 		return repositoryImages.isEmpty ? _catalogueScreenshotURLs : repositoryImages
 	}
 
-	// Share the decoded, high-resolution gallery assets with the hero.
-	private var _heroImages: [UIImage] {
-		Array(_galleryScreenshotURLs.compactMap { _highResolutionScreenshots[$0] }.prefix(2))
-	}
-
-	// Screenshots belong in the gallery; only an explicitly provided
-	// promotional banner can replace the top header.
+	// Promotional art has its own identity and source. Never pick a
+	// device screenshot as the header, even when Games is the active tab.
 	private var _headerArtworkKey: String {
-		app.currentUniqueId + "|" +
-			(app.currentPromotionalArtworkURL?.absoluteString ?? "")
+		app.currentUniqueId + "|promotional|" +
+			(app.currentPromotionalArtworkURL?.absoluteString ?? "") + "|" +
+			_galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")
 	}
 	
 	var currentDownload: Download? {
@@ -104,9 +99,6 @@ struct SourceAppsDetailView: View {
 			.task(id: _headerArtworkKey) {
 				await _loadPromotionalHeader()
 			}
-			.task(id: _verifiedArtworkTaskKey) {
-				await _loadVerifiedFeaturedArtwork()
-			}
 	}
 
 	private var _detailPresented: some View {
@@ -131,13 +123,6 @@ struct SourceAppsDetailView: View {
 
 	private var _catalogueTaskKey: String {
 		app.currentUniqueId + "|gallery|" + app.currentName
-	}
-
-	// Use the same image-resolver request identity as the Games storefront.
-	// The key updates if catalogue screenshots arrive after repository metadata.
-	private var _verifiedArtworkTaskKey: String {
-		app.currentUniqueId + "|verified|" +
-			_galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")
 	}
 
 	@MainActor
@@ -169,30 +154,17 @@ struct SourceAppsDetailView: View {
 		_catalogueScreenshotURLs = catalogue.artworkURLs
 	}
 
-	// The identical verification pipeline used by Games now serves regular
-	// repository app pages as well. It validates real pixel dimensions and
-	// accepts only exact Apple catalogue matches or source-provided shots.
-	@MainActor
-	private func _loadVerifiedFeaturedArtwork() async {
-		_verifiedFeaturedHero = nil
-		guard let verified = await ZagFeaturedArtworkResolver.shared.resolve(
-			bundleID: app.id,
-			name: app.currentName,
-			repositoryScreenshots: _galleryScreenshotURLs
-		) else { return }
-		guard !Task.isCancelled else { return }
-		_verifiedFeaturedHero = ZagAppDetailHeaderHero(verified)
-	}
-
 	@MainActor
 	private func _loadPromotionalHeader() async {
 		_promotionalHeaderImage = nil
-		guard let url = app.currentPromotionalArtworkURL,
-			let image = await ZagFeaturedImageCache.shared.load(url),
-			image.width >= 850, image.height >= 420,
-			Double(image.width) / Double(image.height) >= 1.25 else { return }
+		guard let verified = await ZagPromotionalArtworkResolver.shared.resolve(
+			bundleID: app.id,
+			name: app.currentName,
+			declaredURL: app.currentPromotionalArtworkURL,
+			screenshotURLs: _galleryScreenshotURLs
+		) else { return }
 		guard !Task.isCancelled else { return }
-		_promotionalHeaderImage = UIImage(data: image.data)
+		_promotionalHeaderImage = UIImage(data: verified.data)
 	}
 
 	// Keep the large detail-page builder separate from the scroll-view modifiers.
@@ -584,18 +556,15 @@ extension SourceAppsDetailView {
 	@ViewBuilder
 	private func _header() -> some View {
 		if let image = _promotionalHeaderImage {
-			// Genuine promotional banners always take precedence.
-			ZagAppDetailHeaderImage(hero: .landscape(image))
-		} else if let verifiedHero = _verifiedFeaturedHero {
-			// Identical artwork and layout rules to the Games storefront.
-			ZagAppDetailHeaderImage(hero: verifiedHero)
+			// Independent, verified widescreen marketing art, never gallery media.
+			ZagPromotionalBannerView(image: image)
 		} else {
-			// Present sharp screenshots as editorial cards, never as a
-			// stretched full-bleed screenshot or oversized app icon.
+			// No real banner is available: show product identity without
+			// pretending device screenshots are marketing artwork.
 			ZagSynthesizedAppHeroView(
 				appName: app.currentName,
 				iconURL: app.iconURL,
-				screenshots: _heroImages,
+				screenshots: [],
 				tint: source.tintColor ?? .accentColor
 			)
 		}
