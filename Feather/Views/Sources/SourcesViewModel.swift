@@ -152,6 +152,7 @@ final class SourcesViewModel: ObservableObject {
 					}
 				}
 
+				var batchChanged = false
 				for await (url, repo) in group {
 					refreshingSourceURLs.remove(url.absoluteString)
 
@@ -168,6 +169,11 @@ final class SourcesViewModel: ObservableObject {
 					}
 
 					refreshedSources[source] = repo
+					batchChanged = true
+				}
+				// Publish once per completed batch rather than rebuilding the
+				// Sources UI for every individual repository completion.
+				if batchChanged {
 					self.sources = refreshedSources
 				}
 			}
@@ -196,10 +202,13 @@ final class SourcesViewModel: ObservableObject {
 		let completedRepositories = Array(completedSources.values)
 		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
 
-		// Publish the repository snapshot and its derived update state as
-		// one completed refresh. Until this point the previous Updates
-		// pill/count and app-icon badge remain untouched.
-		self.sources = completedSources
+		// The last batch has already published the current repository
+		// snapshot. Avoid a redundant full-list invalidation at completion.
+		// Publish once more only if the final saved-source filter changed it.
+		if Set(self.sources.keys.map { $0.sourceURL?.absoluteString }) !=
+		   Set(completedSources.keys.map { $0.sourceURL?.absoluteString }) {
+			self.sources = completedSources
+		}
 
 		if diagnosticSkipReconciliation {
 			inventoryTask.cancel()
