@@ -106,8 +106,11 @@ struct VariedTabbarView: View {
 		.task {
 			await ZagLaunchGate.shared.waitUntilSplashFinishes()
 			await updateManager.requestBadgePermission()
+			let refreshStarted = ZagPerformanceMonitor.now()
 			await sourcesViewModel.fetchSources(sources, refresh: true)
 			await MainActor.run {
+				guard !Task.isCancelled else { return }
+				ZagPerformanceMonitor.shared.record(.sourcesRefresh, since: refreshStarted)
 				ZagPerformanceMonitor.shared.markSourcesCompleted()
 			}
 		}
