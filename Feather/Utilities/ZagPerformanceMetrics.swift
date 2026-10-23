@@ -20,6 +20,9 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
     case launchInteractive
     case launchSources
     case sourcesRefresh
+    case repositoriesFetch
+    case repositoryOrigins
+    case repositoryInventory
     case promotionalArtwork
     case catalogueLookup
     case featuredArtwork
@@ -33,6 +36,9 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
         case .launchInteractive: return "Launch → Interactive"
         case .launchSources: return "Launch → Sources"
         case .sourcesRefresh: return "Repositories Refresh"
+        case .repositoriesFetch: return "Repositories Fetch + Decode"
+        case .repositoryOrigins: return "Repository Origin Reconciliation"
+        case .repositoryInventory: return "Installed Apps + Updates"
         case .promotionalArtwork: return "Promotional Artwork"
         case .catalogueLookup: return "Apple Catalogue"
         case .featuredArtwork: return "Featured Artwork"
