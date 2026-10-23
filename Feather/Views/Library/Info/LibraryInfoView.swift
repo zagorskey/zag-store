@@ -16,14 +16,45 @@ struct LibraryInfoView: View {
 	var app: AppInfoPresentable
 	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedRepositorySource: AltSource?
+	@State private var verifiedHeaderHero: ZagAppDetailHeaderHero?
+
+	// Use a repository entry only when the installed/imported app can be
+	// linked to its actual source. Otherwise use Apple's exact identity or
+	// unambiguous title match; never borrow artwork from an unrelated app.
+	private var artworkRepositoryApp: ASRepository.App? {
+		guard let identifier = app.identifier,
+			  let origin = _repositoryOrigin else { return nil }
+		return origin.1.apps.first {
+			$0.id?.caseInsensitiveCompare(identifier) == .orderedSame
+		}
+	}
+
+	private var artworkRequestKey: String {
+		[
+			app.identifier ?? "",
+			app.name ?? "",
+			artworkRepositoryApp?.currentUniqueId ?? "",
+			artworkRepositoryApp?.currentScreenshotURLs.first?.absoluteString ?? ""
+		].joined(separator: "|")
+	}
 	
 	// MARK: Body
 	var body: some View {
 		NBNavigationView(app.name ?? "", displayMode: .inline) {
 			List {
 				Section {} header: {
-					FRAppIconView(app: app)
-						.frame(maxWidth: .infinity, alignment: .center)
+					VStack(spacing: 14) {
+						if let hero = verifiedHeaderHero {
+							ZagAppDetailHeaderImage(hero: hero)
+								.frame(height: 190)
+								.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+								.padding(.horizontal, 6)
+								.accessibilityLabel("Verified app screenshot")
+						}
+						FRAppIconView(app: app)
+							.frame(maxWidth: .infinity, alignment: .center)
+					}
+					.frame(maxWidth: .infinity)
 				}
 				
 				_infoSection(for: app)
@@ -53,6 +84,21 @@ struct LibraryInfoView: View {
 			}
 			.toolbar {
 				NBToolbarButton(role: .close)
+			}
+			.task(id: artworkRequestKey) {
+				verifiedHeaderHero = nil
+				let repositoryApp = artworkRepositoryApp
+				let title = repositoryApp?.currentName ?? app.name ?? ""
+				guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+					return
+				}
+				let artwork = await ZagFeaturedArtworkResolver.shared.resolve(
+					bundleID: repositoryApp?.id ?? app.identifier,
+					name: title,
+					repositoryScreenshots: repositoryApp?.currentScreenshotURLs ?? []
+				)
+				guard !Task.isCancelled else { return }
+				verifiedHeaderHero = artwork.flatMap(ZagAppDetailHeaderHero.init)
 			}
 		}
 	}
