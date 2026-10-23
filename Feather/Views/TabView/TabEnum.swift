@@ -1055,7 +1055,7 @@ private struct ZagGamesPage: View {
                     .clipped()
 
                     if !searchFieldFocused && selectedCategory == "Games" &&
-                        !indexedGames.isEmpty && (!featuredGames.isEmpty || isCheckingFeatured) {
+                        !indexedGames.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("Featured")
@@ -1067,9 +1067,17 @@ private struct ZagGamesPage: View {
                             }
 
                             if featuredGames.isEmpty {
-                                ProgressView("Checking game screenshots…")
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 120)
+                                if isCheckingFeatured {
+                                    ProgressView("Checking game screenshots…")
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 120)
+                                } else {
+                                    Text("No verified game screenshots are available from the current repositories or Apple catalogue.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, 18)
+                                }
                             } else {
                             GeometryReader { geometry in
                                 // Match the native search field's inset. Extend the
