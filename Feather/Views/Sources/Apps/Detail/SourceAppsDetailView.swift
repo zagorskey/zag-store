@@ -21,6 +21,14 @@ struct SourceAppsDetailView: View {
 	@State var cancellable: AnyCancellable? // Combine
 	@State private var _isScreenshotPreviewPresented: Bool = false
 	@State private var _selectedScreenshotIndex: Int = 0
+	@State private var _verifiedHeaderHero: ZagAppDetailHeaderHero?
+
+	// The app detail may be reused for another repository variant. Keep the
+	// artwork request tied to its app identity and screenshot metadata.
+	private var _headerArtworkKey: String {
+		app.currentUniqueId + "|" + app.currentName + "|" +
+			(app.currentScreenshotURLs.first?.absoluteString ?? "")
+	}
 	
 	var currentDownload: Download? {
 		downloadManager.getDownload(by: app.currentUniqueId)
@@ -248,6 +256,16 @@ struct SourceAppsDetailView: View {
 		.onAppear {
 			_refreshInstalledState()
 		}
+		.task(id: _headerArtworkKey) {
+			_verifiedHeaderHero = nil
+			let verified = await ZagFeaturedArtworkResolver.shared.resolve(
+				bundleID: app.id,
+				name: app.currentName,
+				repositoryScreenshots: app.currentScreenshotURLs
+			)
+			guard !Task.isCancelled else { return }
+			_verifiedHeaderHero = verified.flatMap(ZagAppDetailHeaderHero.init)
+		}
 		.onChange(of: scenePhase) { phase in
 			guard phase == .active else { return }
 			_refreshInstalledState()
@@ -343,39 +361,147 @@ private extension SourceAppsDetailView {
 	}
 }
 
+// MARK: - Verified screenshot hero for app-detail pages
+// Keep decoded UIImages in view state so scrolling never repeatedly decodes
+// multi-megabyte screenshots. Only the verified artwork pipeline creates these.
+private enum ZagAppDetailHeaderHero {
+	case landscape(UIImage)
+	case portraits([UIImage])
+	case landscapeStrips([UIImage])
+
+	init?(_ artwork: ZagVerifiedFeaturedArtwork) {
+		let images = artwork.images.compactMap { UIImage(data: $0.data) }
+		guard let first = images.first else { return nil }
+		switch artwork.layout {
+		case .landscape:
+			self = .landscape(first)
+		case .portraits:
+			self = .portraits(images)
+		case .landscapeStrips:
+			self = .landscapeStrips(images)
+		}
+	}
+}
+
+private struct ZagAppDetailHeaderImage: View {
+	let hero: ZagAppDetailHeaderHero
+
+	var body: some View {
+		GeometryReader { geometry in
+			let width = geometry.size.width
+			let height = geometry.size.height
+
+			ZStack {
+				Color.black
+				switch hero {
+				case .landscape(let image):
+					// True landscape screenshot, full bleed and sharp.
+					Image(uiImage: image)
+						.resizable()
+						.scaledToFill()
+						.frame(width: width, height: height)
+						.clipped()
+
+				case .portraits(let images):
+					// Use actual portrait screenshots side by side. Never
+					// repeat a single screenshot or stretch it full-width.
+					HStack(spacing: 3) {
+						ForEach(images.indices, id: \.self) { index in
+							Image(uiImage: images[index])
+								.resizable()
+								.scaledToFill()
+								.frame(
+									width: images.count == 1 ? width * 0.53 :
+										(width - CGFloat(images.count - 1) * 3) / CGFloat(images.count),
+									height: height
+								)
+								.clipped()
+						}
+					}
+					.frame(width: width, height: height)
+					.clipped()
+
+				case .landscapeStrips(let images):
+					// Small landscape shots stay in compact panels to avoid
+					// pixelated full-bleed upscaling.
+					VStack(spacing: 3) {
+						ForEach(images.indices, id: \.self) { index in
+							Image(uiImage: images[index])
+								.resizable()
+								.scaledToFill()
+								.frame(
+									width: images.count == 1 ? width * 0.80 : width,
+									height: images.count == 1 ? height * 0.72 :
+										(height - CGFloat(images.count - 1) * 3) / CGFloat(images.count)
+								)
+								.clipped()
+						}
+					}
+					.frame(width: width, height: height)
+					.clipped()
+				}
+			}
+			.frame(width: width, height: height)
+			.clipped()
+			.overlay {
+				// Light nav-bar contrast without obscuring the actual image.
+				LinearGradient(
+					stops: [
+						.init(color: .black.opacity(0.42), location: 0),
+						.init(color: .clear, location: 0.45),
+						.init(color: .black.opacity(0.18), location: 1)
+					],
+					startPoint: .top,
+					endPoint: .bottom
+				)
+				.allowsHitTesting(false)
+			}
+		}
+		.accessibilityHidden(true)
+	}
+}
+
 // MARK: - SourceAppsDetailView (Extension): Builders
 extension SourceAppsDetailView {
 	@available(iOS 18.0, *)
 	@ViewBuilder
 	private func _header() -> some View {
 		ZStack {
-			if let iconURL = source.currentIconURL {
-				LazyImage(url: iconURL) { state in
-					if let image = state.image {
-						image.resizable()
-							.aspectRatio(contentMode: .fill)
-							.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-							.clipped()
-					} else {
-						standardHeader
-					}
-				}
+			if let hero = _verifiedHeaderHero {
+				// Reuse the same validated screenshot and persistent cache as
+				// Games > Featured. Keep the artwork clear, not heavily blurred.
+				ZagAppDetailHeaderImage(hero: hero)
 			} else {
-				standardHeader
-			}
-			
-			NBVariableBlurView()
-				.rotationEffect(.degrees(-180))
-				.overlay(
-					LinearGradient(
-						gradient: Gradient(colors: [
-							Color.black.opacity(0.8),
-							Color.black.opacity(0)
-						]),
-						startPoint: .top,
-						endPoint: .bottom
+				// No genuine artwork has resolved yet. Preserve the existing
+				// repository header rather than enlarging a small app icon.
+				if let iconURL = source.currentIconURL {
+					LazyImage(url: iconURL) { state in
+						if let image = state.image {
+							image.resizable()
+								.aspectRatio(contentMode: .fill)
+								.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+								.clipped()
+						} else {
+							standardHeader
+						}
+					}
+				} else {
+					standardHeader
+				}
+
+				NBVariableBlurView()
+					.rotationEffect(.degrees(-180))
+					.overlay(
+						LinearGradient(
+							gradient: Gradient(colors: [
+								Color.black.opacity(0.8),
+								Color.black.opacity(0)
+							]),
+							startPoint: .top,
+							endPoint: .bottom
+						)
 					)
-				)
+			}
 		}
 	}
 	
