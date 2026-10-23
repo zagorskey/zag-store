@@ -848,7 +848,7 @@ private struct ZagGamesPage: View {
     private var featuredGames: [SourceAppsView.SourceAppRoute] {
         // A separate, bounded selection from all loaded repositories.
         // The normal Games list remains capped at 60 for smooth scrolling.
-        indexedFeaturedGames.isEmpty ? Array(indexedGames.prefix(8)) : indexedFeaturedGames
+        indexedFeaturedGames
     }
 
     // Match the App Store's landscape editorial format, with one compact app icon.
@@ -959,10 +959,6 @@ private struct ZagGamesPage: View {
             guard featuredIDs.insert(entry.id).inserted else { continue }
             featured.append(entry)
         }
-        for entry in newGames where featured.count < 8 {
-            guard featuredIDs.insert(entry.id).inserted else { continue }
-            featured.append(entry)
-        }
         indexedFeaturedGames = featured
         indexedEmulators = newEmulators
         indexedGames = newGames
@@ -983,7 +979,7 @@ private struct ZagGamesPage: View {
                     .frame(height: searchFieldFocused ? 0 : nil)
                     .clipped()
 
-                    if !searchFieldFocused && selectedCategory == "Games" && !indexedGames.isEmpty {
+                    if !searchFieldFocused && selectedCategory == "Games" && !featuredGames.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("Featured")
