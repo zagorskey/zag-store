@@ -1288,7 +1288,11 @@ private struct ZagGamesPage: View {
                 )
             ) {
                 if let selectedApp {
-                    SourceAppsDetailView(source: selectedApp.source, app: selectedApp.app)
+                    SourceAppsDetailView(
+                        source: selectedApp.source,
+                        app: selectedApp.app,
+                        prefetchedFeaturedHero: verifiedArtwork[selectedApp.id]?.detailHero
+                    )
                 }
             }
             .toolbar {
@@ -1314,6 +1318,19 @@ private enum ZagFeaturedHero {
         case .landscape: return .landscape(images[0])
         case .portraits: return .portraits(images)
         case .landscapeStrips: return .landscapeStrips(images)
+        }
+    }
+}
+
+// The Featured Games card already holds image bytes verified by the same
+// resolver. Reuse those exact images when opening detail, with no second
+// download or placeholder transition.
+private extension ZagFeaturedHero {
+    var detailHero: ZagAppDetailHeaderHero {
+        switch self {
+        case .landscape(let image): return .landscape(image)
+        case .portraits(let images): return .portraits(images)
+        case .landscapeStrips(let images): return .landscapeStrips(images)
         }
     }
 }
