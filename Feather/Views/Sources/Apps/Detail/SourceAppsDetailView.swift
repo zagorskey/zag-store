@@ -23,6 +23,7 @@ struct SourceAppsDetailView: View {
 	@State private var _selectedScreenshotIndex: Int = 0
 	@State private var _promotionalHeaderImage: UIImage?
 	@State private var _catalogueScreenshotURLs: [URL] = []
+	@State private var _highResolutionScreenshots: [URL: UIImage] = [:]
 
 	private var _galleryScreenshotURLs: [URL] {
 		let repositoryImages = app.currentScreenshotURLs
@@ -261,6 +262,22 @@ struct SourceAppsDetailView: View {
 		}
 		.onAppear {
 			_refreshInstalledState()
+		}
+		.task(id: app.currentUniqueId + "|screenshots|" + _galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")) {
+			_highResolutionScreenshots = [:]
+			let urls = Array(_galleryScreenshotURLs.prefix(12))
+			await withTaskGroup(of: (URL, UIImage?).self) { group in
+				for url in urls {
+					group.addTask {
+						let bytes = await ZagFeaturedImageCache.shared.load(url)
+						return (url, bytes.flatMap { UIImage(data: $0.data) })
+					}
+				}
+				for await (url, image) in group {
+					guard !Task.isCancelled else { return }
+					if let image { _highResolutionScreenshots[url] = image }
+				}
+			}
 		}
 		.task(id: app.currentUniqueId + "|gallery|" + app.currentName) {
 			_catalogueScreenshotURLs = []
@@ -550,10 +567,9 @@ extension SourceAppsDetailView {
 			HStack(spacing: 12) {
 				ForEach(screenshotURLs.indices, id: \.self) { index in
 					let url = screenshotURLs[index]
-					LazyImage(url: url) { state in
-						if let image = state.image {
-							image
-								.resizable()
+					if let image = _highResolutionScreenshots[url] {
+						Image(uiImage: image)
+							.resizable()
 								.aspectRatio(contentMode: .fit)
 								.frame(
 									maxWidth: UIScreen.main.bounds.width - 32,
@@ -568,6 +584,18 @@ extension SourceAppsDetailView {
 									_selectedScreenshotIndex = index
 									_isScreenshotPreviewPresented = true
 								}
+					} else {
+						LazyImage(url: url) { state in
+							if let image = state.image {
+								image.resizable()
+									.aspectRatio(contentMode: .fit)
+									.frame(maxWidth: UIScreen.main.bounds.width - 32, maxHeight: 400)
+									.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+									.onTapGesture {
+										_selectedScreenshotIndex = index
+										_isScreenshotPreviewPresented = true
+									}
+							}
 						}
 					}
 				}
