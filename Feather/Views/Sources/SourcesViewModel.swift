@@ -69,7 +69,8 @@ final class SourcesViewModel: ObservableObject {
 			for: Set(sources.compactMap { $0.sourceURL })
 		)
 
-		self.sources = self.sources.filter { source, _ in
+		// Keep the last completed snapshot on screen during refresh.
+		let retainedSources = self.sources.filter { source, _ in
 			guard let sourceURL = source.sourceURL?.absoluteString else {
 				return false
 			}
@@ -77,14 +78,14 @@ final class SourcesViewModel: ObservableObject {
 		}
 
 		if !refresh, sources.allSatisfy({
-			self.sources[$0] != nil
+			retainedSources[$0] != nil
 		}) {
 			// The repository snapshot is already complete. Refresh the device
 			// inventory before reconciling updates so shared bundle identifiers
 			// are never inferred from stale Signed records.
 			reconcileRepositoryOrigins()
 			await _refreshUpdatesUsingInstalledInventory(
-				repositories: Array(self.sources.values)
+				repositories: Array(retainedSources.values)
 			)
 			return
 		}
@@ -125,7 +126,7 @@ final class SourcesViewModel: ObservableObject {
 		// a task boundary.
 		// Keep the last known-good snapshot visible while refreshing. Each
 		// repository replaces its own snapshot as soon as it finishes.
-		var refreshedSources: [AltSource: ASRepository] = self.sources
+		var refreshedSources: [AltSource: ASRepository] = retainedSources
 
 		for startIndex in stride(
 			from: 0,
@@ -173,7 +174,6 @@ final class SourcesViewModel: ObservableObject {
 					}
 				}
 
-				var batchChanged = false
 				for await (url, repo) in group {
 					refreshingSourceURLs.remove(url.absoluteString)
 
@@ -190,12 +190,6 @@ final class SourcesViewModel: ObservableObject {
 					}
 
 					refreshedSources[source] = repo
-					batchChanged = true
-				}
-				// Publish once per completed batch rather than rebuilding the
-				// Sources UI for every individual repository completion.
-				if batchChanged {
-					self.sources = refreshedSources
 				}
 			}
 
@@ -235,13 +229,13 @@ final class SourcesViewModel: ObservableObject {
 		}
 		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
 
-		// The last batch has already published the current repository
-		// snapshot. Avoid a redundant full-list invalidation at completion.
-		// Publish once more only if the final saved-source filter changed it.
-		if Set(self.sources.keys.map { $0.sourceURL?.absoluteString }) !=
-		   Set(completedSources.keys.map { $0.sourceURL?.absoluteString }) {
-			self.sources = completedSources
+		// Publish the finished snapshot once. Never expose partial batch
+		// results to SwiftUI, and do not replace data on cancellation.
+		guard !Task.isCancelled else {
+			inventoryTask.cancel()
+			return
 		}
+		self.sources = completedSources
 
 		if diagnosticSkipReconciliation {
 			inventoryTask.cancel()
