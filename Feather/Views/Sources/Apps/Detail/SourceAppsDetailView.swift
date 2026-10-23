@@ -22,6 +22,12 @@ struct SourceAppsDetailView: View {
 	@State private var _isScreenshotPreviewPresented: Bool = false
 	@State private var _selectedScreenshotIndex: Int = 0
 	@State private var _promotionalHeaderImage: UIImage?
+	@State private var _catalogueScreenshotURLs: [URL] = []
+
+	private var _galleryScreenshotURLs: [URL] {
+		let repositoryImages = app.currentScreenshotURLs
+		return repositoryImages.isEmpty ? _catalogueScreenshotURLs : repositoryImages
+	}
 
 	// Screenshots belong in the gallery; only an explicitly provided
 	// promotional banner can replace the top header.
@@ -78,9 +84,9 @@ struct SourceAppsDetailView: View {
 				_infoPills(app: app)
 				Divider()
                 
-				if !app.currentScreenshotURLs.isEmpty {
+				if !_galleryScreenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {
-						_screenshots(screenshotURLs: app.currentScreenshotURLs)
+						_screenshots(screenshotURLs: _galleryScreenshotURLs)
 					}
                     
 					Divider()
@@ -256,6 +262,15 @@ struct SourceAppsDetailView: View {
 		.onAppear {
 			_refreshInstalledState()
 		}
+		.task(id: app.currentUniqueId + "|gallery|" + app.currentName) {
+			_catalogueScreenshotURLs = []
+			guard app.currentScreenshotURLs.isEmpty else { return }
+			guard let catalogue = try? await ZagGameArtworkClient.shared.lookup(
+				bundleID: app.id ?? "", name: app.currentName
+			) else { return }
+			guard !Task.isCancelled else { return }
+			_catalogueScreenshotURLs = catalogue.artworkURLs
+		}
 		.task(id: _headerArtworkKey) {
 			_promotionalHeaderImage = nil
 			guard let url = app.currentPromotionalArtworkURL,
@@ -270,9 +285,9 @@ struct SourceAppsDetailView: View {
 			_refreshInstalledState()
 		}
 		.fullScreenCover(isPresented: $_isScreenshotPreviewPresented) {
-			if !app.currentScreenshotURLs.isEmpty {
+			if !_galleryScreenshotURLs.isEmpty {
 				ScreenshotPreviewView(
-					screenshotURLs: app.currentScreenshotURLs,
+					screenshotURLs: _galleryScreenshotURLs,
 					initialIndex: _selectedScreenshotIndex
 				)
 			}
