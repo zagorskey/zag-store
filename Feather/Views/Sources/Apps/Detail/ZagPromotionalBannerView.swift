@@ -3,7 +3,7 @@
 //  Feather
 //
 //  Displays a real landscape marketing asset independently of the gallery.
-//  Extra-wide social banners are fit without cropping their branding.
+//  Wide banners fill the viewport; a measured crop avoids letterboxing.
 //
 
 import SwiftUI
