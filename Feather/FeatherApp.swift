@@ -187,6 +187,7 @@ final class ZagLaunchGate {
 
     func finish() {
         guard !completed else { return }
+        ZagPerformanceMonitor.shared.markInteractive()
         completed = true
         let pending = waiters
         waiters.removeAll()
@@ -244,6 +245,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_ application: UIApplication,
 		didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
 	) -> Bool {
+		// This is the earliest stable app-delegate milestone. Store the
+		// monotonic timestamp only if diagnostics were enabled previously.
+		if UserDefaults.standard.bool(forKey: ZagPerformanceSettings.enabledKey) {
+			let launchStarted = ProcessInfo.processInfo.systemUptime
+			Task { @MainActor in
+				ZagPerformanceMonitor.shared.markLaunchStarted(at: launchStarted)
+			}
+		}
 		_createPipeline()
 		_createDocumentsDirectories()
 		ResetView.clearWorkCache()
