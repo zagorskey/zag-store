@@ -80,6 +80,16 @@ final class SourcesViewModel: ObservableObject {
 		self.refreshingSourceURLs = Set(sourceURLs.map { $0.1.absoluteString })
 		UpdateManager.shared.beginRepositoryRefresh()
 
+		// The device inventory and repository downloads are independent inputs.
+		// Begin inventory discovery now, while batches fetch and decode, but
+		// publish update reconciliation only after all repositories are ready.
+		// Holding the completed Task here also prevents starting two inventory
+		// queries when the Apps tab requests its own refresh concurrently.
+		let inventoryStartedAt = ZagPerformanceMonitor.now()
+		let inventoryTask = Task { @MainActor in
+			await self._obtainInstalledInventory()
+		}
+
 		defer {
 			isFinished = true
 
@@ -191,6 +201,7 @@ final class SourcesViewModel: ObservableObject {
 		self.sources = completedSources
 
 		if diagnosticSkipReconciliation {
+			inventoryTask.cancel()
 			print("[Zag Refresh Diagnostic] Skipped origin + inventory/update reconciliation; total — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
 			return
 		}
@@ -206,11 +217,11 @@ final class SourcesViewModel: ObservableObject {
 		)
 
 		let updatesStartedAt = CFAbsoluteTimeGetCurrent()
-		let inventoryMetricStartedAt = ZagPerformanceMonitor.now()
-		await _refreshUpdatesUsingInstalledInventory(
-			repositories: completedRepositories
-		)
-		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryMetricStartedAt)
+		let inventoryAvailable = await inventoryTask.value
+		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryStartedAt)
+		if inventoryAvailable {
+			UpdateManager.shared.refresh(repositories: completedRepositories)
+		}
 		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
 		let finalizationElapsed = CFAbsoluteTimeGetCurrent() - reconciliationStartedAt
 		print(
@@ -229,38 +240,40 @@ final class SourcesViewModel: ObservableObject {
 	private func _refreshUpdatesUsingInstalledInventory(
 		repositories: [ASRepository]
 	) async {
+		if await _obtainInstalledInventory() {
+			UpdateManager.shared.refresh(repositories: repositories)
+		}
+	}
+
+	// Return true only when a usable, authoritative inventory is loaded,
+	// or when the last known-good loaded snapshot is still available.
+	// Crucially this function does not publish update results: callers do so
+	// against their own completed repository snapshot.
+	@MainActor
+	private func _obtainInstalledInventory() async -> Bool {
 		let pairingCore = ZagRPPairingCore.shared
 
-		// Repository refresh and the Apps tab can request device inventory at
-		// nearly the same time. Previously we abandoned update reconciliation
-		// whenever another inventory refresh was already running, which could
-		// leave the Updates popup on its previous snapshot even though repository
-		// rows already showed fresh Update buttons. Wait briefly for the in-flight
-		// authoritative inventory instead, then reconcile against the completed
-		// repository snapshot.
+		// Another caller (such as the Apps tab) may already be querying the
+		// device. Join that request instead of submitting a duplicate.
 		if case .refreshing = pairingCore.installedAppsState {
-			print("[Zag Store Updates] Installed-app inventory already refreshing; waiting for authoritative snapshot")
-
+			print("[Zag Store Updates] Waiting for in-flight device inventory")
 			for _ in 0..<50 {
+				guard !Task.isCancelled else { return false }
 				try? await Task.sleep(nanoseconds: 100_000_000)
-				if case .refreshing = pairingCore.installedAppsState {
-					continue
-				}
+				if case .refreshing = pairingCore.installedAppsState { continue }
 				break
 			}
-
+			if case .loaded = pairingCore.installedAppsState { return true }
 			if case .refreshing = pairingCore.installedAppsState {
-				print("[Zag Store Updates] Installed-app inventory refresh timed out; keeping previous update snapshot")
-				ZagLogger.shared.warning("Updates", "Installed-app inventory refresh timed out; keeping previous update snapshot")
-				return
-			}
-
-			if case .loaded = pairingCore.installedAppsState {
-				UpdateManager.shared.refresh(repositories: repositories)
-				return
+				ZagLogger.shared.warning(
+					"Updates",
+					"Installed-app inventory refresh timed out; keeping previous update snapshot"
+				)
+				return false
 			}
 		}
 
+		guard !Task.isCancelled else { return false }
 		do {
 			let result: Result<Set<String>, Error> = await withCheckedContinuation { continuation in
 				do {
@@ -271,20 +284,19 @@ final class SourcesViewModel: ObservableObject {
 					continuation.resume(returning: .failure(error))
 				}
 			}
-
+			guard !Task.isCancelled else { return false }
 			switch result {
 			case .success:
-				UpdateManager.shared.refresh(repositories: repositories)
+				return true
 			case .failure(let error):
 				if case .loaded = pairingCore.installedAppsState {
-					print("[Zag Store Updates] Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
-					ZagLogger.shared.warning("Updates", "Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
-					UpdateManager.shared.refresh(repositories: repositories)
-				} else {
-					print("[Zag Store Updates] Live inventory unavailable; keeping previous update snapshot: \(error.localizedDescription)")
+					ZagLogger.shared.warning("Updates", "Inventory refresh failed; using last loaded snapshot: \(error.localizedDescription)")
+					return true
 				}
+				ZagLogger.shared.warning("Updates", "Inventory unavailable; retaining previous update state: \(error.localizedDescription)")
+				return false
 			}
-		} 
+		}
 	}
 
 	// MARK: - Repository Origin Provenance
