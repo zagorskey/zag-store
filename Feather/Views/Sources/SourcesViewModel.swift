@@ -26,6 +26,27 @@ final class SourcesViewModel: ObservableObject {
 	@Published private(set) var refreshingSourceURLs: Set<String> = []
 	@Published var sources: [AltSource: ASRepository] = [:]
 
+	// Keep the last completed app counts on screen during cold-start refresh.
+	// These are display-only snapshots; update detection uses live repositories.
+	@Published private(set) var lastCompletedAppCounts: [String: Int] =
+		UserDefaults.standard.dictionary(forKey: "zagStore.lastCompletedSourceAppCounts") as? [String: Int] ?? [:]
+
+	@MainActor
+	func displayedAppCount(for source: AltSource) -> Int {
+		if isRefreshing, let url = source.sourceURL?.absoluteString {
+			return lastCompletedAppCounts[url] ?? sources[source]?.apps.count ?? 0
+		}
+		if let count = sources[source]?.apps.count { return count }
+		guard let url = source.sourceURL?.absoluteString else { return 0 }
+		return lastCompletedAppCounts[url] ?? 0
+	}
+
+	@MainActor
+	func displayedTotalAppCount(for configuredSources: [AltSource]) -> Int {
+		configuredSources.reduce(0) { $0 + displayedAppCount(for: $1) }
+	}
+
+
 
 	@MainActor
 	func fetchSources(
@@ -200,6 +221,19 @@ final class SourcesViewModel: ObservableObject {
 		print("[Zag Refresh Diagnostic] Repository fetch + publication — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
 		let completedSources = refreshedSources
 		let completedRepositories = Array(completedSources.values)
+
+		// Commit display counts only after the whole fetch phase is complete.
+		// Never expose partial counts (or zero) while a batch is still loading.
+		if !Task.isCancelled {
+			let counts = Dictionary(
+				uniqueKeysWithValues: completedSources.compactMap { source, repository in
+					guard let url = source.sourceURL?.absoluteString else { return nil }
+					return (url, repository.apps.count)
+				}
+			)
+			lastCompletedAppCounts = counts
+			UserDefaults.standard.set(counts, forKey: "zagStore.lastCompletedSourceAppCounts")
+		}
 		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
 
 		// The last batch has already published the current repository
