@@ -196,9 +196,9 @@ actor ZagPromotionalArtworkResolver {
 
     private static func metaTags(in html: String) -> [String: String] {
         guard let tagPattern = try? NSRegularExpression(
-            pattern: #"<meta\\b[^>]*>"#, options: .caseInsensitive
+            pattern: #"<meta\b[^>]*>"#, options: .caseInsensitive
         ), let attributePattern = try? NSRegularExpression(
-            pattern: #"([a-zA-Z:-]+)\\s*=\\s*[\"']([^\"']+)[\"']"#,
+            pattern: #"([a-zA-Z:-]+)\s*=\s*["']([^"']+)["']"#,
             options: .caseInsensitive
         ) else { return [:] }
 
