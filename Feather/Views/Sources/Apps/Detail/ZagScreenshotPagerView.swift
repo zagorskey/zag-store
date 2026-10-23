@@ -14,7 +14,6 @@ struct ZagScreenshotPagerView: UIViewRepresentable {
     @Binding var selectedIndex: Int
     let urls: [URL]
     let thumbnails: [URL: UIImage]
-    let previews: [URL: UIImage]
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -103,7 +102,7 @@ struct ZagScreenshotPagerView: UIViewRepresentable {
             let url = displayedURLs[index]
             cell.configure(
                 url: url,
-                image: parent.previews[url] ?? parent.thumbnails[url]
+                image: parent.thumbnails[url]
             )
         }
 
