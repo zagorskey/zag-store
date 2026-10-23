@@ -1217,8 +1217,20 @@ private struct ZagFeaturedGameArtwork: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            if let url = verifiedArtwork ?? repositoryScreenshot {
-                LazyImage(url: url) { state in
+            // Keep the repository image as an independent fallback: a verified
+            // URL may still fail to download or decode on a particular network.
+            if let repositoryScreenshot {
+                LazyImage(url: repositoryScreenshot) { state in
+                    if let image = state.image {
+                        image.resizable()
+                            .scaledToFill()
+                            .frame(width: width, height: 250)
+                            .clipped()
+                    }
+                }
+            }
+            if let verifiedArtwork, verifiedArtwork != repositoryScreenshot {
+                LazyImage(url: verifiedArtwork) { state in
                     if let image = state.image {
                         image.resizable()
                             .scaledToFill()
