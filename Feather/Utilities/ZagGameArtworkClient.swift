@@ -60,6 +60,8 @@ actor ZagGameArtworkClient {
     }
 
     private var cache: [String: CacheEntry] = [:]
+    // Join simultaneous catalogue lookups from gallery and featured artwork.
+    private var inFlightLookups: [String: Task<ZagGameArtworkResponse, Never>] = [:]
     private let session: URLSession
     private let endpoint: URL?
 
@@ -86,7 +88,25 @@ actor ZagGameArtworkClient {
 
         let key = storefront + ":" + bundle.lowercased() + ":" + name
         if let hit = cache[key], hit.expires > Date() { return hit.value }
+        if let pending = inFlightLookups[key] {
+            return await pending.value
+        }
 
+        let pending = Task {
+            await self.lookupUnshared(bundle: bundle, name: name, storefront: storefront)
+        }
+        inFlightLookups[key] = pending
+        let result = await pending.value
+        inFlightLookups[key] = nil
+
+        let lifetime: TimeInterval = result.artworkURLs.isEmpty ? 15 * 60 : 6 * 3600
+        cache[key] = CacheEntry(value: result, expires: Date().addingTimeInterval(lifetime))
+        return result
+    }
+
+    private func lookupUnshared(
+        bundle: String, name: String, storefront: String
+    ) async -> ZagGameArtworkResponse {
         // Resolve the game's official bundle identity and its exact title
         // concurrently. The production Zag bridge currently returns no URLs,
         // so do not block the Apple lookup waiting for that endpoint.
@@ -128,8 +148,6 @@ actor ZagGameArtworkClient {
             screenshotsAvailable: 0,
             artworkURLs: []
         )
-        let lifetime: TimeInterval = result.artworkURLs.isEmpty ? 15 * 60 : 6 * 3600
-        cache[key] = CacheEntry(value: result, expires: Date().addingTimeInterval(lifetime))
         return result
     }
 
