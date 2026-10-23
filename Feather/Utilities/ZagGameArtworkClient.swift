@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import CryptoKit
 
 /// Decodes Zag Store's versioned artwork metadata contract.
 /// The preview endpoint is administrator-only; this client never uses it.
@@ -70,11 +71,12 @@ actor ZagGameArtworkClient {
     func lookup(bundleID: String, name: String, country: String = "gb") async throws -> ZagGameArtworkResponse {
         let bundle = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let storefront = country.lowercased()
-        guard bundle.count <= 255,
-              bundle.contains("."),
+        // An absent bundle ID is permitted only for exact-title lookups.
+        guard (bundle.isEmpty || (bundle.count <= 255 && bundle.contains(".") &&
               !bundle.contains(where: {
                   !$0.isASCII || !($0.isLetter || $0.isNumber || $0 == "." || $0 == "_" || $0 == "-")
-              }),
+              }))),
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               storefront.count == 2,
               storefront.allSatisfy({ $0.isASCII && $0.isLetter }) else {
             throw ZagGameArtworkError.invalidBundleID
@@ -86,8 +88,8 @@ actor ZagGameArtworkClient {
         // Resolve the game's official bundle identity and its exact title
         // concurrently. The production Zag bridge currently returns no URLs,
         // so do not block the Apple lookup waiting for that endpoint.
-        async let exactPrimary: ZagGameArtworkResponse? =
-            try? await fetchAppleScreenshots(bundle: bundle, country: storefront)
+        async let exactPrimary: ZagGameArtworkResponse? = bundle.isEmpty ? nil :
+            (try? await fetchAppleScreenshots(bundle: bundle, country: storefront))
         async let titlePrimary: ZagGameArtworkResponse? =
             try? await fetchAppleScreenshotsByExactTitle(
                 bundle: bundle, name: name, country: storefront
@@ -101,8 +103,8 @@ actor ZagGameArtworkClient {
         // A title may exist only in the US storefront. Still insist on an
         // exact title match: never show artwork from a similarly named app.
         if found == nil && storefront != "us" {
-            async let exactUS: ZagGameArtworkResponse? =
-                try? await fetchAppleScreenshots(bundle: bundle, country: "us")
+            async let exactUS: ZagGameArtworkResponse? = bundle.isEmpty ? nil :
+                (try? await fetchAppleScreenshots(bundle: bundle, country: "us"))
             async let titleUS: ZagGameArtworkResponse? =
                 try? await fetchAppleScreenshotsByExactTitle(
                     bundle: bundle, name: name, country: "us"
@@ -114,7 +116,7 @@ actor ZagGameArtworkClient {
 
         // Retain support for a future curated Zag artwork catalogue, without
         // letting today's empty production response delay ordinary screenshots.
-        let bridgeResult: ZagGameArtworkResponse? = found == nil ?
+        let bridgeResult: ZagGameArtworkResponse? = found == nil && !bundle.isEmpty ?
             (try? await fetchFromBridge(bundle: bundle, name: name, country: storefront)) : nil
         let result = found ?? bridgeResult ?? ZagGameArtworkResponse(
             schemaVersion: 1,
