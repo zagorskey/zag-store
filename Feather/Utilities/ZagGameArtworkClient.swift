@@ -298,9 +298,67 @@ actor ZagFeaturedImageCache {
     private var cacheOrder: [URL] = []
     private var retryAfter: [URL: Date] = [:]
 
+    // Persistent verified bytes; iOS may purge this cache whenever it needs space.
+    private static let diskDirectory: URL = {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return root.appendingPathComponent("ZagFeaturedArtwork", isDirectory: true)
+    }()
+
+    private static func fileURL(for url: URL) -> URL {
+        let hash = SHA256.hash(data: Data(url.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return diskDirectory.appendingPathComponent(hash + ".image")
+    }
+
+    private static func validImage(_ data: Data) -> ZagFeaturedImageBytes? {
+        guard (2_048...12_000_000).contains(data.count),
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+              let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
+              width >= 300, height >= 170 else { return nil }
+        return ZagFeaturedImageBytes(data: data, width: width, height: height)
+    }
+
+    private func remember(_ image: ZagFeaturedImageBytes, for url: URL) {
+        if cached[url] == nil { cacheOrder.append(url) }
+        cached[url] = image
+        while cacheOrder.count > 16 {
+            cached.removeValue(forKey: cacheOrder.removeFirst())
+        }
+        retryAfter[url] = nil
+    }
+
+    private static func pruneDiskCache() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: diskDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        let entries = files.compactMap { url -> (URL, Date, Int)? in
+            guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            else { return nil }
+            return (url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0)
+        }.sorted { $0.1 > $1.1 }
+        var bytes = 0
+        for (index, entry) in entries.enumerated() {
+            bytes += entry.2
+            if index >= 96 || bytes > 180_000_000 {
+                try? FileManager.default.removeItem(at: entry.0)
+            }
+        }
+    }
+
     func load(_ url: URL) async -> ZagFeaturedImageBytes? {
         guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
         if let result = cached[url] { return result }
+        let file = Self.fileURL(for: url)
+        if let data = try? Data(contentsOf: file),
+           let verified = Self.validImage(data) {
+            remember(verified, for: url)
+            return verified
+        }
         if let retry = retryAfter[url], retry > Date() { return nil }
 
         // A 392x696bb.png Apple URL is a thumbnail request, not a maximum
@@ -316,20 +374,14 @@ actor ZagFeaturedImageCache {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 guard let http = response as? HTTPURLResponse,
                       (200..<300).contains(http.statusCode),
-                      data.count >= 2_048, data.count <= 12_000_000,
-                      let source = CGImageSourceCreateWithData(data as CFData, nil),
-                      let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-                      let width = (properties[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue,
-                      let height = (properties[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue,
-                      width >= 300, height >= 170 else { continue }
+                      let result = Self.validImage(data) else { continue }
 
-                let result = ZagFeaturedImageBytes(data: data, width: width, height: height)
-                cached[url] = result
-                cacheOrder.append(url)
-                if cacheOrder.count > 12 {
-                    cached.removeValue(forKey: cacheOrder.removeFirst())
-                }
-                retryAfter[url] = nil
+                remember(result, for: url)
+                try? FileManager.default.createDirectory(
+                    at: Self.diskDirectory, withIntermediateDirectories: true
+                )
+                try? data.write(to: file, options: .atomic)
+                Self.pruneDiskCache()
                 return result
             } catch {
                 // A blocked or unsupported CDN size does not block the
