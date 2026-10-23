@@ -143,11 +143,26 @@ struct SourceAppsDetailView: View {
 		// compressed full-resolution bytes stay in the shared cache.
 		_galleryThumbnailImages = [:]
 		let urls = Array(_galleryScreenshotURLs.prefix(12))
-		for start in stride(from: 0, to: urls.count, by: 3) {
+		guard !urls.isEmpty else { return }
+		let loadStart = ZagPerformanceMonitor.now()
+		for batchStart in stride(from: 0, to: urls.count, by: 3) {
 			guard !Task.isCancelled else { return }
-			let end = min(start + 3, urls.count)
-			await _loadScreenshotBatch(Array(urls[start..<end]))
+			let batchEnd = min(batchStart + 3, urls.count)
+			await _loadScreenshotBatch(Array(urls[batchStart..<batchEnd]))
+			guard !Task.isCancelled else { return }
+			if batchStart == 0 {
+				ZagPerformanceMonitor.shared.record(
+					.galleryFirst,
+					since: loadStart,
+					result: "\(_galleryThumbnailImages.count)/\(min(3, urls.count))"
+				)
+			}
 		}
+		ZagPerformanceMonitor.shared.record(
+			.galleryComplete,
+			since: loadStart,
+			result: "\(_galleryThumbnailImages.count)/\(urls.count)"
+		)
 	}
 
 	@MainActor
@@ -170,39 +185,55 @@ struct SourceAppsDetailView: View {
 	private func _loadCatalogue() async {
 		_catalogueScreenshotURLs = []
 		guard app.currentScreenshotURLs.isEmpty else { return }
-		guard let catalogue = try? await ZagGameArtworkClient.shared.lookup(
+		let started = ZagPerformanceMonitor.now()
+		let catalogue = try? await ZagGameArtworkClient.shared.lookup(
 			bundleID: app.id ?? "", name: app.currentName
-		) else { return }
+		)
 		guard !Task.isCancelled else { return }
-		_catalogueScreenshotURLs = catalogue.artworkURLs
+		_catalogueScreenshotURLs = catalogue?.artworkURLs ?? []
+		ZagPerformanceMonitor.shared.record(
+			.catalogueLookup,
+			since: started,
+			result: _catalogueScreenshotURLs.isEmpty ? "unavailable" : "found"
+		)
 	}
 
 	@MainActor
 	private func _loadPromotionalHeader() async {
 		_promotionalHeaderImage = nil
-		guard let verified = await ZagPromotionalArtworkResolver.shared.resolve(
+		let started = ZagPerformanceMonitor.now()
+		let verified = await ZagPromotionalArtworkResolver.shared.resolve(
 			bundleID: app.id,
 			name: app.currentName,
 			declaredURL: app.currentPromotionalArtworkURL,
 			screenshotURLs: _galleryScreenshotURLs
-		) else { return }
+		)
 		guard !Task.isCancelled else { return }
-		_promotionalHeaderImage = UIImage(data: verified.data)
+		_promotionalHeaderImage = verified.flatMap { UIImage(data: $0.data) }
+		ZagPerformanceMonitor.shared.record(
+			.promotionalArtwork,
+			since: started,
+			result: _promotionalHeaderImage == nil ? "unavailable" : "verified"
+		)
 	}
 
 	@MainActor
 	private func _loadVerifiedFeaturedArtwork() async {
-		// Games Featured already verified the artwork: don't run the resolver
-		// again merely because the user opened that game.
-		guard prefetchedFeaturedHero == nil else { return }
-		guard !_galleryScreenshotURLs.isEmpty else { return }
-		guard let verified = await ZagFeaturedArtworkResolver.shared.resolve(
+		// Games Featured already verified the artwork; avoid fetching it twice.
+		guard prefetchedFeaturedHero == nil, !_galleryScreenshotURLs.isEmpty else { return }
+		let started = ZagPerformanceMonitor.now()
+		let verified = await ZagFeaturedArtworkResolver.shared.resolve(
 			bundleID: app.id,
 			name: app.currentName,
 			repositoryScreenshots: _galleryScreenshotURLs
-		) else { return }
+		)
 		guard !Task.isCancelled else { return }
-		_verifiedFeaturedHero = ZagAppDetailHeaderHero(verified)
+		_verifiedFeaturedHero = verified.flatMap { ZagAppDetailHeaderHero($0) }
+		ZagPerformanceMonitor.shared.record(
+			.featuredArtwork,
+			since: started,
+			result: _verifiedFeaturedHero == nil ? "unavailable" : "verified"
+		)
 	}
 
 	// Keep the large detail-page builder separate from the scroll-view modifiers.
@@ -691,6 +722,7 @@ extension SourceAppsDetailView {
 			.compatScrollTargetLayout()
 		}
 		.compatScrollTargetBehavior()
+		.modifier(ZagGalleryScrollMetricsModifier())
 		.padding(.horizontal, -16)
 	}
 }
