@@ -26,6 +26,15 @@ final class SourcesViewModel: ObservableObject {
 	@Published private(set) var refreshingSourceURLs: Set<String> = []
 	@Published var sources: [AltSource: ASRepository] = [:]
 
+	// Non-observable row summaries: assigned before each live repository
+	// publication so reading them never triggers an extra SwiftUI update.
+	private var rowMetadataByURL: [String: ZagSourceRowMetadata] = [:]
+
+	@MainActor
+	func rowMetadata(for source: AltSource) -> ZagSourceRowMetadata? {
+		guard let url = source.sourceURL?.absoluteString else { return nil }
+		return rowMetadataByURL[url]
+	}
 
 	@MainActor
 	func fetchSources(
@@ -47,6 +56,9 @@ final class SourcesViewModel: ObservableObject {
 		_dataService.retainCachedRepositories(
 			for: Set(sources.compactMap { $0.sourceURL })
 		)
+		rowMetadataByURL = rowMetadataByURL.filter {
+			currentSourceURLs.contains($0.key)
+		}
 
 		self.sources = self.sources.filter { source, _ in
 			guard let sourceURL = source.sourceURL?.absoluteString else {
@@ -108,14 +120,14 @@ final class SourcesViewModel: ObservableObject {
 			let batch = sourceURLs[startIndex..<endIndex]
 			let batchURLs = batch.map { $0.1 }
 
-			await withTaskGroup(of: (URL, ASRepository?).self) { group in
+			await withTaskGroup(of: (URL, ASRepository?, ZagSourceRowMetadata?).self) { group in
 				for url in batchURLs {
 					group.addTask {
 						let startedAt = CFAbsoluteTimeGetCurrent()
 						let host = url.host ?? url.absoluteString
 						print("[Zag Store Sources] Fetch started: \(host)")
 
-						return await withCheckedContinuation { continuation in
+						let fetched: (URL, ASRepository?) = await withCheckedContinuation { continuation in
 							self._dataService.fetch(from: url) {
 								(result: RepositoryDataHandler) in
 								let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
@@ -138,10 +150,16 @@ final class SourcesViewModel: ObservableObject {
 								}
 							}
 						}
+						// Keep O(appCount) metadata scans on this fetch worker.
+						// Never repeat them during 380ms refresh-dot updates.
+						let rowMetadata = fetched.1.map {
+							ZagSourceRowMetadata(repository: $0)
+						}
+						return (fetched.0, fetched.1, rowMetadata)
 					}
 				}
 
-				for await (url, repo) in group {
+				for await (url, repo, rowMetadata) in group {
 					refreshingSourceURLs.remove(url.absoluteString)
 
 					guard
@@ -156,6 +174,9 @@ final class SourcesViewModel: ObservableObject {
 						continue
 					}
 
+					if let rowMetadata {
+						rowMetadataByURL[url.absoluteString] = rowMetadata
+					}
 					refreshedSources[source] = repo
 					self.sources = refreshedSources
 				}
@@ -393,6 +414,7 @@ final class SourcesViewModel: ObservableObject {
 
 		if let sourceURL {
 			_dataService.removeCachedRepository(for: sourceURL)
+			rowMetadataByURL.removeValue(forKey: sourceURL.absoluteString)
 		}
 
 		sources = sources.filter { cachedSource, _ in
