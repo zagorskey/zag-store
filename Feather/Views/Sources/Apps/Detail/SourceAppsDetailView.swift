@@ -109,7 +109,8 @@ struct SourceAppsDetailView: View {
 				if !_galleryScreenshotURLs.isEmpty {
 					ScreenshotPreviewView(
 						screenshotURLs: _galleryScreenshotURLs,
-						initialIndex: _selectedScreenshotIndex
+						initialIndex: _selectedScreenshotIndex,
+						highResolutionImages: _highResolutionScreenshots
 					)
 				}
 			}
