@@ -19,6 +19,7 @@ enum ZagPerformanceSettings {
 enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
     case launchInteractive
     case launchSources
+    case sourcesRefresh
     case promotionalArtwork
     case catalogueLookup
     case featuredArtwork
@@ -31,6 +32,7 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
         switch self {
         case .launchInteractive: return "Launch → Interactive"
         case .launchSources: return "Launch → Sources"
+        case .sourcesRefresh: return "Repositories Refresh"
         case .promotionalArtwork: return "Promotional Artwork"
         case .catalogueLookup: return "Apple Catalogue"
         case .featuredArtwork: return "Featured Artwork"
@@ -156,13 +158,26 @@ final class ZagPerformanceMonitor: ObservableObject {
             ""
         ]
         for category in ZagPerformanceCategory.allCases {
-            let values = samples.filter { $0.category == category }
-                .map(\.milliseconds).sorted()
-            guard !values.isEmpty else { continue }
-            let median = values[values.count / 2]
+            let allSamples = samples.filter { $0.category == category }
+            let measured = allSamples.filter {
+                category != .previewFullResolution || $0.result == "loaded"
+            }
+            let values = measured.map(\.milliseconds).sorted()
+            if values.isEmpty {
+                if !allSamples.isEmpty {
+                    lines.append("\(category.title): 0 uncached loads, \(allSamples.count) prefetched/unavailable samples")
+                }
+                continue
+            }
+            let middle = values.count / 2
+            let median = values.count.isMultiple(of: 2)
+                ? (values[middle - 1] + values[middle]) / 2
+                : values[middle]
             let p95Index = min(values.count - 1, Int(ceil(Double(values.count) * 0.95)) - 1)
             let p95 = values[p95Index]
-            lines.append("\(category.title): n=\(values.count), median=\(Int(median))ms, p95=\(Int(p95))ms")
+            let suffix = category == .previewFullResolution
+                ? ", \(allSamples.count - measured.count) prefetched/unavailable" : ""
+            lines.append("\(category.title): n=\(values.count), median=\(Int(median.rounded()))ms, p95=\(Int(p95.rounded()))ms\(suffix)")
         }
         lines.append("")
         for sample in samples {
