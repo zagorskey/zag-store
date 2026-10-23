@@ -191,7 +191,7 @@ extension ASRepository {
 
 			// AltStore repositories may provide URL strings, URL objects
 			// containing dimensions, or a mixture of both.
-			private struct ScreenshotAsset: Decodable {
+			fileprivate struct ScreenshotAsset: Decodable {
 				let url: URL?
 
 				private enum CodingKeys: String, CodingKey { case url, imageURL }
@@ -313,12 +313,17 @@ extension ASRepository {
 				forKey: .screenshots
 			)
 
-			// Accept both conventional arrays and older device-keyed URL maps.
-			if let urls = try? container.decode([URL].self, forKey: .screenshotURLs) {
-				self.screenshotURLs = urls
-			} else if let grouped = try? container.decode([String: [URL]].self, forKey: .screenshotURLs) {
+			// Support URL strings and screenshot objects with url/imageURL,
+			// including device-keyed groups. Malformed optional media must
+			// never cause the application itself to fail decoding.
+			if let assets = try? container.decode([Screenshots.ScreenshotAsset].self, forKey: .screenshotURLs) {
+				self.screenshotURLs = assets.compactMap(\\.url)
+			} else if let grouped = try? container.decode([String: [Screenshots.ScreenshotAsset]].self, forKey: .screenshotURLs) {
 				let preferred = ["iphone-edgeToEdge", "iphone-standard", "iphone", "ipad"]
-				self.screenshotURLs = preferred.flatMap { grouped[$0] ?? [] }
+				let remaining = grouped.keys.filter { !preferred.contains($0) }.sorted()
+				self.screenshotURLs = (preferred + remaining).flatMap { key in
+					(grouped[key] ?? []).compactMap(\\.url)
+				}
 			} else {
 				self.screenshotURLs = nil
 			}
