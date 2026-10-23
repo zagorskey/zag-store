@@ -30,7 +30,10 @@ struct ZagPerformanceDiagnosticsView: View {
                 } else {
                     ForEach(ZagPerformanceCategory.allCases, id: \.self) { category in
                         let values = monitor.samples
-                            .filter { $0.category == category }
+                            .filter { sample in
+                                sample.category == category &&
+                                    (category != .previewFullResolution || sample.result == "loaded")
+                            }
                             .map(\.milliseconds)
                             .sorted()
                         if !values.isEmpty {
@@ -41,7 +44,7 @@ struct ZagPerformanceDiagnosticsView: View {
             } header: {
                 Text("Loading Times")
             } footer: {
-                Text("Median and p95 from recent measurements. Scroll rows show scroll duration; frame gaps longer than 50ms are a rough smoothness indicator, not a precise dropped-frame count.")
+                Text("Median and p95 from recent measurements. Full-resolution preview latency excludes already-prefetched hits. Scroll rows show scroll duration; frame gaps longer than 50ms are a rough smoothness indicator, not a precise dropped-frame count.")
             }
 
             if !monitor.samples.isEmpty {
@@ -102,7 +105,10 @@ struct ZagPerformanceDiagnosticsView: View {
         category: ZagPerformanceCategory,
         values: [Double]
     ) -> some View {
-        let median = values[values.count / 2]
+        let middle = values.count / 2
+        let median = values.count.isMultiple(of: 2)
+            ? (values[middle - 1] + values[middle]) / 2
+            : values[middle]
         let p95Index = max(0, min(values.count - 1, Int(ceil(Double(values.count) * 0.95)) - 1))
         let p95 = values[p95Index]
 
