@@ -624,6 +624,13 @@ final class UpdateManager: ObservableObject {
 	// MARK: - Global Update Check
 
 	func refresh(repositories: [ASRepository]) {
+		let reconciliationStartedAt = ZagPerformanceMonitor.now()
+		defer {
+			ZagPerformanceMonitor.shared.record(
+				.updateReconciliation,
+				since: reconciliationStartedAt
+			)
+		}
 		let context = Storage.shared.context
 
 		do {
@@ -690,16 +697,22 @@ final class UpdateManager: ObservableObject {
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
 
-		// Build the expensive catalog lookups once. With large sources this avoids
-		// repeatedly flattening/scanning tens of thousands of apps for every
-		// installed bundle ID during refresh finalization.
+		// Only installed/signed bundle IDs are ever consulted below.
+		// Indexing every app in enormous repositories allocates thousands
+		// of unnecessary dictionary entries on the UI thread at refresh end.
+		// Include both sources to keep device and Signed fallback semantics,
+		// including diagnostics, exactly as before.
+		let relevantIdentifiers = Set(deviceInventory.keys).union(
+			signedApps.compactMap { $0.identifier }
+		)
 		let signedAppsByIdentifier = Dictionary(grouping: signedApps) {
 			$0.identifier ?? ""
 		}
 		var repositoryAppsByIdentifier: [String: [(ASRepository, ASRepository.App)]] = [:]
 		for repository in repositories {
 			for candidate in repository.apps {
-				guard let identifier = candidate.id, !identifier.isEmpty else { continue }
+				guard let identifier = candidate.id,
+				      relevantIdentifiers.contains(identifier) else { continue }
 				repositoryAppsByIdentifier[identifier, default: []].append((repository, candidate))
 			}
 		}
