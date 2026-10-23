@@ -787,9 +787,7 @@ struct SourcesView: View {
 							)
 							.foregroundStyle(.primary)
 
-							let totalApps = viewModel.sources.values.reduce(0) {
-								$0 + $1.apps.count
-							}
+							let totalApps = viewModel.displayedTotalAppCount(for: Array(_sources))
 							if totalApps == 0 {
 								HStack(spacing: 0) {
 									Text("You have ")
@@ -814,7 +812,7 @@ struct SourcesView: View {
 								}
 								.font(.system(size: 15, weight: .regular))
 								.lineLimit(1)
-								.modifier(ZagAppCountTransition(value: totalApps))
+
 							}
 						}
 						.frame(
@@ -876,7 +874,8 @@ struct SourcesView: View {
 							],
 						isRefreshing: source.sourceURL.map {
 							viewModel.refreshingSourceURLs.contains($0.absoluteString)
-						} ?? false
+						} ?? false,
+						stableAppCount: viewModel.displayedAppCount(for: source)
 					)
 					.listRowSeparator(.hidden)
 					.moveDisabled(!_isRearrangingRepositories)
@@ -1462,23 +1461,6 @@ private struct ZagRepositoriesHeader:
 			),
 			count: count
 		)
-	}
-}
-
-
-private struct ZagAppCountTransition: ViewModifier {
-	let value: Int
-
-	@ViewBuilder
-	func body(content: Content) -> some View {
-		if #available(iOS 17.0, *) {
-			content
-				.contentTransition(.numericText(value: Double(value)))
-				.animation(.snappy(duration: 0.35), value: value)
-		} else {
-			content
-				.animation(.easeInOut(duration: 0.2), value: value)
-		}
 	}
 }
 
