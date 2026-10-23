@@ -905,6 +905,61 @@ private struct ZagGamesPage: View {
         .accessibilityHint("Opens game details and installation options")
     }
 
+    // Process only a few candidates concurrently so giant repositories never
+    // trigger an unbounded burst of App Store and screenshot requests.
+    @MainActor
+    private func refreshVerifiedFeatured() async {
+        let candidates = indexedFeaturedGames
+        verifiedFeaturedGames = []
+        verifiedArtwork = [:]
+        guard !candidates.isEmpty else {
+            isCheckingFeatured = false
+            return
+        }
+
+        isCheckingFeatured = true
+        defer { isCheckingFeatured = false }
+
+        for start in stride(from: 0, to: candidates.count, by: 4) {
+            guard !Task.isCancelled else { return }
+            let end = min(start + 4, candidates.count)
+            var successes: [(Int, ZagVerifiedFeaturedArtwork)] = []
+
+            await withTaskGroup(of: (Int, ZagVerifiedFeaturedArtwork?).self) { group in
+                for index in start..<end {
+                    let entry = candidates[index]
+                    let candidate = ZagFeaturedArtworkCandidate(
+                        index: index,
+                        bundleID: entry.app.id,
+                        name: entry.app.currentName,
+                        screenshots: entry.app.currentScreenshotURLs
+                    )
+                    group.addTask {
+                        let artwork = await ZagFeaturedArtworkResolver.shared.resolve(
+                            bundleID: candidate.bundleID,
+                            name: candidate.name,
+                            repositoryScreenshots: candidate.screenshots
+                        )
+                        return (candidate.index, artwork)
+                    }
+                }
+                for await (index, artwork) in group {
+                    if let artwork { successes.append((index, artwork)) }
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            for (index, payload) in successes.sorted(by: { $0.0 < $1.0 }) {
+                guard verifiedFeaturedGames.count < 8,
+                      let hero = ZagFeaturedHero.make(from: payload) else { continue }
+                let entry = candidates[index]
+                verifiedArtwork[entry.id] = hero
+                verifiedFeaturedGames.append(entry)
+            }
+            if verifiedFeaturedGames.count >= 8 { break }
+        }
+    }
+
     private func rebuildIndexIfNeeded() {
         let signature = sources.map { source in
             let key = source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
@@ -999,7 +1054,8 @@ private struct ZagGamesPage: View {
                     .frame(height: searchFieldFocused ? 0 : nil)
                     .clipped()
 
-                    if !searchFieldFocused && selectedCategory == "Games" && !indexedGames.isEmpty {
+                    if !searchFieldFocused && selectedCategory == "Games" &&
+                        !indexedGames.isEmpty && (!featuredGames.isEmpty || isCheckingFeatured) {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("Featured")
@@ -1010,6 +1066,11 @@ private struct ZagGamesPage: View {
                                     .foregroundStyle(.secondary)
                             }
 
+                            if featuredGames.isEmpty {
+                                ProgressView("Checking game screenshots…")
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 120)
+                            } else {
                             GeometryReader { geometry in
                                 // Match the native search field's inset. Extend the
                                 // viewport to the screen edge so the next card
@@ -1020,10 +1081,13 @@ private struct ZagGamesPage: View {
                                     // avoids late-appearing cards while scrolling.
                                     HStack(spacing: 10.5) {
                                         ForEach(featuredGames, id: \.id) { entry in
-                                            featuredCard(
-                                                for: entry,
-                                                width: geometry.size.width - cardInset * 2
-                                            )
+                                            if let artwork = verifiedArtwork[entry.id] {
+                                                featuredCard(
+                                                    for: entry,
+                                                    artwork: artwork,
+                                                    width: geometry.size.width - cardInset * 2
+                                                )
+                                            }
                                         }
                                     }
                                     .padding(.leading, cardInset)
@@ -1034,6 +1098,7 @@ private struct ZagGamesPage: View {
                                 .modifier(ZagGamesScrollClipModifier())
                             }
                             .frame(height: 254)
+                            }
                         }
                     }
 
@@ -1195,6 +1260,9 @@ private struct ZagGamesPage: View {
                 Text("Emulators").tag("Emulators")
             }
             .onAppear(perform: rebuildIndexIfNeeded)
+            .task(id: indexSignature) {
+                await refreshVerifiedFeatured()
+            }
             .onReceive(sourcesModel.objectWillChange) { _ in
                 // Defer indexing until the repository model finishes publishing.
                 DispatchQueue.main.async { rebuildIndexIfNeeded() }
