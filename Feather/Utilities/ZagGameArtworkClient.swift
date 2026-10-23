@@ -316,6 +316,7 @@ actor ZagFeaturedImageCache {
 
     private var cached: [URL: ZagFeaturedImageBytes] = [:]
     private var cacheOrder: [URL] = []
+    private var diskWritesSincePrune = 0
     private var retryAfter: [URL: Date] = [:]
     // Coalesce concurrent requests for one image across Games, app details,
     // gallery thumbnails, and full-screen preview.
@@ -345,12 +346,23 @@ actor ZagFeaturedImageCache {
     }
 
     private func remember(_ image: ZagFeaturedImageBytes, for url: URL) {
-        if cached[url] == nil { cacheOrder.append(url) }
+        // Maintain a small actual LRU cache, not a first-in-first-out list:
+        // frequently viewed app artwork should survive repeated navigation.
+        if let oldIndex = cacheOrder.firstIndex(of: url) {
+            cacheOrder.remove(at: oldIndex)
+        }
+        cacheOrder.append(url)
         cached[url] = image
         while cacheOrder.count > 16 {
             cached.removeValue(forKey: cacheOrder.removeFirst())
         }
         retryAfter[url] = nil
+    }
+
+    private func cachedImage(for url: URL) -> ZagFeaturedImageBytes? {
+        guard let image = cached[url] else { return nil }
+        remember(image, for: url)
+        return image
     }
 
     private static func pruneDiskCache() {
@@ -375,7 +387,7 @@ actor ZagFeaturedImageCache {
 
     func load(_ url: URL) async -> ZagFeaturedImageBytes? {
         guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
-        if let result = cached[url] { return result }
+        if let result = cachedImage(for: url) { return result }
 
         if let pending = inFlight[url] {
             return await pending.value
@@ -393,7 +405,7 @@ actor ZagFeaturedImageCache {
 
     private func loadUnshared(_ url: URL) async -> ZagFeaturedImageBytes? {
         guard url.scheme?.lowercased() == "https", url.host != nil else { return nil }
-        if let result = cached[url] { return result }
+        if let result = cachedImage(for: url) { return result }
         let file = Self.fileURL(for: url)
         if let data = try? Data(contentsOf: file),
            let verified = Self.validImage(data) {
@@ -422,7 +434,13 @@ actor ZagFeaturedImageCache {
                     at: Self.diskDirectory, withIntermediateDirectories: true
                 )
                 try? data.write(to: file, options: .atomic)
-                Self.pruneDiskCache()
+                // A directory enumeration/sort after every download costs
+                // unnecessary I/O, particularly on large repositories.
+                diskWritesSincePrune += 1
+                if diskWritesSincePrune >= 8 {
+                    diskWritesSincePrune = 0
+                    Self.pruneDiskCache()
+                }
                 return result
             } catch {
                 // A blocked or unsupported CDN size does not block the
