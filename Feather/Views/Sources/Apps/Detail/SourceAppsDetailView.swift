@@ -31,8 +31,8 @@ struct SourceAppsDetailView: View {
 		return repositoryImages.isEmpty ? _catalogueScreenshotURLs : repositoryImages
 	}
 
-	// Promotional art has its own identity and source. Never pick a
-	// device screenshot as the header, even when Games is the active tab.
+	// Genuine promotional artwork has a separate source from gallery screenshots.
+	// Verified gameplay/screenshots are a fallback only when no banner exists.
 	private var _headerArtworkKey: String {
 		app.currentUniqueId + "|promotional|" +
 			(app.currentPromotionalArtworkURL?.absoluteString ?? "")
