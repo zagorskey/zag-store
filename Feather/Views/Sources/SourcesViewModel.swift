@@ -225,12 +225,11 @@ final class SourcesViewModel: ObservableObject {
 		// Commit display counts only after the whole fetch phase is complete.
 		// Never expose partial counts (or zero) while a batch is still loading.
 		if !Task.isCancelled {
-			let counts = Dictionary(
-				uniqueKeysWithValues: completedSources.compactMap { source, repository in
-					guard let url = source.sourceURL?.absoluteString else { return nil }
-					return (url, repository.apps.count)
-				}
-			)
+			var counts: [String: Int] = [:]
+			for (source, repository) in completedSources {
+				guard let url = source.sourceURL?.absoluteString else { continue }
+				counts[url] = repository.apps.count
+			}
 			lastCompletedAppCounts = counts
 			UserDefaults.standard.set(counts, forKey: "zagStore.lastCompletedSourceAppCounts")
 		}
