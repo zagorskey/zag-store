@@ -22,6 +22,7 @@ struct SourceAppsDetailView: View {
 	@State private var _isScreenshotPreviewPresented: Bool = false
 	@State private var _selectedScreenshotIndex: Int = 0
 	@State private var _promotionalHeaderImage: UIImage?
+	@State private var _verifiedFeaturedHero: ZagAppDetailHeaderHero?
 	@State private var _catalogueScreenshotURLs: [URL] = []
 	@State private var _highResolutionScreenshots: [URL: UIImage] = [:]
 
@@ -103,6 +104,9 @@ struct SourceAppsDetailView: View {
 			.task(id: _headerArtworkKey) {
 				await _loadPromotionalHeader()
 			}
+			.task(id: _verifiedArtworkTaskKey) {
+				await _loadVerifiedFeaturedArtwork()
+			}
 	}
 
 	private var _detailPresented: some View {
@@ -127,6 +131,13 @@ struct SourceAppsDetailView: View {
 
 	private var _catalogueTaskKey: String {
 		app.currentUniqueId + "|gallery|" + app.currentName
+	}
+
+	// Use the same image-resolver request identity as the Games storefront.
+	// The key updates if catalogue screenshots arrive after repository metadata.
+	private var _verifiedArtworkTaskKey: String {
+		app.currentUniqueId + "|verified|" +
+			_galleryScreenshotURLs.map(\.absoluteString).joined(separator: "|")
 	}
 
 	@MainActor
@@ -156,6 +167,21 @@ struct SourceAppsDetailView: View {
 		) else { return }
 		guard !Task.isCancelled else { return }
 		_catalogueScreenshotURLs = catalogue.artworkURLs
+	}
+
+	// The identical verification pipeline used by Games now serves regular
+	// repository app pages as well. It validates real pixel dimensions and
+	// accepts only exact Apple catalogue matches or source-provided shots.
+	@MainActor
+	private func _loadVerifiedFeaturedArtwork() async {
+		_verifiedFeaturedHero = nil
+		guard let verified = await ZagFeaturedArtworkResolver.shared.resolve(
+			bundleID: app.id,
+			name: app.currentName,
+			repositoryScreenshots: _galleryScreenshotURLs
+		) else { return }
+		guard !Task.isCancelled else { return }
+		_verifiedFeaturedHero = ZagAppDetailHeaderHero(verified)
 	}
 
 	@MainActor
@@ -558,8 +584,11 @@ extension SourceAppsDetailView {
 	@ViewBuilder
 	private func _header() -> some View {
 		if let image = _promotionalHeaderImage {
-			// Prefer genuine promotional banners when the repository has one.
+			// Genuine promotional banners always take precedence.
 			ZagAppDetailHeaderImage(hero: .landscape(image))
+		} else if let verifiedHero = _verifiedFeaturedHero {
+			// Identical artwork and layout rules to the Games storefront.
+			ZagAppDetailHeaderImage(hero: verifiedHero)
 		} else {
 			// Present sharp screenshots as editorial cards, never as a
 			// stretched full-bleed screenshot or oversized app icon.
