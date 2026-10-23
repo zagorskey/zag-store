@@ -717,6 +717,13 @@ private struct ZagDiscoverPage: View {
 
 // Initial dedicated destinations; the existing Apps and RPPairing workflows
 // remain untouched while Activity and device registration are developed.
+private struct ZagFeaturedArtworkCandidate: Sendable {
+    let index: Int
+    let bundleID: String?
+    let name: String
+    let screenshots: [URL]
+}
+
 private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
@@ -728,6 +735,9 @@ private struct ZagGamesPage: View {
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedFeaturedGames: [SourceAppsView.SourceAppRoute] = []
+    @State private var verifiedFeaturedGames: [SourceAppsView.SourceAppRoute] = []
+    @State private var verifiedArtwork: [String: ZagFeaturedHero] = [:]
+    @State private var isCheckingFeatured = false
     @State private var indexSignature = ""
     @State private var indexedGameCount = 0
     @State private var indexedEmulatorCount = 0
@@ -844,24 +854,21 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // Prioritize genuine repository screenshots, then vary source and genre.
-    // This only processes the existing 60-item cache, never the full catalogue.
+    // A card is eligible only after an actual screenshot passes download
+    // and decoding checks. Never fill Featured with unverified placeholders.
     private var featuredGames: [SourceAppsView.SourceAppRoute] {
-        // A separate, bounded selection from all loaded repositories.
-        // The normal Games list remains capped at 60 for smooth scrolling.
-        indexedFeaturedGames.isEmpty ? Array(indexedGames.prefix(8)) : indexedFeaturedGames
+        verifiedFeaturedGames
     }
 
     // Match the App Store's landscape editorial format, with one compact app icon.
-    private func featuredCard(for entry: SourceAppsView.SourceAppRoute, width: CGFloat) -> some View {
+    private func featuredCard(
+        for entry: SourceAppsView.SourceAppRoute,
+        artwork: ZagFeaturedHero,
+        width: CGFloat
+    ) -> some View {
         Button { selectedApp = entry } label: {
             ZStack(alignment: .bottomLeading) {
-                ZagFeaturedGameArtwork(
-                    bundleID: entry.app.id,
-                    name: entry.app.currentName,
-                    repositoryScreenshots: entry.app.currentScreenshotURLs,
-                    width: width
-                )
+                ZagFeaturedGameArtwork(hero: artwork, width: width)
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.06), .black.opacity(0.82)],
                     startPoint: .top,
@@ -911,6 +918,7 @@ private struct ZagGamesPage: View {
         var newEmulators: [SourceAppsView.SourceAppRoute] = []
         var newGames: [SourceAppsView.SourceAppRoute] = []
         var artworkCandidates: [SourceAppsView.SourceAppRoute] = []
+        var titleCandidates: [SourceAppsView.SourceAppRoute] = []
         var seenArtwork = Set<String>()
         var artworkCountBySource: [String: Int] = [:]
 
@@ -933,19 +941,26 @@ private struct ZagGamesPage: View {
                     // Continue checking the catalogue for genuine artwork even
                     // after the 60 visible Games slots have been filled.
                     let sourceKey = repository.id ?? repository.name ?? "Repository"
-                    if artworkCandidates.count < 48
-                        && (artworkCountBySource[sourceKey] ?? 0) < 6
-                        && !app.currentScreenshotURLs.isEmpty
-                        && seenArtwork.insert(key).inserted {
-                        artworkCandidates.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
-                        artworkCountBySource[sourceKey, default: 0] += 1
+                    if seenArtwork.insert(key).inserted {
+                        let entry = SourceAppsView.SourceAppRoute(source: repository, app: app)
+                        if !app.currentScreenshotURLs.isEmpty {
+                            if artworkCandidates.count < 72 &&
+                                (artworkCountBySource[sourceKey] ?? 0) < 18 {
+                                artworkCandidates.append(entry)
+                                artworkCountBySource[sourceKey, default: 0] += 1
+                            }
+                        } else if titleCandidates.count < 48 {
+                            // Apple's unique exact-title search can still find
+                            // legitimate artwork without a repository screenshot.
+                            titleCandidates.append(entry)
+                        }
                     }
                 }
                 // Keep scanning for Featured artwork even when both visible lists are full.
             }
         }
-        // Prefer different repositories in Featured, then fill remaining
-        // positions with artwork-bearing games. No new network requests.
+        // Prefer diverse repositories first, but retain plenty of backup
+        // candidates. Eligibility is established asynchronously, not here.
         var featured: [SourceAppsView.SourceAppRoute] = []
         var featuredSources = Set<String>()
         var featuredIDs = Set<String>()
@@ -954,15 +969,16 @@ private struct ZagGamesPage: View {
             guard featuredSources.insert(source).inserted else { continue }
             featured.append(entry)
             featuredIDs.insert(entry.id)
-            if featured.count == 8 { break }
+            if featured.count == 96 { break }
         }
-        for entry in artworkCandidates where featured.count < 8 {
+        for entry in artworkCandidates where featured.count < 96 {
             guard featuredIDs.insert(entry.id).inserted else { continue }
             featured.append(entry)
         }
-        // Do not pad Featured with games that have no repository screenshot
-        // candidates. Those games remain discoverable in the Games list.
-        // A URL is only a candidate, not proof that the image will download.
+        for entry in titleCandidates where featured.count < 96 {
+            guard featuredIDs.insert(entry.id).inserted else { continue }
+            featured.append(entry)
+        }
         indexedFeaturedGames = featured
         indexedEmulators = newEmulators
         indexedGames = newGames
