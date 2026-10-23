@@ -20,6 +20,22 @@ actor ZagPromotionalArtworkResolver {
 
     private var websiteCache: [String: WebsiteCacheEntry] = [:]
 
+    private struct BannerLookupCacheEntry {
+        let url: URL?
+        let expires: Date
+    }
+
+    // Avoid repeating Apple and publisher website discovery for apps known
+    // to have no banner. Store URLs, not large decoded image data.
+    private var bannerLookupCache: [String: BannerLookupCacheEntry] = [:]
+
+    private func rememberBanner(_ url: URL?, for key: String) {
+        if bannerLookupCache.count > 256 { bannerLookupCache.removeAll() }
+        bannerLookupCache[key] = BannerLookupCacheEntry(
+            url: url, expires: Date().addingTimeInterval(url == nil ? 1200 : 21600)
+        )
+    }
+
     func resolve(
         bundleID: String?,
         name: String,
@@ -27,26 +43,42 @@ actor ZagPromotionalArtworkResolver {
         screenshotURLs: [URL]
     ) async -> ZagFeaturedImageBytes? {
         let screenshotSet = Set(screenshotURLs.map(\.absoluteString))
-        var candidates: [URL] = []
+        let key = (bundleID?.lowercased() ?? "") + "|" +
+            Self.normalized(name) + "|" + (declaredURL?.absoluteString ?? "")
 
+        if let cached = bannerLookupCache[key], cached.expires > Date() {
+            guard let url = cached.url else { return nil }
+            if let image = await verifiedBanner(url, excluding: screenshotSet) {
+                return image
+            }
+            // A publisher may replace or remove their marketing asset.
+            bannerLookupCache[key] = nil
+        }
+
+        var candidates: [URL] = []
         if let declaredURL { candidates.append(declaredURL) }
         if let curated = Self.curatedArtwork(bundleID: bundleID, name: name) {
             candidates.append(curated)
         }
 
         for url in candidates {
+            guard !Task.isCancelled else { return nil }
             if let image = await verifiedBanner(url, excluding: screenshotSet) {
+                rememberBanner(url, for: key)
                 return image
             }
         }
 
-        // Apple only supplies device screenshots, not promotional banners.
-        // We consult its verified app identity for a developer website,
-        // then look for an independent, genuinely widescreen social image.
+        // Apple provides screenshots, not banners. Check an exact-identity
+        // developer website only if no independent direct image worked.
         if let website = await officialWebsite(bundleID: bundleID, name: name),
-           let banner = await websiteBanner(website, name: name) {
-            return await verifiedBanner(banner, excluding: screenshotSet)
+           let banner = await websiteBanner(website, name: name),
+           let image = await verifiedBanner(banner, excluding: screenshotSet) {
+            rememberBanner(banner, for: key)
+            return image
         }
+
+        if !Task.isCancelled { rememberBanner(nil, for: key) }
         return nil
     }
 
