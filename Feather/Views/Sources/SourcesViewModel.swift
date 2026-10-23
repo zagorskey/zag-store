@@ -230,7 +230,12 @@ final class SourcesViewModel: ObservableObject {
 		let inventoryAvailable = await inventoryTask.value
 		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryStartedAt)
 		if inventoryAvailable && !Task.isCancelled {
+			let reconciliationMetricStartedAt = ZagPerformanceMonitor.now()
 			UpdateManager.shared.refresh(repositories: completedRepositories)
+			ZagPerformanceMonitor.shared.record(
+				.updateReconciliation,
+				since: reconciliationMetricStartedAt
+			)
 		}
 		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
 		let finalizationElapsed = CFAbsoluteTimeGetCurrent() - reconciliationStartedAt
