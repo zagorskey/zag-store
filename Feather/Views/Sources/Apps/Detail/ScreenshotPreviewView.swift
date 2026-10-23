@@ -13,12 +13,15 @@ struct ScreenshotPreviewView: View {
 	@State private var currentIndex: Int
     
 	let screenshotURLs: [URL]
+	let highResolutionImages: [URL: UIImage]
     
 	init(
 		screenshotURLs: [URL],
-		initialIndex: Int = 0
+		initialIndex: Int = 0,
+		highResolutionImages: [URL: UIImage] = [:]
 	) {
 		self.screenshotURLs = screenshotURLs
+		self.highResolutionImages = highResolutionImages
 		self._currentIndex = State(initialValue: initialIndex)
 	}
     
@@ -60,17 +63,23 @@ extension ScreenshotPreviewView {
 	private func _imageScrollView() -> some View {
 		TabView(selection: $currentIndex) {
 			ForEach(screenshotURLs.indices, id: \.self) { index in
-				LazyImage(url: screenshotURLs[index]) { state in
-					if let image = state.image {
-						image
+				Group {
+					if let highResolution = highResolutionImages[screenshotURLs[index]] {
+						Image(uiImage: highResolution)
 							.resizable()
 							.aspectRatio(contentMode: .fit)
-							.clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-							.overlay {
-								RoundedRectangle(cornerRadius: 32, style: .continuous)
-									.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
+					} else {
+						LazyImage(url: screenshotURLs[index]) { state in
+							if let image = state.image {
+								image.resizable().aspectRatio(contentMode: .fit)
 							}
+						}
 					}
+				}
+				.clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+				.overlay {
+					RoundedRectangle(cornerRadius: 32, style: .continuous)
+						.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
 				}
 				.tag(index)
 				.padding(.horizontal)
