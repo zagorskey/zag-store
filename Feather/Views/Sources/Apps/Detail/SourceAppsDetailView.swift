@@ -21,13 +21,13 @@ struct SourceAppsDetailView: View {
 	@State var cancellable: AnyCancellable? // Combine
 	@State private var _isScreenshotPreviewPresented: Bool = false
 	@State private var _selectedScreenshotIndex: Int = 0
-	@State private var _verifiedHeaderHero: ZagAppDetailHeaderHero?
+	@State private var _promotionalHeaderImage: UIImage?
 
-	// The app detail may be reused for another repository variant. Keep the
-	// artwork request tied to its app identity and screenshot metadata.
+	// Screenshots belong in the gallery; only an explicitly provided
+	// promotional banner can replace the top header.
 	private var _headerArtworkKey: String {
-		app.currentUniqueId + "|" + app.currentName + "|" +
-			(app.currentScreenshotURLs.first?.absoluteString ?? "")
+		app.currentUniqueId + "|" +
+			(app.currentPromotionalArtworkURL?.absoluteString ?? "")
 	}
 	
 	var currentDownload: Download? {
@@ -257,14 +257,13 @@ struct SourceAppsDetailView: View {
 			_refreshInstalledState()
 		}
 		.task(id: _headerArtworkKey) {
-			_verifiedHeaderHero = nil
-			let verified = await ZagFeaturedArtworkResolver.shared.resolve(
-				bundleID: app.id,
-				name: app.currentName,
-				repositoryScreenshots: app.currentScreenshotURLs
-			)
+			_promotionalHeaderImage = nil
+			guard let url = app.currentPromotionalArtworkURL,
+				let image = await ZagFeaturedImageCache.shared.load(url),
+				image.width >= 850, image.height >= 420,
+				Double(image.width) / Double(image.height) >= 1.25 else { return }
 			guard !Task.isCancelled else { return }
-			_verifiedHeaderHero = verified.flatMap(ZagAppDetailHeaderHero.init)
+			_promotionalHeaderImage = UIImage(data: image.data)
 		}
 		.onChange(of: scenePhase) { phase in
 			guard phase == .active else { return }
@@ -467,10 +466,10 @@ extension SourceAppsDetailView {
 	@ViewBuilder
 	private func _header() -> some View {
 		ZStack {
-			if let hero = _verifiedHeaderHero {
-				// Reuse the same validated screenshot and persistent cache as
-				// Games > Featured. Keep the artwork clear, not heavily blurred.
-				ZagAppDetailHeaderImage(hero: hero)
+			if let image = _promotionalHeaderImage {
+				// Only a real, high-resolution promotional banner is full bleed.
+				// Portrait and landscape screenshots stay in Screenshots below.
+				ZagAppDetailHeaderImage(hero: .landscape(image))
 			} else {
 				// No genuine artwork has resolved yet. Preserve the existing
 				// repository header rather than enlarging a small app icon.
