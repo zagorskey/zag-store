@@ -21,7 +21,7 @@ This is an opt-in, on-device instrumentation feature. It is **off by default** a
 | Apple Catalogue | Catalogue lookup starts | Screenshot URLs are returned, or lookup finishes without them |
 | First 3 Screenshots | Gallery loader starts | First batch of up to three thumbnails completes |
 | Screenshot Gallery | Gallery loader starts | All scheduled thumbnail batches complete |
-| Full-Resolution Preview | Full-screen screenshot loading begins | The selected image and its neighboring prefetch tasks complete |
+| Full-Resolution Preview | Full-screen screenshot loading begins | The selected screenshot is ready at full resolution (neighbors prefetch afterward) |
 | Screenshot Scrolling | A horizontal scroll begins | Scrolling and deceleration finish |
 
 Screenshot scrolling also records **frame gaps over 50 ms** using a display-link callback. This is a practical frame-pacing diagnostic, *not* an official GPU dropped-frame or average FPS metric.
