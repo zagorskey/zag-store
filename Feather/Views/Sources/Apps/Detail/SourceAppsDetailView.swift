@@ -681,38 +681,37 @@ extension SourceAppsDetailView {
 	
 	@ViewBuilder
 	private func _screenshots(screenshotURLs: [URL]) -> some View {
-		// A page is exactly the width of the horizontal viewport. Variable
-		// screenshot aspect ratios must never change its scroll target width:
-		// otherwise snapping can land on the gap between two screenshots.
-		let pageWidth = UIScreen.main.bounds.width
-		let imageWidth = pageWidth - 32
+		// The detail page is a thumbnail STRIP, not a fullscreen pager.
+		// Stable item widths prevent view-aligned snapping from targeting a
+		// gap as images switch from placeholders to downsampled thumbnails.
+		let tileWidth: CGFloat = 188
+		let tileHeight: CGFloat = 360
 
 		ScrollView(.horizontal, showsIndicators: false) {
-			LazyHStack(spacing: 0) {
+			LazyHStack(alignment: .center, spacing: 12) {
 				ForEach(screenshotURLs.indices, id: \.self) { index in
 					let url = screenshotURLs[index]
-					Group {
+					ZStack {
 						if let thumbnail = _galleryThumbnailImages[url] {
 							Image(uiImage: thumbnail)
 								.resizable()
-								.aspectRatio(contentMode: .fit)
+								.scaledToFit()
 						} else {
 							LazyImage(url: url) { state in
 								if let image = state.image {
-									image.resizable().aspectRatio(contentMode: .fit)
+									image.resizable().scaledToFit()
 								} else {
 									ProgressView()
 								}
 							}
 						}
 					}
-					.frame(width: imageWidth, height: 400)
+					.frame(width: tileWidth, height: tileHeight)
 					.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 					.overlay {
 						RoundedRectangle(cornerRadius: 16, style: .continuous)
 							.strokeBorder(.gray.opacity(0.3), lineWidth: 1)
 					}
-					.frame(width: pageWidth, height: 400, alignment: .center)
 					.contentShape(Rectangle())
 					.onTapGesture {
 						_selectedScreenshotIndex = index
@@ -720,21 +719,11 @@ extension SourceAppsDetailView {
 					}
 				}
 			}
+			.padding(.horizontal, 16)
 			.compatScrollTargetLayout()
 		}
-		.zagScreenshotPaging()
+		.compatScrollTargetBehavior()
 		.modifier(ZagGalleryScrollMetricsModifier())
 		.padding(.horizontal, -16)
-	}
-}
-
-private extension View {
-	@ViewBuilder
-	func zagScreenshotPaging() -> some View {
-		if #available(iOS 17.0, *) {
-			self.scrollTargetBehavior(.paging)
-		} else {
-			self
-		}
 	}
 }
