@@ -34,6 +34,9 @@ final class ZagSplashStageView: UIView {
         backgroundColor = UIColor(red: 4.0 / 255.0, green: 6.0 / 255.0, blue: 18.0 / 255.0, alpha: 1)
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
+        // Match the launch storyboard: reduce the ambient wash so the
+        // untouched cyan/blue/magenta 3D artwork remains the focal point.
+        backdrop.alpha = 0.52
         addSubview(backdrop)
         layer.masksToBounds = true
     }
@@ -71,7 +74,7 @@ final class ZagSplashStageView: UIView {
 
         let glow = CALayer()
         glow.frame = logoRect.insetBy(dx: -width * 0.31, dy: -height * 0.31)
-        glow.opacity = reduceMotion ? 0.55 : 0.0
+        glow.opacity = reduceMotion ? 0.20 : 0.0
         layer.addSublayer(glow)
 
         func addBloom(color: UIColor, x: CGFloat, strength: CGFloat) -> CAGradientLayer {
@@ -92,11 +95,11 @@ final class ZagSplashStageView: UIView {
 
         let cyanBloom = addBloom(
             color: UIColor(displayP3Red: 0, green: 0.81, blue: 1, alpha: 1),
-            x: 0.35, strength: 0.47
+            x: 0.35, strength: 0.19
         )
         let magentaBloom = addBloom(
             color: UIColor(displayP3Red: 0.83, green: 0.17, blue: 1, alpha: 1),
-            x: 0.67, strength: 0.36
+            x: 0.67, strength: 0.15
         )
 
         // Mirrored reflection: same bitmap, same reveal timeline and same
@@ -202,8 +205,8 @@ final class ZagSplashStageView: UIView {
         completeZ.shadowColor = UIColor(
             displayP3Red: 0.18, green: 0.50, blue: 1, alpha: 1
         ).cgColor
-        completeZ.shadowOpacity = 0.33
-        completeZ.shadowRadius = 15
+        completeZ.shadowOpacity = 0.12
+        completeZ.shadowRadius = 9
         completeZ.shadowOffset = .zero
 
         func addStudioReflection(to group: CALayer) -> CAGradientLayer {
@@ -212,8 +215,8 @@ final class ZagSplashStageView: UIView {
             sheen.colors = [
                 UIColor.clear.cgColor,
                 UIColor.white.withAlphaComponent(0.03).cgColor,
-                UIColor.white.withAlphaComponent(0.84).cgColor,
-                UIColor(displayP3Red: 0.59, green: 0.94, blue: 1, alpha: 0.40).cgColor,
+                UIColor(displayP3Red: 0.52, green: 0.90, blue: 1, alpha: 0.28).cgColor,
+                UIColor(displayP3Red: 0.20, green: 0.82, blue: 1, alpha: 0.17).cgColor,
                 UIColor.clear.cgColor
             ]
             sheen.locations = [0, 0.34, 0.51, 0.68, 1]
@@ -254,7 +257,7 @@ final class ZagSplashStageView: UIView {
             sheen.colors = [
                 UIColor.clear.cgColor,
                 UIColor(displayP3Red: 0.32, green: 0.84, blue: 1, alpha: 0.06).cgColor,
-                UIColor(displayP3Red: 1, green: 0.80, blue: 0.99, alpha: 0.78).cgColor,
+                UIColor(displayP3Red: 0.97, green: 0.39, blue: 0.90, alpha: 0.31).cgColor,
                 UIColor(displayP3Red: 0.96, green: 0.28, blue: 1, alpha: 0.13).cgColor,
                 UIColor.clear.cgColor
             ]
@@ -283,7 +286,7 @@ final class ZagSplashStageView: UIView {
         drawHead.strokeColor = UIColor(
             displayP3Red: 0.86, green: 0.97, blue: 1, alpha: 1
         ).cgColor
-        drawHead.lineWidth = 13.5 * scale
+        drawHead.lineWidth = 5.5 * scale
         drawHead.lineCap = .round
         drawHead.lineJoin = .round
         drawHead.strokeStart = 0
@@ -292,8 +295,8 @@ final class ZagSplashStageView: UIView {
         drawHead.shadowColor = UIColor(
             displayP3Red: 0.12, green: 0.87, blue: 1, alpha: 1
         ).cgColor
-        drawHead.shadowOpacity = 1
-        drawHead.shadowRadius = 25 * scale
+        drawHead.shadowOpacity = 0.42
+        drawHead.shadowRadius = 11 * scale
         drawHead.shadowOffset = .zero
         headSleeve.addSublayer(drawHead)
 
@@ -307,8 +310,8 @@ final class ZagSplashStageView: UIView {
         focusAura.shadowColor = UIColor(
             displayP3Red: 0.43, green: 0.68, blue: 1, alpha: 1
         ).cgColor
-        focusAura.shadowOpacity = 0.52
-        focusAura.shadowRadius = 24 * scale
+        focusAura.shadowOpacity = 0.18
+        focusAura.shadowRadius = 12 * scale
         focusAura.shadowOffset = .zero
         focusAura.opacity = reduceMotion ? 0 : 0
         logoGroup.insertSublayer(focusAura, below: drawnZ)
@@ -316,17 +319,23 @@ final class ZagSplashStageView: UIView {
         // Three separately laid-out CATextLayers: no typewriter wipe, no
         // awkward partial letters. Each word arrives with a clean rise, glow
         // and a short specular pass. Keep the whole line optically centred.
-        let mottoFontSize = min(22.5, max(17.5, bounds.width * 0.051))
-        let mottoFont = UIFont.systemFont(ofSize: mottoFontSize, weight: .semibold)
+        let mottoFontSize = min(21, max(16.5, bounds.width * 0.049))
         let words = ["Sideloading", "and", "beyond."]
-        let gap: CGFloat = max(6, mottoFontSize * 0.35)
-        let measured = words.map {
-            ceil(($0 as NSString).size(withAttributes: [.font: mottoFont]).width)
+        // Editorial typographic contrast: an airy opening, restrained
+        // connector, and a confident finishing word. Not three identical
+        // system-font labels with a generic shine.
+        let weights: [UIFont.Weight] = [.light, .ultraLight, .semibold]
+        let tracking: [CGFloat] = [0.9, 1.15, 0.65]
+        let gap: CGFloat = max(10, mottoFontSize * 0.52)
+        let measured = words.enumerated().map { index, word in
+            let font = UIFont.systemFont(ofSize: mottoFontSize, weight: weights[index])
+            let base = (word as NSString).size(withAttributes: [.font: font]).width
+            return ceil(base + tracking[index] * CGFloat(word.count - 1))
         }
         let lineWidth = measured.reduce(0, +) + gap * CGFloat(words.count - 1)
         let fit = min(1, (bounds.width - 30) / lineWidth)
         let wordY = max(
-            logoRect.maxY + reflectionHeight + 26,
+            logoRect.maxY + reflectionHeight + 28,
             bounds.height * 0.681
         )
         var wordX = (bounds.width - lineWidth * fit) / 2
@@ -345,10 +354,12 @@ final class ZagSplashStageView: UIView {
                 attributes: [
                     .font: UIFont.systemFont(
                         ofSize: mottoFontSize * fit,
-                        weight: .semibold
+                        weight: weights[index]
                     ),
-                    .foregroundColor: UIColor.white,
-                    .kern: 0.05
+                    .foregroundColor: UIColor.white.withAlphaComponent(
+                        index == 1 ? 0.68 : 0.96
+                    ),
+                    .kern: tracking[index] * fit
                 ]
             )
             text.frame = CGRect(
@@ -380,7 +391,7 @@ final class ZagSplashStageView: UIView {
             sheen.colors = [
                 UIColor.clear.cgColor,
                 UIColor.white.withAlphaComponent(0.04).cgColor,
-                UIColor.white.withAlphaComponent(0.92).cgColor,
+                UIColor.white.withAlphaComponent(0.30).cgColor,
                 UIColor.clear.cgColor
             ]
             sheen.locations = [0, 0.32, 0.55, 1]
@@ -443,7 +454,7 @@ final class ZagSplashStageView: UIView {
         drawHead.add(headEnd, forKey: "zag.drawHeadTip")
 
         let headDissolve = CAKeyframeAnimation(keyPath: "opacity")
-        headDissolve.values = [0, 1, 1, 0]
+        headDissolve.values = [0, 0.72, 0.72, 0]
         headDissolve.keyTimes = [0, 0.10, 0.83, 1]
         headDissolve.beginTime = tick + 0.20
         headDissolve.duration = 1.65
@@ -477,9 +488,9 @@ final class ZagSplashStageView: UIView {
         animateFullArtwork(completeZ, drawnZ)
         animateFullArtwork(reflectionComplete, reflectionDraw)
 
-        glow.opacity = 0.60
+        glow.opacity = 0.20
         let bloom = CAKeyframeAnimation(keyPath: "opacity")
-        bloom.values = [0.04, 0.24, 0.72, 0.48, 0.60]
+        bloom.values = [0.02, 0.10, 0.28, 0.18, 0.20]
         bloom.keyTimes = [0, 0.18, 0.63, 0.83, 1]
         bloom.beginTime = tick + 0.18
         bloom.duration = 2.34
@@ -512,18 +523,18 @@ final class ZagSplashStageView: UIView {
         }
         animateColour(
             cyanBloom,
-            values: [0.25, 1, 0.90, 0.75],
+            values: [0.20, 0.72, 0.64, 0.54],
             times: [0, 0.22, 0.67, 1]
         )
         animateColour(
             magentaBloom,
-            values: [0.06, 0.15, 1, 0.82],
+            values: [0.03, 0.12, 0.75, 0.56],
             times: [0, 0.30, 0.72, 1]
         )
 
         focusAura.opacity = 0
         let clarity = CAKeyframeAnimation(keyPath: "opacity")
-        clarity.values = [0, 0.32, 0.68, 0]
+        clarity.values = [0, 0.09, 0.17, 0]
         clarity.keyTimes = [0, 0.48, 0.75, 1]
         clarity.beginTime = tick + 0.34
         clarity.duration = 1.92
@@ -556,7 +567,7 @@ final class ZagSplashStageView: UIView {
             sheen.add(travel, forKey: "zag.specularTravel")
 
             let amplitude = CAKeyframeAnimation(keyPath: "opacity")
-            amplitude.values = [0, 0.94, 0.90, 0]
+            amplitude.values = [0, 0.46, 0.40, 0]
             amplitude.keyTimes = [0, 0.24, 0.72, 1]
             amplitude.beginTime = tick + 1.40
             amplitude.duration = 1.02
@@ -583,7 +594,7 @@ final class ZagSplashStageView: UIView {
             sheen.add(travel, forKey: "zag.prismTravel")
 
             let light = CAKeyframeAnimation(keyPath: "opacity")
-            light.values = [0, 0.84, 0.78, 0]
+            light.values = [0, 0.43, 0.38, 0]
             light.keyTimes = [0, 0.22, 0.70, 1]
             light.beginTime = tick + 1.74
             light.duration = 0.86
@@ -611,7 +622,7 @@ final class ZagSplashStageView: UIView {
             word.add(fade, forKey: "zag.wordFade")
 
             let rise = CABasicAnimation(keyPath: "position.y")
-            rise.fromValue = word.position.y + 9
+            rise.fromValue = word.position.y + 5
             rise.toValue = word.position.y
             rise.beginTime = arrival
             rise.duration = 0.52
@@ -634,7 +645,7 @@ final class ZagSplashStageView: UIView {
             sheen.add(pass, forKey: "zag.wordLightTravel")
 
             let flare = CAKeyframeAnimation(keyPath: "opacity")
-            flare.values = [0, 0.82, 0.82, 0]
+            flare.values = [0, 0.34, 0.34, 0]
             flare.keyTimes = [0, 0.24, 0.72, 1]
             flare.beginTime = arrival + 0.16
             flare.duration = 0.52
