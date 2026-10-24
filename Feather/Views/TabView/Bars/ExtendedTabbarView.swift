@@ -69,6 +69,21 @@ struct ExtendedTabbarView: View {
                             )
                         }
                     }
+                } else if tab == .discover || tab == .games || tab == .activity {
+                    Tab(value: tab.rawValue) {
+                        TabEnum.view(for: tab)
+                    } label: {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            switch tab {
+                            case .discover: ZagPrimaryTabIcons.label(for: .discover)
+                            case .games: ZagPrimaryTabIcons.label(for: .games)
+                            case .activity: ZagPrimaryTabIcons.label(for: .activity)
+                            default: EmptyView()
+                            }
+                        }
+                    }
                 } else {
                     Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
                         TabEnum.view(for: tab)
