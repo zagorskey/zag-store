@@ -209,12 +209,16 @@ private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ZagSplashPreferences.enabledKey) private var enabled = true
     @State private var opacity: Double = 1
+    @State private var exitRequested = false
     @State private var dismissed = false
 
     var body: some View {
         Group {
             if enabled && !dismissed {
-                ZagSplashAnimationStage(reduceMotion: reduceMotion)
+                ZagSplashAnimationStage(
+                    reduceMotion: reduceMotion,
+                    exiting: exitRequested
+                )
                     .ignoresSafeArea()
                     .opacity(opacity)
                     .allowsHitTesting(true)
@@ -226,21 +230,41 @@ private struct ZagAnimatedLaunchOverlay: View {
                 complete()
                 return
             }
-            // Native Core Animation draws the extracted original 3D artwork,
-            // reflects it live and reveals the motto after the Z forms.
-            // Reveal the motto word by word, then hold the completed hero composition
-            // before crossfading into the interactive app.
-            try? await Task.sleep(
-                for: .milliseconds(reduceMotion ? 370 : 3490)
-            )
+            // All milestones come from ZagSplashTimeline, shared with the
+            // Core Animation stage. The exit is a choreographed scene event;
+            // the final SwiftUI crossfade is only the last handoff.
+            if reduceMotion {
+                try? await Task.sleep(for: .milliseconds(370))
+            } else {
+                try? await Task.sleep(
+                    for: .milliseconds(Int64(
+                        ZagSplashTimeline.heroHoldEnd * 1000
+                    ))
+                )
+                guard !Task.isCancelled, !dismissed else { return }
+                exitRequested = true
+                let gap = ZagSplashTimeline.screenFadeStart
+                    - ZagSplashTimeline.heroHoldEnd
+                try? await Task.sleep(
+                    for: .milliseconds(Int64(gap * 1000))
+                )
+            }
+
             guard !Task.isCancelled, !dismissed else { return }
-            withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.36)) {
+            withAnimation(.easeInOut(
+                duration: reduceMotion
+                    ? 0.01 : ZagSplashTimeline.screenFadeDuration
+            )) {
                 opacity = 0
             }
             try? await Task.sleep(
-                for: .milliseconds(reduceMotion ? 20 : 390)
+                for: .milliseconds(Int64(
+                    (reduceMotion ? 0.02 :
+                        ZagSplashTimeline.finish
+                            - ZagSplashTimeline.screenFadeStart) * 1000
+                ))
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !dismissed else { return }
             complete()
         }
         .onChange(of: enabled) { value in
