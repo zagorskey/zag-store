@@ -1060,7 +1060,16 @@ struct LibraryView: View {
 						// inventory and repository reconciliation. The refresh remains
 						// automatic, but no longer competes with the initial tab transition.
 						DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-							_refreshInstalledAppsFromDevice()
+							// Sources already performs authoritative inventory + update
+							// reconciliation at launch. Do not immediately repeat the
+							// same expensive work when Apps is opened for the first time.
+							// Scene reactivation and explicit refresh still query again.
+							switch rppairingCore.installedAppsState {
+							case .loaded, .refreshing:
+								break
+							case .idle, .failed:
+								_refreshInstalledAppsFromDevice()
+							}
 						}
 					}
 				)
