@@ -40,11 +40,12 @@ struct ZagAppsTabIcon: View {
         if isSelected {
             return UIColor(ZagWideGamutTint.color(hex: tintHex))
         }
-        // Match UIKit's adaptive secondary-label tone on light and dark docks.
+        // Match the other unselected dock icons: full-contrast white in dark
+        // appearance and black in light appearance (never secondary gray).
         let traits = UITraitCollection(
             userInterfaceStyle: colorScheme == .dark ? .dark : .light
         )
-        return UIColor.secondaryLabel.resolvedColor(with: traits)
+        return UIColor.label.resolvedColor(with: traits)
     }
 
     private static func render(
