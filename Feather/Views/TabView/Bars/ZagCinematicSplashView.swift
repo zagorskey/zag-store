@@ -41,6 +41,7 @@ final class ZagCinematicSplashStage: UIView {
         }
     }
 
+    private let backgroundImage = UIImageView(image: UIImage(named: "ZagSplashBackdrop"))
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playbackClock: Any?
@@ -67,6 +68,10 @@ final class ZagCinematicSplashStage: UIView {
         isUserInteractionEnabled = false
         backgroundColor = UIColor(red: 3/255, green: 5/255, blue: 15/255, alpha: 1)
         clipsToBounds = true
+        backgroundImage.contentMode = .scaleAspectFill
+        backgroundImage.clipsToBounds = true
+        backgroundImage.alpha = 0.52
+        addSubview(backgroundImage)
     }
 
     required init?(coder: NSCoder) { return nil }
@@ -74,6 +79,7 @@ final class ZagCinematicSplashStage: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 20, bounds.height > 20 else { return }
+        backgroundImage.frame = bounds
         playerLayer?.frame = bounds
         if !prepared {
             prepared = true
