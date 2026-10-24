@@ -8,6 +8,7 @@
 import SwiftUI
 import NimbleViews
 import NukeUI
+import AltSourceKit
 import UIKit
 
 enum ZagPageStartupPolicy {
