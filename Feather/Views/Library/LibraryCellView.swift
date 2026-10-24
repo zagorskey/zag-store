@@ -38,16 +38,6 @@ struct LibraryCellView: View {
 		return certificates.first
 	}
 
-	var certInfo: Date.ExpirationInfo? {
-		displayCertificate?
-			.expiration?
-			.expirationInfo()
-	}
-
-	var certRevoked: Bool {
-		displayCertificate?.revoked == true
-	}
-
 	var app: AppInfoPresentable
 	var isManagedInstalled: Bool = false
 	var availableUpdate: UpdateManager.AvailableUpdate? = nil
@@ -494,6 +484,11 @@ extension LibraryCellView {
 		for app: AppInfoPresentable
 	) -> some View {
 		if app.isSigned {
+			// Avoid fetching and parsing the selected certificate twice while
+			// building the initial Apps cell.
+			let certificate = displayCertificate
+			let certRevoked = certificate?.revoked == true
+			let certInfo = certificate?.expiration?.expirationInfo()
 			ZStack {
 				if isManagedInstalled, let update = availableUpdate {
 					_installedUpdateAction(update)
