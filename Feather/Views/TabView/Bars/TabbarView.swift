@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct TabbarView: View {
+	@StateObject private var updateManager = UpdateManager.shared
+	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabValue = ZagPageStartupPolicy.initialTab
 
@@ -36,6 +38,16 @@ struct TabbarView: View {
                                 Text(tab.title)
                             } icon: {
                                 ZagSourcesTabIcon.label
+                            }
+                        } else if tab == .library {
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                ZagAppsTabIcon(
+                                    hasUpdates: updateManager.hasVisibleUpdates,
+                                    isSelected: selectedTabValue == tab,
+                                    tintHex: themeTintHex
+                                )
                             }
                         } else {
                             Label(tab.title, systemImage: tab.icon)
