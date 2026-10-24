@@ -90,11 +90,11 @@ final class ZagSplashStageView: UIView {
             return bloom
         }
 
-        _ = addBloom(
+        let cyanBloom = addBloom(
             color: UIColor(displayP3Red: 0, green: 0.81, blue: 1, alpha: 1),
             x: 0.35, strength: 0.47
         )
-        _ = addBloom(
+        let magentaBloom = addBloom(
             color: UIColor(displayP3Red: 0.83, green: 0.17, blue: 1, alpha: 1),
             x: 0.67, strength: 0.36
         )
@@ -164,6 +164,18 @@ final class ZagSplashStageView: UIView {
         }
         let centerline = revealPath()
 
+        // The animated energy travels along the very same centreline as the
+        // artwork reveal. This avoids a disconnected white line or a second Z.
+        // The transparent logo PNG is used as the clip for ALL light passes.
+        func artworkAlphaMask() -> CALayer {
+            let alpha = CALayer()
+            alpha.frame = canvas
+            alpha.contents = artwork
+            alpha.contentsGravity = .resizeAspect
+            alpha.contentsScale = UIScreen.main.scale
+            return alpha
+        }
+
         func setRevealMask(on image: CALayer) -> CAShapeLayer {
             let mask = CAShapeLayer()
             mask.frame = canvas
@@ -226,6 +238,81 @@ final class ZagSplashStageView: UIView {
         let specular = addStudioReflection(to: logoGroup)
         let mirrorSpecular = addStudioReflection(to: reflectedGroup)
 
+        // A separate iridescent reflection crosses the lower magenta surface
+        // slightly later. Both passes use the exact original alpha silhouette.
+        func addPrismaticReflection(to group: CALayer) -> CAGradientLayer {
+            let sleeve = CALayer()
+            sleeve.frame = canvas
+            sleeve.mask = artworkAlphaMask()
+            group.addSublayer(sleeve)
+
+            let sheen = CAGradientLayer()
+            sheen.frame = CGRect(
+                x: -width * 0.65, y: height * 0.31,
+                width: width * 0.53, height: height * 0.66
+            )
+            sheen.colors = [
+                UIColor.clear.cgColor,
+                UIColor(displayP3Red: 0.32, green: 0.84, blue: 1, alpha: 0.06).cgColor,
+                UIColor(displayP3Red: 1, green: 0.80, blue: 0.99, alpha: 0.46).cgColor,
+                UIColor(displayP3Red: 0.96, green: 0.28, blue: 1, alpha: 0.13).cgColor,
+                UIColor.clear.cgColor
+            ]
+            sheen.locations = [0, 0.36, 0.50, 0.64, 1]
+            sheen.startPoint = CGPoint(x: 0.1, y: 0)
+            sheen.endPoint = CGPoint(x: 0.9, y: 1)
+            sheen.opacity = 0
+            sleeve.addSublayer(sheen)
+            return sheen
+        }
+        let prism = addPrismaticReflection(to: logoGroup)
+        let mirrorPrism = addPrismaticReflection(to: reflectedGroup)
+
+        // The travelling drawing head is narrow and clipped to the existing
+        // artwork. Its glow is created by a shadow on that same stroked path;
+        // it never paints a new flat Z or lights the empty background.
+        let headSleeve = CALayer()
+        headSleeve.frame = canvas
+        headSleeve.mask = artworkAlphaMask()
+        logoGroup.addSublayer(headSleeve)
+
+        let drawHead = CAShapeLayer()
+        drawHead.frame = canvas
+        drawHead.path = centerline
+        drawHead.fillColor = nil
+        drawHead.strokeColor = UIColor(
+            displayP3Red: 0.86, green: 0.97, blue: 1, alpha: 1
+        ).cgColor
+        drawHead.lineWidth = 9.5 * scale
+        drawHead.lineCap = .round
+        drawHead.lineJoin = .round
+        drawHead.strokeStart = 0
+        drawHead.strokeEnd = 0
+        drawHead.opacity = reduceMotion ? 0 : 1
+        drawHead.shadowColor = UIColor(
+            displayP3Red: 0.12, green: 0.87, blue: 1, alpha: 1
+        ).cgColor
+        drawHead.shadowOpacity = 0.85
+        drawHead.shadowRadius = 15 * scale
+        drawHead.shadowOffset = .zero
+        headSleeve.addSublayer(drawHead)
+
+        // The crisp logo resolves from a softly luminous copy. A static
+        // pre-rasterised glow layer avoids a costly animated Gaussian blur.
+        let focusAura = CALayer()
+        focusAura.frame = canvas
+        focusAura.contents = artwork
+        focusAura.contentsGravity = .resizeAspect
+        focusAura.contentsScale = UIScreen.main.scale
+        focusAura.shadowColor = UIColor(
+            displayP3Red: 0.43, green: 0.68, blue: 1, alpha: 1
+        ).cgColor
+        focusAura.shadowOpacity = 0.52
+        focusAura.shadowRadius = 24 * scale
+        focusAura.shadowOffset = .zero
+        focusAura.opacity = reduceMotion ? 0 : 0
+        logoGroup.insertSublayer(focusAura, below: drawnZ)
+
         let motto = CATextLayer()
         motto.contentsScale = UIScreen.main.scale
         motto.alignmentMode = .center
@@ -284,6 +371,43 @@ final class ZagSplashStageView: UIView {
         animateDraw(drawMask)
         animateDraw(reflectionMask)
 
+        // The leading tip advances in sync with the three unevenly paced
+        // sections. The tail stays close behind, producing a luminous
+        // travelling point rather than a second drawn outline.
+        let headStart = CAKeyframeAnimation(keyPath: "strokeStart")
+        headStart.values = [0, 0.245, 0.695, 0.978]
+        headStart.keyTimes = [0, 0.285, 0.765, 1]
+        headStart.timingFunctions = [
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeOut)
+        ]
+        headStart.beginTime = tick + 0.15
+        headStart.duration = 1.50
+        headStart.fillMode = .both
+        headStart.isRemovedOnCompletion = false
+        drawHead.add(headStart, forKey: "zag.drawHeadTail")
+
+        let headEnd = CAKeyframeAnimation(keyPath: "strokeEnd")
+        headEnd.values = [0.008, 0.285, 0.735, 1]
+        headEnd.keyTimes = [0, 0.285, 0.765, 1]
+        headEnd.timingFunctions = headStart.timingFunctions
+        headEnd.beginTime = tick + 0.15
+        headEnd.duration = 1.50
+        headEnd.fillMode = .both
+        headEnd.isRemovedOnCompletion = false
+        drawHead.add(headEnd, forKey: "zag.drawHeadTip")
+
+        let headDissolve = CAKeyframeAnimation(keyPath: "opacity")
+        headDissolve.values = [0, 0.94, 0.94, 0]
+        headDissolve.keyTimes = [0, 0.10, 0.83, 1]
+        headDissolve.beginTime = tick + 0.15
+        headDissolve.duration = 1.57
+        headDissolve.fillMode = .both
+        headDissolve.isRemovedOnCompletion = false
+        drawHead.opacity = 0
+        drawHead.add(headDissolve, forKey: "zag.drawHeadGlow")
+
         func animateFullArtwork(_ finished: CALayer, _ drawing: CALayer) {
             finished.opacity = 1
             drawing.opacity = 0
@@ -325,6 +449,44 @@ final class ZagSplashStageView: UIView {
         bloom.isRemovedOnCompletion = false
         glow.add(bloom, forKey: "zag.bloom")
 
+        // Colour develops with the geometry: cyan wakes first at the upper
+        // stroke; magenta blooms later when the lower bar materialises.
+        func animateColour(
+            _ layer: CAGradientLayer,
+            values: [NSNumber],
+            times: [NSNumber]
+        ) {
+            let pulse = CAKeyframeAnimation(keyPath: "opacity")
+            pulse.values = values
+            pulse.keyTimes = times
+            pulse.beginTime = tick + 0.18
+            pulse.duration = 2.34
+            pulse.fillMode = .both
+            pulse.isRemovedOnCompletion = false
+            layer.opacity = 1
+            layer.add(pulse, forKey: "zag.colourResponse")
+        }
+        animateColour(
+            cyanBloom,
+            values: [0.25, 1, 0.90, 0.75],
+            times: [0, 0.22, 0.67, 1]
+        )
+        animateColour(
+            magentaBloom,
+            values: [0.06, 0.15, 1, 0.82],
+            times: [0, 0.30, 0.72, 1]
+        )
+
+        focusAura.opacity = 0
+        let clarity = CAKeyframeAnimation(keyPath: "opacity")
+        clarity.values = [0, 0.32, 0.68, 0]
+        clarity.keyTimes = [0, 0.48, 0.75, 1]
+        clarity.beginTime = tick + 0.34
+        clarity.duration = 1.92
+        clarity.fillMode = .both
+        clarity.isRemovedOnCompletion = false
+        focusAura.add(clarity, forKey: "zag.opticalFocus")
+
         reflectedWindow.opacity = 0.57
         let reflectionFadeIn = CABasicAnimation(keyPath: "opacity")
         reflectionFadeIn.fromValue = 0
@@ -361,6 +523,32 @@ final class ZagSplashStageView: UIView {
         }
         animateSheen(specular)
         animateSheen(mirrorSpecular)
+
+        // The second highlight is offset in time and restricted to the lower
+        // portion of the genuine logo. The reflected copy moves identically.
+        func animatePrism(_ sheen: CAGradientLayer) {
+            let travel = CABasicAnimation(keyPath: "position.x")
+            travel.fromValue = -width * 0.42
+            travel.toValue = width * 1.21
+            travel.beginTime = tick + 1.42
+            travel.duration = 0.86
+            travel.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            travel.fillMode = .both
+            travel.isRemovedOnCompletion = false
+            sheen.position.x = width * 1.21
+            sheen.add(travel, forKey: "zag.prismTravel")
+
+            let light = CAKeyframeAnimation(keyPath: "opacity")
+            light.values = [0, 0.58, 0.55, 0]
+            light.keyTimes = [0, 0.22, 0.70, 1]
+            light.beginTime = tick + 1.42
+            light.duration = 0.86
+            light.fillMode = .both
+            light.isRemovedOnCompletion = false
+            sheen.add(light, forKey: "zag.prismLight")
+        }
+        animatePrism(prism)
+        animatePrism(mirrorPrism)
 
         motto.opacity = 1
         let textFade = CAKeyframeAnimation(keyPath: "opacity")
