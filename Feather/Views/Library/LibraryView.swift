@@ -82,6 +82,7 @@ private struct ZagLibraryListSnapshot {
 
 struct LibraryView: View {
 	private static var didPerformInitialDeviceInventory = false
+	private static var didMeasureFirstListPreparation = false
 
 	@Environment(\.scenePhase) private var scenePhase
 
@@ -220,6 +221,9 @@ struct LibraryView: View {
     // than repeatedly filtering the same Core Data results for every header,
     // row separator and animation value during initial navigation.
     private var _listSnapshot: ZagLibraryListSnapshot {
+        let shouldMeasure = !Self.didMeasureFirstListPreparation &&
+            ZagPerformanceMonitor.shared.isEnabled
+        let startedAt = shouldMeasure ? ZagPerformanceMonitor.now() : 0
         let managed = _managedInstalledBundleIDs
         let signed = filteredAndSortedApps(from: _signedApps).filter {
             $0.identifier != Bundle.main.bundleIdentifier
@@ -246,6 +250,14 @@ struct LibraryView: View {
         }
         for id in ambiguous { uniqueUpdates.removeValue(forKey: id) }
 
+        if shouldMeasure {
+            Self.didMeasureFirstListPreparation = true
+            ZagPerformanceMonitor.shared.record(
+                .appsListPreparation,
+                since: startedAt,
+                result: "signed=\(signed.count), imported=\(imported.count)"
+            )
+        }
         return ZagLibraryListSnapshot(
             managedIDs: managed,
             signedApps: signed,
