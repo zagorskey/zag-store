@@ -135,6 +135,7 @@ struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
+	@AppStorage("ZagStore.animatedSplashEnabled") private var _animatedSplashEnabled = true
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
@@ -548,6 +549,9 @@ extension SettingsView {
 
 		case .pages:
 			Section {
+				Toggle(isOn: $_animatedSplashEnabled) {
+					Label("Animated Splash Screen", systemImage: "sparkles.rectangle.stack")
+				}
 				Toggle(isOn: $_rememberLastPage) {
 					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
 				}
@@ -569,6 +573,7 @@ extension SettingsView {
 					_rememberLastPage
 						? "Zag Store will reopen on the last main page you used."
 						: "Choose which main page Zag Store opens on."
+					+ " The splash screen plays only on cold launches and can be disabled above."
 				)
 			}
 
