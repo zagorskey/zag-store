@@ -1,9 +1,11 @@
 //
-//  ZagSplashAnimationStage.swift
-//  Zag Store — premium cold-launch motion
+// ZagSplashAnimationStage.swift
+// Zag Store: original-artwork, layer-driven cold-start motion.
 //
-//  The existing ZagSplashFull image supplies the genuine 3D Z (all colour,
-//  bevel and internal reflections). Only the reveal mask is a vector path.
+// The translucent 3D Z is the exact user-supplied artwork, isolated once into
+// ZagSplashZIsolated.imageset. Geometry below drives REVEAL only; it never
+// manufactures, re-colours or cuts the final logo. Everything runs in Core
+// Animation (no display-link bitmap drawing during the splash).
 //
 
 import SwiftUI
@@ -20,110 +22,16 @@ struct ZagSplashAnimationStage: UIViewRepresentable {
     func updateUIView(_ uiView: ZagSplashStageView, context: Context) { }
 }
 
-/// Cache the cropped ORIGINAL 3D logo once, rather than decoding it per frame.
-/// The artwork contains a coloured backdrop, so use a colour-luminance key
-/// ONLY to remove the backdrop. Do not restrict the recovered pixels to an
-/// approximate Z centreline: that sliced apart the real 3D bevels and joints.
-/// We deliberately keep every bright source pixel within the asset crop.
-@MainActor
-private enum ZagSplashMarkAsset {
-    static let originalSize = CGSize(width: 863, height: 1822)
-    static let crop = CGRect(x: 133, y: 572, width: 597, height: 690)
-    static let image: CGImage? = makeImage()
-
-    private static func makeImage() -> CGImage? {
-        guard let source = UIImage(named: "ZagSplashFull")?.cgImage else {
-            return nil
-        }
-        let rect = CGRect(
-            x: CGFloat(source.width) * crop.minX / originalSize.width,
-            y: CGFloat(source.height) * crop.minY / originalSize.height,
-            width: CGFloat(source.width) * crop.width / originalSize.width,
-            height: CGFloat(source.height) * crop.height / originalSize.height
-        ).integral
-        guard let cropped = source.cropping(to: rect) else { return nil }
-
-        let width = cropped.width
-        let height = cropped.height
-        let rowBytes = width * 4
-        var pixels = [UInt8](repeating: 0, count: height * rowBytes)
-        let space = CGColorSpaceCreateDeviceRGB()
-        let flags = CGBitmapInfo.byteOrder32Big.rawValue |
-            CGImageAlphaInfo.premultipliedLast.rawValue
-
-        let success = pixels.withUnsafeMutableBytes { pointer -> Bool in
-            guard let context = CGContext(
-                data: pointer.baseAddress,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: rowBytes,
-                space: space,
-                bitmapInfo: flags
-            ) else { return false }
-            context.translateBy(x: 0, y: CGFloat(height))
-            context.scaleBy(x: 1, y: -1)
-            context.draw(
-                cropped,
-                in: CGRect(x: 0, y: 0, width: width, height: height)
-            )
-            return true
-        }
-        guard success else { return nil }
-
-        // Recover every bright surface of the actual Z. The previous
-        // geometric distance gate clipped the diagonal and created dark,
-        // diamond-shaped holes in the artwork. This purely photometric key
-        // preserves the original continuous glass/bevel geometry.
-        //
-        // The thresholds are deliberately soft (140...210 / 255). They keep
-        // internal cobalt/violet surfaces and anti-aliased specular edges,
-        // while the much darker surrounding gradient becomes transparent.
-        for index in stride(from: 0, to: pixels.count, by: 4) {
-            let peak = CGFloat(
-                max(pixels[index], max(pixels[index + 1], pixels[index + 2]))
-            )
-            let t = min(1, max(0, (peak - 140) / 70))
-            let alpha = t * t * (3 - 2 * t)
-
-            // This is a premultiplied RGBA buffer.
-            pixels[index] = UInt8(CGFloat(pixels[index]) * alpha)
-            pixels[index + 1] = UInt8(CGFloat(pixels[index + 1]) * alpha)
-            pixels[index + 2] = UInt8(CGFloat(pixels[index + 2]) * alpha)
-            pixels[index + 3] = UInt8(255 * alpha)
-        }
-
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else {
-            return nil
-        }
-        return CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: rowBytes,
-            space: space,
-            bitmapInfo: CGBitmapInfo(rawValue: flags),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: true,
-            intent: .defaultIntent
-        )
-    }
-}
-
-/// Layer-backed motion, designed to run on the Core Animation render server.
-/// There is no 60fps SwiftUI bitmap redrawing, blur loop or launch-time network.
 final class ZagSplashStageView: UIView {
     private let backdrop = UIImageView(image: UIImage(named: "ZagSplashBackdrop"))
     private let reduceMotion: Bool
-    private var started = false
+    private var assembled = false
 
     init(reduceMotion: Bool) {
         self.reduceMotion = reduceMotion
         super.init(frame: .zero)
         isUserInteractionEnabled = false
-        backgroundColor = UIColor(red: 4 / 255, green: 5 / 255, blue: 16 / 255, alpha: 1)
+        backgroundColor = UIColor(red: 4.0 / 255.0, green: 6.0 / 255.0, blue: 18.0 / 255.0, alpha: 1)
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
         addSubview(backdrop)
@@ -135,247 +43,360 @@ final class ZagSplashStageView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         backdrop.frame = bounds
-        guard !started, bounds.width > 10, bounds.height > 10 else { return }
-        started = true
-        buildLayers()
+        guard !assembled, bounds.width > 20, bounds.height > 20 else { return }
+        assembled = true
+        assembleScene()
     }
 
-    private func buildLayers() {
-        guard let mark = ZagSplashMarkAsset.image else { return }
-        let source = ZagSplashMarkAsset.originalSize
-        let crop = ZagSplashMarkAsset.crop
-        let scale = max(bounds.width / source.width, bounds.height / source.height)
-        let originX = (bounds.width - source.width * scale) / 2
-        let originY = (bounds.height - source.height * scale) / 2
-
-        let root = CALayer()
-        root.frame = CGRect(
-            x: originX + crop.minX * scale,
-            y: originY + crop.minY * scale,
-            width: crop.width * scale,
-            height: crop.height * scale
-        )
-        root.masksToBounds = false
-        layer.addSublayer(root)
-        let rect = root.bounds
-
-        func bloom(_ color: UIColor, horizontalOffset: CGFloat) -> CAGradientLayer {
-            let volume = CAGradientLayer()
-            volume.type = .radial
-            volume.colors = [
-                color.withAlphaComponent(0.38).cgColor,
-                color.withAlphaComponent(0.10).cgColor,
-                UIColor.clear.cgColor
-            ]
-            volume.locations = [0, 0.46, 1]
-            volume.startPoint = CGPoint(x: 0.5, y: 0.5)
-            volume.endPoint = CGPoint(x: 1, y: 1)
-            volume.frame = rect.insetBy(
-                dx: -rect.width * 0.42,
-                dy: -rect.height * 0.30
-            )
-            volume.position.x += horizontalOffset * rect.width
-            volume.opacity = reduceMotion ? 0.34 : 0
-            root.addSublayer(volume)
-            return volume
+    private func assembleScene() {
+        guard let artwork = UIImage(named: "ZagSplashZIsolated")?.cgImage else {
+            // Never recreate a fake Z or show a malformed extracted image.
+            return
         }
 
-        let cyan = bloom(
-            UIColor(displayP3Red: 0, green: 0.74, blue: 1, alpha: 1),
-            horizontalOffset: -0.20
+        let width = min(bounds.width * 0.635, 286)
+        let height = width * CGFloat(artwork.height) / CGFloat(artwork.width)
+        let logoRect = CGRect(
+            x: (bounds.width - width) / 2,
+            y: bounds.height * 0.425 - height / 2,
+            width: width,
+            height: height
         )
-        let magenta = bloom(
-            UIColor(displayP3Red: 0.85, green: 0.19, blue: 1, alpha: 1),
-            horizontalOffset: 0.23
-        )
+        let canvas = CGRect(origin: .zero, size: logoRect.size)
+        let tick = CACurrentMediaTime() + 0.05
+        let scale = width / 692.0
 
-        let image = CALayer()
-        image.frame = rect
-        image.contents = mark
-        image.contentsGravity = .resize
-        image.contentsScale = UIScreen.main.scale
-        image.minificationFilter = .trilinear
-        image.magnificationFilter = .linear
-        image.shadowColor = UIColor(
-            displayP3Red: 0.25, green: 0.57, blue: 1, alpha: 1
-        ).cgColor
-        image.shadowRadius = 18 * scale
-        image.shadowOpacity = reduceMotion ? 0.3 : 0.48
-        image.shadowOffset = .zero
-        root.addSublayer(image)
-
-        var path = UIBezierPath()
-        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: (x - crop.minX) * scale, y: (y - crop.minY) * scale)
-        }
-        path.move(to: point(249, 711))
-        path.addLine(to: point(615, 711))
-        path.addLine(to: point(249, 1084))
-        path.addLine(to: point(615, 1084))
-
-        let mask = CAShapeLayer()
-        mask.frame = rect
-        mask.path = path.cgPath
-        mask.fillColor = nil
-        mask.strokeColor = UIColor.white.cgColor
-        // This is a REVEAL envelope, not the logo silhouette. Its
-        // width must safely envelop the actual rounded Z (including
-        // its bevels), rather than trimming the artwork like a knife.
-        // The extracted source image already supplies the real alpha.
-        mask.lineWidth = 260 * scale
-        mask.lineCap = .round
-        mask.lineJoin = .round
-        mask.strokeEnd = reduceMotion ? 1 : 0
-        image.mask = mask
-
-        if reduceMotion { return }
-        let time = CACurrentMediaTime()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
-        // Three controlled strokes expose the original translucent 3D Z.
-        mask.strokeEnd = 1
-        let draw = CAKeyframeAnimation(keyPath: "strokeEnd")
-        draw.values = [0, 0.29, 0.72, 1]
-        draw.keyTimes = [0, 0.27, 0.73, 1]
-        draw.timingFunctions = [
-            CAMediaTimingFunction(name: .easeInEaseOut),
+        let glow = CALayer()
+        glow.frame = logoRect.insetBy(dx: -width * 0.31, dy: -height * 0.31)
+        glow.opacity = reduceMotion ? 0.55 : 0.0
+        layer.addSublayer(glow)
+
+        func addBloom(color: UIColor, x: CGFloat, strength: CGFloat) -> CAGradientLayer {
+            let bloom = CAGradientLayer()
+            bloom.type = .radial
+            bloom.frame = glow.bounds
+            bloom.startPoint = CGPoint(x: x, y: 0.52)
+            bloom.endPoint = CGPoint(x: x + 0.47, y: 1.0)
+            bloom.colors = [
+                color.withAlphaComponent(strength).cgColor,
+                color.withAlphaComponent(strength * 0.26).cgColor,
+                UIColor.clear.cgColor
+            ]
+            bloom.locations = [0, 0.48, 1]
+            glow.addSublayer(bloom)
+            return bloom
+        }
+
+        _ = addBloom(
+            color: UIColor(displayP3Red: 0, green: 0.81, blue: 1, alpha: 1),
+            x: 0.35, strength: 0.47
+        )
+        _ = addBloom(
+            color: UIColor(displayP3Red: 0.83, green: 0.17, blue: 1, alpha: 1),
+            x: 0.67, strength: 0.36
+        )
+
+        // Mirrored reflection: same bitmap, same reveal timeline and same
+        // specular motion. The small lower window is softly masked out.
+        let reflectionHeight = min(height * 0.24, 70)
+        let reflectedWindow = CALayer()
+        reflectedWindow.frame = CGRect(
+            x: logoRect.minX,
+            y: logoRect.maxY + 6,
+            width: width,
+            height: reflectionHeight
+        )
+        reflectedWindow.masksToBounds = true
+        reflectedWindow.opacity = reduceMotion ? 0.48 : 0
+        layer.addSublayer(reflectedWindow)
+
+        let reflectedGroup = CALayer()
+        reflectedGroup.frame = canvas
+        reflectedGroup.transform = CATransform3DMakeScale(1, -1, 1)
+        reflectedWindow.addSublayer(reflectedGroup)
+
+        let reflectionFade = CAGradientLayer()
+        reflectionFade.frame = reflectedWindow.bounds
+        reflectionFade.colors = [
+            UIColor.white.withAlphaComponent(0.26).cgColor,
+            UIColor.white.withAlphaComponent(0.11).cgColor,
+            UIColor.clear.cgColor
+        ]
+        reflectionFade.locations = [0, 0.39, 1]
+        reflectionFade.startPoint = CGPoint(x: 0.5, y: 0)
+        reflectionFade.endPoint = CGPoint(x: 0.5, y: 1)
+        reflectedWindow.mask = reflectionFade
+
+        let logoGroup = CALayer()
+        logoGroup.frame = logoRect
+        layer.addSublayer(logoGroup)
+
+        // Every copy uses only the original untouched alpha PNG, ensuring
+        // exact geometry at the end of the entrance.
+        func mark(in group: CALayer, initialOpacity: Float) -> CALayer {
+            let image = CALayer()
+            image.frame = canvas
+            image.contents = artwork
+            image.contentsGravity = .resizeAspect
+            image.contentsScale = UIScreen.main.scale
+            image.minificationFilter = .trilinear
+            image.magnificationFilter = .linear
+            image.opacity = initialOpacity
+            group.addSublayer(image)
+            return image
+        }
+
+        func revealPath() -> CGPath {
+            // Normalised to the exact source crop 692 × 711 (rather than the
+            // old 863 × 1822 screenshot that inverted/clipped the logo).
+            let path = UIBezierPath()
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: x * scale, y: y * scale)
+            }
+            path.move(to: p(132, 116))
+            path.addLine(to: p(580, 116))
+            path.addLine(to: p(130, 601))
+            path.addLine(to: p(580, 601))
+            return path.cgPath
+        }
+        let centerline = revealPath()
+
+        func setRevealMask(on image: CALayer) -> CAShapeLayer {
+            let mask = CAShapeLayer()
+            mask.frame = canvas
+            mask.path = centerline
+            mask.fillColor = nil
+            mask.strokeColor = UIColor.white.cgColor
+            // This is an envelope over the ALREADY transparent bitmap, not a
+            // geometry cutter. Full artwork crossfades in before completion.
+            mask.lineWidth = 240 * scale
+            mask.lineCap = .round
+            mask.lineJoin = .round
+            mask.strokeEnd = reduceMotion ? 1 : 0
+            image.mask = mask
+            return mask
+        }
+
+        let reflectionDraw = mark(in: reflectedGroup, initialOpacity: 1)
+        let reflectionMask = setRevealMask(on: reflectionDraw)
+        let reflectionComplete = mark(in: reflectedGroup, initialOpacity: reduceMotion ? 1 : 0)
+
+        let drawnZ = mark(in: logoGroup, initialOpacity: 1)
+        let drawMask = setRevealMask(on: drawnZ)
+        let completeZ = mark(in: logoGroup, initialOpacity: reduceMotion ? 1 : 0)
+        completeZ.shadowColor = UIColor(
+            displayP3Red: 0.18, green: 0.50, blue: 1, alpha: 1
+        ).cgColor
+        completeZ.shadowOpacity = 0.33
+        completeZ.shadowRadius = 15
+        completeZ.shadowOffset = .zero
+
+        func addStudioReflection(to group: CALayer) -> CAGradientLayer {
+            let sheen = CAGradientLayer()
+            sheen.frame = CGRect(x: -width * 0.80, y: 0, width: width * 0.72, height: height)
+            sheen.colors = [
+                UIColor.clear.cgColor,
+                UIColor.white.withAlphaComponent(0.03).cgColor,
+                UIColor.white.withAlphaComponent(0.58).cgColor,
+                UIColor(displayP3Red: 0.59, green: 0.94, blue: 1, alpha: 0.21).cgColor,
+                UIColor.clear.cgColor
+            ]
+            sheen.locations = [0, 0.34, 0.51, 0.68, 1]
+            sheen.startPoint = CGPoint(x: 0, y: 0)
+            sheen.endPoint = CGPoint(x: 1, y: 1)
+            sheen.opacity = reduceMotion ? 0 : 0.68
+
+            // The travelling light is clipped to the REAL alpha of the mark.
+            let clip = CALayer()
+            clip.frame = canvas
+            clip.contents = artwork
+            clip.contentsGravity = .resizeAspect
+            clip.contentsScale = UIScreen.main.scale
+            let sleeve = CALayer()
+            sleeve.frame = canvas
+            sleeve.mask = clip
+            group.addSublayer(sleeve)
+            sleeve.addSublayer(sheen)
+            return sheen
+        }
+
+        let specular = addStudioReflection(to: logoGroup)
+        let mirrorSpecular = addStudioReflection(to: reflectedGroup)
+
+        let motto = CATextLayer()
+        motto.contentsScale = UIScreen.main.scale
+        motto.alignmentMode = .center
+        motto.truncationMode = .none
+        motto.isWrapped = false
+        let pointSize = min(19.5, max(15.8, bounds.width * 0.044))
+        motto.string = NSAttributedString(
+            string: "Sideloading and beyond.",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: pointSize, weight: .medium),
+                .foregroundColor: UIColor.white.withAlphaComponent(0.98),
+                .kern: 0.15
+            ]
+        )
+        motto.frame = CGRect(
+            x: 12,
+            y: max(logoRect.maxY + reflectionHeight + 24, bounds.height * 0.674),
+            width: bounds.width - 24,
+            height: pointSize * 1.65
+        )
+        motto.opacity = reduceMotion ? 1 : 0
+        layer.addSublayer(motto)
+
+        let mottoWipe = CAShapeLayer()
+        mottoWipe.frame = motto.bounds
+        mottoWipe.path = UIBezierPath(rect: motto.bounds).cgPath
+        mottoWipe.fillColor = UIColor.white.cgColor
+        mottoWipe.anchorPoint = CGPoint(x: 0, y: 0.5)
+        mottoWipe.position = CGPoint(x: 0, y: motto.bounds.midY)
+        mottoWipe.bounds.size.width = reduceMotion ? motto.bounds.width : 0
+        motto.mask = mottoWipe
+
+        guard !reduceMotion else {
+            CATransaction.commit()
+            return
+        }
+
+        // Smooth, intentionally paced Z draw: three passages of equal visual
+        // weight, rather than a single mechanical linear trim animation.
+        func animateDraw(_ mask: CAShapeLayer) {
+            mask.strokeEnd = 1
+            let draw = CAKeyframeAnimation(keyPath: "strokeEnd")
+            draw.values = [0, 0.285, 0.735, 1]
+            draw.keyTimes = [0, 0.285, 0.765, 1]
+            draw.timingFunctions = [
+                CAMediaTimingFunction(name: .easeInEaseOut),
+                CAMediaTimingFunction(name: .easeInEaseOut),
+                CAMediaTimingFunction(name: .easeOut)
+            ]
+            draw.beginTime = tick + 0.15
+            draw.duration = 1.50
+            draw.fillMode = .both
+            draw.isRemovedOnCompletion = false
+            mask.add(draw, forKey: "zag.strokeReveal")
+        }
+        animateDraw(drawMask)
+        animateDraw(reflectionMask)
+
+        func animateFullArtwork(_ finished: CALayer, _ drawing: CALayer) {
+            finished.opacity = 1
+            drawing.opacity = 0
+            let arrive = CABasicAnimation(keyPath: "opacity")
+            arrive.fromValue = 0
+            arrive.toValue = 1
+            arrive.beginTime = tick + 1.46
+            arrive.duration = 0.32
+            arrive.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            arrive.fillMode = .both
+            arrive.isRemovedOnCompletion = false
+            finished.add(arrive, forKey: "zag.complete")
+
+            let retire = CABasicAnimation(keyPath: "opacity")
+            retire.fromValue = 1
+            retire.toValue = 0
+            retire.beginTime = tick + 1.46
+            retire.duration = 0.32
+            retire.fillMode = .both
+            retire.isRemovedOnCompletion = false
+            drawing.add(retire, forKey: "zag.retireMask")
+        }
+        animateFullArtwork(completeZ, drawnZ)
+        animateFullArtwork(reflectionComplete, reflectionDraw)
+
+        glow.opacity = 0.60
+        let bloom = CAKeyframeAnimation(keyPath: "opacity")
+        bloom.values = [0.04, 0.24, 0.72, 0.48, 0.60]
+        bloom.keyTimes = [0, 0.18, 0.63, 0.83, 1]
+        bloom.beginTime = tick + 0.18
+        bloom.duration = 2.34
+        bloom.timingFunctions = [
+            CAMediaTimingFunction(name: .easeIn),
+            CAMediaTimingFunction(name: .easeOut),
             CAMediaTimingFunction(name: .easeInEaseOut),
             CAMediaTimingFunction(name: .easeOut)
         ]
-        draw.beginTime = time + 0.20
-        draw.duration = 1.38
-        draw.fillMode = .both
-        draw.isRemovedOnCompletion = false
-        mask.add(draw, forKey: "zag.3D.draw")
+        bloom.fillMode = .both
+        bloom.isRemovedOnCompletion = false
+        glow.add(bloom, forKey: "zag.bloom")
 
-        // A very narrow, glowing lead point gives the draw physical energy.
-        // It never covers the mark in a flat white stroke.
-        let head = CAShapeLayer()
-        head.frame = rect
-        head.path = path.cgPath
-        head.fillColor = nil
-        head.strokeColor = UIColor(
-            displayP3Red: 0.78, green: 0.95, blue: 1, alpha: 0.85
-        ).cgColor
-        head.lineWidth = 4.4 * scale
-        head.lineCap = .round
-        head.lineJoin = .round
-        head.shadowColor = UIColor(
-            displayP3Red: 0, green: 0.90, blue: 1, alpha: 1
-        ).cgColor
-        head.shadowOpacity = 0.88
-        head.shadowRadius = 12 * scale
-        head.shadowOffset = .zero
-        head.opacity = 0
-        root.addSublayer(head)
+        reflectedWindow.opacity = 0.57
+        let reflectionFadeIn = CABasicAnimation(keyPath: "opacity")
+        reflectionFadeIn.fromValue = 0
+        reflectionFadeIn.toValue = 0.57
+        reflectionFadeIn.beginTime = tick + 0.52
+        reflectionFadeIn.duration = 1.18
+        reflectionFadeIn.fillMode = .both
+        reflectionFadeIn.isRemovedOnCompletion = false
+        reflectionFadeIn.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        reflectedWindow.add(reflectionFadeIn, forKey: "zag.reflectionLive")
 
-        let leading = CAKeyframeAnimation(keyPath: "strokeStart")
-        leading.values = [0, 0.24, 0.69, 0.97]
-        leading.keyTimes = [0, 0.27, 0.73, 1]
-        leading.beginTime = time + 0.20
-        leading.duration = 1.38
-        leading.fillMode = .both
-        leading.isRemovedOnCompletion = false
-        head.add(leading, forKey: "zag.head.leading")
+        // Both the logo and its actual mirror receive the travelling beam.
+        func animateSheen(_ sheen: CALayer) {
+            let travel = CABasicAnimation(keyPath: "position.x")
+            travel.fromValue = -width * 0.44
+            travel.toValue = width * 1.30
+            travel.beginTime = tick + 1.19
+            travel.duration = 0.98
+            travel.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            travel.fillMode = .both
+            travel.isRemovedOnCompletion = false
+            sheen.position.x = width * 1.30
+            sheen.add(travel, forKey: "zag.specularTravel")
 
-        let trailing = CAKeyframeAnimation(keyPath: "strokeEnd")
-        trailing.values = [0.035, 0.30, 0.75, 1]
-        trailing.keyTimes = [0, 0.27, 0.73, 1]
-        trailing.beginTime = time + 0.20
-        trailing.duration = 1.38
-        trailing.fillMode = .both
-        trailing.isRemovedOnCompletion = false
-        head.add(trailing, forKey: "zag.head.trailing")
-
-        let headFade = CAKeyframeAnimation(keyPath: "opacity")
-        headFade.values = [0, 0.75, 0.8, 0]
-        headFade.keyTimes = [0, 0.12, 0.77, 1]
-        headFade.beginTime = time + 0.19
-        headFade.duration = 1.45
-        headFade.fillMode = .both
-        headFade.isRemovedOnCompletion = false
-        head.add(headFade, forKey: "zag.head.fade")
-
-        // A studio specular highlight follows the ORIGINAL alpha silhouette
-        // only, with iridescent cyan rather than an all-white rectangle.
-        let specular = CAGradientLayer()
-        specular.frame = rect
-        specular.colors = [
-            UIColor.clear.cgColor,
-            UIColor.white.withAlphaComponent(0.02).cgColor,
-            UIColor.white.withAlphaComponent(0.50).cgColor,
-            UIColor(displayP3Red: 0.55, green: 0.91, blue: 1, alpha: 0.12).cgColor,
-            UIColor.clear.cgColor
-        ]
-        specular.locations = [0, 0.41, 0.50, 0.60, 1]
-        specular.startPoint = CGPoint(x: -1, y: 0)
-        specular.endPoint = CGPoint(x: 0, y: 0)
-        specular.opacity = 0
-        let specularMask = CALayer()
-        specularMask.frame = rect
-        specularMask.contents = mark
-        specularMask.contentsGravity = .resize
-        specular.mask = specularMask
-        root.addSublayer(specular)
-
-        let startMotion = CABasicAnimation(keyPath: "startPoint")
-        startMotion.fromValue = NSValue(cgPoint: CGPoint(x: -1, y: 0))
-        startMotion.toValue = NSValue(cgPoint: CGPoint(x: 1, y: 1))
-        startMotion.beginTime = time + 1.24
-        startMotion.duration = 0.82
-        startMotion.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        startMotion.fillMode = .both
-        startMotion.isRemovedOnCompletion = false
-        specular.add(startMotion, forKey: "zag.specular.start")
-
-        let endMotion = CABasicAnimation(keyPath: "endPoint")
-        endMotion.fromValue = NSValue(cgPoint: CGPoint(x: 0, y: 0))
-        endMotion.toValue = NSValue(cgPoint: CGPoint(x: 2, y: 1))
-        endMotion.beginTime = time + 1.24
-        endMotion.duration = 0.82
-        endMotion.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        endMotion.fillMode = .both
-        endMotion.isRemovedOnCompletion = false
-        specular.add(endMotion, forKey: "zag.specular.end")
-
-        let sheen = CAKeyframeAnimation(keyPath: "opacity")
-        sheen.values = [0, 0.64, 0.64, 0]
-        sheen.keyTimes = [0, 0.22, 0.75, 1]
-        sheen.beginTime = time + 1.21
-        sheen.duration = 0.89
-        sheen.fillMode = .both
-        sheen.isRemovedOnCompletion = false
-        specular.add(sheen, forKey: "zag.specular.intensity")
-
-        func animateBloom(_ volume: CALayer, delay: CFTimeInterval) {
-            volume.opacity = 0.36
-            let pulse = CAKeyframeAnimation(keyPath: "opacity")
-            pulse.values = [0, 0.36, 0.83, 0.36]
-            pulse.keyTimes = [0, 0.30, 0.72, 1]
-            pulse.beginTime = time + delay
-            pulse.duration = 2.18
-            pulse.fillMode = .both
-            pulse.isRemovedOnCompletion = false
-            volume.add(pulse, forKey: "zag.bloom")
+            let amplitude = CAKeyframeAnimation(keyPath: "opacity")
+            amplitude.values = [0, 0.76, 0.70, 0]
+            amplitude.keyTimes = [0, 0.24, 0.72, 1]
+            amplitude.beginTime = tick + 1.19
+            amplitude.duration = 0.98
+            amplitude.fillMode = .both
+            amplitude.isRemovedOnCompletion = false
+            sheen.opacity = 0
+            sheen.add(amplitude, forKey: "zag.specularGlow")
         }
-        animateBloom(cyan, delay: 0.06)
-        animateBloom(magenta, delay: 0.12)
+        animateSheen(specular)
+        animateSheen(mirrorSpecular)
 
-        // A nearly imperceptible focus lock—no bounce or cartoony spring.
+        motto.opacity = 1
+        let textFade = CAKeyframeAnimation(keyPath: "opacity")
+        textFade.values = [0, 0.30, 1]
+        textFade.keyTimes = [0, 0.22, 1]
+        textFade.beginTime = tick + 1.65
+        textFade.duration = 0.62
+        textFade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        textFade.fillMode = .both
+        textFade.isRemovedOnCompletion = false
+        motto.add(textFade, forKey: "zag.mottoFade")
+
+        mottoWipe.bounds.size.width = motto.bounds.width
+        let revealText = CABasicAnimation(keyPath: "bounds.size.width")
+        revealText.fromValue = 0
+        revealText.toValue = motto.bounds.width
+        revealText.beginTime = tick + 1.60
+        revealText.duration = 0.78
+        revealText.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        revealText.fillMode = .both
+        revealText.isRemovedOnCompletion = false
+        mottoWipe.add(revealText, forKey: "zag.mottoDraw")
+
         let focus = CAKeyframeAnimation(keyPath: "transform.scale")
-        focus.values = [0.972, 0.993, 1.011, 1]
-        focus.keyTimes = [0, 0.61, 0.83, 1]
-        focus.beginTime = time + 0.16
-        focus.duration = 2.22
+        focus.values = [0.984, 0.989, 1.008, 1]
+        focus.keyTimes = [0, 0.52, 0.80, 1]
+        focus.beginTime = tick + 0.12
+        focus.duration = 2.34
+        focus.fillMode = .both
+        focus.isRemovedOnCompletion = false
         focus.timingFunctions = [
             CAMediaTimingFunction(name: .easeOut),
             CAMediaTimingFunction(name: .easeInEaseOut),
             CAMediaTimingFunction(name: .easeOut)
         ]
-        focus.fillMode = .both
-        focus.isRemovedOnCompletion = false
-        root.add(focus, forKey: "zag.focus")
+        logoGroup.add(focus, forKey: "zag.focusSettle")
 
         CATransaction.commit()
     }

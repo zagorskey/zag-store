@@ -226,10 +226,11 @@ private struct ZagAnimatedLaunchOverlay: View {
                 complete()
                 return
             }
-            // CAShapeLayer and CAGradientLayer animate on the render server.
-            // The startup gate is released only after the crossfade ends.
+            // Native Core Animation draws the extracted original 3D artwork,
+            // reflects it live and reveals the motto after the Z forms.
+            // Hold the completed composition briefly before crossfading.
             try? await Task.sleep(
-                for: .milliseconds(reduceMotion ? 370 : 2460)
+                for: .milliseconds(reduceMotion ? 370 : 2780)
             )
             guard !Task.isCancelled, !dismissed else { return }
             withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.36)) {
