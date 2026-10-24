@@ -203,7 +203,8 @@ private enum ZagSplashPreferences {
     }
 }
 
-/// The system launch frame is gradient-only. On normal cold starts, Zag Store
+/// The system launch frame is the exact first frame of the Kling master.
+/// On normal cold starts, Zag Store
 /// plays the ORIGINAL 5-second cinematic master (including its audio track).
 /// A precise, native text reveal is layered above the unmodified video.
 /// Reduced Motion and missing bundled video fall back to the existing
@@ -216,6 +217,7 @@ private struct ZagAnimatedLaunchOverlay: View {
     @State private var exitRequested = false
     @State private var dismissed = false
     @State private var videoFadeStarted = false
+    @State private var skipVideoRequested = false
 
     private var playsVideo: Bool {
         !reduceMotion && ZagCinematicSplashView.available
@@ -228,8 +230,19 @@ private struct ZagAnimatedLaunchOverlay: View {
                     if playsVideo {
                         ZagCinematicSplashView(
                             soundEnabled: soundEnabled,
+                            skipRequested: skipVideoRequested,
+                            onExitReady: beginVideoFade,
                             onFinished: finishVideo
                         )
+                        // A transparent full-screen gesture surface: no Skip
+                        // affordance competes with the original Z artwork.
+                        .overlay {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture { skipVideoRequested = true }
+                                .accessibilityLabel("Skip introduction")
+                                .accessibilityAddTraits(.isButton)
+                        }
                     } else {
                         ZagSplashAnimationStage(
                             reduceMotion: reduceMotion,
@@ -291,14 +304,26 @@ private struct ZagAnimatedLaunchOverlay: View {
         }
     }
 
-    private func finishVideo() {
+    private func beginVideoFade() {
         guard !dismissed, !videoFadeStarted else { return }
         videoFadeStarted = true
-        withAnimation(.easeInOut(duration: 0.38)) {
+        // The motto has already withdrawn. Now the unmodified video
+        // dissolves into the real, fully-mounted Zag Store interface.
+        withAnimation(.easeInOut(duration: 0.28)) {
             opacity = 0
         }
+    }
+
+    private func finishVideo() {
+        guard !dismissed else { return }
+        let wasFading = videoFadeStarted
+        beginVideoFade()
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(410))
+            // Normally the video finishes 0.28 s after the exit cue. If it
+            // ends unexpectedly, let the same transition complete first.
+            try? await Task.sleep(for: .milliseconds(
+                wasFading ? 55 : 310
+            ))
             complete()
         }
     }
