@@ -136,6 +136,7 @@ struct SettingsView: View {
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
 	@AppStorage("ZagStore.animatedSplashEnabled") private var _animatedSplashEnabled = true
+	@AppStorage("ZagStore.splashSoundEnabled") private var _splashSoundEnabled = true
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
@@ -498,7 +499,7 @@ extension SettingsView {
                 case .display:
                     return _settingsSearchMatches("Display Appearance App Icon")
                 case .pages:
-                    return _settingsSearchMatches("Pages Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Pages Animated Splash Screen Splash Sound Mute Unmute Remember Last Page Default Start Page")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -552,6 +553,10 @@ extension SettingsView {
 				Toggle(isOn: $_animatedSplashEnabled) {
 					Label("Animated Splash Screen", systemImage: "sparkles.rectangle.stack")
 				}
+				Toggle(isOn: $_splashSoundEnabled) {
+					Label("Splash Sound", systemImage: _splashSoundEnabled ? "speaker.wave.2" : "speaker.slash")
+				}
+				.disabled(!_animatedSplashEnabled)
 				Toggle(isOn: $_rememberLastPage) {
 					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
 				}
@@ -573,7 +578,7 @@ extension SettingsView {
 					_rememberLastPage
 						? "Zag Store will reopen on the last main page you used."
 						: "Choose which main page Zag Store opens on."
-					+ " The splash screen plays only on cold launches and can be disabled above."
+					+ " The cinematic splash plays only on cold launches. Sound can be muted separately; the iPhone silent switch is respected."
 				)
 			}
 
