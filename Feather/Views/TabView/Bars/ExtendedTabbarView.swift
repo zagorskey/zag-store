@@ -15,6 +15,7 @@ struct ExtendedTabbarView: View {
 	@AppStorage("Feather.tabCustomization") var customization = TabViewCustomization()
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
+	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
 	
@@ -52,6 +53,20 @@ struct ExtendedTabbarView: View {
                             Text(tab.title)
                         } icon: {
                             ZagSourcesTabIcon.label
+                        }
+                    }
+                } else if tab == .library {
+                    Tab(value: tab.rawValue) {
+                        TabEnum.view(for: tab)
+                    } label: {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            ZagAppsTabIcon(
+                                hasUpdates: updateManager.hasVisibleUpdates,
+                                isSelected: selectedTabRawValue == tab.rawValue,
+                                tintHex: themeTintHex
+                            )
                         }
                     }
                 } else {
@@ -102,27 +117,6 @@ struct ExtendedTabbarView: View {
 			.hidden(horizontalSizeClass == .compact)
 		}
 		.tabViewStyle(.sidebarAdaptable)
-		.overlay(alignment: .bottom) {
-			if horizontalSizeClass == .compact, updateManager.hasVisibleUpdates {
-				GeometryReader { proxy in
-					// The native floating tab bar keeps its items inside a
-					// horizontal content inset. Preserve the original indicator
-					// geometry: 12pt to the right of the Apps icon centre.
-					let tabContentInset: CGFloat = 30
-					let contentWidth = proxy.size.width - (tabContentInset * 2)
-					let itemWidth = contentWidth / CGFloat(TabEnum.defaultTabs.count)
-					Circle()
-						.fill(Color(uiColor: UIColor(displayP3Red: 1, green: 0.12, blue: 0.16, alpha: 1)))
-						.frame(width: 7, height: 7)
-						.position(
-							x: tabContentInset + itemWidth * 2.5 + 12,
-							y: proxy.size.height - 55
-						)
-						.allowsHitTesting(false)
-				}
-				.ignoresSafeArea()
-			}
-		}
 		.tabViewCustomization($customization)
 		.onOpenURL { url in
             if let tab = TabEnum.tab(for: url) {
