@@ -103,7 +103,7 @@ struct ZagAppsTabIcon: View {
             // corner. Cut a transparent breathing gap in the stroke so the
             // badge reads as a single integrated mark, never a glued-on dot.
             let centre = CGPoint(x: 25.2, y: 4.8)
-            let gapRadius: CGFloat = 5.1
+            let gapRadius: CGFloat = 5.65
             context.setBlendMode(.clear)
             context.fillEllipse(in: CGRect(
                 x: centre.x - gapRadius,
@@ -114,7 +114,7 @@ struct ZagAppsTabIcon: View {
             context.setBlendMode(.normal)
 
             if drawSpectrumBadge {
-                let radius: CGFloat = 4.05
+                let radius: CGFloat = 4.55
                 let rect = CGRect(
                     x: centre.x - radius,
                     y: centre.y - radius,
@@ -127,14 +127,14 @@ struct ZagAppsTabIcon: View {
 
                 // Paint the spectrum into the native tab image itself.
                 let palette: [UIColor] = [
-                    UIColor(displayP3Red: 0.00, green: 0.86, blue: 1.00, alpha: 1),
-                    UIColor(displayP3Red: 0.05, green: 0.37, blue: 1.00, alpha: 1),
-                    UIColor(displayP3Red: 0.42, green: 0.18, blue: 1.00, alpha: 1),
-                    UIColor(displayP3Red: 0.95, green: 0.16, blue: 0.89, alpha: 1)
+                    UIColor(displayP3Red: 0.00, green: 1.00, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 0.18, green: 0.62, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 0.65, green: 0.38, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 1.00, green: 0.30, blue: 0.96, alpha: 1)
                 ]
                 let angle = CGFloat(spectrumPhase) * .pi * 2
                 let direction = CGPoint(x: cos(angle), y: sin(angle))
-                let reach: CGFloat = 6.0
+                let reach: CGFloat = 4.8
                 let start = CGPoint(
                     x: centre.x - direction.x * reach,
                     y: centre.y - direction.y * reach
