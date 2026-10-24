@@ -20,10 +20,11 @@ struct ZagSplashAnimationStage: UIViewRepresentable {
     func updateUIView(_ uiView: ZagSplashStageView, context: Context) { }
 }
 
-/// Cache the cropped real 3D logo once, instead of decoding an image on every
-/// frame. The source has a gradient baked behind the mark, so recover a soft
-/// alpha based on brightness AND proximity to the three actual Z strokes.
-/// No AI redrawing, traced flat logo, or visual substitution is involved.
+/// Cache the cropped ORIGINAL 3D logo once, rather than decoding it per frame.
+/// The artwork contains a coloured backdrop, so use a colour-luminance key
+/// ONLY to remove the backdrop. Do not restrict the recovered pixels to an
+/// approximate Z centreline: that sliced apart the real 3D bevels and joints.
+/// We deliberately keep every bright source pixel within the asset crop.
 @MainActor
 private enum ZagSplashMarkAsset {
     static let originalSize = CGSize(width: 863, height: 1822)
@@ -70,37 +71,20 @@ private enum ZagSplashMarkAsset {
         }
         guard success else { return nil }
 
-        func segmentDistance(
-            _ x: CGFloat, _ y: CGFloat,
-            _ x0: CGFloat, _ y0: CGFloat,
-            _ x1: CGFloat, _ y1: CGFloat
-        ) -> CGFloat {
-            let dx = x1 - x0
-            let dy = y1 - y0
-            let t = min(1, max(0, ((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy)))
-            return hypot(x - x0 - t * dx, y - y0 - t * dy)
-        }
-
+        // Recover every bright surface of the actual Z. The previous
+        // geometric distance gate clipped the diagonal and created dark,
+        // diamond-shaped holes in the artwork. This purely photometric key
+        // preserves the original continuous glass/bevel geometry.
+        //
+        // The thresholds are deliberately soft (140...210 / 255). They keep
+        // internal cobalt/violet surfaces and anti-aliased specular edges,
+        // while the much darker surrounding gradient becomes transparent.
         for index in stride(from: 0, to: pixels.count, by: 4) {
-            let pixel = index / 4
-            let x = crop.minX + CGFloat(pixel % width) * crop.width / CGFloat(width)
-            let y = crop.minY + CGFloat(pixel / width) * crop.height / CGFloat(height)
-            let distance = min(
-                segmentDistance(x, y, 249, 711, 615, 711),
-                min(
-                    segmentDistance(x, y, 615, 711, 249, 1084),
-                    segmentDistance(x, y, 249, 1084, 615, 1084)
-                )
-            )
-            let outer = min(1, max(0, (130 - distance) / 52))
-            let geometry = outer * outer * (3 - 2 * outer)
-
-            let value = CGFloat(
+            let peak = CGFloat(
                 max(pixels[index], max(pixels[index + 1], pixels[index + 2]))
-            ) / 255
-            let t = min(1, max(0, (value - 0.14) / 0.34))
-            let luminance = t * t * (3 - 2 * t)
-            let alpha = geometry * luminance
+            )
+            let t = min(1, max(0, (peak - 140) / 70))
+            let alpha = t * t * (3 - 2 * t)
 
             // This is a premultiplied RGBA buffer.
             pixels[index] = UInt8(CGFloat(pixels[index]) * alpha)
@@ -234,7 +218,11 @@ final class ZagSplashStageView: UIView {
         mask.path = path.cgPath
         mask.fillColor = nil
         mask.strokeColor = UIColor.white.cgColor
-        mask.lineWidth = 153 * scale
+        // This is a REVEAL envelope, not the logo silhouette. Its
+        // width must safely envelop the actual rounded Z (including
+        // its bevels), rather than trimming the artwork like a knife.
+        // The extracted source image already supplies the real alpha.
+        mask.lineWidth = 260 * scale
         mask.lineCap = .round
         mask.lineJoin = .round
         mask.strokeEnd = reduceMotion ? 1 : 0
