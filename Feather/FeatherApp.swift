@@ -253,7 +253,8 @@ private struct ZagAnimatedLaunchOverlay: View {
                 .ignoresSafeArea()
                 .opacity(opacity)
                 .allowsHitTesting(true)
-                .accessibilityHidden(true)
+                // Keep the invisible Skip introduction button reachable to
+                // VoiceOver; the video itself has no announced elements.
             }
         }
         .task {
