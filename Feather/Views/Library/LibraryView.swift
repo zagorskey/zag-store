@@ -252,11 +252,17 @@ struct LibraryView: View {
 
         if shouldMeasure {
             Self.didMeasureFirstListPreparation = true
-            ZagPerformanceMonitor.shared.record(
-                .appsListPreparation,
-                since: startedAt,
-                result: "signed=\(signed.count), imported=\(imported.count)"
-            )
+            let elapsed = ZagPerformanceMonitor.now() - startedAt
+            let result = "signed=\(signed.count), imported=\(imported.count)"
+            // A performance sample is Published state. Never publish it
+            // synchronously while SwiftUI is evaluating a View body.
+            DispatchQueue.main.async {
+                ZagPerformanceMonitor.shared.record(
+                    .appsListPreparation,
+                    since: ZagPerformanceMonitor.now() - elapsed,
+                    result: result
+                )
+            }
         }
         return ZagLibraryListSnapshot(
             managedIDs: managed,
