@@ -724,6 +724,113 @@ private struct ZagFeaturedArtworkCandidate: Sendable {
     let screenshots: [URL]
 }
 
+// The Games catalogue is read-only. Build its bounded storefront selection
+// off the main actor, then publish only the small finished index to SwiftUI.
+// Repository values and app routes are Sendable; Core Data objects never
+// cross into the worker.
+private struct ZagGamesIndexSnapshot: Sendable {
+    let emulators: [SourceAppsView.SourceAppRoute]
+    let games: [SourceAppsView.SourceAppRoute]
+    let featuredCandidates: [SourceAppsView.SourceAppRoute]
+}
+
+private enum ZagGamesIndexBuilder {
+    private static func normalizedName(_ name: String) -> String {
+        name.lowercased()
+            .folding(options: [.diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static let emulatorPrefixes: [String] = [
+        "delta", "retroarch", "ppsspp", "provenance", "flycast",
+        "dolphinios", "folium", "ignited", "gamma", "sameboy",
+        "mame", "melonds", "inds", "ad boy", "play!",
+        "emu4ios", "gearboy", "gearsystem", "gpsphone",
+        "gba4ios", "snes9x", "scummvm"
+    ].map { normalizedName($0) }
+
+    private static let gameDescriptions = [
+        "mobile game", "video game", "arcade game", "puzzle game",
+        "role-playing game", "racing game", "strategy game"
+    ]
+
+    static func build(_ repositories: [ASRepository]) -> ZagGamesIndexSnapshot? {
+        var seenEmulators = Set<String>()
+        var seenGames = Set<String>()
+        var newEmulators: [SourceAppsView.SourceAppRoute] = []
+        var newGames: [SourceAppsView.SourceAppRoute] = []
+        var artworkCandidates: [SourceAppsView.SourceAppRoute] = []
+        var titleCandidates: [SourceAppsView.SourceAppRoute] = []
+        var seenArtwork = Set<String>()
+        var artworkCountBySource: [String: Int] = [:]
+
+        for repository in repositories {
+            guard !Task.isCancelled else { return nil }
+            for (index, app) in repository.apps.enumerated() {
+                if index % 256 == 0 && Task.isCancelled { return nil }
+
+                let name = app.currentName
+                let key = normalizedName(name)
+                if emulatorPrefixes.contains(where: { key.hasPrefix($0) }) {
+                    if newEmulators.count < 60 && seenEmulators.insert(key).inserted {
+                        newEmulators.append(.init(source: repository, app: app))
+                    }
+                    continue
+                }
+
+                let description = (app.currentDescription ?? app.localizedDescription ?? "").lowercased()
+                let isGame = app.category?.lowercased() == "games"
+                    || gameDescriptions.contains(where: { description.contains($0) })
+                guard isGame else { continue }
+
+                if newGames.count < 60 && seenGames.insert(key).inserted {
+                    newGames.append(.init(source: repository, app: app))
+                }
+
+                // Keep checking the whole catalog for genuine, varied artwork
+                // without creating an unbounded collection of candidates.
+                let sourceKey = repository.id ?? repository.name ?? "Repository"
+                if seenArtwork.insert(sourceKey + "::" + key).inserted {
+                    let entry = SourceAppsView.SourceAppRoute(source: repository, app: app)
+                    if !app.currentScreenshotURLs.isEmpty {
+                        if artworkCandidates.count < 72 &&
+                           (artworkCountBySource[sourceKey] ?? 0) < 18 {
+                            artworkCandidates.append(entry)
+                            artworkCountBySource[sourceKey, default: 0] += 1
+                        }
+                    } else if titleCandidates.count < 48 {
+                        titleCandidates.append(entry)
+                    }
+                }
+            }
+        }
+
+        var featured: [SourceAppsView.SourceAppRoute] = []
+        var featuredSources = Set<String>()
+        var featuredIDs = Set<String>()
+        for entry in artworkCandidates {
+            let source = entry.source.id ?? entry.source.name ?? "Repository"
+            guard featuredSources.insert(source).inserted else { continue }
+            featured.append(entry)
+            featuredIDs.insert(entry.id)
+            if featured.count == 96 { break }
+        }
+        for entry in artworkCandidates where featured.count < 96 {
+            guard featuredIDs.insert(entry.id).inserted else { continue }
+            featured.append(entry)
+        }
+        for entry in titleCandidates where featured.count < 96 {
+            guard featuredIDs.insert(entry.id).inserted else { continue }
+            featured.append(entry)
+        }
+        return ZagGamesIndexSnapshot(
+            emulators: newEmulators,
+            games: newGames,
+            featuredCandidates: featured
+        )
+    }
+}
+
 private struct ZagGamesPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
@@ -739,6 +846,7 @@ private struct ZagGamesPage: View {
     @State private var verifiedArtwork: [String: ZagFeaturedHero] = [:]
     @State private var isCheckingFeatured = false
     @State private var indexSignature = ""
+    @State private var indexWorker: Task<ZagGamesIndexSnapshot?, Never>?
     @State private var indexedGameCount = 0
     @State private var indexedEmulatorCount = 0
     @FetchRequest(
@@ -964,6 +1072,8 @@ private struct ZagGamesPage: View {
         }
     }
 
+    // Starting the scan must not block the Games tab transition.
+    // Keep current results visible until the new version is ready.
     private func rebuildIndexIfNeeded() {
         let signature = sources.map { source in
             let key = source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
@@ -972,79 +1082,26 @@ private struct ZagGamesPage: View {
         guard signature != indexSignature else { return }
         indexSignature = signature
 
-        var seenEmulators = Set<String>()
-        var seenGames = Set<String>()
-        var newEmulators: [SourceAppsView.SourceAppRoute] = []
-        var newGames: [SourceAppsView.SourceAppRoute] = []
-        var artworkCandidates: [SourceAppsView.SourceAppRoute] = []
-        var titleCandidates: [SourceAppsView.SourceAppRoute] = []
-        var seenArtwork = Set<String>()
-        var artworkCountBySource: [String: Int] = [:]
+        // Copy repository *values* on the main actor, without copying Core Data
+        // source objects to a background executor.
+        let repositories = sources.compactMap { sourcesModel.sources[$0] }
+        indexWorker?.cancel()
+        let worker = Task.detached(priority: .userInitiated) {
+            ZagGamesIndexBuilder.build(repositories)
+        }
+        indexWorker = worker
 
-        for source in sources {
-            guard let repository = sourcesModel.sources[source] else { continue }
-            for app in repository.apps {
-                let name = app.currentName
-                let key = normalizedName(name)
-                if isEmulator(name) {
-                    if seenEmulators.insert(key).inserted && newEmulators.count < 60 {
-                        newEmulators.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
-                    }
-                } else {
-                    let isGame = isGameDescription(app.currentDescription ?? app.localizedDescription ?? "")
-                        || app.category?.lowercased() == "games"
-                    guard isGame else { continue }
-                    if newGames.count < 60 && seenGames.insert(key).inserted {
-                        newGames.append(SourceAppsView.SourceAppRoute(source: repository, app: app))
-                    }
-                    // Continue checking the catalogue for genuine artwork even
-                    // after the 60 visible Games slots have been filled.
-                    let sourceKey = repository.id ?? repository.name ?? "Repository"
-                    // A different source may have working images for the
-                    // same game even if an earlier source has broken links.
-                    if seenArtwork.insert(sourceKey + "::" + key).inserted {
-                        let entry = SourceAppsView.SourceAppRoute(source: repository, app: app)
-                        if !app.currentScreenshotURLs.isEmpty {
-                            if artworkCandidates.count < 72 &&
-                                (artworkCountBySource[sourceKey] ?? 0) < 18 {
-                                artworkCandidates.append(entry)
-                                artworkCountBySource[sourceKey, default: 0] += 1
-                            }
-                        } else if titleCandidates.count < 48 {
-                            // Apple's unique exact-title search can still find
-                            // legitimate artwork without a repository screenshot.
-                            titleCandidates.append(entry)
-                        }
-                    }
-                }
-                // Keep scanning for Featured artwork even when both visible lists are full.
-            }
+        Task { @MainActor in
+            guard let snapshot = await worker.value,
+                  !worker.isCancelled,
+                  indexSignature == signature else { return }
+
+            indexedFeaturedGames = snapshot.featuredCandidates
+            indexedEmulators = snapshot.emulators
+            indexedGames = snapshot.games
+            indexedEmulatorCount = snapshot.emulators.count
+            indexedGameCount = snapshot.games.count
         }
-        // Prefer diverse repositories first, but retain plenty of backup
-        // candidates. Eligibility is established asynchronously, not here.
-        var featured: [SourceAppsView.SourceAppRoute] = []
-        var featuredSources = Set<String>()
-        var featuredIDs = Set<String>()
-        for entry in artworkCandidates {
-            let source = entry.source.id ?? entry.source.name ?? "Repository"
-            guard featuredSources.insert(source).inserted else { continue }
-            featured.append(entry)
-            featuredIDs.insert(entry.id)
-            if featured.count == 96 { break }
-        }
-        for entry in artworkCandidates where featured.count < 96 {
-            guard featuredIDs.insert(entry.id).inserted else { continue }
-            featured.append(entry)
-        }
-        for entry in titleCandidates where featured.count < 96 {
-            guard featuredIDs.insert(entry.id).inserted else { continue }
-            featured.append(entry)
-        }
-        indexedFeaturedGames = featured
-        indexedEmulators = newEmulators
-        indexedGames = newGames
-        indexedEmulatorCount = newEmulators.count
-        indexedGameCount = newGames.count
     }
 
     var body: some View {
