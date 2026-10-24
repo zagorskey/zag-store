@@ -41,7 +41,9 @@ final class ZagCinematicSplashStage: UIView {
         }
     }
 
-    private let backgroundImage = UIImageView(image: UIImage(named: "ZagSplashBackdrop"))
+    // Pixel-identical frame zero of the bundled master, also used by the
+    // iOS launch storyboard. Avoid colour overlays, alpha dimming or gradients.
+    private let backgroundImage = UIImageView(image: UIImage(named: "ZagSplashVideoFirstFrame"))
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playbackClock: Any?
@@ -70,7 +72,6 @@ final class ZagCinematicSplashStage: UIView {
         clipsToBounds = true
         backgroundImage.contentMode = .scaleAspectFill
         backgroundImage.clipsToBounds = true
-        backgroundImage.alpha = 0.52
         addSubview(backgroundImage)
     }
 
