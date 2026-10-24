@@ -437,6 +437,11 @@ final class ZagCinematicSplashStage: UIView {
             fade.timingFunction = CAMediaTimingFunction(
                 controlPoints: 0.42, 0, 0.74, 0.39
             )
+            // Preserve the word until its own delayed outro begins.
+            // Without backwards fill, model opacity=0 would make the
+            // second and third words disappear prematurely.
+            fade.fillMode = .both
+            fade.isRemovedOnCompletion = false
             text.add(fade, forKey: "zag.signatureOutro")
 
             let rise = CABasicAnimation(keyPath: "position.y")
