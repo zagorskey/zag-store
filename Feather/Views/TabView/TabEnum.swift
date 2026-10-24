@@ -1086,6 +1086,7 @@ private struct ZagGamesPage: View {
         // Copy repository *values* on the main actor, without copying Core Data
         // source objects to a background executor.
         let repositories = sources.compactMap { sourcesModel.sources[$0] }
+        let indexStartedAt = ZagPerformanceMonitor.now()
         indexWorker?.cancel()
         let worker = Task.detached(priority: .userInitiated) {
             ZagGamesIndexBuilder.build(repositories)
@@ -1103,6 +1104,11 @@ private struct ZagGamesPage: View {
             indexedEmulatorCount = snapshot.emulators.count
             indexedGameCount = snapshot.games.count
             indexedArtworkRevision += 1
+            ZagPerformanceMonitor.shared.record(
+                .gamesCatalogueIndex,
+                since: indexStartedAt,
+                result: "repositories=\(repositories.count), games=\(snapshot.games.count), emulators=\(snapshot.emulators.count)"
+            )
         }
     }
 
