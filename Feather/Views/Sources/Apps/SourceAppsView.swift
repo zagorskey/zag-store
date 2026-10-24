@@ -1200,7 +1200,7 @@ struct SourceAppsView: View {
 		}
 	}
 	
-	struct SourceAppRoute: Identifiable, Hashable {
+	struct SourceAppRoute: Identifiable, Hashable, Sendable {
 		let source: ASRepository
 		let app: ASRepository.App
 
