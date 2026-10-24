@@ -54,7 +54,7 @@ final class ZagSplashStageView: UIView {
             return
         }
 
-        let width = min(bounds.width * 0.635, 286)
+        let width = min(bounds.width * 0.68, 310)
         let height = width * CGFloat(artwork.height) / CGFloat(artwork.width)
         let logoRect = CGRect(
             x: (bounds.width - width) / 2,
@@ -101,16 +101,16 @@ final class ZagSplashStageView: UIView {
 
         // Mirrored reflection: same bitmap, same reveal timeline and same
         // specular motion. The small lower window is softly masked out.
-        let reflectionHeight = min(height * 0.24, 70)
+        let reflectionHeight = min(height * 0.29, 91)
         let reflectedWindow = CALayer()
         reflectedWindow.frame = CGRect(
             x: logoRect.minX,
-            y: logoRect.maxY + 6,
+            y: logoRect.maxY + 4,
             width: width,
             height: reflectionHeight
         )
         reflectedWindow.masksToBounds = true
-        reflectedWindow.opacity = reduceMotion ? 0.48 : 0
+        reflectedWindow.opacity = reduceMotion ? 0.68 : 0
         layer.addSublayer(reflectedWindow)
 
         let reflectedGroup = CALayer()
@@ -121,11 +121,11 @@ final class ZagSplashStageView: UIView {
         let reflectionFade = CAGradientLayer()
         reflectionFade.frame = reflectedWindow.bounds
         reflectionFade.colors = [
-            UIColor.white.withAlphaComponent(0.26).cgColor,
-            UIColor.white.withAlphaComponent(0.11).cgColor,
+            UIColor.white.withAlphaComponent(0.72).cgColor,
+            UIColor.white.withAlphaComponent(0.30).cgColor,
             UIColor.clear.cgColor
         ]
-        reflectionFade.locations = [0, 0.39, 1]
+        reflectionFade.locations = [0, 0.43, 1]
         reflectionFade.startPoint = CGPoint(x: 0.5, y: 0)
         reflectionFade.endPoint = CGPoint(x: 0.5, y: 1)
         reflectedWindow.mask = reflectionFade
@@ -184,7 +184,7 @@ final class ZagSplashStageView: UIView {
             mask.strokeColor = UIColor.white.cgColor
             // This is an envelope over the ALREADY transparent bitmap, not a
             // geometry cutter. Full artwork crossfades in before completion.
-            mask.lineWidth = 240 * scale
+            mask.lineWidth = 265 * scale
             mask.lineCap = .round
             mask.lineJoin = .round
             mask.strokeEnd = reduceMotion ? 1 : 0
@@ -212,8 +212,8 @@ final class ZagSplashStageView: UIView {
             sheen.colors = [
                 UIColor.clear.cgColor,
                 UIColor.white.withAlphaComponent(0.03).cgColor,
-                UIColor.white.withAlphaComponent(0.58).cgColor,
-                UIColor(displayP3Red: 0.59, green: 0.94, blue: 1, alpha: 0.21).cgColor,
+                UIColor.white.withAlphaComponent(0.84).cgColor,
+                UIColor(displayP3Red: 0.59, green: 0.94, blue: 1, alpha: 0.40).cgColor,
                 UIColor.clear.cgColor
             ]
             sheen.locations = [0, 0.34, 0.51, 0.68, 1]
@@ -254,7 +254,7 @@ final class ZagSplashStageView: UIView {
             sheen.colors = [
                 UIColor.clear.cgColor,
                 UIColor(displayP3Red: 0.32, green: 0.84, blue: 1, alpha: 0.06).cgColor,
-                UIColor(displayP3Red: 1, green: 0.80, blue: 0.99, alpha: 0.46).cgColor,
+                UIColor(displayP3Red: 1, green: 0.80, blue: 0.99, alpha: 0.78).cgColor,
                 UIColor(displayP3Red: 0.96, green: 0.28, blue: 1, alpha: 0.13).cgColor,
                 UIColor.clear.cgColor
             ]
@@ -283,7 +283,7 @@ final class ZagSplashStageView: UIView {
         drawHead.strokeColor = UIColor(
             displayP3Red: 0.86, green: 0.97, blue: 1, alpha: 1
         ).cgColor
-        drawHead.lineWidth = 9.5 * scale
+        drawHead.lineWidth = 13.5 * scale
         drawHead.lineCap = .round
         drawHead.lineJoin = .round
         drawHead.strokeStart = 0
@@ -292,8 +292,8 @@ final class ZagSplashStageView: UIView {
         drawHead.shadowColor = UIColor(
             displayP3Red: 0.12, green: 0.87, blue: 1, alpha: 1
         ).cgColor
-        drawHead.shadowOpacity = 0.85
-        drawHead.shadowRadius = 15 * scale
+        drawHead.shadowOpacity = 1
+        drawHead.shadowRadius = 25 * scale
         drawHead.shadowOffset = .zero
         headSleeve.addSublayer(drawHead)
 
@@ -313,96 +313,140 @@ final class ZagSplashStageView: UIView {
         focusAura.opacity = reduceMotion ? 0 : 0
         logoGroup.insertSublayer(focusAura, below: drawnZ)
 
-        let motto = CATextLayer()
-        motto.contentsScale = UIScreen.main.scale
-        motto.alignmentMode = .center
-        motto.truncationMode = .none
-        motto.isWrapped = false
-        let pointSize = min(19.5, max(15.8, bounds.width * 0.044))
-        motto.string = NSAttributedString(
-            string: "Sideloading and beyond.",
-            attributes: [
-                .font: UIFont.systemFont(ofSize: pointSize, weight: .medium),
-                .foregroundColor: UIColor.white.withAlphaComponent(0.98),
-                .kern: 0.15
-            ]
+        // Three separately laid-out CATextLayers: no typewriter wipe, no
+        // awkward partial letters. Each word arrives with a clean rise, glow
+        // and a short specular pass. Keep the whole line optically centred.
+        let mottoFontSize = min(22.5, max(17.5, bounds.width * 0.051))
+        let mottoFont = UIFont.systemFont(ofSize: mottoFontSize, weight: .semibold)
+        let words = ["Sideloading", "and", "beyond."]
+        let gap: CGFloat = max(6, mottoFontSize * 0.35)
+        let measured = words.map {
+            ceil(($0 as NSString).size(withAttributes: [.font: mottoFont]).width)
+        }
+        let lineWidth = measured.reduce(0, +) + gap * CGFloat(words.count - 1)
+        let fit = min(1, (bounds.width - 30) / lineWidth)
+        let wordY = max(
+            logoRect.maxY + reflectionHeight + 26,
+            bounds.height * 0.681
         )
-        motto.frame = CGRect(
-            x: 12,
-            y: max(logoRect.maxY + reflectionHeight + 24, bounds.height * 0.674),
-            width: bounds.width - 24,
-            height: pointSize * 1.65
-        )
-        motto.opacity = reduceMotion ? 1 : 0
-        layer.addSublayer(motto)
+        var wordX = (bounds.width - lineWidth * fit) / 2
+        var wordLayers: [CATextLayer] = []
+        var wordSheens: [CAGradientLayer] = []
 
-        let mottoWipe = CAShapeLayer()
-        mottoWipe.frame = motto.bounds
-        mottoWipe.path = UIBezierPath(rect: motto.bounds).cgPath
-        mottoWipe.fillColor = UIColor.white.cgColor
-        mottoWipe.anchorPoint = CGPoint(x: 0, y: 0.5)
-        mottoWipe.position = CGPoint(x: 0, y: motto.bounds.midY)
-        mottoWipe.bounds.size.width = reduceMotion ? motto.bounds.width : 0
-        motto.mask = mottoWipe
+        for (index, word) in words.enumerated() {
+            let wordWidth = measured[index] * fit
+            let text = CATextLayer()
+            text.contentsScale = UIScreen.main.scale
+            text.alignmentMode = .center
+            text.isWrapped = false
+            text.truncationMode = .none
+            text.string = NSAttributedString(
+                string: word,
+                attributes: [
+                    .font: UIFont.systemFont(
+                        ofSize: mottoFontSize * fit,
+                        weight: .semibold
+                    ),
+                    .foregroundColor: UIColor.white,
+                    .kern: 0.05
+                ]
+            )
+            text.frame = CGRect(
+                x: wordX, y: wordY,
+                width: wordWidth + 2,
+                height: mottoFontSize * fit * 1.7
+            )
+            text.opacity = reduceMotion ? 1 : 0
+            layer.addSublayer(text)
+            wordLayers.append(text)
+
+            // White-gold reflection is confined to the glyphs of this word.
+            let sleeve = CALayer()
+            sleeve.frame = text.frame
+            let glyphMask = CATextLayer()
+            glyphMask.frame = sleeve.bounds
+            glyphMask.contentsScale = UIScreen.main.scale
+            glyphMask.alignmentMode = .center
+            glyphMask.string = text.string
+            sleeve.mask = glyphMask
+            layer.addSublayer(sleeve)
+
+            let sheen = CAGradientLayer()
+            sheen.frame = CGRect(
+                x: -wordWidth * 0.85, y: 0,
+                width: wordWidth * 0.65,
+                height: sleeve.bounds.height
+            )
+            sheen.colors = [
+                UIColor.clear.cgColor,
+                UIColor.white.withAlphaComponent(0.04).cgColor,
+                UIColor.white.withAlphaComponent(0.92).cgColor,
+                UIColor.clear.cgColor
+            ]
+            sheen.locations = [0, 0.32, 0.55, 1]
+            sheen.startPoint = CGPoint(x: 0, y: 0)
+            sheen.endPoint = CGPoint(x: 1, y: 0.25)
+            sheen.opacity = 0
+            sleeve.addSublayer(sheen)
+            wordSheens.append(sheen)
+            wordX += wordWidth + gap * fit
+        }
 
         guard !reduceMotion else {
             CATransaction.commit()
             return
         }
 
-        // Smooth, intentionally paced Z draw: three passages of equal visual
-        // weight, rather than a single mechanical linear trim animation.
+        // One uninterrupted, cubic-eased stroke. The three bars are one
+        // continuous CGPath and the drawing head uses the identical clock.
+        // This removes the stops and visual 'pop-in' at the two corners.
         func animateDraw(_ mask: CAShapeLayer) {
             mask.strokeEnd = 1
-            let draw = CAKeyframeAnimation(keyPath: "strokeEnd")
-            draw.values = [0, 0.285, 0.735, 1]
-            draw.keyTimes = [0, 0.285, 0.765, 1]
-            draw.timingFunctions = [
-                CAMediaTimingFunction(name: .easeInEaseOut),
-                CAMediaTimingFunction(name: .easeInEaseOut),
-                CAMediaTimingFunction(name: .easeOut)
-            ]
-            draw.beginTime = tick + 0.15
-            draw.duration = 1.50
+            let draw = CABasicAnimation(keyPath: "strokeEnd")
+            draw.fromValue = 0
+            draw.toValue = 1
+            draw.beginTime = tick + 0.20
+            draw.duration = 1.60
+            draw.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.35, 0.04, 0.20, 1
+            )
             draw.fillMode = .both
             draw.isRemovedOnCompletion = false
-            mask.add(draw, forKey: "zag.strokeReveal")
+            mask.add(draw, forKey: "zag.continuousReveal")
         }
         animateDraw(drawMask)
         animateDraw(reflectionMask)
 
-        // The leading tip advances in sync with the three unevenly paced
-        // sections. The tail stays close behind, producing a luminous
-        // travelling point rather than a second drawn outline.
-        let headStart = CAKeyframeAnimation(keyPath: "strokeStart")
-        headStart.values = [0, 0.245, 0.695, 0.978]
-        headStart.keyTimes = [0, 0.285, 0.765, 1]
-        headStart.timingFunctions = [
-            CAMediaTimingFunction(name: .easeInEaseOut),
-            CAMediaTimingFunction(name: .easeInEaseOut),
-            CAMediaTimingFunction(name: .easeOut)
-        ]
-        headStart.beginTime = tick + 0.15
-        headStart.duration = 1.50
+        // A continuous leading energy tip with a short travelling tail.
+        // The same easing/duration as the mask keeps both in phase.
+        let headEase = CAMediaTimingFunction(
+            controlPoints: 0.35, 0.04, 0.20, 1
+        )
+        let headStart = CABasicAnimation(keyPath: "strokeStart")
+        headStart.fromValue = 0
+        headStart.toValue = 0.977
+        headStart.beginTime = tick + 0.20
+        headStart.duration = 1.60
+        headStart.timingFunction = headEase
         headStart.fillMode = .both
         headStart.isRemovedOnCompletion = false
         drawHead.add(headStart, forKey: "zag.drawHeadTail")
 
-        let headEnd = CAKeyframeAnimation(keyPath: "strokeEnd")
-        headEnd.values = [0.008, 0.285, 0.735, 1]
-        headEnd.keyTimes = [0, 0.285, 0.765, 1]
-        headEnd.timingFunctions = headStart.timingFunctions
-        headEnd.beginTime = tick + 0.15
-        headEnd.duration = 1.50
+        let headEnd = CABasicAnimation(keyPath: "strokeEnd")
+        headEnd.fromValue = 0.023
+        headEnd.toValue = 1
+        headEnd.beginTime = tick + 0.20
+        headEnd.duration = 1.60
+        headEnd.timingFunction = headEase
         headEnd.fillMode = .both
         headEnd.isRemovedOnCompletion = false
         drawHead.add(headEnd, forKey: "zag.drawHeadTip")
 
         let headDissolve = CAKeyframeAnimation(keyPath: "opacity")
-        headDissolve.values = [0, 0.94, 0.94, 0]
+        headDissolve.values = [0, 1, 1, 0]
         headDissolve.keyTimes = [0, 0.10, 0.83, 1]
-        headDissolve.beginTime = tick + 0.15
-        headDissolve.duration = 1.57
+        headDissolve.beginTime = tick + 0.20
+        headDissolve.duration = 1.65
         headDissolve.fillMode = .both
         headDissolve.isRemovedOnCompletion = false
         drawHead.opacity = 0
@@ -414,8 +458,8 @@ final class ZagSplashStageView: UIView {
             let arrive = CABasicAnimation(keyPath: "opacity")
             arrive.fromValue = 0
             arrive.toValue = 1
-            arrive.beginTime = tick + 1.46
-            arrive.duration = 0.32
+            arrive.beginTime = tick + 1.73
+            arrive.duration = 0.24
             arrive.timingFunction = CAMediaTimingFunction(name: .easeOut)
             arrive.fillMode = .both
             arrive.isRemovedOnCompletion = false
@@ -424,8 +468,8 @@ final class ZagSplashStageView: UIView {
             let retire = CABasicAnimation(keyPath: "opacity")
             retire.fromValue = 1
             retire.toValue = 0
-            retire.beginTime = tick + 1.46
-            retire.duration = 0.32
+            retire.beginTime = tick + 1.73
+            retire.duration = 0.24
             retire.fillMode = .both
             retire.isRemovedOnCompletion = false
             drawing.add(retire, forKey: "zag.retireMask")
@@ -487,12 +531,12 @@ final class ZagSplashStageView: UIView {
         clarity.isRemovedOnCompletion = false
         focusAura.add(clarity, forKey: "zag.opticalFocus")
 
-        reflectedWindow.opacity = 0.57
+        reflectedWindow.opacity = 0.82
         let reflectionFadeIn = CABasicAnimation(keyPath: "opacity")
         reflectionFadeIn.fromValue = 0
-        reflectionFadeIn.toValue = 0.57
-        reflectionFadeIn.beginTime = tick + 0.52
-        reflectionFadeIn.duration = 1.18
+        reflectionFadeIn.toValue = 0.82
+        reflectionFadeIn.beginTime = tick + 0.42
+        reflectionFadeIn.duration = 1.50
         reflectionFadeIn.fillMode = .both
         reflectionFadeIn.isRemovedOnCompletion = false
         reflectionFadeIn.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -503,8 +547,8 @@ final class ZagSplashStageView: UIView {
             let travel = CABasicAnimation(keyPath: "position.x")
             travel.fromValue = -width * 0.44
             travel.toValue = width * 1.30
-            travel.beginTime = tick + 1.19
-            travel.duration = 0.98
+            travel.beginTime = tick + 1.40
+            travel.duration = 1.02
             travel.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             travel.fillMode = .both
             travel.isRemovedOnCompletion = false
@@ -512,10 +556,10 @@ final class ZagSplashStageView: UIView {
             sheen.add(travel, forKey: "zag.specularTravel")
 
             let amplitude = CAKeyframeAnimation(keyPath: "opacity")
-            amplitude.values = [0, 0.76, 0.70, 0]
+            amplitude.values = [0, 0.94, 0.90, 0]
             amplitude.keyTimes = [0, 0.24, 0.72, 1]
-            amplitude.beginTime = tick + 1.19
-            amplitude.duration = 0.98
+            amplitude.beginTime = tick + 1.40
+            amplitude.duration = 1.02
             amplitude.fillMode = .both
             amplitude.isRemovedOnCompletion = false
             sheen.opacity = 0
@@ -530,7 +574,7 @@ final class ZagSplashStageView: UIView {
             let travel = CABasicAnimation(keyPath: "position.x")
             travel.fromValue = -width * 0.42
             travel.toValue = width * 1.21
-            travel.beginTime = tick + 1.42
+            travel.beginTime = tick + 1.74
             travel.duration = 0.86
             travel.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             travel.fillMode = .both
@@ -539,9 +583,9 @@ final class ZagSplashStageView: UIView {
             sheen.add(travel, forKey: "zag.prismTravel")
 
             let light = CAKeyframeAnimation(keyPath: "opacity")
-            light.values = [0, 0.58, 0.55, 0]
+            light.values = [0, 0.84, 0.78, 0]
             light.keyTimes = [0, 0.22, 0.70, 1]
-            light.beginTime = tick + 1.42
+            light.beginTime = tick + 1.74
             light.duration = 0.86
             light.fillMode = .both
             light.isRemovedOnCompletion = false
@@ -550,27 +594,54 @@ final class ZagSplashStageView: UIView {
         animatePrism(prism)
         animatePrism(mirrorPrism)
 
-        motto.opacity = 1
-        let textFade = CAKeyframeAnimation(keyPath: "opacity")
-        textFade.values = [0, 0.30, 1]
-        textFade.keyTimes = [0, 0.22, 1]
-        textFade.beginTime = tick + 1.65
-        textFade.duration = 0.62
-        textFade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        textFade.fillMode = .both
-        textFade.isRemovedOnCompletion = false
-        motto.add(textFade, forKey: "zag.mottoFade")
+        // Delayed, individual word reveals. Each word fades and rises
+        // into its final baseline; its light sweep follows the entrance.
+        // The final phrase is held as a composed hero frame before fade-out.
+        for (index, word) in wordLayers.enumerated() {
+            let arrival = tick + 1.94 + Double(index) * 0.24
+            word.opacity = 1
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+            fade.beginTime = arrival
+            fade.duration = 0.45
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            fade.fillMode = .both
+            fade.isRemovedOnCompletion = false
+            word.add(fade, forKey: "zag.wordFade")
 
-        mottoWipe.bounds.size.width = motto.bounds.width
-        let revealText = CABasicAnimation(keyPath: "bounds.size.width")
-        revealText.fromValue = 0
-        revealText.toValue = motto.bounds.width
-        revealText.beginTime = tick + 1.60
-        revealText.duration = 0.78
-        revealText.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        revealText.fillMode = .both
-        revealText.isRemovedOnCompletion = false
-        mottoWipe.add(revealText, forKey: "zag.mottoDraw")
+            let rise = CABasicAnimation(keyPath: "position.y")
+            rise.fromValue = word.position.y + 9
+            rise.toValue = word.position.y
+            rise.beginTime = arrival
+            rise.duration = 0.52
+            rise.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.18, 0.75, 0.26, 1
+            )
+            rise.fillMode = .both
+            rise.isRemovedOnCompletion = false
+            word.add(rise, forKey: "zag.wordRise")
+
+            let sheen = wordSheens[index]
+            let pass = CABasicAnimation(keyPath: "position.x")
+            pass.fromValue = -sheen.bounds.width
+            pass.toValue = word.bounds.width + sheen.bounds.width
+            pass.beginTime = arrival + 0.16
+            pass.duration = 0.52
+            pass.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            pass.fillMode = .both
+            pass.isRemovedOnCompletion = false
+            sheen.add(pass, forKey: "zag.wordLightTravel")
+
+            let flare = CAKeyframeAnimation(keyPath: "opacity")
+            flare.values = [0, 0.82, 0.82, 0]
+            flare.keyTimes = [0, 0.24, 0.72, 1]
+            flare.beginTime = arrival + 0.16
+            flare.duration = 0.52
+            flare.fillMode = .both
+            flare.isRemovedOnCompletion = false
+            sheen.add(flare, forKey: "zag.wordLight")
+        }
 
         let focus = CAKeyframeAnimation(keyPath: "transform.scale")
         focus.values = [0.984, 0.989, 1.008, 1]
