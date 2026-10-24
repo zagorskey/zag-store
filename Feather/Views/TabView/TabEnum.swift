@@ -847,6 +847,7 @@ private struct ZagGamesPage: View {
     @State private var isCheckingFeatured = false
     @State private var indexSignature = ""
     @State private var indexWorker: Task<ZagGamesIndexSnapshot?, Never>?
+    @State private var indexedArtworkRevision = 0
     @State private var indexedGameCount = 0
     @State private var indexedEmulatorCount = 0
     @FetchRequest(
@@ -1101,6 +1102,7 @@ private struct ZagGamesPage: View {
             indexedGames = snapshot.games
             indexedEmulatorCount = snapshot.emulators.count
             indexedGameCount = snapshot.games.count
+            indexedArtworkRevision += 1
         }
     }
 
@@ -1331,7 +1333,8 @@ private struct ZagGamesPage: View {
                 Text("Emulators").tag("Emulators")
             }
             .onAppear(perform: rebuildIndexIfNeeded)
-            .task(id: indexSignature) {
+            // Resolve artwork only once the background index has been published.
+            .task(id: indexedArtworkRevision) {
                 await refreshVerifiedFeatured()
             }
             .onReceive(sourcesModel.objectWillChange) { _ in
