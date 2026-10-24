@@ -23,28 +23,30 @@ struct ZagAppsTabIcon: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Native tab bars snapshot the Label image and discard SwiftUI overlays.
+    // Draw both the outline and update badge into the same UIImage.
     var body: some View {
-        Image(
-            uiImage: Self.render(
-                hasUpdates: hasUpdates || hasStoreUpdate,
-                drawRedBadge: hasUpdates && !hasStoreUpdate,
-                outlineColor: outlineColor
+        TimelineView(.animation(
+            minimumInterval: 1.0 / 10.0,
+            paused: !hasStoreUpdate || reduceMotion
+        )) { timeline in
+            Image(
+                uiImage: Self.render(
+                    hasUpdates: hasUpdates || hasStoreUpdate,
+                    drawRedBadge: hasUpdates && !hasStoreUpdate,
+                    drawSpectrumBadge: hasStoreUpdate,
+                    spectrumPhase: reduceMotion ? 0 :
+                        timeline.date.timeIntervalSinceReferenceDate
+                            .truncatingRemainder(dividingBy: 5) / 5,
+                    outlineColor: outlineColor
+                )
             )
-        )
-        .renderingMode(.original)
-        .interpolation(.high)
-        .frame(width: 30, height: 30)
-        .overlay(alignment: .topTrailing) {
-            if hasStoreUpdate {
-                ZagSelfUpdateSpectrumDot(diameter: 8.1)
-                    .padding(.top, 0.75)
-                    .padding(.trailing, 0.75)
-                .accessibilityHidden(true)
-            }
+            .renderingMode(.original)
+            .interpolation(.high)
+            .accessibilityHidden(true)
         }
-        .contentTransition(.opacity)
-        .animation(.easeInOut(duration: 0.22), value: hasUpdates)
-        .animation(.easeInOut(duration: 0.22), value: hasStoreUpdate)
         .accessibilityHidden(true)
     }
 
@@ -63,6 +65,8 @@ struct ZagAppsTabIcon: View {
     private static func render(
         hasUpdates: Bool,
         drawRedBadge: Bool,
+        drawSpectrumBadge: Bool,
+        spectrumPhase: Double,
         outlineColor: UIColor
     ) -> UIImage {
         let canvas = CGSize(width: 30, height: 30)
@@ -108,6 +112,50 @@ struct ZagAppsTabIcon: View {
                 height: gapRadius * 2
             ))
             context.setBlendMode(.normal)
+
+            if drawSpectrumBadge {
+                let radius: CGFloat = 4.05
+                let rect = CGRect(
+                    x: centre.x - radius,
+                    y: centre.y - radius,
+                    width: radius * 2,
+                    height: radius * 2
+                )
+                context.saveGState()
+                context.addEllipse(in: rect)
+                context.clip()
+
+                // Paint the spectrum into the native tab image itself.
+                let palette: [UIColor] = [
+                    UIColor(displayP3Red: 0.00, green: 0.86, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 0.05, green: 0.37, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 0.42, green: 0.18, blue: 1.00, alpha: 1),
+                    UIColor(displayP3Red: 0.95, green: 0.16, blue: 0.89, alpha: 1)
+                ]
+                let angle = CGFloat(spectrumPhase) * .pi * 2
+                let direction = CGPoint(x: cos(angle), y: sin(angle))
+                let reach: CGFloat = 6.0
+                let start = CGPoint(
+                    x: centre.x - direction.x * reach,
+                    y: centre.y - direction.y * reach
+                )
+                let end = CGPoint(
+                    x: centre.x + direction.x * reach,
+                    y: centre.y + direction.y * reach
+                )
+                if let gradient = CGGradient(
+                    colorsSpace: CGColorSpace(name: CGColorSpace.displayP3),
+                    colors: palette.map(\.cgColor) as CFArray,
+                    locations: [0, 0.33, 0.67, 1]
+                ) {
+                    context.drawLinearGradient(
+                        gradient, start: start, end: end,
+                        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                    )
+                }
+                context.restoreGState()
+                return
+            }
 
             guard drawRedBadge else { return }
 
