@@ -996,13 +996,7 @@ private struct ZagSelfUpdateRainbowProgress: View {
     let progress: Double
     var isIndeterminate = false
 
-    private let spectrum: [Color] = [
-        Color(red: 0.00, green: 0.86, blue: 1.00),
-        Color(red: 0.05, green: 0.37, blue: 1.00),
-        Color(red: 0.42, green: 0.18, blue: 1.00),
-        Color(red: 0.95, green: 0.16, blue: 0.89),
-        Color(red: 0.00, green: 0.86, blue: 1.00)
-    ]
+    private let spectrum = ZagSelfUpdateSpectrum.colors
 
     var body: some View {
         GeometryReader { geometry in
