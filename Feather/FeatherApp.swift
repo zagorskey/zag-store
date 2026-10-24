@@ -228,9 +228,10 @@ private struct ZagAnimatedLaunchOverlay: View {
             }
             // Native Core Animation draws the extracted original 3D artwork,
             // reflects it live and reveals the motto after the Z forms.
-            // Hold the completed composition briefly before crossfading.
+            // Reveal the motto word by word, then hold the completed hero composition
+            // before crossfading into the interactive app.
             try? await Task.sleep(
-                for: .milliseconds(reduceMotion ? 370 : 2780)
+                for: .milliseconds(reduceMotion ? 370 : 3490)
             )
             guard !Task.isCancelled, !dismissed else { return }
             withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.36)) {
