@@ -65,14 +65,15 @@ struct ZagAppsTabIcon: View {
             context.setShouldAntialias(true)
             context.setAllowsAntialiasing(true)
 
-            // Deliberately smaller than the native icon slot to provide
-            // balanced optical margins above/below and on both sides.
-            let frame = CGRect(x: 5.0, y: 6.0, width: 20.0, height: 20.0)
+            // Match the 30pt Z icon's optical footprint: the square's stroke
+            // reaches nearly the same top, bottom and side extents.
+            // Reserve the upper-right corner for the update indicator.
+            let frame = CGRect(x: 3.8, y: 4.4, width: 22.4, height: 22.4)
             let outline = UIBezierPath(
                 roundedRect: frame,
-                cornerRadius: 5.2
+                cornerRadius: 5.8
             )
-            context.setLineWidth(2.65)
+            context.setLineWidth(2.85)
             context.setLineCap(.round)
             context.setLineJoin(.round)
             context.setStrokeColor(outlineColor.cgColor)
@@ -84,8 +85,8 @@ struct ZagAppsTabIcon: View {
             // Precisely register the badge against the square's top-right
             // corner. Cut a transparent breathing gap in the stroke so the
             // badge reads as a single integrated mark, never a glued-on dot.
-            let centre = CGPoint(x: 24.0, y: 6.8)
-            let gapRadius: CGFloat = 5.25
+            let centre = CGPoint(x: 25.2, y: 4.8)
+            let gapRadius: CGFloat = 5.1
             context.setBlendMode(.clear)
             context.fillEllipse(in: CGRect(
                 x: centre.x - gapRadius,
@@ -95,7 +96,7 @@ struct ZagAppsTabIcon: View {
             ))
             context.setBlendMode(.normal)
 
-            let badgeRadius: CGFloat = 4.15
+            let badgeRadius: CGFloat = 4.05
             context.setFillColor(
                 UIColor(
                     displayP3Red: 1.0,
