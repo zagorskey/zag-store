@@ -203,13 +203,15 @@ private enum ZagSplashPreferences {
     }
 }
 
-/// Runs once when the app process starts, never when returning from background.
-/// This is a SwiftUI overlay after the required static iOS launch screen.
+/// Runs once per process, never when resuming from the background.
+/// Keep the artwork pixel-for-pixel identical to the system launch screen:
+/// animate its EXISTING 3D logo lighting, not a replacement vector or wordmark.
 private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ZagSplashPreferences.enabledKey) private var enabled = true
-    @State private var progress: CGFloat = 0
-    @State private var showWordmark = false
+
+    @State private var lightTravel: CGFloat = -1.0
+    @State private var lightBloom: Double = 0
     @State private var opacity = 1.0
     @State private var dismissed = false
 
@@ -218,25 +220,30 @@ private struct ZagAnimatedLaunchOverlay: View {
             if !dismissed && enabled {
                 GeometryReader { geometry in
                     ZStack {
-                        Color.black
-                        VStack(spacing: 22) {
-                            ZagSplashZ(progress: progress)
-                                .frame(width: 116, height: 116)
-                                .shadow(color: Color(red: 0.40, green: 0.24, blue: 1).opacity(showWordmark ? 0.26 : 0), radius: 25)
-                            VStack(spacing: 7) {
-                                Text("Zag Store")
-                                    .font(.system(size: 25, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.white)
-                                Text("Discover beyond the App Store.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.56))
-                            }
-                            .opacity(showWordmark ? 1 : 0)
-                            .offset(y: showWordmark ? 0 : 7)
+                        // This is the same high-resolution 3D Zag Store artwork
+                        // used by Launch Screen.storyboard. No new logo, font,
+                        // tagline, or separately reconstructed geometry.
+                        Image("ZagSplashFull")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height
+                            )
+                            .clipped()
+
+                        if !reduceMotion {
+                            ZagSplashArtworkLighting(
+                                travel: lightTravel,
+                                bloom: lightBloom
+                            )
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(
+                        width: geometry.size.width,
+                        height: geometry.size.height
+                    )
+                    .clipped()
                     .ignoresSafeArea()
                 }
                 .ignoresSafeArea()
@@ -244,32 +251,39 @@ private struct ZagAnimatedLaunchOverlay: View {
                 .allowsHitTesting(true)
                 .task {
                     if reduceMotion {
-                        progress = 1
-                        showWordmark = true
+                        // Keep the original artwork without motion.
                         try? await Task.sleep(for: .milliseconds(350))
                     } else {
-                        withAnimation(.easeInOut(duration: 1.15)) {
-                            progress = 1
+                        // A moving studio-light reflection catches the existing
+                        // 3D bevels, followed by a soft, brief colour bloom.
+                        withAnimation(.easeInOut(duration: 1.30)) {
+                            lightTravel = 1.0
                         }
-                        try? await Task.sleep(for: .milliseconds(1080))
+                        withAnimation(.easeInOut(duration: 0.62)) {
+                            lightBloom = 1.0
+                        }
+                        try? await Task.sleep(for: .milliseconds(680))
                         guard !Task.isCancelled else { return }
-                        withAnimation(.easeOut(duration: 0.35)) {
-                            showWordmark = true
+                        withAnimation(.easeOut(duration: 0.62)) {
+                            lightBloom = 0.10
                         }
-                        try? await Task.sleep(for: .milliseconds(650))
+                        try? await Task.sleep(for: .milliseconds(820))
                     }
+
                     guard !Task.isCancelled else { return }
-                    withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.35)) {
+                    withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.34)) {
                         opacity = 0
                     }
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 370))
+                    try? await Task.sleep(
+                        for: .milliseconds(reduceMotion ? 20 : 360)
+                    )
                     guard !Task.isCancelled else { return }
                     complete()
                 }
             }
         }
         .task {
-            // No splash means no waiting, no animation and no blocking overlay.
+            // The opt-out is a genuine no-splash path: do not block launch.
             if !ZagSplashPreferences.isEnabled {
                 complete()
             }
@@ -291,38 +305,76 @@ private struct ZagAnimatedLaunchOverlay: View {
     }
 }
 
-private struct ZagSplashZ: View {
-    let progress: CGFloat
-
-    private var gradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0, green: 0.86, blue: 1),
-                Color(red: 0.05, green: 0.37, blue: 1),
-                Color(red: 0.42, green: 0.18, blue: 1),
-                Color(red: 0.95, green: 0.16, blue: 0.89)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+/// A restrained specular reflection over the ORIGINAL 3D Z pixels.
+/// The full-screen artwork is also the luminance mask, so the sweep lights
+/// the existing beveled surfaces instead of drawing a second Z or a white
+/// streak across the black background. The logo-only crop avoids the wordmark.
+private struct ZagSplashArtworkLighting: View {
+    let travel: CGFloat
+    let bloom: Double
 
     var body: some View {
-        ZStack {
-            Path { path in
-                path.move(to: CGPoint(x: 21, y: 24))
-                path.addLine(to: CGPoint(x: 95, y: 24))
-                path.addLine(to: CGPoint(x: 21, y: 92))
-                path.addLine(to: CGPoint(x: 95, y: 92))
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let logoSize = width * 0.345
+            let logoCentre = CGPoint(x: width * 0.5, y: height * 0.505)
+
+            ZStack {
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.34, green: 0.47, blue: 1)
+                            .opacity(bloom * 0.30),
+                        Color(red: 0.83, green: 0.28, blue: 1)
+                            .opacity(bloom * 0.14),
+                        .clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: logoSize * 0.75
+                )
+                .frame(width: logoSize * 1.55, height: logoSize * 1.55)
+                .position(logoCentre)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .white.opacity(0.06), location: 0.26),
+                        .init(color: .white.opacity(0.46), location: 0.48),
+                        .init(color: .white.opacity(0.20), location: 0.56),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: logoSize * 0.48, height: logoSize * 1.65)
+                .rotationEffect(.degrees(18))
+                .position(
+                    x: logoCentre.x + travel * logoSize * 0.92,
+                    y: logoCentre.y
+                )
             }
-            .trim(from: 0, to: progress)
-            .stroke(
-                gradient,
-                style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
-            )
+            .frame(width: width, height: height)
+            .mask {
+                Image("ZagSplashFull")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: width, height: height)
+                    .clipped()
+                    .luminanceToAlpha()
+                    .mask {
+                        RoundedRectangle(
+                            cornerRadius: logoSize * 0.22,
+                            style: .continuous
+                        )
+                        .frame(width: logoSize, height: logoSize)
+                        .position(logoCentre)
+                    }
+            }
+            .blendMode(.screen)
         }
-        .frame(width: 116, height: 116)
         .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 }
 
