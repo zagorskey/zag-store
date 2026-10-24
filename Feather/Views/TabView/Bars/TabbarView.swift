@@ -49,6 +49,17 @@ struct TabbarView: View {
                                     tintHex: themeTintHex
                                 )
                             }
+                        } else if tab == .discover || tab == .games || tab == .activity {
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                switch tab {
+                                case .discover: ZagPrimaryTabIcons.label(for: .discover)
+                                case .games: ZagPrimaryTabIcons.label(for: .games)
+                                case .activity: ZagPrimaryTabIcons.label(for: .activity)
+                                default: EmptyView()
+                                }
+                            }
                         } else {
                             Label(tab.title, systemImage: tab.icon)
                         }
