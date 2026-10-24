@@ -11,18 +11,24 @@ import QuartzCore
 
 struct ZagCinematicSplashView: UIViewRepresentable {
     let soundEnabled: Bool
+    let skipRequested: Bool
+    let onExitReady: () -> Void
     let onFinished: () -> Void
 
     func makeUIView(context: Context) -> ZagCinematicSplashStage {
         let view = ZagCinematicSplashStage()
         view.onFinished = onFinished
+        view.onExitReady = onExitReady
         view.soundEnabled = soundEnabled
+        if skipRequested { view.requestSkip() }
         return view
     }
 
     func updateUIView(_ uiView: ZagCinematicSplashStage, context: Context) {
         uiView.onFinished = onFinished
+        uiView.onExitReady = onExitReady
         uiView.soundEnabled = soundEnabled
+        if skipRequested { uiView.requestSkip() }
     }
 
     static var available: Bool {
@@ -35,6 +41,7 @@ struct ZagCinematicSplashView: UIViewRepresentable {
 
 final class ZagCinematicSplashStage: UIView {
     var onFinished: (() -> Void)?
+    var onExitReady: (() -> Void)?
     var soundEnabled: Bool = true {
         didSet {
             player?.isMuted = !soundEnabled
@@ -52,6 +59,9 @@ final class ZagCinematicSplashStage: UIView {
     private var itemStatus: NSKeyValueObservation?
     private var started = false
     private var finished = false
+    private var exitSent = false
+    private var outroStarted = false
+    private var skipStarted = false
     private var prepared = false
     private var wordLayers: [CATextLayer] = []
     private var wordGlints: [CAGradientLayer] = []
@@ -62,7 +72,12 @@ final class ZagCinematicSplashStage: UIView {
 
     // Timed against the PLAYER rather than wall-clock time. Buffering or
     // device startup delay never separates the motto from its video cue.
-    private let arrivalTimes: [Double] = [2.48, 3.05, 3.51]
+    // Master measurements: the glass resolves at ~2.15s, and the largest
+    // musical accent is at 1.95–2.15s. The final word arrives as the halo
+    // settles, then has a full second of undisturbed screen time.
+    private let arrivalTimes: [Double] = [2.18, 2.76, 3.26]
+    private let outroStart: Double = 4.34
+    private let crossfadeStart: Double = 4.76
     private let videoDuration: Double = 5.041667
 
     override init(frame: CGRect) {
@@ -283,6 +298,7 @@ final class ZagCinematicSplashStage: UIView {
     }
 
     private func update(at seconds: Double) {
+        guard !skipStarted else { return }
         if !startedSweep && seconds >= arrivalTimes[0] - 0.08 {
             startedSweep = true
             animateSweep()
@@ -292,6 +308,18 @@ final class ZagCinematicSplashStage: UIView {
             where !revealed[index] && seconds >= arrivalTimes[index] {
             revealed[index] = true
             revealWord(at: index)
+        }
+
+        // The words depart first; only then does the Z dissolve into the
+        // already-rendered app. Neither gesture nor letter layers tint the
+        // original video pixels.
+        if !outroStarted && seconds >= outroStart {
+            outroStarted = true
+            animateSignatureOutro()
+        }
+        if !exitSent && seconds >= crossfadeStart {
+            exitSent = true
+            onExitReady?()
         }
 
         // Final audio tail is gently tapered, never cut off mid-note.
@@ -392,10 +420,79 @@ final class ZagCinematicSplashStage: UIView {
         CATransaction.commit()
     }
 
+    private func animateSignatureOutro() {
+        let now = CACurrentMediaTime()
+
+        for (index, text) in wordLayers.enumerated() {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let from = text.presentation()?.opacity ?? text.opacity
+            text.opacity = 0
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = from
+            fade.toValue = 0
+            fade.beginTime = now + Double(index) * 0.075
+            fade.duration = index == 2 ? 0.34 : 0.27
+            fade.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.42, 0, 0.74, 0.39
+            )
+            text.add(fade, forKey: "zag.signatureOutro")
+
+            let rise = CABasicAnimation(keyPath: "position.y")
+            rise.fromValue = text.position.y
+            rise.toValue = text.position.y - 3.0
+            rise.beginTime = fade.beginTime
+            rise.duration = fade.duration
+            rise.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            text.add(rise, forKey: "zag.signatureOutroLift")
+            CATransaction.commit()
+        }
+
+        if let beam = sweep {
+            beam.removeAllAnimations()
+            beam.opacity = 0
+        }
+        for glint in wordGlints {
+            glint.removeAllAnimations()
+            glint.opacity = 0
+        }
+    }
+
+    /// Exit is also used by the preview and the invisible tap-to-skip
+    /// gesture. We fade the actual soundtrack rather than just muting it.
+    func requestSkip() {
+        guard !finished, !skipStarted else { return }
+        skipStarted = true
+        if !exitSent {
+            exitSent = true
+            onExitReady?()
+        }
+        let initialVolume = player?.volume ?? 0
+        for step in 1...10 {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Double(step) * 0.031
+            ) { [weak self] in
+                guard let self, !self.finished else { return }
+                self.player?.volume = initialVolume * Float(10-step) / 10
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            [weak self] in
+            self?.finish()
+        }
+    }
+
     private func finish() {
         guard !finished else { return }
         finished = true
         player?.pause()
+        // Even an AVPlayerItem failure or watchdog release performs a graceful
+        // outro; SwiftUI closes after the fade has had time to complete.
+        if !exitSent {
+            exitSent = true
+            onExitReady?()
+        }
         onFinished?()
     }
 
