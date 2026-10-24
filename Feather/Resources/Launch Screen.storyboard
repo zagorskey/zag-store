@@ -16,28 +16,21 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ZagSplashBackdrop" translatesAutoresizingMaskIntoConstraints="NO" id="Zag-image">
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ZagSplashVideoFirstFrame" translatesAutoresizingMaskIntoConstraints="NO" id="Zag-image">
                                 <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                             </imageView>
-                            <!-- Match the runtime splash's 48% ambient darkening.
-                                 The original gradient remains, but no longer
-                                 competes with the vivid 3D Z. -->
-                            <view userInteractionEnabled="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="Zag-dim">
-                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
-                                <color key="backgroundColor" red="0" green="0" blue="0" alpha="0.48" colorSpace="custom" customColorSpace="sRGB"/>
-                            </view>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
-                        <color key="backgroundColor" red="0.016" green="0.020" blue="0.063" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.008" green="0.008" blue="0.055" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="Zag-image" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="Zag-leading"/>
                             <constraint firstItem="Zag-image" firstAttribute="trailing" secondItem="Ze5-6b-2t3" secondAttribute="trailing" id="Zag-trailing"/>
                             <constraint firstItem="Zag-image" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="Zag-top"/>
                             <constraint firstItem="Zag-image" firstAttribute="bottom" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="Zag-bottom"/>
-                            <constraint firstItem="Zag-dim" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="Zag-dim-leading"/>
-                            <constraint firstItem="Zag-dim" firstAttribute="trailing" secondItem="Ze5-6b-2t3" secondAttribute="trailing" id="Zag-dim-trailing"/>
-                            <constraint firstItem="Zag-dim" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="Zag-dim-top"/>
-                            <constraint firstItem="Zag-dim" firstAttribute="bottom" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="Zag-dim-bottom"/>
+
+
+
+
                                                 </constraints>
                     </view>
                 </viewController>
@@ -47,6 +40,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="ZagSplashBackdrop" width="256" height="540"/>
+        <image name="ZagSplashVideoFirstFrame" width="1080" height="1920"/>
     </resources>
 </document>
