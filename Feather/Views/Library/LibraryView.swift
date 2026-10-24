@@ -51,6 +51,35 @@ import AltSourceKit
 
 
 
+// Cache the decoded managed-app identifier set for the current persisted data.
+// SwiftUI can evaluate the Apps list several times during its first transition.
+private final class ZagManagedInstalledIDsCache {
+    private var lastData: Data?
+    private var lastIDs: Set<String> = []
+
+    func identifiers(for data: Data) -> Set<String> {
+        if lastData != data {
+            lastData = data
+            lastIDs = (try? JSONDecoder().decode(Set<String>.self, from: data)) ?? []
+        }
+        return lastIDs
+    }
+}
+
+private struct ZagLibraryListSnapshot {
+    let managedIDs: Set<String>
+    let signedApps: [Signed]
+    let installed: [Signed]
+    let signedOnly: [Signed]
+    let imported: [Imported]
+    let uniqueUpdates: [String: UpdateManager.AvailableUpdate]
+
+    func availableUpdate(for app: Signed) -> UpdateManager.AvailableUpdate? {
+        guard let id = app.identifier, !id.isEmpty else { return nil }
+        return uniqueUpdates[id]
+    }
+}
+
 struct LibraryView: View {
 	private static var didPerformInitialDeviceInventory = false
 
@@ -105,6 +134,7 @@ struct LibraryView: View {
 	@State private var _transactionSignedUUIDs: Set<String> = []
 	@AppStorage("zagStore.managedInstalledBundleIDs")
 	private var _managedInstalledBundleIDsData: Data = Data()
+	@State private var _managedIDsCache = ZagManagedInstalledIDsCache()
 	@AppStorage("zagStore.apps.installedCollapsed") private var _installedCollapsed = false
 	@AppStorage("zagStore.apps.signedCollapsed") private var _signedCollapsed = false
 	@AppStorage("zagStore.apps.importedCollapsed") private var _importedCollapsed = false
@@ -183,6 +213,47 @@ struct LibraryView: View {
             }
         default: return filtered
         }
+    }
+
+
+    // Derive the three visible app sections once per body evaluation rather
+    // than repeatedly filtering the same Core Data results for every header,
+    // row separator and animation value during initial navigation.
+    private var _listSnapshot: ZagLibraryListSnapshot {
+        let managed = _managedInstalledBundleIDs
+        let signed = filteredAndSortedApps(from: _signedApps).filter {
+            $0.identifier != Bundle.main.bundleIdentifier
+        }
+        let installed = signed.filter {
+            guard let id = $0.identifier, !id.isEmpty else { return false }
+            return managed.contains(id)
+        }
+        let signedOnly = signed.filter { app in
+            if let uuid = app.uuid, _transactionSignedUUIDs.contains(uuid) { return false }
+            guard let id = app.identifier, !id.isEmpty else { return true }
+            return !managed.contains(id)
+        }
+        let imported = filteredAndSortedApps(from: _importedApps)
+        var uniqueUpdates: [String: UpdateManager.AvailableUpdate] = [:]
+        var ambiguous = Set<String>()
+        for update in updateManager.updates {
+            guard let id = update.app.id else { continue }
+            if uniqueUpdates[id] == nil {
+                uniqueUpdates[id] = update
+            } else {
+                ambiguous.insert(id)
+            }
+        }
+        for id in ambiguous { uniqueUpdates.removeValue(forKey: id) }
+
+        return ZagLibraryListSnapshot(
+            managedIDs: managed,
+            signedApps: signed,
+            installed: installed,
+            signedOnly: signedOnly,
+            imported: imported,
+            uniqueUpdates: uniqueUpdates
+        )
     }
 
     // Keep device inventory intact; hide the store's own signed archive from Library.
@@ -600,16 +671,16 @@ struct LibraryView: View {
 
 
 	@ViewBuilder
-	private var libraryListContent: some View {
+	private func libraryListContent(_ snapshot: ZagLibraryListSnapshot) -> some View {
 		Group {
 			zagUpdatesContent
 
-			if !_filteredInstalledApps.isEmpty,
+			if !snapshot.installed.isEmpty,
 			   _selectedScope == .all || _selectedScope == .installed {
 				Section {
 					ZagLibraryHeader(
 						title: .localized("Installed"),
-						count: _filteredInstalledApps.count,
+						count: snapshot.installed.count,
 						isCollapsed: _installedCollapsed
 					) {
 						withAnimation(.easeInOut(duration: 0.28)) {
@@ -620,13 +691,13 @@ struct LibraryView: View {
 						.listRowBackground(Color.clear)
 
 					if !_installedCollapsed {
-					ForEach(Array(_filteredInstalledApps.enumerated()), id: \.element.uuid) { index, app in
+					ForEach(Array(snapshot.installed.enumerated()), id: \.element.uuid) { index, app in
 						LibraryCellView(
 							app: app,
 							isManagedInstalled: true,
-							availableUpdate: _installedRowUpdate(for: app),
+							availableUpdate: snapshot.availableUpdate(for: app),
 							isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
-							showsSeparator: index < _filteredInstalledApps.count - 1,
+							showsSeparator: index < snapshot.installed.count - 1,
 							onDeleteApp: _deleteStoredApp,
 							onRemoveManagedApp: _requestRemoveManagedApp,
 							onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
@@ -646,12 +717,12 @@ struct LibraryView: View {
 				}
 			}
 
-			if !_filteredSignedOnlyApps.isEmpty,
+			if !snapshot.signedOnly.isEmpty,
 			   _selectedScope == .all || _selectedScope == .signed {
 				Section {
 					ZagLibraryHeader(
 						title: .localized("Signed"),
-						count: _filteredSignedOnlyApps.count,
+						count: snapshot.signedOnly.count,
 						isCollapsed: _signedCollapsed
 					) {
 						withAnimation(.easeInOut(duration: 0.28)) {
@@ -662,12 +733,12 @@ struct LibraryView: View {
 						.listRowBackground(Color.clear)
 
 					if !_signedCollapsed {
-					ForEach(Array(_filteredSignedOnlyApps.enumerated()), id: \.element.uuid) { index, app in
+					ForEach(Array(snapshot.signedOnly.enumerated()), id: \.element.uuid) { index, app in
 						LibraryCellView(
 							app: app,
-							isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+							isManagedInstalled: snapshot.managedIDs.contains(app.identifier ?? ""),
 							isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
-							showsSeparator: index < _filteredSignedOnlyApps.count - 1,
+							showsSeparator: index < snapshot.signedOnly.count - 1,
 							onDeleteApp: _deleteStoredApp,
 							onRemoveManagedApp: _requestRemoveManagedApp,
 							onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
@@ -687,12 +758,12 @@ struct LibraryView: View {
 				}
 			}
 
-			if !_filteredImportedApps.isEmpty,
+			if !snapshot.imported.isEmpty,
 			   _selectedScope == .all || _selectedScope == .imported {
 				Section {
 					ZagLibraryHeader(
 						title: .localized("Imported"),
-						count: _filteredImportedApps.count,
+						count: snapshot.imported.count,
 						isCollapsed: _importedCollapsed
 					) {
 						withAnimation(.easeInOut(duration: 0.28)) {
@@ -703,12 +774,12 @@ struct LibraryView: View {
 						.listRowBackground(Color.clear)
 
 					if !_importedCollapsed {
-					ForEach(Array(_filteredImportedApps.enumerated()), id: \.element.uuid) { index, app in
+					ForEach(Array(snapshot.imported.enumerated()), id: \.element.uuid) { index, app in
 						LibraryCellView(
 							app: app,
-							isManagedInstalled: _managedInstalledBundleIDs.contains(app.identifier ?? ""),
+							isManagedInstalled: snapshot.managedIDs.contains(app.identifier ?? ""),
 							isRemoving: _removingBundleIDs.contains(app.identifier ?? ""),
-							showsSeparator: index < _filteredImportedApps.count - 1,
+							showsSeparator: index < snapshot.imported.count - 1,
 							onDeleteApp: _deleteStoredApp,
 							onRemoveManagedApp: _requestRemoveManagedApp,
 							onRepositoryBadgeTap: { source in _selectedRepositorySource = source },
@@ -738,15 +809,14 @@ struct LibraryView: View {
 	}
 
 	var body: some View {
-
-
+		let snapshot = _listSnapshot
 
 		NBNavigationView(.localized("Apps")) {
 
 
 
 			NBListAdaptable(transparentBackground: true) {
-				libraryListContent
+				libraryListContent(snapshot)
 			}
 			.modifier(ZagLibrarySectionSpacingModifier())
 			.zagWallpaperSurface()
@@ -782,15 +852,15 @@ struct LibraryView: View {
 			)
 			.animation(
 				.easeInOut(duration: 0.35),
-				value: _filteredInstalledApps.compactMap(\.uuid)
+				value: snapshot.installed.compactMap(\.uuid)
 			)
 			.animation(
 				.easeInOut(duration: 0.35),
-				value: _filteredSignedOnlyApps.compactMap(\.uuid)
+				value: snapshot.signedOnly.compactMap(\.uuid)
 			)
 			.animation(
 				.easeInOut(duration: 0.35),
-				value: _filteredImportedApps.compactMap(\.uuid)
+				value: snapshot.imported.compactMap(\.uuid)
 			)
 			.animation(
 				.easeInOut(duration: 0.28),
@@ -823,11 +893,11 @@ struct LibraryView: View {
 
 
 
-					_filteredSignedApps.isEmpty,
+					snapshot.signedApps.isEmpty,
 
 
 
-					_filteredImportedApps.isEmpty
+					snapshot.imported.isEmpty
 
 
 
@@ -1133,16 +1203,7 @@ private struct ZagLibraryTailEventsModifier: ViewModifier {
 extension LibraryView {
 
 	private var _managedInstalledBundleIDs: Set<String> {
-		guard
-			!_managedInstalledBundleIDsData.isEmpty,
-			let identifiers = try? JSONDecoder().decode(
-				Set<String>.self,
-				from: _managedInstalledBundleIDsData
-			)
-		else {
-			return []
-		}
-		return identifiers
+		_managedIDsCache.identifiers(for: _managedInstalledBundleIDsData)
 	}
 
 	private func _markManagedAppInstalled(_ app: AppInfoPresentable) {
