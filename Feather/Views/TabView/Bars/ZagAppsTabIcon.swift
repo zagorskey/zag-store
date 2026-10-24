@@ -11,13 +11,15 @@ import UIKit
 
 /// A two-colour tab item image:
 /// - the rounded-square outline follows the selected theme / native inactive colour;
-/// - the vivid P3-red indicator appears only while an update is available.
+/// - the red app-update indicator yields to the animated self-update spectrum.
 ///
 /// Rendering as one high-resolution *original* image is intentional. The native
 /// iOS tab bar otherwise template-tints the red dot alongside the outline.
 struct ZagAppsTabIcon: View {
     let hasUpdates: Bool
+    let hasStoreUpdate: Bool
     let isSelected: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let tintHex: String
 
     @Environment(\.colorScheme) private var colorScheme
@@ -25,14 +27,40 @@ struct ZagAppsTabIcon: View {
     var body: some View {
         Image(
             uiImage: Self.render(
-                hasUpdates: hasUpdates,
+                hasUpdates: hasUpdates || hasStoreUpdate,
+                drawRedBadge: hasUpdates && !hasStoreUpdate,
                 outlineColor: outlineColor
             )
         )
         .renderingMode(.original)
         .interpolation(.high)
+        .frame(width: 30, height: 30)
+        .overlay(alignment: .topTrailing) {
+            if hasStoreUpdate {
+                TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { timeline in
+                    Circle()
+                        .fill(
+                            AngularGradient(
+                                colors: ZagSelfUpdateSpectrum.colors,
+                                center: .center
+                            )
+                        )
+                        .rotationEffect(.degrees(
+                            reduceMotion ? 0 :
+                                timeline.date.timeIntervalSinceReferenceDate
+                                    .truncatingRemainder(dividingBy: 5) * 72
+                        ))
+                        .frame(width: 8.1, height: 8.1)
+                }
+                .frame(width: 8.1, height: 8.1)
+                .padding(.top, 0.75)
+                .padding(.trailing, 0.75)
+                .accessibilityHidden(true)
+            }
+        }
         .contentTransition(.opacity)
         .animation(.easeInOut(duration: 0.22), value: hasUpdates)
+        .animation(.easeInOut(duration: 0.22), value: hasStoreUpdate)
         .accessibilityHidden(true)
     }
 
@@ -50,6 +78,7 @@ struct ZagAppsTabIcon: View {
 
     private static func render(
         hasUpdates: Bool,
+        drawRedBadge: Bool,
         outlineColor: UIColor
     ) -> UIImage {
         let canvas = CGSize(width: 30, height: 30)
@@ -96,6 +125,8 @@ struct ZagAppsTabIcon: View {
             ))
             context.setBlendMode(.normal)
 
+            guard drawRedBadge else { return }
+
             let badgeRadius: CGFloat = 4.05
             context.setFillColor(
                 UIColor(
@@ -113,4 +144,17 @@ struct ZagAppsTabIcon: View {
             ))
         }.withRenderingMode(.alwaysOriginal)
     }
+}
+
+
+/// Shared spectrum for the self-update progress bar, account indicator and
+/// Apps dock indicator. Keep all three in sync when updating Zag Store colours.
+enum ZagSelfUpdateSpectrum {
+    static let colors: [Color] = [
+        Color(red: 0.00, green: 0.86, blue: 1.00),
+        Color(red: 0.05, green: 0.37, blue: 1.00),
+        Color(red: 0.42, green: 0.18, blue: 1.00),
+        Color(red: 0.95, green: 0.16, blue: 0.89),
+        Color(red: 0.00, green: 0.86, blue: 1.00)
+    ]
 }
