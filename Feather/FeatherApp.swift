@@ -195,48 +195,134 @@ final class ZagLaunchGate {
     }
 }
 
+private enum ZagSplashPreferences {
+    static let enabledKey = "ZagStore.animatedSplashEnabled"
+    static var isEnabled: Bool {
+        // Opt-out: existing installations see the animation by default.
+        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
+    }
+}
+
+/// Runs once when the app process starts, never when returning from background.
+/// This is a SwiftUI overlay after the required static iOS launch screen.
 private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(ZagSplashPreferences.enabledKey) private var enabled = true
+    @State private var progress: CGFloat = 0
+    @State private var showWordmark = false
     @State private var opacity = 1.0
     @State private var dismissed = false
 
     var body: some View {
         Group {
-            if !dismissed {
+            if !dismissed && enabled {
                 GeometryReader { geometry in
-                    Image("ZagSplashFull")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                        .ignoresSafeArea()
-                        .accessibilityHidden(true)
+                    ZStack {
+                        Color.black
+                        VStack(spacing: 22) {
+                            ZagSplashZ(progress: progress)
+                                .frame(width: 116, height: 116)
+                                .shadow(color: Color(red: 0.40, green: 0.24, blue: 1).opacity(showWordmark ? 0.26 : 0), radius: 25)
+                            VStack(spacing: 7) {
+                                Text("Zag Store")
+                                    .font(.system(size: 25, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                Text("Discover beyond the App Store.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.56))
+                            }
+                            .opacity(showWordmark ? 1 : 0)
+                            .offset(y: showWordmark ? 0 : 7)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .ignoresSafeArea()
                 }
                 .ignoresSafeArea()
                 .opacity(opacity)
-                .allowsHitTesting(opacity > 0.01)
+                .allowsHitTesting(true)
                 .task {
-                    // Hold the original artwork for 0.7 seconds before fading.
-                    try? await Task.sleep(for: .milliseconds(700))
+                    if reduceMotion {
+                        progress = 1
+                        showWordmark = true
+                        try? await Task.sleep(for: .milliseconds(350))
+                    } else {
+                        withAnimation(.easeInOut(duration: 1.15)) {
+                            progress = 1
+                        }
+                        try? await Task.sleep(for: .milliseconds(1080))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            showWordmark = true
+                        }
+                        try? await Task.sleep(for: .milliseconds(650))
+                    }
                     guard !Task.isCancelled else { return }
-                    let fadeDuration = reduceMotion ? 0.01 : 0.50
-                    withAnimation(.easeInOut(duration: fadeDuration)) {
+                    withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.35)) {
                         opacity = 0
                     }
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 520))
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 20 : 370))
                     guard !Task.isCancelled else { return }
-                    dismissed = true
-                    ZagLaunchGate.shared.finish()
-                    // The global updates badge lives in a UIKit window layer.
-                    // Reveal it only after the full-screen image is gone.
-                    NotificationCenter.default.post(
-                        name: .zagLaunchSplashVisibilityDidChange,
-                        object: nil,
-                        userInfo: ["visible": false]
-                    )
+                    complete()
                 }
             }
         }
+        .task {
+            // No splash means no waiting, no animation and no blocking overlay.
+            if !ZagSplashPreferences.isEnabled {
+                complete()
+            }
+        }
+        .onChange(of: enabled) { value in
+            if !value { complete() }
+        }
+    }
+
+    private func complete() {
+        guard !dismissed else { return }
+        dismissed = true
+        ZagLaunchGate.shared.finish()
+        NotificationCenter.default.post(
+            name: .zagLaunchSplashVisibilityDidChange,
+            object: nil,
+            userInfo: ["visible": false]
+        )
+    }
+}
+
+private struct ZagSplashZ: View {
+    let progress: CGFloat
+
+    private var gradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0, green: 0.86, blue: 1),
+                Color(red: 0.05, green: 0.37, blue: 1),
+                Color(red: 0.42, green: 0.18, blue: 1),
+                Color(red: 0.95, green: 0.16, blue: 0.89)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            Path { path in
+                path.move(to: CGPoint(x: 21, y: 24))
+                path.addLine(to: CGPoint(x: 95, y: 24))
+                path.addLine(to: CGPoint(x: 21, y: 92))
+                path.addLine(to: CGPoint(x: 95, y: 92))
+            }
+            .trim(from: 0, to: progress)
+            .stroke(
+                gradient,
+                style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .frame(width: 116, height: 116)
+        .accessibilityHidden(true)
     }
 }
 
