@@ -19,7 +19,6 @@ struct ZagAppsTabIcon: View {
     let hasUpdates: Bool
     let hasStoreUpdate: Bool
     let isSelected: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let tintHex: String
 
     @Environment(\.colorScheme) private var colorScheme
@@ -37,24 +36,9 @@ struct ZagAppsTabIcon: View {
         .frame(width: 30, height: 30)
         .overlay(alignment: .topTrailing) {
             if hasStoreUpdate {
-                TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { timeline in
-                    Circle()
-                        .fill(
-                            AngularGradient(
-                                colors: ZagSelfUpdateSpectrum.colors,
-                                center: .center
-                            )
-                        )
-                        .rotationEffect(.degrees(
-                            reduceMotion ? 0 :
-                                timeline.date.timeIntervalSinceReferenceDate
-                                    .truncatingRemainder(dividingBy: 5) * 72
-                        ))
-                        .frame(width: 8.1, height: 8.1)
-                }
-                .frame(width: 8.1, height: 8.1)
-                .padding(.top, 0.75)
-                .padding(.trailing, 0.75)
+                ZagSelfUpdateSpectrumDot(diameter: 8.1)
+                    .padding(.top, 0.75)
+                    .padding(.trailing, 0.75)
                 .accessibilityHidden(true)
             }
         }
@@ -157,4 +141,32 @@ enum ZagSelfUpdateSpectrum {
         Color(red: 0.95, green: 0.16, blue: 0.89),
         Color(red: 0.00, green: 0.86, blue: 1.00)
     ]
+}
+
+
+/// A single lightweight animated gradient for all self-update notifications.
+/// Only the 8pt badge animates; the Apps glyph itself stays rasterized once.
+struct ZagSelfUpdateSpectrumDot: View {
+    var diameter: CGFloat = 10
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { timeline in
+            Circle()
+                .fill(
+                    AngularGradient(
+                        colors: ZagSelfUpdateSpectrum.colors,
+                        center: .center
+                    )
+                )
+                .rotationEffect(.degrees(
+                    reduceMotion ? 0 :
+                        timeline.date.timeIntervalSinceReferenceDate
+                            .truncatingRemainder(dividingBy: 5) * 72
+                ))
+                .frame(width: diameter, height: diameter)
+        }
+        .frame(width: diameter, height: diameter)
+        .accessibilityLabel("Zag Store update available")
+    }
 }
