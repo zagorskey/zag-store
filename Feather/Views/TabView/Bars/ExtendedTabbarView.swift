@@ -15,6 +15,7 @@ struct ExtendedTabbarView: View {
 	@AppStorage("Feather.tabCustomization") var customization = TabViewCustomization()
 	@StateObject var viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
+	@StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
@@ -64,6 +65,7 @@ struct ExtendedTabbarView: View {
                         } icon: {
                             ZagAppsTabIcon(
                                 hasUpdates: updateManager.hasVisibleUpdates,
+                                hasStoreUpdate: selfUpdateCoordinator.availableRelease != nil,
                                 isSelected: selectedTabRawValue == tab.rawValue,
                                 tintHex: themeTintHex
                             )
