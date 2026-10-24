@@ -548,7 +548,10 @@ struct ZagCinematicSplashPreview: View {
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .background(Color.black)
+        // Transparent modal backing is essential: as the film dissolves, the
+        // Settings page underneath is already visible instead of a black
+        // presentation surface suddenly cutting back to the app.
+        .presentationBackground(.clear)
         .interactiveDismissDisabled()
     }
 
