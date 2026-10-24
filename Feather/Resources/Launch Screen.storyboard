@@ -16,12 +16,12 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ZagSplashFull" translatesAutoresizingMaskIntoConstraints="NO" id="Zag-image">
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ZagSplashBackdrop" translatesAutoresizingMaskIntoConstraints="NO" id="Zag-image">
                                 <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
-                        <color key="backgroundColor" red="0.007" green="0.009" blue="0.028" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.016" green="0.020" blue="0.063" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="Zag-image" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="Zag-leading"/>
                             <constraint firstItem="Zag-image" firstAttribute="trailing" secondItem="Ze5-6b-2t3" secondAttribute="trailing" id="Zag-trailing"/>
@@ -36,6 +36,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="ZagSplashFull" width="863" height="1822"/>
+        <image name="ZagSplashBackdrop" width="256" height="540"/>
     </resources>
 </document>
