@@ -24,6 +24,8 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
     case repositoryOrigins
     case repositoryInventory
     case updateReconciliation
+    case appsListPreparation
+    case gamesCatalogueIndex
     case promotionalArtwork
     case catalogueLookup
     case featuredArtwork
@@ -41,6 +43,8 @@ enum ZagPerformanceCategory: String, CaseIterable, Codable, Sendable {
         case .repositoryOrigins: return "Repository Origin Reconciliation"
         case .repositoryInventory: return "Installed Apps + Updates"
         case .updateReconciliation: return "Update Reconciliation (CPU)"
+        case .appsListPreparation: return "Apps List Preparation"
+        case .gamesCatalogueIndex: return "Games Catalogue Index"
         case .promotionalArtwork: return "Promotional Artwork"
         case .catalogueLookup: return "Apple Catalogue"
         case .featuredArtwork: return "Featured Artwork"
