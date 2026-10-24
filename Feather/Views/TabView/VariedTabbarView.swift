@@ -534,10 +534,7 @@ struct ZagAccountPopup: View {
                             Text("Zag Store Update").foregroundStyle(themeTint)
                             Spacer(minLength: 8)
                             if selfUpdateCoordinator.availableRelease != nil {
-                                Circle()
-                                    .fill(themeTint)
-                                    .frame(width: 10, height: 10)
-                                    .accessibilityLabel("Update available")
+                                ZagSelfUpdateSpectrumDot(diameter: 10)
                             }
                         }
                     }
