@@ -9,6 +9,7 @@ import SwiftUI
 
 struct TabbarView: View {
 	@StateObject private var updateManager = UpdateManager.shared
+	@StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@State private var selectedTabValue = ZagPageStartupPolicy.initialTab
@@ -45,6 +46,7 @@ struct TabbarView: View {
                             } icon: {
                                 ZagAppsTabIcon(
                                     hasUpdates: updateManager.hasVisibleUpdates,
+                                hasStoreUpdate: selfUpdateCoordinator.availableRelease != nil,
                                     isSelected: selectedTabValue == tab,
                                     tintHex: themeTintHex
                                 )
