@@ -203,26 +203,44 @@ private enum ZagSplashPreferences {
     }
 }
 
-/// The first runtime frame matches the gradient-only iOS launch screen.
-/// Core Animation in ZagSplashAnimationStage creates the actual 3D Z.
+/// The system launch frame is gradient-only. On normal cold starts, Zag Store
+/// plays the ORIGINAL 5-second cinematic master (including its audio track).
+/// A precise, native text reveal is layered above the unmodified video.
+/// Reduced Motion and missing bundled video fall back to the existing
+/// colour-preserving still/native Core Animation path.
 private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ZagSplashPreferences.enabledKey) private var enabled = true
+    @AppStorage("ZagStore.splashSoundEnabled") private var soundEnabled = true
     @State private var opacity: Double = 1
     @State private var exitRequested = false
     @State private var dismissed = false
+    @State private var videoFadeStarted = false
+
+    private var playsVideo: Bool {
+        !reduceMotion && ZagCinematicSplashView.available
+    }
 
     var body: some View {
         Group {
             if enabled && !dismissed {
-                ZagSplashAnimationStage(
-                    reduceMotion: reduceMotion,
-                    exiting: exitRequested
-                )
-                    .ignoresSafeArea()
-                    .opacity(opacity)
-                    .allowsHitTesting(true)
-                    .accessibilityHidden(true)
+                Group {
+                    if playsVideo {
+                        ZagCinematicSplashView(
+                            soundEnabled: soundEnabled,
+                            onFinished: finishVideo
+                        )
+                    } else {
+                        ZagSplashAnimationStage(
+                            reduceMotion: reduceMotion,
+                            exiting: exitRequested
+                        )
+                    }
+                }
+                .ignoresSafeArea()
+                .opacity(opacity)
+                .allowsHitTesting(true)
+                .accessibilityHidden(true)
             }
         }
         .task {
@@ -230,9 +248,10 @@ private struct ZagAnimatedLaunchOverlay: View {
                 complete()
                 return
             }
-            // All milestones come from ZagSplashTimeline, shared with the
-            // Core Animation stage. The exit is a choreographed scene event;
-            // the final SwiftUI crossfade is only the last handoff.
+            // Video completion comes from AVPlayerItemDidPlayToEndTime, not
+            // an approximation that can drift with decode/startup latency.
+            if playsVideo { return }
+
             if reduceMotion {
                 try? await Task.sleep(for: .milliseconds(370))
             } else {
@@ -269,6 +288,18 @@ private struct ZagAnimatedLaunchOverlay: View {
         }
         .onChange(of: enabled) { value in
             if !value { complete() }
+        }
+    }
+
+    private func finishVideo() {
+        guard !dismissed, !videoFadeStarted else { return }
+        videoFadeStarted = true
+        withAnimation(.easeInOut(duration: 0.38)) {
+            opacity = 0
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(410))
+            complete()
         }
     }
 
