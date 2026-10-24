@@ -203,16 +203,18 @@ private enum ZagSplashPreferences {
     }
 }
 
-/// Runs once per process, never when resuming from the background.
-/// Keep the artwork pixel-for-pixel identical to the system launch screen:
-/// animate its EXISTING 3D logo lighting, not a replacement vector or wordmark.
+/// Runs once per process, never when returning from the background.
+///
+/// The original 3D Zag Store image remains the only logo artwork. We reveal
+/// its actual pixels along the Z's strokes; we never draw a replacement Z.
+/// Starting with the complete artwork matches Launch Screen.storyboard exactly.
 private struct ZagAnimatedLaunchOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(ZagSplashPreferences.enabledKey) private var enabled = true
 
-    @State private var lightTravel: CGFloat = -1.0
-    @State private var lightBloom: Double = 0
-    @State private var opacity = 1.0
+    @State private var revealProgress: CGFloat = 0
+    @State private var originalArtworkOpacity = 1.0
+    @State private var overlayOpacity = 1.0
     @State private var dismissed = false
 
     var body: some View {
@@ -220,24 +222,29 @@ private struct ZagAnimatedLaunchOverlay: View {
             if !dismissed && enabled {
                 GeometryReader { geometry in
                     ZStack {
-                        // This is the same high-resolution 3D Zag Store artwork
-                        // used by Launch Screen.storyboard. No new logo, font,
-                        // tagline, or separately reconstructed geometry.
-                        Image("ZagSplashFull")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height
-                            )
-                            .clipped()
+                        Color.black
 
-                        if !reduceMotion {
-                            ZagSplashArtworkLighting(
-                                travel: lightTravel,
-                                bloom: lightBloom
-                            )
-                        }
+                        // The ambient cyan/magenta glow is derived from the
+                        // EXISTING artwork. This is the backdrop while the
+                        // sharply rendered 3D logo materializes.
+                        splashArtwork(in: geometry.size)
+                            .blur(radius: 55)
+                            .opacity(0.74)
+
+                        // Reveal the actual bevels, colours and reflections
+                        // sequentially: upper stroke, diagonal, lower stroke.
+                        // The path is only a MASK, never visible as artwork.
+                        splashArtwork(in: geometry.size)
+                            .mask {
+                                ZagSplashArtworkReveal(progress: revealProgress)
+                                    .fill(.white)
+                                    .blur(radius: 1.2)
+                            }
+
+                        // Finish on the unmodified original image, preserving
+                        // its full glow and pixel-perfect launch composition.
+                        splashArtwork(in: geometry.size)
+                            .opacity(originalArtworkOpacity)
                     }
                     .frame(
                         width: geometry.size.width,
@@ -247,32 +254,45 @@ private struct ZagAnimatedLaunchOverlay: View {
                     .ignoresSafeArea()
                 }
                 .ignoresSafeArea()
-                .opacity(opacity)
+                .opacity(overlayOpacity)
                 .allowsHitTesting(true)
                 .task {
                     if reduceMotion {
-                        // Keep the original artwork without motion.
+                        // No deconstruction or stroke motion when Reduce Motion
+                        // is enabled; simply show the original 3D artwork.
                         try? await Task.sleep(for: .milliseconds(350))
                     } else {
-                        // A moving studio-light reflection catches the existing
-                        // 3D bevels, followed by a soft, brief colour bloom.
-                        withAnimation(.easeInOut(duration: 1.30)) {
-                            lightTravel = 1.0
-                        }
-                        withAnimation(.easeInOut(duration: 0.62)) {
-                            lightBloom = 1.0
-                        }
-                        try? await Task.sleep(for: .milliseconds(680))
+                        // Match the static iOS launch screen for the first
+                        // frame, then dissolve into its own ambient lighting.
+                        try? await Task.sleep(for: .milliseconds(100))
                         guard !Task.isCancelled else { return }
-                        withAnimation(.easeOut(duration: 0.62)) {
-                            lightBloom = 0.10
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            originalArtworkOpacity = 0
                         }
-                        try? await Task.sleep(for: .milliseconds(820))
+                        try? await Task.sleep(for: .milliseconds(230))
+                        guard !Task.isCancelled else { return }
+
+                        // This is the visible animation: the original 3D Z
+                        // forms along its real geometry, not a white shimmer.
+                        withAnimation(.easeInOut(duration: 1.28)) {
+                            revealProgress = 1
+                        }
+                        try? await Task.sleep(for: .milliseconds(1290))
+                        guard !Task.isCancelled else { return }
+
+                        // Resolve the mask into the full original artwork,
+                        // including its outer light spill and background.
+                        withAnimation(.easeOut(duration: 0.24)) {
+                            originalArtworkOpacity = 1
+                        }
+                        try? await Task.sleep(for: .milliseconds(330))
                     }
 
                     guard !Task.isCancelled else { return }
-                    withAnimation(.easeInOut(duration: reduceMotion ? 0.01 : 0.34)) {
-                        opacity = 0
+                    withAnimation(
+                        .easeInOut(duration: reduceMotion ? 0.01 : 0.34)
+                    ) {
+                        overlayOpacity = 0
                     }
                     try? await Task.sleep(
                         for: .milliseconds(reduceMotion ? 20 : 360)
@@ -283,7 +303,8 @@ private struct ZagAnimatedLaunchOverlay: View {
             }
         }
         .task {
-            // The opt-out is a genuine no-splash path: do not block launch.
+            // Disabling the setting genuinely skips the splash and releases
+            // the startup gate without a timer or animated overlay.
             if !ZagSplashPreferences.isEnabled {
                 complete()
             }
@@ -291,6 +312,15 @@ private struct ZagAnimatedLaunchOverlay: View {
         .onChange(of: enabled) { value in
             if !value { complete() }
         }
+    }
+
+    private func splashArtwork(in size: CGSize) -> some View {
+        Image("ZagSplashFull")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: size.width, height: size.height)
+            .clipped()
+            .accessibilityHidden(true)
     }
 
     private func complete() {
@@ -305,76 +335,49 @@ private struct ZagAnimatedLaunchOverlay: View {
     }
 }
 
-/// A restrained specular reflection over the ORIGINAL 3D Z pixels.
-/// The full-screen artwork is also the luminance mask, so the sweep lights
-/// the existing beveled surfaces instead of drawing a second Z or a white
-/// streak across the black background. The logo-only crop avoids the wordmark.
-private struct ZagSplashArtworkLighting: View {
-    let travel: CGFloat
-    let bloom: Double
+/// Reveal-only geometry, calibrated to ZagSplashFull.png (863 x 1822).
+///
+/// The Z remains a bitmap with its original 3D lighting and texture. This
+/// stroked path is exclusively a progressively uncovered alpha mask.
+/// Coordinates are mapped through the same aspect-fill transform as the image,
+/// so the mask stays aligned on different iPhone screen sizes.
+private struct ZagSplashArtworkReveal: Shape {
+    var progress: CGFloat
 
-    var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-            let logoSize = width * 0.345
-            let logoCentre = CGPoint(x: width * 0.5, y: height * 0.505)
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
-            ZStack {
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.34, green: 0.47, blue: 1)
-                            .opacity(bloom * 0.30),
-                        Color(red: 0.83, green: 0.28, blue: 1)
-                            .opacity(bloom * 0.14),
-                        .clear
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: logoSize * 0.75
-                )
-                .frame(width: logoSize * 1.55, height: logoSize * 1.55)
-                .position(logoCentre)
+    func path(in rect: CGRect) -> Path {
+        let artworkWidth: CGFloat = 863
+        let artworkHeight: CGFloat = 1822
+        let scale = max(
+            rect.width / artworkWidth,
+            rect.height / artworkHeight
+        )
+        let offsetX = (rect.width - artworkWidth * scale) * 0.5
+        let offsetY = (rect.height - artworkHeight * scale) * 0.5
 
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: .white.opacity(0.06), location: 0.26),
-                        .init(color: .white.opacity(0.46), location: 0.48),
-                        .init(color: .white.opacity(0.20), location: 0.56),
-                        .init(color: .clear, location: 1.0)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: logoSize * 0.48, height: logoSize * 1.65)
-                .rotationEffect(.degrees(18))
-                .position(
-                    x: logoCentre.x + travel * logoSize * 0.92,
-                    y: logoCentre.y
-                )
-            }
-            .frame(width: width, height: height)
-            .mask {
-                Image("ZagSplashFull")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: width, height: height)
-                    .clipped()
-                    .luminanceToAlpha()
-                    .mask {
-                        RoundedRectangle(
-                            cornerRadius: logoSize * 0.22,
-                            style: .continuous
-                        )
-                        .frame(width: logoSize, height: logoSize)
-                        .position(logoCentre)
-                    }
-            }
-            .blendMode(.screen)
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: offsetX + x * scale, y: offsetY + y * scale)
         }
-        .accessibilityHidden(true)
-        .allowsHitTesting(false)
+
+        var centerline = Path()
+        centerline.move(to: point(249, 711))
+        centerline.addLine(to: point(615, 711))
+        centerline.addLine(to: point(249, 1084))
+        centerline.addLine(to: point(615, 1084))
+
+        return centerline
+            .trimmedPath(from: 0, to: min(max(progress, 0), 1))
+            .strokedPath(
+                StrokeStyle(
+                    lineWidth: 145 * scale,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
     }
 }
 
