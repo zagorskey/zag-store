@@ -2289,7 +2289,7 @@ private struct ZagUpdateRow: View {
 		colorScheme == .dark
 	}
 
-	private var zagUpdatesBlue: Color { .accentColor }
+	private var zagUpdatesBlue: Color { ZagWideGamutTint.color(hex: selectedColorHex) }
 
 	private var zagUpdatePillBackground: Color {
 		colorScheme == .dark
@@ -2404,7 +2404,7 @@ private struct ZagUpdateRow: View {
 
 					if let releaseDateText {
 						Text(releaseDateText)
-							.font(.subheadline)
+							.font(.system(size: 15))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 					}
@@ -2655,7 +2655,8 @@ struct ZagUpdatesPopup: View {
 		colorScheme == .dark ? Color(hex: "#403F44") : Color(hex: "#E7E7E9")
 	}
 
-	private var updatesBlue: Color { .accentColor }
+	@AppStorage("Feather.userTintColor") private var themeTintHex: String = "#4395F8"
+	private var updatesBlue: Color { ZagWideGamutTint.color(hex: themeTintHex) }
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
 		updateManager.visibleUpdates.filter { !completedUpdateIDs.contains($0.id) }
@@ -2830,7 +2831,7 @@ struct ZagUpdatesPopup: View {
 	private var updateAllCard: some View {
 		HStack {
 			Text(.localized("Update All"))
-				.font(.system(size: 20, weight: .regular))
+				.font(.system(size: 19, weight: .regular))
 				.foregroundStyle(updatesBlue)
 
 			Spacer()
@@ -2839,9 +2840,9 @@ struct ZagUpdatesPopup: View {
 				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
-				.padding(.horizontal, 6)
+				.padding(.horizontal, 3)
 				.background(
-					Color(uiColor: UIColor(displayP3Red: 1.0, green: 0.035, blue: 0.055, alpha: 1)),
+					Color(uiColor: UIColor(displayP3Red: 0.92, green: 0.19, blue: 0.15, alpha: 1)),
 					in: Capsule()
 				)
 		}
@@ -2979,7 +2980,8 @@ private struct ZagCachedUpdateRow: View {
 	@Environment(\.colorScheme) private var colorScheme
 	@State private var showsFullReleaseNotes = false
 
-	private var blue: Color { .accentColor }
+	@AppStorage("Feather.userTintColor") private var themeTintHex: String = "#4395F8"
+	private var blue: Color { ZagWideGamutTint.color(hex: themeTintHex) }
 	private var pillBackground: Color {
 		colorScheme == .dark ? Color(hex: "#3E3D42") : Color(hex: "#EEEEF0")
 	}
@@ -3037,7 +3039,7 @@ private struct ZagCachedUpdateRow: View {
 				VStack(alignment: .leading, spacing: 2) {
 					Text(row.name).zagContentTitleStyle().lineLimit(1)
 					if !dateText.isEmpty {
-						Text(dateText).font(.subheadline).foregroundStyle(.secondary)
+						Text(dateText).font(.system(size: 15)).foregroundStyle(.secondary)
 					}
 				}
 				Spacer(minLength: 8)
