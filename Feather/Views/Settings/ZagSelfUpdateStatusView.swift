@@ -1068,6 +1068,9 @@ private struct ZagSelfUpdateRainbowProgress: View {
 private struct ZagStoreUpdateAutomaticPreferencesView: View {
     @AppStorage("ZagStore.updatePreferences.automaticChecks.v1")
     private var enabled = true
+    @AppStorage("ZagStore.updatePreferences.wifiDownload.v1")
+    private var wifiDownload = false
+    @ObservedObject private var coordinator = ZagSelfUpdateCoordinator.shared
 
     var body: some View {
         Form {
@@ -1075,13 +1078,24 @@ private struct ZagStoreUpdateAutomaticPreferencesView: View {
                 Toggle("Automatically Check for Updates", isOn: $enabled)
                     .tint(.green)
                     .onChange(of: enabled) { _ in
-                        ZagSelfUpdateCoordinator.shared.preferencesChanged()
+                        coordinator.preferencesChanged()
                     }
+                Toggle("Download Updates on Wi-Fi", isOn: $wifiDownload)
+                    .tint(.green)
+                    .disabled(!enabled)
+                    .onChange(of: wifiDownload) { _ in
+                        coordinator.preferencesChanged()
+                    }
+                if wifiDownload {
+                    Text(coordinator.automaticDownloadStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             } footer: {
-                Text("Checks for updates on launch and when returning to Zag Store. Downloads and installation require your approval.")
+                Text("Checks on launch and when returning to Zag Store. When enabled, downloads use Wi-Fi only and are SHA-256 verified. Signing and installation still require your approval. Downloads run while Zag Store is active.")
             }
         }
-        .navigationTitle("Automatic Update Checks")
+        .navigationTitle("Automatic Updates")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
