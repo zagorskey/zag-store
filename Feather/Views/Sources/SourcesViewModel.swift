@@ -277,10 +277,24 @@ final class SourcesViewModel: ObservableObject {
 	) async {
 		let pairingCore = ZagRPPairingCore.shared
 
-		// Repository reconciliation must never wait indefinitely on a native
-		// inventory callback. Publish the best available snapshot immediately;
-		// when RPPairing completes, promote it to authoritative installed versions.
-		UpdateManager.shared.refresh(repositories: repositories)
+		// A paired device's Signed archive is not authoritative installed
+		// state. During launch, reconciling against it can briefly replace
+		// the persisted update count (e.g. 10) with a false lower count (4).
+		// Keep the previous snapshot until the native inventory is loaded.
+		// The successful inventory callback below publishes the final result.
+		// Without pairing, Signed fallback remains the available source.
+		let hasAuthoritativeInventory: Bool = {
+			if case .loaded = pairingCore.installedAppsState { return true }
+			return false
+		}()
+		if hasAuthoritativeInventory || !pairingCore.pairingFileExists {
+			UpdateManager.shared.refresh(repositories: repositories)
+		} else {
+			ZagLogger.shared.info(
+				"Updates",
+				"Waiting for device inventory; preserving previous update snapshot"
+			)
+		}
 
 		if case .refreshing = pairingCore.installedAppsState {
 			// The active request will be observed through the shared inventory
