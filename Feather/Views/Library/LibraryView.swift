@@ -2642,6 +2642,11 @@ struct ZagUpdatesPopup: View {
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
+	@State private var isUpdatingAll = false
+	@State private var bulkUpdateProgress = 0
+	@State private var bulkUpdateTotal = 0
+	@State private var bulkUpdateFailures: [String] = []
+	@State private var showBulkUpdateResult = false
 
 	private var popupBackground: Color {
 		colorScheme == .dark ? Color(hex: "#1C1C1E") : Color(hex: "#F2F1F6")
@@ -2813,7 +2818,16 @@ struct ZagUpdatesPopup: View {
 					)
 				}
 			}
-			.interactiveDismissDisabled(!embeddedInAccountNavigation)
+			.interactiveDismissDisabled(isUpdatingAll || !embeddedInAccountNavigation)
+			.alert("Update All", isPresented: $showBulkUpdateResult) {
+				Button("OK", role: .cancel) { }
+			} message: {
+				if bulkUpdateFailures.isEmpty {
+					Text("Successfully installed all \(bulkUpdateTotal) updates.")
+				} else {
+					Text("Installed \(bulkUpdateTotal - bulkUpdateFailures.count) of \(bulkUpdateTotal) updates. Failed: \(bulkUpdateFailures.joined(separator: ", ")). You can retry failed updates individually.")
+				}
+			}
 			.toolbar {
 				ToolbarItem(placement: .topBarTrailing) {
 					if !embeddedInAccountNavigation {
@@ -2829,8 +2843,23 @@ struct ZagUpdatesPopup: View {
 	}
 
 	private var updateAllCard: some View {
+		Button {
+			guard !isUpdatingAll, updateManager.hasCompletedUpdateCheck else { return }
+			let pending = availableUpdates.filter {
+				ZagUpdateTransactionManager.shared.stage(for: $0) == nil || {
+					if case .failed = ZagUpdateTransactionManager.shared.stage(for: $0) { return true }
+					return false
+				}()
+			}
+			guard !pending.isEmpty else { return }
+			isUpdatingAll = true
+			bulkUpdateTotal = pending.count
+			bulkUpdateProgress = 0
+			bulkUpdateFailures = []
+			Task { await _installAll(pending) }
+		} label: {
 		HStack {
-			Text(.localized("Update All"))
+			Text(isUpdatingAll ? "Updating \(bulkUpdateProgress + 1) of \(bulkUpdateTotal)…" : .localized("Update All"))
 				.font(.system(size: 19, weight: .regular))
 				.foregroundStyle(updatesBlue)
 
@@ -2852,7 +2881,29 @@ struct ZagUpdatesPopup: View {
 			sectionBackground,
 			in: RoundedRectangle(cornerRadius: 24, style: .continuous)
 		)
+		}
+		.buttonStyle(.plain)
+		.disabled(isUpdatingAll || !updateManager.hasCompletedUpdateCheck)
 		.accessibilityElement(children: .combine)
+	}
+
+	@MainActor
+	private func _installAll(_ pending: [UpdateManager.AvailableUpdate]) async {
+		let manager = ZagUpdateTransactionManager.shared
+		for update in pending {
+			do {
+				let signedUUID = try await manager.prepareAsync(update)
+				try await manager.installPreparedUpdate(signedUUID: signedUUID)
+				_moveToUpdatedRecently(update)
+				try? pairingCore.refreshInstalledApps()
+			} catch {
+				manager.failInstallation(update: update, error: error)
+				bulkUpdateFailures.append(update.app.currentName)
+			}
+			bulkUpdateProgress += 1
+		}
+		isUpdatingAll = false
+		showBulkUpdateResult = true
 	}
 }
 
