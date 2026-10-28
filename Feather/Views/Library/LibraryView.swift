@@ -2840,7 +2840,7 @@ struct ZagUpdatesPopup: View {
 				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
-				.padding(.horizontal, 3)
+				.padding(.horizontal, 1)
 				.background(
 					Color(uiColor: UIColor(displayP3Red: 0.92, green: 0.19, blue: 0.15, alpha: 1)),
 					in: Capsule()
