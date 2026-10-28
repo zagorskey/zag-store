@@ -577,6 +577,9 @@ struct ZagSelfUpdateStatusView: View {
     @AppStorage("ZagStore.advancedSettingsUnlocked")
     private var zagAdvancedSettingsUnlocked = false
 
+    // Temporary local admin gate until Zag Account roles are introduced.
+    private var isAdmin: Bool { zagAdvancedSettingsUnlocked }
+
     @State private var showAdvancedTools = false
     @State private var showClearPendingConfirmation = false
     @State private var handoffReadiness: [String] = []
@@ -615,7 +618,7 @@ struct ZagSelfUpdateStatusView: View {
                     ZagStoreUpdateAutomaticPreferencesView()
                 } label: {
                     HStack {
-                        Text("Automatic Update Checks")
+                        Text("Automatic Updates")
                         Spacer()
                         Text(zagAutoCheckEnabled ? "On" : "Off")
                             .foregroundStyle(.secondary)
@@ -683,14 +686,19 @@ struct ZagSelfUpdateStatusView: View {
                                     .frame(width: 60, height: 60)
                             }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Zag Store \(release.version)")
-                                    .font(.headline)
-                                Text("Build \(release.build)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 8) {
+                                    Text("Zag Store \(release.version)")
+                                        .font(.headline)
+                                    Text("Build \(release.build)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                                 Text(releaseDownloadSize ?? "Checking download size…")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.primary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -698,6 +706,21 @@ struct ZagSelfUpdateStatusView: View {
                             .font(.body)
                         Link("Learn more about this update", destination: URL(string: "https://github.com/zagorskey/zag-store-releases/releases")!)
                             .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .underline()
+                        if releaseDownloadBusy || installBusy || gate4ShouldShowProgress {
+                            VStack(spacing: 8) {
+                                ZagSelfUpdateRainbowProgress(
+                                    progress: Double(gate4MeasuredPercentage ?? 0) / 100,
+                                    isIndeterminate: gate4MeasuredPercentage == nil
+                                )
+                                .frame(height: 14)
+                                Text(gate4ShouldShowProgress ? gate4ProgressTitle : "Preparing Update…")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                        } else {
                         Button {
                             guard !releaseDownloadBusy else { return }
                             releaseDownloadBusy = true
@@ -719,18 +742,16 @@ struct ZagSelfUpdateStatusView: View {
                                 }
                             }
                         } label: {
-                            Text(releaseDownloadBusy ? "Preparing Update…" : "Update Now")
+                            Text("Update Now")
+                                .font(.system(size: 17, weight: .semibold))
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 5)
+                                .frame(height: 54)
+                                .foregroundStyle(.white)
+                                .background(Color(uiColor: UIColor(displayP3Red: 0.0, green: 0.54, blue: 1.0, alpha: 1)), in: Capsule())
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .foregroundStyle(.white)
-                        .controlSize(.large)
-                        .disabled(releaseDownloadBusy)
-                        Text("The update will be verified and signed before you confirm installation.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        }
+
                     }
                     .task(id: release.ipaURL) {
                         releaseDownloadSize = nil
@@ -759,6 +780,7 @@ struct ZagSelfUpdateStatusView: View {
                 }
             }
 
+            if isAdmin {
             Section {
                 HStack(spacing: 9) {
                     Image(systemName: "app.badge.checkmark")
@@ -780,7 +802,7 @@ struct ZagSelfUpdateStatusView: View {
                 }
             }
 
-            if zagAdvancedSettingsUnlocked {
+            if isAdmin && zagAdvancedSettingsUnlocked {
             Section {
                 DisclosureGroup("Advanced diagnostics and recovery", isExpanded: $showAdvancedTools) {
                 Section("Authenticated Beta v2 — Test Only") {
@@ -897,6 +919,7 @@ struct ZagSelfUpdateStatusView: View {
             }
             }
 
+            if isAdmin {
             Section("Self-Update") {
                 gate4ProgressDisplay
 
@@ -919,6 +942,7 @@ struct ZagSelfUpdateStatusView: View {
                         zagDeveloperDiagnostics
                     }
                 }
+            }
             }
 
         }
