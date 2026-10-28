@@ -2289,11 +2289,7 @@ private struct ZagUpdateRow: View {
 		colorScheme == .dark
 	}
 
-	private var zagUpdatesBlue: Color {
-		colorScheme == .dark
-			? Color(hex: "#3F8EF7")
-			: Color(hex: "#3A85F8")
-	}
+	private var zagUpdatesBlue: Color { .accentColor }
 
 	private var zagUpdatePillBackground: Color {
 		colorScheme == .dark
@@ -2659,9 +2655,7 @@ struct ZagUpdatesPopup: View {
 		colorScheme == .dark ? Color(hex: "#403F44") : Color(hex: "#E7E7E9")
 	}
 
-	private var updatesBlue: Color {
-		colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8")
-	}
+	private var updatesBlue: Color { .accentColor }
 
 	private var availableUpdates: [UpdateManager.AvailableUpdate] {
 		updateManager.visibleUpdates.filter { !completedUpdateIDs.contains($0.id) }
@@ -2845,8 +2839,11 @@ struct ZagUpdatesPopup: View {
 				.font(.system(size: 14, weight: .regular))
 				.foregroundStyle(.white)
 				.frame(minWidth: 24, minHeight: 24)
-				.padding(.horizontal, displayedAvailableCount > 99 ? 4 : 0)
-				.background(Color(hex: "#FF3B30"), in: Capsule())
+				.padding(.horizontal, 6)
+				.background(
+					Color(uiColor: UIColor(displayP3Red: 1.0, green: 0.035, blue: 0.055, alpha: 1)),
+					in: Capsule()
+				)
 		}
 		.padding(.horizontal, 16)
 		.frame(minHeight: 60)
@@ -2982,9 +2979,7 @@ private struct ZagCachedUpdateRow: View {
 	@Environment(\.colorScheme) private var colorScheme
 	@State private var showsFullReleaseNotes = false
 
-	private var blue: Color {
-		colorScheme == .dark ? Color(hex: "#3F8EF7") : Color(hex: "#3A85F8")
-	}
+	private var blue: Color { .accentColor }
 	private var pillBackground: Color {
 		colorScheme == .dark ? Color(hex: "#3E3D42") : Color(hex: "#EEEEF0")
 	}
