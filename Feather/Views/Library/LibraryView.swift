@@ -2845,11 +2845,11 @@ struct ZagUpdatesPopup: View {
 	private var updateAllCard: some View {
 		Button {
 			guard !isUpdatingAll, updateManager.hasCompletedUpdateCheck else { return }
-			let pending = availableUpdates.filter {
-				ZagUpdateTransactionManager.shared.stage(for: $0) == nil || {
-					if case .failed = ZagUpdateTransactionManager.shared.stage(for: $0) { return true }
-					return false
-				}()
+			let pending = availableUpdates.filter { update in
+				switch ZagUpdateTransactionManager.shared.stage(for: update) {
+				case nil, .failed: return true
+				default: return false
+				}
 			}
 			guard !pending.isEmpty else { return }
 			isUpdatingAll = true
