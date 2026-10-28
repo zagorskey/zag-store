@@ -12,6 +12,7 @@ struct TabbarView: View {
 	@StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+	@AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
 	@State private var selectedTabValue = ZagPageStartupPolicy.initialTab
 
 	private var selectedTab: Binding<TabEnum> {
@@ -62,6 +63,12 @@ struct TabbarView: View {
                                 default: EmptyView()
                                 }
                             }
+                        } else if tab == .settings {
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                ZagPrimaryTabIcons.label(for: .settings)
+                            }
                         } else {
                             Label(tab.title, systemImage: tab.icon)
                         }
@@ -69,9 +76,14 @@ struct TabbarView: View {
 					.tag(tab)
 			}
 		}
+		.onChange(of: dockTabs) { _ in
+            if !ZagDockConfiguration.tabs.contains(selectedTabValue) {
+                selectedTabValue = ZagDockConfiguration.tabs.first ?? .discover
+            }
+        }
 		.onOpenURL { url in
             if let tab = TabEnum.tab(for: url) {
-                selectedTab.wrappedValue = tab
+                selectedTab.wrappedValue = ZagDockConfiguration.tabs.contains(tab) ? tab : (ZagDockConfiguration.tabs.first ?? .discover)
             }
         }
 		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in

@@ -464,7 +464,7 @@ final class ZagCinematicSplashStage: UIView {
         }
     }
 
-    /// Exit is also used by the preview and the invisible tap-to-skip
+    /// Exit is also used by the invisible tap-to-skip
     /// gesture. We fade the actual soundtrack rather than just muting it.
     func requestSkip() {
         guard !finished, !skipStarted else { return }
@@ -516,68 +516,3 @@ final class ZagCinematicSplashStage: UIView {
     }
 }
 
-
-// MARK: - Full-screen replay from Settings
-//
-// Entirely separate from ZagLaunchGate: previewing must never reset,
-// wait for, or mark the cold-launch gate interactive. The player is created
-// fresh on every presentation, and its soundtrack honours the same toggle.
-struct ZagCinematicSplashPreview: View {
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage("ZagStore.splashSoundEnabled") private var soundEnabled = true
-    @State private var opacity: Double = 1
-    @State private var skipRequested = false
-    @State private var exitStarted = false
-    @State private var closing = false
-
-    var body: some View {
-        ZStack {
-            Color(red: 3 / 255, green: 5 / 255, blue: 15 / 255)
-
-            ZagCinematicSplashView(
-                soundEnabled: soundEnabled,
-                skipRequested: skipRequested,
-                onExitReady: beginOutro,
-                onFinished: completeOutro
-            )
-        }
-        .ignoresSafeArea()
-        .opacity(opacity)
-        .overlay {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { skipRequested = true }
-                .accessibilityLabel("Skip splash preview")
-                .accessibilityHint("Double tap to close the cinematic introduction")
-                .accessibilityAddTraits(.isButton)
-        }
-        .statusBarHidden()
-        .persistentSystemOverlays(.hidden)
-        // Transparent modal backing is essential: as the film dissolves, the
-        // Settings page underneath is already visible instead of a black
-        // presentation surface suddenly cutting back to the app.
-        .presentationBackground(.clear)
-        .interactiveDismissDisabled()
-    }
-
-    private func beginOutro() {
-        guard !exitStarted else { return }
-        exitStarted = true
-        withAnimation(.easeInOut(duration: 0.28)) {
-            opacity = 0
-        }
-    }
-
-    private func completeOutro() {
-        guard !closing else { return }
-        closing = true
-        let alreadyFading = exitStarted
-        beginOutro()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(
-                alreadyFading ? 55 : 310
-            ))
-            dismiss()
-        }
-    }
-}

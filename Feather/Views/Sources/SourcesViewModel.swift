@@ -206,10 +206,35 @@ final class SourcesViewModel: ObservableObject {
 		let completedRepositories = Array(completedSources.values)
 		let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
 
-		// Publish the repository snapshot and its derived update state as
-		// one completed refresh. Until this point the previous Updates
-		// pill/count and app-icon badge remain untouched.
+		// Match the background updater's complete-snapshot guarantee. A source
+		// failure on cold launch must not turn a 15-update snapshot into six
+		// simply because only some repositories finished loading.
+		let configuredSourceURLs = Set(
+			Storage.shared.getSources().compactMap { $0.sourceURL?.absoluteString }
+		)
+		let loadedSourceURLs = Set(
+			completedSources.keys.compactMap { $0.sourceURL?.absoluteString }
+		)
+		let missingSourceURLs = configuredSourceURLs.subtracting(loadedSourceURLs)
+		guard !Task.isCancelled else {
+			print("[Zag Store Updates] Foreground refresh cancelled; retaining last update snapshot")
+			ZagLogger.shared.warning("Updates", "Foreground refresh cancelled; retaining last update snapshot")
+			return
+		}
+
+		// Keep successful Sources rows live even if a repository is temporarily
+		// unavailable; however, do not treat a partial catalogue as a complete
+		// basis for globally replacing the update count.
 		self.sources = completedSources
+		guard missingSourceURLs.isEmpty else {
+			let message = "Incomplete foreground repository snapshot " +
+				"(\(loadedSourceURLs.count)/\(configuredSourceURLs.count)); " +
+				"missing: " + missingSourceURLs.sorted().joined(separator: ", ") +
+				" — retaining last update snapshot"
+			print("[Zag Store Updates] " + message)
+			ZagLogger.shared.warning("Updates", message)
+			return
+		}
 
 		if diagnosticSkipReconciliation {
 			print("[Zag Refresh Diagnostic] Skipped origin + inventory/update reconciliation; total — " + String(format: "%.3fs", CFAbsoluteTimeGetCurrent() - diagnosticStart))
@@ -252,60 +277,71 @@ final class SourcesViewModel: ObservableObject {
 	) async {
 		let pairingCore = ZagRPPairingCore.shared
 
-		// Repository refresh and the Apps tab can request device inventory at
-		// nearly the same time. Previously we abandoned update reconciliation
-		// whenever another inventory refresh was already running, which could
-		// leave the Updates popup on its previous snapshot even though repository
-		// rows already showed fresh Update buttons. Wait briefly for the in-flight
-		// authoritative inventory instead, then reconcile against the completed
-		// repository snapshot.
+		// Repository reconciliation must never wait indefinitely on a native
+		// inventory callback. Publish the best available snapshot immediately;
+		// when RPPairing completes, promote it to authoritative installed versions.
+		UpdateManager.shared.refresh(repositories: repositories)
+
 		if case .refreshing = pairingCore.installedAppsState {
-			print("[Zag Store Updates] Installed-app inventory already refreshing; waiting for authoritative snapshot")
+			// The active request will be observed through the shared inventory
+			// state and the callback of its original caller. Do not start another.
+			ZagLogger.shared.info(
+				"Updates", "Inventory already refreshing; keeping immediately reconciled update snapshot"
+			)
+			return
+		}
 
-			for _ in 0..<50 {
-				try? await Task.sleep(nanoseconds: 100_000_000)
-				if case .refreshing = pairingCore.installedAppsState {
-					continue
-				}
-				break
-			}
-
-			if case .refreshing = pairingCore.installedAppsState {
-				print("[Zag Store Updates] Installed-app inventory refresh timed out; keeping previous update snapshot")
-				ZagLogger.shared.warning("Updates", "Installed-app inventory refresh timed out; keeping previous update snapshot")
-				return
-			}
-
-			if case .loaded = pairingCore.installedAppsState {
-				UpdateManager.shared.refresh(repositories: repositories)
-				return
-			}
+		guard pairingCore.pairingFileExists else {
+			ZagLogger.shared.warning(
+				"Updates", "No pairing file available; updates reconciled using Signed fallback"
+			)
+			return
 		}
 
 		do {
-			let result: Result<Set<String>, Error> = await withCheckedContinuation { continuation in
-				do {
-					try pairingCore.refreshInstalledApps { result in
-						continuation.resume(returning: result)
+			try pairingCore.refreshInstalledApps { result in
+				// The native callback is delivered on the main queue. Defer
+				// reconciliation so the completed repository publication and
+				// its isRefreshing/defer cleanup cannot race a fast callback.
+				DispatchQueue.main.async {
+					switch result {
+					case .failure(let error):
+						ZagLogger.shared.warning(
+							"Updates",
+							"Device inventory unavailable: \(error.localizedDescription); Signed fallback preserved"
+						)
+						return
+					case .success:
+						break
 					}
-				} catch {
-					continuation.resume(returning: .failure(error))
-				}
-			}
 
-			switch result {
-			case .success:
-				UpdateManager.shared.refresh(repositories: repositories)
-			case .failure(let error):
-				if case .loaded = pairingCore.installedAppsState {
-					print("[Zag Store Updates] Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
-					ZagLogger.shared.warning("Updates", "Live inventory refresh failed; using last loaded inventory: \(error.localizedDescription)")
-					UpdateManager.shared.refresh(repositories: repositories)
-				} else {
-					print("[Zag Store Updates] Live inventory unavailable; keeping previous update snapshot: \(error.localizedDescription)")
+					let configuredURLs = Set(
+						Storage.shared.getSources().compactMap { $0.sourceURL?.absoluteString }
+					)
+					let currentlyLoaded = self.sources.filter { source, _ in
+						guard let url = source.sourceURL?.absoluteString else { return false }
+						return configuredURLs.contains(url)
+					}
+					let loadedURLs = Set(
+						currentlyLoaded.keys.compactMap { $0.sourceURL?.absoluteString }
+					)
+					// Never replace a complete update snapshot with a partial
+					// catalogue merely because the inventory arrived late.
+					guard configuredURLs == loadedURLs,
+						!self.isRefreshing,
+						!UpdateManager.shared.isRepositoryRefreshInProgress
+					else { return }
+					UpdateManager.shared.refresh(
+						repositories: Array(currentlyLoaded.values)
+					)
 				}
 			}
-		} 
+		} catch {
+			ZagLogger.shared.warning(
+				"Updates",
+				"Inventory request did not start: \(error.localizedDescription); initial update snapshot preserved"
+			)
+		}
 	}
 
 	// MARK: - Repository Origin Provenance
@@ -352,7 +388,10 @@ final class SourcesViewModel: ObservableObject {
 		origins = prunedOrigins
 		icons = prunedIcons
 
-		var repositoriesByBundleID: [String: [(AltSource, ASRepository)]] = [:]
+		// Preserve the actual candidate entry: several repositories contain
+		// many releases of one bundle ID. Counting entries is not equivalent
+		// to counting repository origins.
+		var repositoriesByBundleID: [String: [(AltSource, ASRepository, ASRepository.App)]] = [:]
 		if !trackedBundleIDs.isEmpty {
 			for (storedSource, repository) in sources {
 				for app in repository.apps {
@@ -363,33 +402,90 @@ final class SourcesViewModel: ObservableObject {
 						continue
 					}
 					repositoriesByBundleID[bundleID, default: []].append(
-						(storedSource, repository)
+						(storedSource, repository, app)
 					)
 				}
 			}
 		}
 
+		let recordedAppNames = defaults.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		let recordedVariantFingerprints = defaults.dictionary(
+			forKey: "zagStore.repositoryVariantOrigins"
+		) as? [String: String] ?? [:]
+
 		for (bundleID, matches) in repositoriesByBundleID {
-			if origins[bundleID] == nil, matches.count == 1,
-			   let match = matches.first {
-				let repository = match.1
-				let stableKey =
-					match.0.sourceURL?.absoluteString ??
-					repository.id ??
-					repository.website?.absoluteString ??
-					repository.name
-				if let stableKey, !stableKey.isEmpty {
-					origins[bundleID] = stableKey
+			if origins[bundleID] == nil {
+				let bySource = Dictionary(grouping: matches) { entry in
+					entry.0.sourceURL?.absoluteString ??
+					entry.1.id ??
+					entry.1.website?.absoluteString ??
+					entry.1.name ?? ""
+				}.filter { !$0.key.isEmpty }
+
+				let eligibleKeys: [String] = {
+					let trackedName = recordedAppNames[bundleID]
+					let trackedFingerprint = recordedVariantFingerprints[bundleID]
+					guard let trackedFingerprint else {
+						// A single source containing many *versions* is still just
+						// one source, but do not infer across competing app names.
+						guard bySource.count == 1,
+							let group = bySource.values.first
+						else { return [] }
+						let names = Set(group.map {
+							ZagVariantLineageResolver.normalizedName($0.2.currentName)
+						})
+						let fingerprints = Set(group.map {
+							UpdateManager.variantIdentity(for: $0.2)
+						})
+						// Without a tracked variant, different descriptions may
+						// represent different tweaks under the same name. Inferring
+						// source ownership must not imply variant equivalence.
+						return names.count == 1 && fingerprints.count == 1
+							? Array(bySource.keys) : []
+					}
+					guard let trackedName, !trackedName.isEmpty else { return [] }
+					let normalized = ZagVariantLineageResolver.normalizedName(trackedName)
+					return bySource.compactMap { key, group -> String? in
+						let matched = group.contains { entry in
+							let app = entry.2
+							guard ZagVariantLineageResolver.normalizedName(app.currentName) == normalized
+							else { return false }
+							// Only exact legacy fingerprints may establish missing
+							// provenance. A shared bundle ID or a fuzzy hint cannot.
+							if UpdateManager.variantIdentity(for: app) == trackedFingerprint {
+								return true
+							}
+							return (app.versions ?? []).contains { version in
+								guard let description = version.localizedDescription else { return false }
+								return UpdateManager.variantIdentity(
+									appName: app.currentName, variantDescription: description
+								) == trackedFingerprint
+							}
+						}
+						return matched ? key : nil
+					}
+				}()
+				if eligibleKeys.count == 1,
+					let selectedKey = eligibleKeys.first {
+					origins[bundleID] = selectedKey
 					changedOrigins = true
+					ZagLogger.shared.info(
+						"Updates",
+						"Recovered unambiguous repository provenance for \(bundleID)"
+					)
 				}
 			}
 
 			guard let origin = origins[bundleID] else { continue }
-			if let match = matches.first(where: { storedSource, repository in
-				storedSource.sourceURL?.absoluteString == origin ||
-				repository.id == origin ||
-				repository.website?.absoluteString == origin ||
-				repository.name == origin
+			if let match = matches.first(where: { entry in
+				let storedSource = entry.0
+				let repository = entry.1
+				return storedSource.sourceURL?.absoluteString == origin ||
+					repository.id == origin ||
+					repository.website?.absoluteString == origin ||
+					repository.name == origin
 			}), let icon = match.1.currentIconURL?.absoluteString,
 			   icons[bundleID] != icon {
 				icons[bundleID] = icon
@@ -476,12 +572,21 @@ final class UpdateManager: ObservableObject {
 
 	// The popup and every badge must count the same release-aware update set.
 	var visibleUpdates: [AvailableUpdate] {
+		let cutoff = Calendar.current.date(
+			byAdding: .day, value: -30, to: Date()
+		) ?? .distantPast
 		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+			.filter { ($0.completedAt ?? .distantPast) >= cutoff }
 		return updates.filter { update in
 			let bundleID = update.app.id ?? update.id
 			return !recent.contains { row in
 				row.id == update.id && row.bundleID == bundleID &&
-				row.version == update.availableVersion
+				ZagVariantLineageResolver.matchesCompletedRelease(
+					availableVersion: update.availableVersion,
+					availableBuild: update.availableBuild,
+					completedVersion: row.version,
+					completedBuild: row.build
+				)
 			}
 		}
 	}
@@ -493,6 +598,7 @@ final class UpdateManager: ObservableObject {
 	}
 
 	private var hasCompletedReconciliation = false
+	var hasCompletedUpdateCheck: Bool { hasCompletedReconciliation }
 
 	func updateCompletionDidChange() {
 		objectWillChange.send()
@@ -679,23 +785,16 @@ final class UpdateManager: ObservableObject {
 		let persistedRepositoryOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryOrigins"
 		) as? [String: String] ?? [:]
-		let managedInstalledBundleIDs: Set<String> = {
-			guard
-				let data = UserDefaults.standard.data(
-					forKey: "zagStore.managedInstalledBundleIDs"
-				),
-				let identifiers = try? JSONDecoder().decode(
-					Set<String>.self,
-					from: data
-				)
-			else {
-				return []
-			}
-			return identifiers
-		}()
-
 		let pairingCore = ZagRPPairingCore.shared
 		let deviceInventory = pairingCore.installedApps
+		let inventoryStatus: String = {
+			switch pairingCore.installedAppsState {
+			case .idle: return "idle"
+			case .refreshing: return "refreshing"
+			case .loaded(let count): return "loaded (reported \(count))"
+			case .failed(let detail): return "failed: \(detail)"
+			}
+		}()
 
 		// Only installed/signed bundle IDs are ever consulted below.
 		// Indexing every app in enormous repositories allocates thousands
@@ -789,10 +888,26 @@ final class UpdateManager: ObservableObject {
 					"\(localApps.count) versioned app(s)"
 			)
 		} else {
-			// Preserve the previous behavior until the first successful device
-			// inventory is available. This keeps background/source refreshes
-			// functional when RPPairing has not established a snapshot yet.
+			// A prepared Signed record is not an installed app. When native
+			// inventory is unavailable, preserve the pre-install version for
+			// an in-flight or failed update, including after a cold restart.
+			var overriddenBundleIDs = Set<String>()
 			for app in signedApps {
+				if let bundleID = app.identifier,
+					let baseline = ZagUpdateTransactionManager.shared.pendingInstallationBaseline(
+						bundleID: bundleID
+					) {
+					if overriddenBundleIDs.insert(bundleID).inserted {
+						_addLocalApp(
+							name: baseline.appName,
+							identifier: bundleID,
+							version: baseline.installedVersion,
+							build: baseline.installedBuild,
+							to: &localApps
+						)
+					}
+					continue
+				}
 				_addLocalApp(
 					name: app.name,
 					identifier: app.identifier,
@@ -804,7 +919,8 @@ final class UpdateManager: ObservableObject {
 
 			print(
 				"[Zag Store Updates] Device inventory unavailable; " +
-					"using Signed fallback: \(localApps.count) app(s)"
+					"using Signed fallback: \(localApps.count) app(s), " +
+					"\(overriddenBundleIDs.count) pending-install baseline(s)"
 			)
 		}
 
@@ -824,9 +940,15 @@ final class UpdateManager: ObservableObject {
 			)
 		}
 
-		var foundUpdates: [AvailableUpdate] = []
-		var seenLocalApps = Set<String>()
-		var warnedAmbiguousVariantIDs = Set<String>()
+		// Defer selection until every compatible repository release has been
+		// examined. The first entry in a repository is not necessarily newest.
+		var selectedUpdates: [String: AvailableUpdate] = [:]
+		var selectedLineageReasons: [String: String] = [:]
+		var recoveredVariantLineages: [String: String] = [:]
+		var rejectedNewerCandidates: [String: Set<String>] = [:]
+		// Group only the installed identifiers. Avoid repeatedly walking the
+		// entire Alan's Gigantic Repo while resolving release-note changes.
+		var lineagePeersByKey: [String: [ASRepository.App]] = [:]
 
 		let recordedOrigins = persistedRepositoryOrigins
 		let recordedAppOrigins = UserDefaults.standard.dictionary(
@@ -835,21 +957,6 @@ final class UpdateManager: ObservableObject {
 		let recordedVariantOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryVariantOrigins"
 		) as? [String: String] ?? [:]
-
-		var repositoryOriginAliases: [String: Set<String>] = [:]
-		for (storedSource, candidateRepository) in SourcesViewModel.shared.sources {
-			let aliases = [
-				storedSource.sourceURL?.absoluteString,
-				candidateRepository.id,
-				candidateRepository.website?.absoluteString,
-				candidateRepository.name
-			].compactMap { $0 }.filter { !$0.isEmpty }
-
-			let aliasSet = Set(aliases)
-			for alias in aliases {
-				repositoryOriginAliases[alias, default: []].formUnion(aliasSet)
-			}
-		}
 
 		let localAppsByIdentifier = Dictionary(grouping: localApps) { $0.identifier }
 		var repositoryAppNamesByIdentifier: [String: Set<String>] = [:]
@@ -867,7 +974,8 @@ final class UpdateManager: ObservableObject {
 			for (repository, app) in repositoryAppsByIdentifier[identifier] ?? [] {
 				guard
 					let availableVersion = app.currentVersion,
-					!availableVersion.isEmpty
+					!availableVersion.isEmpty,
+					app.currentDownloadUrl != nil
 				else {
 					continue
 				}
@@ -879,6 +987,16 @@ final class UpdateManager: ObservableObject {
 					!candidates.isEmpty else {
 					continue
 				}
+
+				let availableBuild = app.currentAppVersion?.build
+				guard candidates.contains(where: {
+					_isRepositoryReleaseNewer(
+						availableVersion: availableVersion,
+						availableBuild: availableBuild,
+						installedVersion: $0.version,
+						installedBuild: $0.build
+					)
+				}) else { continue }
 
 				let recordedAppOrigin = recordedAppOrigins[identifier]
 				let repositoryNames = repositoryAppNamesByIdentifier[identifier] ?? []
@@ -910,27 +1028,100 @@ final class UpdateManager: ObservableObject {
 
 				if let effectiveAppOrigin,
 				   _normalizedAppName(effectiveAppOrigin) != _normalizedAppName(app.currentName) {
+					rejectedNewerCandidates[identifier, default: []].insert(
+						"\(app.currentName) \(availableVersion) [different app name]"
+					)
 					continue
 				}
 
+				// Without a recorded variant fingerprint, a matching bundle ID
+				// and display name cannot prove two modified IPAs are equivalent.
+				// Keep the recorded repository boundary until explicit package
+				// provenance verification is implemented. This prevents an Eevee
+				// installation from silently becoming a Chroma Spotify update.
+				if recordedVariantOrigins[identifier] == nil,
+					let origin = recordedOrigins[identifier],
+					!origin.isEmpty {
+					var sourceAliases = Set([
+						repository.id,
+						repository.website?.absoluteString,
+						repository.name
+					].compactMap { $0 }.filter { !$0.isEmpty })
+					if !sourceAliases.contains(origin) {
+						for (storedSource, loaded) in SourcesViewModel.shared.sources {
+							guard loaded.id == repository.id,
+								loaded.website == repository.website,
+								loaded.name == repository.name
+							else { continue }
+							if let url = storedSource.sourceURL?.absoluteString {
+								sourceAliases.insert(url)
+							}
+						}
+						if !sourceAliases.contains(origin) {
+							rejectedNewerCandidates[identifier, default: []].insert(
+								"\(app.currentName) \(availableVersion) [unverified cross-source variant]"
+							)
+							continue
+						}
+					}
+				}
+
+				var lineageRecovery: ZagVariantLineageResolver.Decision?
 				if let recordedVariantOrigin = recordedVariantOrigins[identifier] {
-					let candidateVariantIdentity = Self.variantIdentity(for: app)
-					guard recordedVariantOrigin == candidateVariantIdentity else {
-						print(
-							"[Zag Store Updates] IGNORED VARIANT LINEAGE: " +
-							"id=\(identifier) | tracked=\(recordedVariantOrigin) | " +
-							"candidate=\(candidateVariantIdentity)"
+					let decision: ZagVariantLineageResolver.Decision
+					if recordedVariantOrigin == Self.variantIdentity(for: app) {
+						// Exact matches are quick, but must still respect recorded
+						// repository provenance; otherwise a sibling source can
+						// win before the legitimate source is considered.
+						decision = Self.variantLineageDecision(
+							for: app,
+							in: repository,
+							trackedVariant: recordedVariantOrigin,
+							trackedAppName: recordedAppOrigin,
+							trackedRepository: recordedOrigins[identifier],
+							sameNameCandidates: []
 						)
-						ZagLogger.shared.debug(
-							"Updates",
-							"Ignored variant lineage | id=\(identifier) | tracked=\(recordedVariantOrigin) | candidate=\(candidateVariantIdentity)"
+					} else {
+						let normalizedName = _normalizedAppName(app.currentName)
+						let peerKey = [
+							identifier,
+							repository.id ?? "",
+							repository.website?.absoluteString ?? "",
+							repository.name ?? "",
+							normalizedName
+						].joined(separator: "|")
+						if lineagePeersByKey[peerKey] == nil {
+							lineagePeersByKey[peerKey] = (repositoryAppsByIdentifier[identifier] ?? [])
+								.compactMap { source, candidate in
+									guard source.id == repository.id,
+										source.website == repository.website,
+										source.name == repository.name,
+										_normalizedAppName(candidate.currentName) == normalizedName
+									else { return nil }
+									return candidate
+								}
+						}
+						decision = Self.variantLineageDecision(
+							for: app,
+							in: repository,
+							trackedVariant: recordedVariantOrigin,
+							trackedAppName: recordedAppOrigin,
+							trackedRepository: recordedOrigins[identifier],
+							sameNameCandidates: lineagePeersByKey[peerKey]
+						)
+					}
+					guard decision.isMatch else {
+						rejectedNewerCandidates[identifier, default: []].insert(
+							"\(app.currentName) \(availableVersion) [\(decision.rawValue)]"
 						)
 						continue
+					}
+					if decision != .exactLegacyIdentity {
+						lineageRecovery = decision
 					}
 				}
 
 				for localApp in candidates {
-					let availableBuild = app.currentAppVersion?.build
 					guard _isRepositoryReleaseNewer(
 						availableVersion: availableVersion,
 						availableBuild: availableBuild,
@@ -944,28 +1135,42 @@ final class UpdateManager: ObservableObject {
 						identifier.lowercased() + "|" +
 						_normalizedAppName(localApp.name)
 
-					guard
-						seenLocalApps.insert(localKey).inserted
-					else {
-						continue
-					}
-
-					foundUpdates.append(
-						AvailableUpdate(
-							app: app,
-							source: repository,
-							installedVersion: localApp.version,
-							availableVersion: availableVersion,
-							installedBuild: localApp.build,
-							availableBuild: availableBuild
-						)
+					let suggestedUpdate = AvailableUpdate(
+						app: app,
+						source: repository,
+						installedVersion: localApp.version,
+						availableVersion: availableVersion,
+						installedBuild: localApp.build,
+						availableBuild: availableBuild
 					)
-
+					if let existing = selectedUpdates[localKey] {
+						let comparison = ZagVariantLineageResolver.compareRelease(
+							version: availableVersion, build: availableBuild,
+							to: existing.availableVersion, build: existing.availableBuild
+						)
+						if comparison != .orderedDescending {
+							// Prefer the first compatible release on an exact tie:
+							// it has no meaningful version/build advantage.
+							continue
+						}
+					}
+					selectedUpdates[localKey] = suggestedUpdate
+					if let lineageRecovery {
+						selectedLineageReasons[localKey] = lineageRecovery.rawValue
+					} else {
+						selectedLineageReasons.removeValue(forKey: localKey)
+					}
 					break
 				}
 			}
 		}
 
+		let foundUpdates = Array(selectedUpdates.values)
+		for (localKey, reason) in selectedLineageReasons {
+			if let identifier = selectedUpdates[localKey]?.app.id {
+				recoveredVariantLineages[identifier] = reason
+			}
+		}
 		var diagnosticLines: [String] = []
 		diagnosticLines.append("=== Zag Store Update Diagnostics ===")
 		diagnosticLines.append("Tracked Variant Lineage:")
@@ -984,6 +1189,11 @@ final class UpdateManager: ObservableObject {
 			}
 		}
 		diagnosticLines.append("")
+		diagnosticLines.append(
+			"Inventory status: \(inventoryStatus) | pairingFilePresent=\(pairingCore.pairingFileExists) | " +
+			"entries=\(deviceInventory.count) | localState=\(localApps.count) | " +
+			"source=\(inventoryStatus.hasPrefix("loaded") ? "RPPairing" : "Signed fallback")"
+		)
 		diagnosticLines.append("Raw device inventory:")
 		for installed in deviceInventory.values.sorted(by: { $0.bundleID < $1.bundleID }) {
 			let origin = recordedOrigins[installed.bundleID] ?? "<none>"
@@ -1045,8 +1255,26 @@ final class UpdateManager: ObservableObject {
 				diagnosticLines.append("- \(update.app.currentName) | id=\(update.app.id ?? "<none>") | \(update.installedVersion) -> \(update.availableVersion) | repo=\(update.source.name ?? "<unknown>")")
 			}
 		}
-		diagnosticsReport = diagnosticLines.joined(separator: "\n")
-
+		diagnosticLines.append("")
+		diagnosticLines.append("Recovered release-note lineages:")
+		if recoveredVariantLineages.isEmpty {
+			diagnosticLines.append("- <none>")
+		} else {
+			for identifier in recoveredVariantLineages.keys.sorted() {
+				diagnosticLines.append("- \(identifier) | \(recoveredVariantLineages[identifier] ?? "")")
+			}
+		}
+		diagnosticLines.append("")
+		diagnosticLines.append("Rejected newer repository candidates:")
+		if rejectedNewerCandidates.isEmpty {
+			diagnosticLines.append("- <none>")
+		} else {
+			for identifier in rejectedNewerCandidates.keys.sorted() {
+				for reason in (rejectedNewerCandidates[identifier] ?? []).sorted().prefix(8) {
+					diagnosticLines.append("- \(identifier) | \(reason)")
+				}
+			}
+		}
 		updates = foundUpdates.sorted { lhs, rhs in
 			let lhsDate = lhs.app.currentDate?.date ?? .distantPast
 			let rhsDate = rhs.app.currentDate?.date ?? .distantPast
@@ -1060,8 +1288,61 @@ final class UpdateManager: ObservableObject {
 			) == .orderedAscending
 		}
 
+		// Distinguish repository matching from the separate release-aware
+		// Updated Recently suppression. This diagnostic never changes eligibility.
+		let visibleCount = visibleUpdates.count
+		let suppressedRecentCount = updates.count - visibleCount
+		diagnosticLines.append("")
+		diagnosticLines.append("Suppressed by Updated Recently:")
+		let visibleIDs = Set(visibleUpdates.map {
+			($0.app.id ?? "") + "|" + $0.availableVersion
+		})
+		let suppressedUpdates = updates.filter {
+			!visibleIDs.contains(($0.app.id ?? "") + "|" + $0.availableVersion)
+		}
+		if suppressedUpdates.isEmpty {
+			diagnosticLines.append("- <none>")
+		} else {
+			for update in suppressedUpdates {
+				diagnosticLines.append(
+					"- \(update.app.currentName) | \(update.availableVersion) | \(update.source.name ?? "Unknown")"
+				)
+			}
+		}
+		diagnosticLines.append("")
+		diagnosticLines.append(
+			"Reconciliation: repository candidates for \(repositoryAppsByIdentifier.count) IDs; " +
+			"installed inventory \(deviceInventory.count); " +
+			"matched \(updates.count); visible \(visibleCount); " +
+			"suppressed by Updated Recently \(suppressedRecentCount)"
+		)
+		let acceptedIDs = Set(updates.compactMap { $0.app.id })
+		diagnosticLines.append("")
+		diagnosticLines.append("Local apps without accepted updates:")
+		for localApp in localApps.sorted(by: { $0.name < $1.name }) {
+			guard !acceptedIDs.contains(localApp.identifier) else { continue }
+			let repoCandidates = repositoryAppsByIdentifier[localApp.identifier] ?? []
+			let hasNewerCandidate = repoCandidates.contains { entry in
+				let candidate = entry.1
+				guard let version = candidate.currentVersion, !version.isEmpty else { return false }
+				return _isRepositoryReleaseNewer(
+					availableVersion: version,
+					availableBuild: candidate.currentAppVersion?.build,
+					installedVersion: localApp.version,
+					installedBuild: localApp.build
+				)
+			}
+			let explanation = repoCandidates.isEmpty
+				? "not found in loaded repositories"
+				: (hasNewerCandidate
+					? "newer candidate exists; examine app/variant lineage"
+					: "no strictly newer version in loaded repositories")
+			diagnosticLines.append("- \(localApp.name) | id=\(localApp.identifier) | \(explanation)")
+		}
+		diagnosticsReport = diagnosticLines.joined(separator: "\n")
+
 		hasCompletedReconciliation = true
-		persistedUpdateCount = visibleUpdates.count
+		persistedUpdateCount = visibleCount
 		UserDefaults.standard.set(
 			persistedUpdateCount,
 			forKey: Self.persistedUpdateCountKey
@@ -1174,6 +1455,105 @@ final class UpdateManager: ObservableObject {
 	) -> Bool {
 		_normalizedAppName(installedName) ==
 			_normalizedAppName(repositoryName)
+	}
+
+
+	/// Legacy variant identities include release notes, which are not stable
+	/// across updates. Recover a successor only when its recorded source and
+	/// app name agree and that source has an unambiguous matching entry (or a
+	/// unique historical release fingerprint).
+	static func variantLineageDecision(
+		for app: ASRepository.App,
+		in source: ASRepository?,
+		trackedVariant: String,
+		trackedAppName: String?,
+		trackedRepository: String?,
+		sameNameCandidates: [ASRepository.App]? = nil
+	) -> ZagVariantLineageResolver.Decision {
+		let currentIdentity = variantIdentity(for: app)
+
+		guard let source else { return .unknownSource }
+		let normalizedName = ZagVariantLineageResolver.normalizedName(app.currentName)
+		guard let trackedAppName,
+			ZagVariantLineageResolver.normalizedName(trackedAppName) == normalizedName
+		else { return .differentAppName }
+
+		var aliases = Set([
+			source.id,
+			source.website?.absoluteString,
+			source.name
+		].compactMap { $0 }.filter { !$0.isEmpty })
+		if let trackedRepository, !aliases.contains(trackedRepository) {
+			for (storedSource, loaded) in SourcesViewModel.shared.sources {
+				guard loaded.id == source.id,
+					loaded.website == source.website,
+					loaded.name == source.name
+				else { continue }
+				if let url = storedSource.sourceURL?.absoluteString {
+					aliases.insert(url)
+				}
+			}
+		}
+
+		if trackedVariant == currentIdentity {
+			if let trackedRepository, !trackedRepository.isEmpty,
+				!aliases.contains(trackedRepository) { return .differentSource }
+			return .exactLegacyIdentity
+		}
+
+		let peers = sameNameCandidates ?? source.apps.filter {
+			$0.id == app.id &&
+				ZagVariantLineageResolver.normalizedName($0.currentName) == normalizedName
+		}
+		func containsLegacyHistory(_ candidate: ASRepository.App) -> Bool {
+			var descriptions = candidate.versions?.compactMap { $0.localizedDescription } ?? []
+			if let legacy = candidate.versionDescription { descriptions.append(legacy) }
+			if let description = candidate.currentDescription { descriptions.append(description) }
+			return descriptions.contains {
+				variantIdentity(appName: candidate.currentName, variantDescription: $0) == trackedVariant
+			}
+		}
+		let hasHistory = peers.count > 1 && containsLegacyHistory(app)
+		let historyCount = hasHistory
+			? peers.filter { containsLegacyHistory($0) }.count
+			: 0
+
+		// Same-name entries frequently represent different releases rather than
+		// different variants. A distinctive old mod/publisher marker can prove
+		// continuity across versions, even when the full notes have changed.
+		let stableMarker = ZagVariantLineageResolver.hasStableVariantMarker(
+			trackedVariant: trackedVariant,
+			candidateVariant: currentIdentity
+		)
+		let sameReleaseMatches = stableMarker ? peers.filter { peer in
+			guard peer.currentVersion == app.currentVersion,
+				ZagVariantLineageResolver.hasStableVariantMarker(
+					trackedVariant: trackedVariant,
+					candidateVariant: variantIdentity(for: peer)
+				)
+			else { return false }
+			return true
+		} : []
+		// Multiple packages for the same version with the same visible marker
+		// are not evidence that those IPA binaries are interchangeable.
+		let packageURLs = Set(sameReleaseMatches.compactMap {
+			$0.currentDownloadUrl?.absoluteString
+		})
+		let hasAmbiguousSameRelease = packageURLs.count > 1
+		let stableEvidence = stableMarker && !hasAmbiguousSameRelease
+
+		return ZagVariantLineageResolver.resolve(
+			trackedVariant: trackedVariant,
+			trackedAppName: trackedAppName,
+			trackedRepository: trackedRepository,
+			candidateAppName: app.currentName,
+			candidateVariant: currentIdentity,
+			candidateRepositoryAliases: aliases,
+			sameSourceSameNameCount: peers.count,
+			hasMatchingHistoricalRelease: hasHistory,
+			historicalReleaseMatchCount: historyCount,
+			hasStableVariantEvidence: stableEvidence
+		)
 	}
 
 	static func variantIdentity(for app: ASRepository.App) -> String {

@@ -176,9 +176,16 @@ struct FeatherApp: App {
 final class ZagLaunchGate {
     static let shared = ZagLaunchGate()
     private var completed = false
+    var isFinished: Bool { completed }
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     func waitUntilSplashFinishes() async {
+        // No splash means no playback lifecycle to release the launch gate.
+        // Unblock repository refresh even if the overlay never appears.
+        if !ZagSplashPreferences.isEnabled {
+            finish()
+            return
+        }
         if completed { return }
         await withCheckedContinuation { continuation in
             waiters.append(continuation)
@@ -192,10 +199,15 @@ final class ZagLaunchGate {
         let pending = waiters
         waiters.removeAll()
         pending.forEach { $0.resume() }
+        NotificationCenter.default.post(
+            name: .zagLaunchSplashVisibilityDidChange,
+            object: nil,
+            userInfo: ["visible": false]
+        )
     }
 }
 
-private enum ZagSplashPreferences {
+enum ZagSplashPreferences {
     static let enabledKey = "ZagStore.animatedSplashEnabled"
     static var isEnabled: Bool {
         // Opt-out: existing installations see the animation by default.
@@ -225,7 +237,9 @@ private struct ZagAnimatedLaunchOverlay: View {
 
     var body: some View {
         Group {
-            if enabled && !dismissed {
+            // The launch gate is one-shot for the process lifetime. Changing
+            // Settings must never recreate the video or restart its audio.
+            if enabled && !dismissed && !ZagLaunchGate.shared.isFinished {
                 Group {
                     if playsVideo {
                         ZagCinematicSplashView(
@@ -333,11 +347,6 @@ private struct ZagAnimatedLaunchOverlay: View {
         guard !dismissed else { return }
         dismissed = true
         ZagLaunchGate.shared.finish()
-        NotificationCenter.default.post(
-            name: .zagLaunchSplashVisibilityDidChange,
-            object: nil,
-            userInfo: ["visible": false]
-        )
     }
 }
 

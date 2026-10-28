@@ -66,6 +66,8 @@ struct VariedTabbarView: View {
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
 	@StateObject private var sourcesViewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
+	@StateObject private var pairingCore = ZagRPPairingCore.shared
+	@State private var didStartInitialUpdateRefresh = false
 
 	@FetchRequest(
 		entity: AltSource.entity(),
@@ -103,16 +105,42 @@ struct VariedTabbarView: View {
 				Color.clear
 			}
 		}
-		.task {
-			await ZagLaunchGate.shared.waitUntilSplashFinishes()
-			await updateManager.requestBadgePermission()
-			let refreshStarted = ZagPerformanceMonitor.now()
-			await sourcesViewModel.fetchSources(sources, refresh: true)
-			await MainActor.run {
-				guard !Task.isCancelled else { return }
+		.onAppear {
+			// The initial update refresh belongs to the application, not a
+			// selected tab's SwiftUI .task lifetime. Tab navigation can cancel
+			// .task and leave updates unavailable until Apps is opened.
+			guard !didStartInitialUpdateRefresh else { return }
+			didStartInitialUpdateRefresh = true
+			Task { @MainActor in
+				await ZagLaunchGate.shared.waitUntilSplashFinishes()
+				// Notification permission is optional. It must never delay
+				// catalogue loading or the App Updates popup.
+				let refreshStarted = ZagPerformanceMonitor.now()
+				await sourcesViewModel.fetchSources(sources, refresh: true)
 				ZagPerformanceMonitor.shared.record(.sourcesRefresh, since: refreshStarted)
 				ZagPerformanceMonitor.shared.markSourcesCompleted()
+				await updateManager.requestBadgePermission()
 			}
+		}
+		.onChange(of: pairingCore.installedAppsState) { state in
+			// An inventory query can complete after the startup refresh has
+			// timed out and published Signed fallback. Promote it to the
+			// authoritative update snapshot without opening the Apps tab.
+			guard case .loaded = state,
+				!sourcesViewModel.isRefreshing,
+				!updateManager.isRepositoryRefreshInProgress else { return }
+			let configuredURLs = Set(
+				Storage.shared.getSources().compactMap { $0.sourceURL?.absoluteString }
+			)
+			let activeSources = sourcesViewModel.sources.filter { source, _ in
+				guard let url = source.sourceURL?.absoluteString else { return false }
+				return configuredURLs.contains(url)
+			}
+			let loadedURLs = Set(
+				activeSources.keys.compactMap { $0.sourceURL?.absoluteString }
+			)
+			guard configuredURLs == loadedURLs else { return }
+			updateManager.refresh(repositories: Array(activeSources.values))
 		}
 		.onReceive(sourcesViewModel.$sources) { _ in
 			// SourcesViewModel commits repository and update state together.
@@ -189,7 +217,7 @@ private final class ZagProfileBadgeCoordinator {
     private var visibleStates: [ObjectIdentifier: Bool] = [:]
     private var updatesSheetPresented = false
     private var importBannerPresented = false
-    private var launchSplashVisible = true
+    private var launchSplashVisible = ZagSplashPreferences.isEnabled
     // The avatar can move when iOS inserts a temporary transfer banner.
     // Window-level labels must follow its presentation position, not only
     // SwiftUI layout passes (which may not run during ancestor animation).
@@ -451,7 +479,7 @@ struct ZagAccountPopup: View {
     @State private var accountPath: [AccountDestination] = []
 
     private enum AccountDestination: Hashable {
-        case profile, updates, certificates, installation, signing, notifications, devices, selfUpdate, settings
+        case profile, updates, certificates, installation, signing, notifications, devices, activity, selfUpdate, settings
     }
 
     private var themeTint: Color { Color(hex: themeColorHex) }
@@ -489,7 +517,7 @@ struct ZagAccountPopup: View {
                             .frame(width: 54)
                         Text("Account Type")
                         Spacer()
-                        Text("Standard")
+                        Text("Guest")
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
@@ -520,6 +548,9 @@ struct ZagAccountPopup: View {
                     }
                     NavigationLink(value: AccountDestination.devices) {
                         Text("Devices")
+                    }
+                    NavigationLink(value: AccountDestination.activity) {
+                        Text("Activity")
                     }
                     NavigationLink(value: AccountDestination.notifications) {
                         Text("Notifications")
@@ -577,6 +608,7 @@ struct ZagAccountPopup: View {
                     case .signing: ConfigurationView()
                     case .notifications: ZagAccountNotificationsView()
                     case .devices: ZagDevicesPage().tint(themeTint)
+                    case .activity: TabEnum.view(for: .activity).tint(themeTint)
                     case .selfUpdate: ZagSelfUpdateStatusView()
                     case .settings:
                         SettingsView(

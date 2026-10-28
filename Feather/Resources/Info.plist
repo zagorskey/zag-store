@@ -41,6 +41,54 @@
 	<dict>
 		<key>CFBundleAlternateIcons</key>
 		<dict>
+            <key>ZagGBP</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array><string>ZagGBP</string></array>
+                <key>UIPrerenderedIcon</key><false/>
+            </dict>
+            <key>ZagMoney</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array><string>ZagMoney</string></array>
+                <key>UIPrerenderedIcon</key><false/>
+            </dict>
+            <key>ZagNeonFlux</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>ZagNeonFlux</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>ZagMatrix</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>ZagMatrix</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+            <key>ZagClearGlass</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>ZagClearGlass</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <false/>
+            </dict>
+			<key>ZagFirewood</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>ZagFirewood</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
 			<key>Donor</key>
 			<dict>
 				<key>CFBundleIconFiles</key>

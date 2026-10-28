@@ -570,18 +570,32 @@ struct DownloadButtonView: View {
 		_installInline(signed)
 	}
 
-	private func _hasInstalledTrackedAlternative(bundleID: String) -> Bool {
+	private func _trackedVariantDecision(bundleID: String) -> ZagVariantLineageResolver.Decision? {
 		let defaults = UserDefaults.standard
-		let variantOrigins = defaults.dictionary(
+		let variants = defaults.dictionary(
 			forKey: "zagStore.repositoryVariantOrigins"
 		) as? [String: String] ?? [:]
+		guard let trackedVariant = variants[bundleID] else { return nil }
+		let appOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryAppOrigins"
+		) as? [String: String] ?? [:]
+		let repositoryOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
+		return UpdateManager.variantLineageDecision(
+			for: app,
+			in: source,
+			trackedVariant: trackedVariant,
+			trackedAppName: appOrigins[bundleID],
+			trackedRepository: repositoryOrigins[bundleID]
+		)
+	}
 
-		guard
-			let trackedVariant = variantOrigins[bundleID],
-			trackedVariant != UpdateManager.variantIdentity(for: app)
-		else {
-			return false
-		}
+	private func _hasInstalledTrackedAlternative(bundleID: String) -> Bool {
+		let defaults = UserDefaults.standard
+		guard let decision = _trackedVariantDecision(bundleID: bundleID),
+			!decision.isMatch
+		else { return false }
 
 		// The device inventory is authoritative when available. A tracked
 		// lineage is also sufficient here because it is only written after a
@@ -599,12 +613,8 @@ struct DownloadButtonView: View {
 
 	private func _matchesTrackedVariant(bundleID: String) -> Bool {
 		let defaults = UserDefaults.standard
-		let variantOrigins = defaults.dictionary(
-			forKey: "zagStore.repositoryVariantOrigins"
-		) as? [String: String] ?? [:]
-
-		if let trackedVariant = variantOrigins[bundleID] {
-			return trackedVariant == UpdateManager.variantIdentity(for: app)
+		if let decision = _trackedVariantDecision(bundleID: bundleID) {
+			return decision.isMatch
 		}
 
 		let appOrigins = defaults.dictionary(

@@ -18,6 +18,7 @@ struct ExtendedTabbarView: View {
 	@StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+	@AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
 	
 	@State private var _isAddingPresenting = false
@@ -86,6 +87,16 @@ struct ExtendedTabbarView: View {
                             }
                         }
                     }
+                } else if tab == .settings {
+                    Tab(value: tab.rawValue) {
+                        TabEnum.view(for: tab)
+                    } label: {
+                        Label {
+                            Text(tab.title)
+                        } icon: {
+                            ZagPrimaryTabIcons.label(for: .settings)
+                        }
+                    }
                 } else {
                     Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
                         TabEnum.view(for: tab)
@@ -135,14 +146,19 @@ struct ExtendedTabbarView: View {
 		}
 		.tabViewStyle(.sidebarAdaptable)
 		.tabViewCustomization($customization)
+		.onChange(of: dockTabs) { _ in
+            if !ZagDockConfiguration.tabs.contains(TabEnum(rawValue: selectedTabRawValue) ?? .discover) {
+                selectedTabRawValue = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+            }
+        }
 		.onOpenURL { url in
             if let tab = TabEnum.tab(for: url) {
-                selectedTab.wrappedValue = tab.rawValue
+                selectedTab.wrappedValue = (ZagDockConfiguration.tabs.contains(tab) ? tab : (ZagDockConfiguration.tabs.first ?? .discover)).rawValue
             }
         }
 		.onReceive(NotificationCenter.default.publisher(for: .zagStoreRouteRequested)) { note in
 			guard let route = note.object as? ZagStoreRoute else { return }
-			selectedTab.wrappedValue = route.tab
+			selectedTab.wrappedValue = (ZagDockConfiguration.tabs.contains(TabEnum(rawValue: route.tab) ?? .discover) ? route.tab : (ZagDockConfiguration.tabs.first ?? .discover).rawValue)
 		}
 		.sheet(isPresented: $_isAddingPresenting) {
 			SourcesAddView()

@@ -228,12 +228,16 @@ struct LibraryView: View {
         let signed = filteredAndSortedApps(from: _signedApps).filter {
             $0.identifier != Bundle.main.bundleIdentifier
         }
-        let installed = signed.filter {
-            guard let id = $0.identifier, !id.isEmpty else { return false }
-            return managed.contains(id)
+        let installed = signed.filter { app in
+            guard let id = app.identifier, !id.isEmpty else { return false }
+            return managed.contains(id) &&
+                !ZagUpdateTransactionManager.shared.isPendingInstallationSigned(uuid: app.uuid)
         }
         let signedOnly = signed.filter { app in
             if let uuid = app.uuid, _transactionSignedUUIDs.contains(uuid) { return false }
+            if ZagUpdateTransactionManager.shared.isPendingInstallationSigned(uuid: app.uuid) {
+                return true
+            }
             guard let id = app.identifier, !id.isEmpty else { return true }
             return !managed.contains(id)
         }
@@ -286,7 +290,8 @@ struct LibraryView: View {
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return false
 			}
-			return _managedInstalledBundleIDs.contains(identifier)
+			return _managedInstalledBundleIDs.contains(identifier) &&
+				!ZagUpdateTransactionManager.shared.isPendingInstallationSigned(uuid: app.uuid)
 		}
 	}
 
@@ -304,6 +309,9 @@ struct LibraryView: View {
 				return false
 			}
 
+			if ZagUpdateTransactionManager.shared.isPendingInstallationSigned(uuid: app.uuid) {
+				return true
+			}
 			guard let identifier = app.identifier, !identifier.isEmpty else {
 				return true
 			}
@@ -1312,9 +1320,9 @@ extension LibraryView {
 			return false
 		}
 
-		if let encoded = try? JSONEncoder().encode(installedBundleIDs) {
-			_managedInstalledBundleIDsData = encoded
-		}
+		// Confirm only the app we just installed. Device inventory is not
+		// evidence that unrelated App Store apps are Zag Store-managed.
+		_markManagedAppInstalled(app)
 		_updateRepositoryUpdates()
 		_removeSupersededInstalledSignedCopies(keeping: app)
 
@@ -1336,7 +1344,10 @@ extension LibraryView {
 				DispatchQueue.main.async {
 					switch result {
 					case .success(let installedBundleIDs):
-						if let encoded = try? JSONEncoder().encode(installedBundleIDs) {
+						// Reconcile existing markers only. Do not adopt every
+						// App Store app returned by installation_proxy.
+						let retained = _managedInstalledBundleIDs.intersection(installedBundleIDs)
+						if let encoded = try? JSONEncoder().encode(retained) {
 							_managedInstalledBundleIDsData = encoded
 						}
 						_updateRepositoryUpdates()
@@ -2229,6 +2240,8 @@ struct ZagUpdateRowSnapshot: Codable, Identifiable {
 	let releaseNotes: String?
 	let metadataText: String?
 	let version: String
+	// Optional for compatibility with snapshots saved by older Zag Store builds.
+	let build: String?
 	let completedAt: Date?
 
 	static let availableKey = "ZagStore.availableUpdateRows"
@@ -2378,6 +2391,7 @@ private struct ZagUpdateRow: View {
 			releaseNotes: releaseNotes,
 			metadataText: releaseMetadataText,
 			version: update.availableVersion,
+			build: update.availableBuild,
 			completedAt: mode == .recentlyUpdated ? Date() : nil
 		)
 	}
@@ -2654,7 +2668,10 @@ struct ZagUpdatesPopup: View {
 	}
 
 	private var displayedAvailableCount: Int {
-		updateManager.updateCount
+		// Popup rows and popup count must describe the same collection.
+		// Preserve the persisted badge while the first check is pending.
+		updateManager.hasCompletedUpdateCheck
+			? availableUpdates.count : updateManager.updateCount
 	}
 
 	var body: some View {
@@ -2781,7 +2798,9 @@ struct ZagUpdatesPopup: View {
 				_cacheAvailableRows()
 			}
 			.onReceive(updateManager.$updates) { _ in
-				_cacheAvailableRows()
+				// @Published sends before the stored value changes. Cache after
+				// publication, or a previous update snapshot may be saved again.
+				DispatchQueue.main.async { _cacheAvailableRows() }
 			}
 			.animation(.easeInOut(duration: 0.35), value: displayedAvailableCount)
 			.navigationTitle(.localized("App Updates"))
@@ -2897,12 +2916,15 @@ private extension ZagUpdatesPopup {
 			releaseNotes: notes,
 			metadataText: metadata.isEmpty ? nil : metadata.joined(separator: " • "),
 			version: update.availableVersion,
+			build: update.availableBuild,
 			completedAt: completedAt
 		)
 	}
 
 	func _cacheAvailableRows() {
-		guard !updates.isEmpty else { return }
+		// Do not discard the cached cold-start rows until reconciliation is
+		// authoritative. A completed empty result must clear a stale cache.
+		guard updateManager.hasCompletedUpdateCheck else { return }
 		let rows = availableUpdates.map { _snapshot(for: $0) }
 		cachedAvailableRows = rows
 		ZagUpdateRowSnapshot.save(rows, key: ZagUpdateRowSnapshot.availableKey)
@@ -3354,6 +3376,89 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 	private var pendingBySignedUUID: [String: PendingUpdate] = [:]
 
+	// Signing creates a Core Data record before the device has installed it.
+	// Keep the previously installed release as fallback evidence until Gate4
+	// confirms success. This is persisted so a failed install stays failed
+	// across a cold launch instead of appearing as an already-installed update.
+	struct InstallationBaseline: Codable {
+		let bundleID: String
+		let appName: String
+		let installedVersion: String
+		let installedBuild: String?
+		let targetVersion: String
+		let stagedSignedUUIDs: [String]
+	}
+	private static let installationBaselinesKey = "zagStore.pendingInstallationBaselines.v1"
+	private lazy var cachedBaselines: [String: InstallationBaseline] = {
+		guard let data = UserDefaults.standard.data(forKey: Self.installationBaselinesKey),
+			let stored = try? JSONDecoder().decode([String: InstallationBaseline].self, from: data)
+		else { return [:] }
+		return stored
+	}()
+	private lazy var stagedSignedUUIDSet: Set<String> = Set(
+		cachedBaselines.values.flatMap { $0.stagedSignedUUIDs }
+	)
+
+	private func baselines() -> [String: InstallationBaseline] {
+		cachedBaselines
+	}
+
+	func pendingInstallationBaseline(bundleID: String) -> InstallationBaseline? {
+		baselines()[bundleID]
+	}
+
+	func isPendingInstallationSigned(uuid: String?) -> Bool {
+		guard let uuid else { return false }
+		return stagedSignedUUIDSet.contains(uuid)
+	}
+
+	private func recordPendingInstallation(
+		_ update: UpdateManager.AvailableUpdate,
+		signedUUID: String
+	) {
+		guard let bundleID = update.app.id, !bundleID.isEmpty else { return }
+		var stored = baselines()
+		// Preserve the first known installed release through multiple retries,
+		// while tracking every prepared IPA that has never been installed.
+		if let previous = stored[bundleID] {
+			var uuids = previous.stagedSignedUUIDs
+			if !uuids.contains(signedUUID) { uuids.append(signedUUID) }
+			stored[bundleID] = InstallationBaseline(
+				bundleID: bundleID,
+				appName: previous.appName,
+				installedVersion: previous.installedVersion,
+				installedBuild: previous.installedBuild,
+				targetVersion: update.availableVersion,
+				stagedSignedUUIDs: uuids
+			)
+		} else {
+			stored[bundleID] = InstallationBaseline(
+				bundleID: bundleID,
+				appName: update.app.currentName,
+				installedVersion: update.installedVersion,
+				installedBuild: update.installedBuild,
+				targetVersion: update.availableVersion,
+				stagedSignedUUIDs: [signedUUID]
+			)
+		}
+		cachedBaselines = stored
+		stagedSignedUUIDSet = Set(stored.values.flatMap { $0.stagedSignedUUIDs })
+		if let data = try? JSONEncoder().encode(stored) {
+			UserDefaults.standard.set(data, forKey: Self.installationBaselinesKey)
+		}
+	}
+
+	private func clearPendingInstallation(bundleID: String?) {
+		guard let bundleID else { return }
+		var stored = baselines()
+		guard stored.removeValue(forKey: bundleID) != nil else { return }
+		cachedBaselines = stored
+		stagedSignedUUIDSet = Set(stored.values.flatMap { $0.stagedSignedUUIDs })
+		if let data = try? JSONEncoder().encode(stored) {
+			UserDefaults.standard.set(data, forKey: Self.installationBaselinesKey)
+		}
+	}
+
     private init() {
         if let data = UserDefaults.standard.data(forKey: historyKey),
            let records = try? JSONDecoder().decode([ActivityRecord].self, from: data) {
@@ -3371,6 +3476,16 @@ final class ZagUpdateTransactionManager: ObservableObject {
 	) {
 		rememberName(update)
 		guard stages[update.id] == nil || isRetryable(update) else {
+			return
+		}
+
+		// Retry the signed package after a transport failure. Re-downloading
+		// and signing would create yet another false installed-state record.
+		if isRetryable(update),
+			let pending = pendingBySignedUUID.values.first(where: { $0.updateID == update.id }),
+			signedApp(uuid: pending.signedUUID) != nil {
+			stages[update.id] = .readyToInstall
+			completion(.success(pending.signedUUID))
 			return
 		}
 
@@ -3470,6 +3585,12 @@ final class ZagUpdateTransactionManager: ObservableObject {
 					signedUUID: signingHandler.uuid,
 					supersededSignedUUIDs: supersededSignedUUIDs
 				)
+				recordPendingInstallation(update, signedUUID: signingHandler.uuid)
+				// New signed records must not make the device look updated before
+				// Gate4 confirms the installation.
+				UpdateManager.shared.refresh(
+					repositories: Array(SourcesViewModel.shared.sources.values)
+				)
 
 				try? FileManager.default.removeItem(at: localURL)
 
@@ -3534,6 +3655,16 @@ final class ZagUpdateTransactionManager: ObservableObject {
 			return
 		}
 
+		if let bundleID = signedApp(uuid: signedUUID)?.identifier,
+			let baseline = pendingInstallationBaseline(bundleID: bundleID) {
+			for staleUUID in baseline.stagedSignedUUIDs where staleUUID != signedUUID {
+				if let stale = signedApp(uuid: staleUUID) {
+					Storage.shared.deleteApp(for: stale)
+				}
+			}
+		}
+		clearPendingInstallation(bundleID: signedApp(uuid: signedUUID)?.identifier)
+
 		if let imported = importedApp(uuid: pending.importedUUID) {
 			Storage.shared.deleteApp(for: imported)
 		}
@@ -3564,6 +3695,10 @@ final class ZagUpdateTransactionManager: ObservableObject {
         rememberName(update)
 		stages[update.id] = .failed(error.localizedDescription)
         recordActivity(updateID: update.id, status: "Failed", detail: error.localizedDescription)
+		// Do not promote the staged Signed record into installed state.
+		UpdateManager.shared.refresh(
+			repositories: Array(SourcesViewModel.shared.sources.values)
+		)
 	}
 
 	func reset(_ update: UpdateManager.AvailableUpdate) {

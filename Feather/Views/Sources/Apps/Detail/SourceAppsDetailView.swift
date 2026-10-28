@@ -485,7 +485,7 @@ private extension SourceAppsDetailView {
 		let variantOrigins = defaults.dictionary(
 			forKey: "zagStore.repositoryVariantOrigins"
 		) as? [String: String] ?? [:]
-		guard variantOrigins[bundleID] != nil else { return nil }
+		guard let trackedVariant = variantOrigins[bundleID] else { return nil }
 
 		let appOrigins = defaults.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
@@ -494,9 +494,19 @@ private extension SourceAppsDetailView {
 			return .localized("Tracked Variant")
 		}
 
-		// Prefer the human-readable variant description from the currently
-		// opened repository entry when it is the tracked lineage.
-		if UpdateManager.variantIdentity(for: app) == variantOrigins[bundleID] {
+		// A new release can change the release notes without changing variants.
+		// Use the same conservative lineage decision as Updates and Get/Update.
+		let repositoryOrigins = defaults.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String] ?? [:]
+		let decision = UpdateManager.variantLineageDecision(
+			for: app,
+			in: source,
+			trackedVariant: trackedVariant,
+			trackedAppName: trackedName,
+			trackedRepository: repositoryOrigins[bundleID]
+		)
+		if decision.isMatch {
 			let description =
 				app.currentAppVersion?.localizedDescription ??
 				app.versionDescription ??

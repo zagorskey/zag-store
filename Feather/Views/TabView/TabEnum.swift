@@ -11,6 +11,46 @@ import NukeUI
 import AltSourceKit
 import UIKit
 
+enum ZagDockConfiguration {
+    static let storageKey = "ZagStore.navigation.dockTabs"
+    static let defaults: [TabEnum] = [.discover, .sources, .library, .games, .activity]
+    static let choices: [TabEnum] = [.discover, .sources, .library, .games, .activity, .devices, .settings]
+
+    static var tabs: [TabEnum] {
+        guard let saved = UserDefaults.standard.string(forKey: storageKey) else { return defaults }
+        let values = saved.split(separator: ",").compactMap { TabEnum(rawValue: String($0)) }
+        let unique = values.reduce(into: [TabEnum]()) { result, tab in
+            if choices.contains(tab) && !result.contains(tab) && result.count < 5 { result.append(tab) }
+        }
+        return unique.isEmpty ? defaults : unique
+    }
+
+    static func save(_ tabs: [TabEnum]) {
+        let valid = tabs.filter { choices.contains($0) }
+        guard !valid.isEmpty, valid.count <= 5, Set(valid).count == valid.count else { return }
+        UserDefaults.standard.set(valid.map(\.rawValue).joined(separator: ","), forKey: storageKey)
+        reconcileNavigation()
+    }
+
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        reconcileNavigation()
+    }
+
+    static func reconcileNavigation() {
+        let defaults = UserDefaults.standard
+        let allowed = tabs
+        let fallback = allowed.first?.rawValue ?? TabEnum.discover.rawValue
+        for key in [ZagPageStartupPolicy.defaultStartPageKey, ZagPageStartupPolicy.lastPageKey] {
+            guard let stored = defaults.string(forKey: key) else { continue }
+            let normalized = stored == "home" ? TabEnum.discover.rawValue : stored
+            if !allowed.contains(where: { $0.rawValue == normalized }) {
+                defaults.set(fallback, forKey: key)
+            }
+        }
+    }
+}
+
 enum ZagPageStartupPolicy {
 	static let rememberLastPageKey = "zagStore.navigation.rememberLastPage"
 	static let defaultStartPageKey = "zagStore.navigation.defaultStartPage"
@@ -31,7 +71,7 @@ enum ZagPageStartupPolicy {
 			: defaults.string(forKey: defaultStartPageKey)
 		let migrated = rawValue == "home" ? TabEnum.discover.rawValue : rawValue
         let tab = TabEnum(rawValue: migrated ?? TabEnum.sources.rawValue) ?? .sources
-        return TabEnum.defaultTabs.contains(tab) ? tab : .sources
+        return ZagDockConfiguration.tabs.contains(tab) ? tab : (ZagDockConfiguration.tabs.first ?? .discover)
 	}
 }
 
@@ -58,6 +98,7 @@ enum TabEnum: String, CaseIterable, Hashable {
         case "activity": return .activity
         case "games": return .games
         case "devices": return .devices
+        case "settings": return .settings
         default: return nil
         }
     }
@@ -102,15 +143,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		}
 	}
 	
-	static var defaultTabs: [TabEnum] {
-		return [
-			.discover,
-			.sources,
-			.library,
-			.games,
-			.activity
-		]
-	}
+	static var defaultTabs: [TabEnum] { ZagDockConfiguration.tabs }
 	
 	static var customizableTabs: [TabEnum] {
 		return [
@@ -839,6 +872,11 @@ private struct ZagGamesPage: View {
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
     @State private var selectedCategory = "Games"
+    @State private var showGameLibrary = false
+    @State private var showCollections = false
+    @State private var showGameFilters = false
+    @State private var selectedGameRepository = "All"
+    @State private var selectedGameGenre = "All"
     @State private var searchScope = "All"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
@@ -958,10 +996,43 @@ private struct ZagGamesPage: View {
     }
 
     private var games: [SourceAppsView.SourceAppRoute] {
-        guard !searchText.isEmpty else { return indexedGames }
-        return indexedGames.filter {
-            matchesSearch($0)
+        indexedGames.filter { entry in
+            (searchText.isEmpty || matchesSearch(entry))
+            && (selectedGameRepository == "All" || entry.source.name == selectedGameRepository)
+            && (selectedGameGenre == "All" || gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") == selectedGameGenre)
         }
+    }
+
+    private var installedGames: [SourceAppsView.SourceAppRoute] {
+        indexedGames.filter { entry in
+            entry.app.id.map { UIApplication.isAppInstalled(with: $0) == true } ?? false
+        }
+    }
+
+    private var gameRepositories: [String] {
+        Array(Set(indexedGames.compactMap { $0.source.name })).sorted()
+    }
+
+    private let gameGenres = ["Puzzle", "Racing", "Strategy", "RPG", "Arcade", "Adventure", "Simulation", "Sports"]
+
+    private func gameListRow(_ entry: SourceAppsView.SourceAppRoute) -> some View {
+        Button {
+            showGameLibrary = false
+            showCollections = false
+            selectedApp = entry
+        } label: {
+            HStack(spacing: 12) {
+                ZagRepositoryAppIconView(app: entry.app, size: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.app.currentName).font(.headline).foregroundStyle(.primary)
+                    Text(entry.source.name ?? "Repository")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // A card is eligible only after an actual screenshot passes download
@@ -1113,18 +1184,31 @@ private struct ZagGamesPage: View {
         }
     }
 
+    // Search scopes are presented by UISearchController's native scope bar.
+    // Use that same UIKit component for the inline Games categories instead
+    // of SwiftUI's differently styled segmented Picker.
+    private var gamesCategorySwitcher: some View {
+        ZagGamesSearchScopeBar(selection: $selectedCategory)
+            .frame(maxWidth: .infinity)
+            // UISearchBar's native scope buttons occupy the bottom of its
+            // 76-point bounds; the hidden search row consumes the top.
+            // Shift the whole bar up by that unused row while reserving only
+            // the visible scope control's height in the Games stack.
+            .frame(height: 76)
+            // Equalize the visible gap above and below the native scope tabs.
+            // Shift the control itself without changing the Featured layout.
+            .offset(y: -65)
+            .frame(height: 21, alignment: .top)
+            .accessibilityLabel("Gaming Category")
+    }
+
     var body: some View {
         NBNavigationView("Games") {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    Picker("Gaming Category", selection: $selectedCategory) {
-                        Text("Games").tag("Games")
-                        Text("Emulators").tag("Emulators")
+                    if !searchFieldFocused {
+                        gamesCategorySwitcher
                     }
-                    .pickerStyle(.segmented)
-                    .opacity(searchFieldFocused ? 0 : 1)
-                    .frame(height: searchFieldFocused ? 0 : nil)
-                    .clipped()
 
                     if !searchFieldFocused && selectedCategory == "Games" &&
                         !indexedGames.isEmpty {
@@ -1363,9 +1447,161 @@ private struct ZagGamesPage: View {
                 }
             }
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button { showGameLibrary = true } label: {
+                        ZagPrimaryTabIcons.label(for: .games)
+                            .frame(width: 30, height: 30)
+                    }
+                        .accessibilityLabel("Game Library")
+                    Button { showCollections = true } label: {
+                        ZagPrimaryTabIcons.label(for: .collections)
+                            .frame(width: 30, height: 30)
+                    }
+                        .accessibilityLabel("Game Collections")
+                }
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                ToolbarItem(placement: .topBarTrailing) { ZagProfileToolbarButton() }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showGameFilters = true } label: { Image(systemName: "slider.horizontal.3") }
+                        .accessibilityLabel("Game Filters")
+                    ZagProfileToolbarButton()
+                        .tint(.primary)
+                        .padding(.trailing, -2)
+                }
             }
+            .sheet(isPresented: $showGameLibrary) {
+                NavigationStack {
+                    List {
+                        ForEach(installedGames, id: \.id) { entry in gameListRow(entry) }
+                    }
+                    .overlay {
+                        if installedGames.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "gamecontroller")
+                                    .font(.system(size: 32, weight: .light))
+                                    .foregroundStyle(.secondary)
+                                Text("No Installed Games").font(.headline)
+                                Text("Installed games from your loaded repositories will appear here.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(24)
+                        }
+                    }
+                    .navigationTitle("Game Library")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showGameLibrary = false }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showCollections) {
+                NavigationStack {
+                    List {
+                        ForEach(gameGenres, id: \.self) { genre in
+                            let entries = indexedGames.filter {
+                                gameGenre($0.app.currentDescription ?? $0.app.localizedDescription ?? "") == genre
+                            }
+                            if !entries.isEmpty {
+                                Section(genre) {
+                                    ForEach(entries.prefix(12), id: \.id) { entry in gameListRow(entry) }
+                                }
+                            }
+                        }
+                    }
+                    .overlay {
+                        if indexedGames.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "trophy")
+                                    .font(.system(size: 32, weight: .light))
+                                    .foregroundStyle(.secondary)
+                                Text("No Collections Yet").font(.headline)
+                                Text("Collections are assembled from games in your repositories.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(24)
+                        }
+                    }
+                    .navigationTitle("Collections")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showCollections = false }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showGameFilters) {
+                NavigationStack {
+                    Form {
+                        Picker("Repository", selection: $selectedGameRepository) {
+                            Text("All Repositories").tag("All")
+                            ForEach(gameRepositories, id: \.self) { name in Text(name).tag(name) }
+                        }
+                        Picker("Genre", selection: $selectedGameGenre) {
+                            Text("All Genres").tag("All")
+                            ForEach(gameGenres, id: \.self) { genre in Text(genre).tag(genre) }
+                        }
+                        Button("Reset Filters") {
+                            selectedGameRepository = "All"
+                            selectedGameGenre = "All"
+                        }
+                    }
+                    .navigationTitle("Game Filters")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showGameFilters = false }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Native UISearchBar scope buttons, matching the search UI's own control.
+struct ZagGamesSearchScopeBar: UIViewRepresentable {
+    @Binding var selection: String
+    var titles: [String] = ["Games", "Emulators"]
+    var values: [String] = ["Games", "Emulators"]
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection, values: values) }
+
+    func makeUIView(context: Context) -> UISearchBar {
+        let bar = UISearchBar(frame: .zero)
+        bar.searchBarStyle = .minimal
+        bar.showsScopeBar = true
+        bar.scopeButtonTitles = titles
+        bar.selectedScopeButtonIndex = values.firstIndex(of: selection) ?? 0
+        bar.delegate = context.coordinator
+        // The search field is not part of this inline scope control.
+        bar.searchTextField.isHidden = true
+        // The UIKit search bar normally reserves an invisible search-field
+        // row above the scope buttons. Translate the scope buttons into the
+        // compact representable bounds without shifting subsequent content.
+        bar.clipsToBounds = true
+        bar.backgroundImage = UIImage()
+        return bar
+    }
+
+    func updateUIView(_ bar: UISearchBar, context: Context) {
+        context.coordinator.selection = $selection
+        context.coordinator.values = values
+        bar.selectedScopeButtonIndex = values.firstIndex(of: selection) ?? 0
+    }
+
+    final class Coordinator: NSObject, UISearchBarDelegate {
+        var selection: Binding<String>
+        var values: [String]
+        init(selection: Binding<String>, values: [String]) {
+            self.selection = selection
+            self.values = values
+        }
+        func searchBar(_ searchBar: UISearchBar, selectedScopeButtonIndexDidChange selectedScope: Int) {
+            guard values.indices.contains(selectedScope) else { return }
+            selection.wrappedValue = values[selectedScope]
         }
     }
 }
@@ -1464,9 +1700,13 @@ private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
     @State private var historyFilter = "All"
+    @AppStorage("ZagStore.activity.sortOrder") private var sortOrder = "Newest First"
+    @State private var showStatistics = false
     @State private var selectedHistoryRecord: ZagUpdateTransactionManager.ActivityRecord?
     @State private var showRepositoryDetails = false
     @State private var historySearchText = ""
+    @FocusState private var searchFieldFocused: Bool
+    @State private var dictationAvailable = false
     @FetchRequest(
         entity: AltSource.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)]
@@ -1491,15 +1731,44 @@ private struct ZagActivityPage: View {
         }
     }
 
+    private func probeSystemDictation() {
+        guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+              cls.responds(to: NSSelectorFromString("sharedInstance")),
+              let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+        else {
+            dictationAvailable = false
+            return
+        }
+        dictationAvailable = controller.responds(to: NSSelectorFromString("startDictation"))
+    }
+
+    private func startDictationFromSearchMic() {
+        searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard let cls = NSClassFromString("UIDictationController") as? NSObject.Type,
+                  cls.responds(to: NSSelectorFromString("sharedInstance")),
+                  let controller = cls.perform(NSSelectorFromString("sharedInstance"))?.takeUnretainedValue() as? NSObject
+            else { return }
+            let preheat = NSSelectorFromString("preheatIfNecessary")
+            if controller.responds(to: preheat) { _ = controller.perform(preheat) }
+            let start = NSSelectorFromString("startDictation")
+            if controller.responds(to: start) { _ = controller.perform(start) }
+        }
+    }
+
     private var filteredHistory: [ZagUpdateTransactionManager.ActivityRecord] {
         let statusFiltered = consolidatedHistory.filter { historyFilter == "All" || $0.status == historyFilter }
         let query = historySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return statusFiltered }
-        return statusFiltered.filter { record in
+        let searched = query.isEmpty ? statusFiltered : statusFiltered.filter { record in
             (record.appName?.localizedCaseInsensitiveContains(query) ?? false)
             || record.updateID.localizedCaseInsensitiveContains(query)
             || (record.detail?.localizedCaseInsensitiveContains(query) ?? false)
             || record.status.localizedCaseInsensitiveContains(query)
+        }
+        switch sortOrder {
+        case "Oldest First": return searched.sorted { $0.timestamp < $1.timestamp }
+        case "App Name": return searched.sorted { ($0.appName ?? $0.updateID).localizedStandardCompare($1.appName ?? $1.updateID) == .orderedAscending }
+        default: return searched.sorted { $0.timestamp > $1.timestamp }
         }
     }
 
@@ -1590,6 +1859,7 @@ private struct ZagActivityPage: View {
                     }
                     }
                     if !updateTransactions.activityHistory.isEmpty {
+                        // Same 12-point section rhythm as Games > Featured.
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text("History").font(.title2.bold())
@@ -1598,33 +1868,21 @@ private struct ZagActivityPage: View {
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
-                            Picker("History Filter", selection: $historyFilter) {
-                                Text("All").tag("All")
-                                Text("Installed").tag("Installed")
-                                Text("Signed").tag("Signed")
-                                Text("Prepared").tag("Ready to Install")
-                                Text("Failed").tag("Failed")
-                            }
-                            .pickerStyle(.segmented)
-                            HStack(spacing: 10) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                TextField("Search activity", text: $historySearchText)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                if !historySearchText.isEmpty {
-                                    Button {
-                                        historySearchText = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 13)
-                            .frame(height: 42)
-                            .background(Color.secondary.opacity(0.085), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            ZagGamesSearchScopeBar(
+                                selection: $historyFilter,
+                                titles: ["All", "Installed", "Signed", "Prepared", "Failed"],
+                                values: ["All", "Installed", "Signed", "Ready to Install", "Failed"]
+                            )
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 76)
+                            .offset(y: -65)
+                            .frame(height: 21, alignment: .top)
+                            // The embedded UISearchBar's visible capsule is
+                            // asymmetrical within its layout bounds. Compensate
+                            // locally while retaining Featured's 12-pt spacing.
+                            .padding(.top, 12)
+                            .padding(.bottom, 4)
+                            .accessibilityLabel("History Filter")
                             LazyVStack(spacing: 0) {
                                 ForEach(filteredHistory) { record in
                                     Button {
@@ -1825,9 +2083,71 @@ private struct ZagActivityPage: View {
                     }
                 }
             }
+            .searchable(text: $historySearchText, placement: .platform(), prompt: Text("Search Activity"))
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Search Activity",
+                    activePrompt: "Search Activity"
+                )
+                .frame(width: 0, height: 0)
+            }
+            .onAppear(perform: probeSystemDictation)
+            .sheet(isPresented: $showStatistics) {
+                NavigationStack {
+                    List {
+                        Section("Operations") {
+                            LabeledContent("Total", value: consolidatedHistory.count.formatted())
+                            LabeledContent("Installed", value: consolidatedHistory.filter { $0.status == "Installed" }.count.formatted())
+                            LabeledContent("Signed", value: consolidatedHistory.filter { $0.status == "Signed" }.count.formatted())
+                            LabeledContent("Failed", value: consolidatedHistory.filter { $0.status == "Failed" }.count.formatted())
+                        }
+                        Section("Repositories") {
+                            LabeledContent("Loaded", value: loadedRepositories.formatted())
+                            LabeledContent("Indexed Apps", value: loadedApps.formatted())
+                        }
+                    }
+                    .navigationTitle("Activity Statistics")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showStatistics = false }
+                        }
+                    }
+                }
+            }
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Menu {
+                        Picker("Filter Activity", selection: $historyFilter) {
+                            Text("All").tag("All")
+                            Text("Installed").tag("Installed")
+                            Text("Signed").tag("Signed")
+                            Text("Prepared").tag("Ready to Install")
+                            Text("Failed").tag("Failed")
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Filter Activity")
+                    Button { showStatistics = true } label: {
+                        Image(systemName: "chart.bar.xaxis")
+                    }
+                    .accessibilityLabel("Activity Statistics")
+                }
                 ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Sort Activity", selection: $sortOrder) {
+                            Text("Newest First").tag("Newest First")
+                            Text("Oldest First").tag("Oldest First")
+                            Text("App Name").tag("App Name")
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("Sort Activity")
                     ZagProfileToolbarButton()
                         .tint(.primary)
                         .padding(.trailing, -2)
@@ -2125,6 +2445,122 @@ private struct ZagGamesScrollClipModifier: ViewModifier {
             content.scrollClipDisabled()
         } else {
             content
+        }
+    }
+}
+
+ 
+// Native dock editor; its persisted order is shared by both tab-bar implementations.
+struct ZagDockCustomizationView: View {
+    @AppStorage(ZagDockConfiguration.storageKey) private var storedTabs = ""
+    @State private var showLimitAlert = false
+    @State private var showLastTabAlert = false
+    @AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
+    private var themeTint: Color { ZagWideGamutTint.color(hex: themeTintHex) }
+    // Reuse the exact artwork shown in the live dock, rather than TabEnum's
+    // legacy SF Symbol fallbacks. This also keeps the reorder list in sync.
+    @ViewBuilder
+    private func dockIcon(for tab: TabEnum) -> some View {
+        switch tab {
+        case .discover:
+            ZagPrimaryTabIcons.label(for: .discover)
+        case .sources:
+            ZagSourcesTabIcon.label
+        case .games:
+            ZagPrimaryTabIcons.label(for: .games)
+        case .activity:
+            ZagPrimaryTabIcons.label(for: .activity)
+        case .settings:
+            ZagPrimaryTabIcons.label(for: .settings)
+        default:
+            Image(systemName: tab.icon)
+        }
+    }
+
+    private func tintedLabel(_ tab: TabEnum) -> some View {
+        Label { Text(tab.title) } icon: {
+            dockIcon(for: tab)
+                .foregroundStyle(themeTint)
+        }
+    }
+
+    private var active: [TabEnum] { ZagDockConfiguration.tabs }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(ZagDockConfiguration.choices, id: \.rawValue) { tab in
+                    Toggle(isOn: Binding(
+                        get: { active.contains(tab) },
+                        set: { enabled in
+                            var tabs = active
+                            if enabled {
+                                guard tabs.count < 5 else { showLimitAlert = true; return }
+                                tabs.append(tab)
+                            } else {
+                                guard tabs.count > 1 else { showLastTabAlert = true; return }
+                                tabs.removeAll { $0 == tab }
+                            }
+                            ZagDockConfiguration.save(tabs)
+                            storedTabs = tabs.map(\.rawValue).joined(separator: ",")
+                        }
+                    )) {
+                        tintedLabel(tab)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Visible Tabs")
+                    Spacer()
+                    Text("\(active.count) / 5")
+                        .font(.system(size: 15, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(themeTint)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(themeTint.opacity(0.14), in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(themeTint.opacity(0.5), lineWidth: 1)
+                        }
+                }
+            } footer: {
+                Text("Choose up to five destinations. Hidden pages remain accessible through the account menu.")
+            }
+            Section {
+                ForEach(active, id: \.rawValue) { tab in
+                    tintedLabel(tab)
+                }
+                .onMove { indices, destination in
+                    var tabs = active
+                    tabs.move(fromOffsets: indices, toOffset: destination)
+                    ZagDockConfiguration.save(tabs)
+                    storedTabs = tabs.map(\.rawValue).joined(separator: ",")
+                }
+            } header: {
+                Text("Dock Order")
+            } footer: {
+                Text("Drag the handles to rearrange the dock.")
+            }
+            Section {
+                Button {
+                    ZagDockConfiguration.reset()
+                    storedTabs = ZagDockConfiguration.defaults.map(\.rawValue).joined(separator: ",")
+                } label: {
+                    Label { Text("Reset to Default") } icon: { Image(systemName: "arrow.counterclockwise").foregroundStyle(themeTint) }
+                }
+            }
+        }
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Customise Dock")
+        .alert("Dock Limit Reached", isPresented: $showLimitAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You can display up to five tabs. Disable another tab before enabling this one.")
+        }
+        .alert("Keep One Tab", isPresented: $showLastTabAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("At least one destination must remain in the dock.")
         }
     }
 }

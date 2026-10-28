@@ -135,9 +135,9 @@ struct SettingsView: View {
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var _rememberLastPage = true
 	@AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var _defaultStartPage = TabEnum.sources.rawValue
+    @AppStorage(ZagDockConfiguration.storageKey) private var _dockTabs = ""
 	@AppStorage("ZagStore.animatedSplashEnabled") private var _animatedSplashEnabled = true
 	@AppStorage("ZagStore.splashSoundEnabled") private var _splashSoundEnabled = true
-	@State private var _showSplashPreview = false
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey) private var _askCertificateEveryTime = false
 	@AppStorage(ZagCertificateSelection.allowCustomisationKey) private var _allowSigningCustomisation = false
 	@AppStorage(ZagBackgroundUpdateRefresh.enabledKey) private var _backgroundUpdatesEnabled = false
@@ -400,9 +400,6 @@ struct SettingsView: View {
 				NBNavigationView(.localized("Settings")) { settingsContent }
 			}
 		}
-		.fullScreenCover(isPresented: $_showSplashPreview) {
-			ZagCinematicSplashPreview()
-		}
 		.sheet(item: $_selectedCertificateInfo) { cert in
 			CertificatesInfoView(cert: cert)
 		}
@@ -503,7 +500,7 @@ extension SettingsView {
                 case .display:
                     return _settingsSearchMatches("Display Appearance App Icon")
                 case .pages:
-                    return _settingsSearchMatches("Pages Animated Splash Screen Splash Sound Mute Unmute Preview Splash Watch Replay Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Pages Customise Dock Reset to Default Animated Splash Screen Splash Sound Mute Unmute Remember Last Page Default Start Page")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -554,6 +551,9 @@ extension SettingsView {
 
 		case .pages:
 			Section {
+                NavigationLink(destination: ZagDockCustomizationView().zagSettingsDestinationAvatar()) {
+                    Label { Text("Customise Dock") } icon: { Image(systemName: "square.grid.3x2").foregroundStyle(ZagWideGamutTint.color(hex: userTintColor)) }
+                }
 				Toggle(isOn: $_animatedSplashEnabled) {
 					Label("Animated Splash Screen", systemImage: "sparkles.rectangle.stack")
 				}
@@ -561,12 +561,6 @@ extension SettingsView {
 					Label("Splash Sound", systemImage: _splashSoundEnabled ? "speaker.wave.2" : "speaker.slash")
 				}
 				.disabled(!_animatedSplashEnabled)
-				Button {
-					_showSplashPreview = true
-				} label: {
-					Label("Preview Splash", systemImage: "play.rectangle")
-				}
-				.disabled(!ZagCinematicSplashView.available)
 				Toggle(isOn: $_rememberLastPage) {
 					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
 				}
@@ -579,16 +573,23 @@ extension SettingsView {
 					Label("Default Start Page", systemImage: "rectangle.portrait.and.arrow.right")
 				}
 				.disabled(_rememberLastPage)
+                .onChange(of: _dockTabs) { _ in
+                    if !ZagDockConfiguration.tabs.contains(where: { $0.rawValue == _defaultStartPage }) {
+                        _defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+                    }
+                }
 			}
 			header: {
 				Text("Pages")
 			}
 			footer: {
 				Text(
-					_rememberLastPage
-						? "Zag Store will reopen on the last main page you used."
-						: "Choose which main page Zag Store opens on."
-					+ " The cinematic splash plays on cold launches, or anytime using Preview Splash. Tap during playback to skip. Sound can be muted separately; the iPhone silent switch is respected."
+					(
+						_rememberLastPage
+							? "Zag Store will reopen on the last main page you used."
+							: "Choose which main page Zag Store opens on."
+					)
+					+ " The cinematic splash plays only on cold launches. Tap anywhere during video playback to skip. Sound can be muted separately; the iPhone silent switch is respected."
 				)
 			}
 

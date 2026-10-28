@@ -110,7 +110,31 @@ final class ZagRPPairingCore: ObservableObject {
 	@Published private(set) var houseArrestPairingInstallStatus: String?
 	@Published private(set) var houseArrestPairingInstallError: String?
 	private var pendingInstalledApps: [String: InstalledAppInfo] = [:]
+
 	private var installedAppsCompletion: ((Result<Set<String>, Error>) -> Void)?
+	// All native RPPairing workers open their own socket. Never overlap them.
+	// Gate2 is queued behind an automatic inventory request for diagnostics.
+	private var transportOwner: String?
+	private var pendingGate2IP: String?
+	private func acquireTransport(_ operation: String) -> Bool {
+		guard transportOwner == nil else {
+			ZagLogger.shared.warning("RPPairing", "Transport busy | requested=\(operation) owner=\(transportOwner ?? "unknown")")
+			return false
+		}
+		transportOwner = operation
+		ZagLogger.shared.info("RPPairing", "Transport acquired | owner=\(operation)")
+		return true
+	}
+	private func releaseTransport(_ operation: String) {
+		guard transportOwner == operation else { return }
+		transportOwner = nil
+		ZagLogger.shared.info("RPPairing", "Transport released | owner=\(operation)")
+		if let ip = pendingGate2IP {
+			pendingGate2IP = nil
+			gate2State = .idle
+			startGate2Probe(deviceIP: ip)
+		}
+	}
 
 	enum Gate2State: Equatable {
 		case idle
@@ -206,20 +230,25 @@ final class ZagRPPairingCore: ObservableObject {
 		progress: ((Int) -> Void)? = nil,
 		completion: ((Result<Void, Error>) -> Void)? = nil
 	) throws {
-		guard !isGate4Running else {
+		guard !isGate4Running, acquireTransport("Gate4 install") else {
 			throw Gate4InstallError.alreadyRunning
 		}
 		gate4Completion = completion
 		gate4Progress = progress
-		let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-			.appendingPathComponent("ZagStore/Gate4", isDirectory: true)
-		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-		let localURL = directory.appendingPathComponent("gate4-test.ipa")
-		try? FileManager.default.removeItem(at: localURL)
-
-		let scoped = sourceURL.startAccessingSecurityScopedResource()
-		defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
-		try FileManager.default.copyItem(at: sourceURL, to: localURL)
+		let localURL: URL
+		do {
+			let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+				.appendingPathComponent("ZagStore/Gate4", isDirectory: true)
+			try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+			localURL = directory.appendingPathComponent("gate4-test.ipa")
+			try? FileManager.default.removeItem(at: localURL)
+			let scoped = sourceURL.startAccessingSecurityScopedResource()
+			defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
+			try FileManager.default.copyItem(at: sourceURL, to: localURL)
+		} catch {
+			releaseTransport("Gate4 install")
+			throw error
+		}
 
 		ZagLogger.shared.info("RPPairing", "Gate4 install starting | deviceIP=\(deviceIP) | ipa=\(sourceURL.lastPathComponent)")
 		gate4State = .starting
@@ -232,6 +261,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("Gate4 install")
 			recordGate4Event("Native Gate4 worker failed to start")
 			ZagLogger.shared.error("RPPairing", gate4LastEvent)
 			let error = Gate4InstallError.couldNotStart
@@ -274,10 +304,12 @@ final class ZagRPPairingCore: ObservableObject {
 		case 207:
 			ZagLogger.shared.info("RPPairing", "Gate4 install completed")
 			gate4State = .complete
+			releaseTransport("Gate4 install")
 			gate4Completion?(.success(()))
 			gate4Completion = nil
 			gate4Progress = nil
 		case -4:
+			releaseTransport("Gate4 install")
 			gate4SelfUpdateCommandSent = false
 			ZagLogger.shared.error("RPPairing", "Gate4 install failed: \(message)")
 			gate4State = .failed(message)
@@ -310,6 +342,7 @@ final class ZagRPPairingCore: ObservableObject {
 		guard !bundleID.isEmpty else {
 			throw Gate4UninstallError.invalidBundleID
 		}
+		guard acquireTransport("Gate4 uninstall") else { throw Gate4UninstallError.alreadyRunning }
 
 		gate4UninstallRunning = true
 		gate4UninstallCompletion = completion
@@ -321,6 +354,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("Gate4 uninstall")
 			gate4UninstallRunning = false
 			gate4UninstallCompletion = nil
 			throw Gate4UninstallError.couldNotStart
@@ -330,11 +364,13 @@ final class ZagRPPairingCore: ObservableObject {
 	fileprivate func receiveGate4Uninstall(code: Int32, message: String) {
 		switch code {
 		case 307:
+			releaseTransport("Gate4 uninstall")
 			gate4UninstallRunning = false
 			let completion = gate4UninstallCompletion
 			gate4UninstallCompletion = nil
 			completion?(.success(()))
 		case -5:
+			releaseTransport("Gate4 uninstall")
 			gate4UninstallRunning = false
 			let completion = gate4UninstallCompletion
 			gate4UninstallCompletion = nil
@@ -350,6 +386,7 @@ final class ZagRPPairingCore: ObservableObject {
 	) throws {
 		guard !houseArrestPairingInstallRunning else { return }
 		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+		guard acquireTransport("SideStore pairing transfer") else { throw InstalledAppsError.alreadyRunning }
 
 		houseArrestPairingInstallRunning = true
 		houseArrestPairingInstallStatus = "Starting…"
@@ -362,6 +399,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("SideStore pairing transfer")
 			houseArrestPairingInstallRunning = false
 			houseArrestPairingInstallError = "The pairing file transfer could not be started."
 		}
@@ -373,10 +411,12 @@ final class ZagRPPairingCore: ObservableObject {
 			houseArrestPairingInstallRunning = true
 			houseArrestPairingInstallStatus = message
 		case 616:
+			releaseTransport("SideStore pairing transfer")
 			houseArrestPairingInstallRunning = false
 			houseArrestPairingInstallStatus = message
 			ZagLogger.shared.info("RPPairing", "SideStore pairing transfer complete | \(message)")
 		case -9:
+			releaseTransport("SideStore pairing transfer")
 			houseArrestPairingInstallRunning = false
 			houseArrestPairingInstallError = message
 			ZagLogger.shared.error("RPPairing", "SideStore pairing transfer failed: \(message)")
@@ -392,6 +432,7 @@ final class ZagRPPairingCore: ObservableObject {
 		guard !houseArrestRunning else { return }
 		guard pairingFileExists else { throw InstalledAppsError.notPaired }
 		guard !bundleID.isEmpty else { return }
+		guard acquireTransport("House Arrest") else { throw InstalledAppsError.alreadyRunning }
 
 		houseArrestRunning = true
 		houseArrestBundleID = nil
@@ -405,6 +446,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("House Arrest")
 			houseArrestRunning = false
 			houseArrestError = "The House Arrest probe could not be started."
 		}
@@ -421,9 +463,11 @@ final class ZagRPPairingCore: ObservableObject {
 		case 605:
 			houseArrestDocuments = message.isEmpty ? [] : message.split(separator: "\t").map(String.init)
 		case 606:
+			releaseTransport("House Arrest")
 			houseArrestRunning = false
 			ZagLogger.shared.info("RPPairing", "House Arrest probe complete | \(message)")
 		case -8:
+			releaseTransport("House Arrest")
 			houseArrestRunning = false
 			houseArrestError = message
 			ZagLogger.shared.error("RPPairing", "House Arrest probe failed: \(message)")
@@ -438,6 +482,7 @@ final class ZagRPPairingCore: ObservableObject {
 	) throws {
 		guard installedAppsState != .refreshing else { throw InstalledAppsError.alreadyRunning }
 		guard pairingFileExists else { throw InstalledAppsError.notPaired }
+		guard acquireTransport("Installed apps inventory") else { throw InstalledAppsError.alreadyRunning }
 
 		pendingInstalledApps.removeAll(keepingCapacity: true)
 		installedAppsCompletion = completion
@@ -449,6 +494,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("Installed apps inventory")
 			installedAppsState = .failed(InstalledAppsError.couldNotStart.localizedDescription)
 			installedAppsCompletion = nil
 			throw InstalledAppsError.couldNotStart
@@ -478,6 +524,7 @@ final class ZagRPPairingCore: ObservableObject {
 			installedAppsDebugKeys = message
 			ZagLogger.shared.info("RPPairing", "Installed-app metadata keys | \(message)")
 		case 403:
+			releaseTransport("Installed apps inventory")
 			ZagLogger.shared.info("RPPairing", "Installed-app inventory loaded | count=\(Int(message) ?? pendingInstalledApps.count)")
 			installedApps = pendingInstalledApps
 			installedBundleIDs = Set(installedApps.keys)
@@ -486,6 +533,7 @@ final class ZagRPPairingCore: ObservableObject {
 			installedAppsCompletion = nil
 			completion?(.success(installedBundleIDs))
 		case -6:
+			releaseTransport("Installed apps inventory")
 			ZagLogger.shared.error("RPPairing", "Installed-app inventory failed: \(message)")
 			pendingInstalledApps.removeAll(keepingCapacity: true)
 			installedAppsState = .failed(message)
@@ -506,16 +554,22 @@ final class ZagRPPairingCore: ObservableObject {
 
 		let requested = Array(Set(bundleIDs.filter { !$0.isEmpty })).sorted()
 		guard !requested.isEmpty else { return }
+		guard acquireTransport("Installed app icons") else { throw InstalledAppsError.alreadyRunning }
 
 		let directory = FileManager.default.urls(
 			for: .cachesDirectory,
 			in: .userDomainMask
 		).first!
 			.appendingPathComponent("ZagStore/InstalledAppIcons", isDirectory: true)
-		try FileManager.default.createDirectory(
-			at: directory,
-			withIntermediateDirectories: true
-		)
+		do {
+			try FileManager.default.createDirectory(
+				at: directory,
+				withIntermediateDirectories: true
+			)
+		} catch {
+			releaseTransport("Installed app icons")
+			throw error
+		}
 
 		installedAppIconsRefreshing = true
 		let joined = requested.joined(separator: "\t")
@@ -536,6 +590,7 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 
 		if !started {
+			releaseTransport("Installed app icons")
 			installedAppIconsRefreshing = false
 			throw InstalledAppsError.couldNotStart
 		}
@@ -554,6 +609,7 @@ final class ZagRPPairingCore: ObservableObject {
 			guard fields.count == 2, !fields[0].isEmpty else { break }
 			installedAppIconURLs[fields[0]] = URL(fileURLWithPath: fields[1])
 		case 503, -7:
+			releaseTransport("Installed app icons")
 			installedAppIconsRefreshing = false
 		default:
 			break
@@ -570,6 +626,13 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func startGate2Probe(deviceIP: String = "10.7.0.1") {
 		guard !isGate2Running else { return }
+		guard acquireTransport("Gate2 health probe") else {
+			// Manual diagnostics should run after background inventory finishes.
+			pendingGate2IP = deviceIP
+			gate2State = .starting
+			ZagLogger.shared.info("RPPairing", "Gate2 health probe queued behind active transport")
+			return
+		}
 		ZagLogger.shared.info("RPPairing", "Gate2 health probe starting | deviceIP=\(deviceIP)")
 		gate2State = .starting
 		let started = deviceIP.withCString { ip in
@@ -578,6 +641,7 @@ final class ZagRPPairingCore: ObservableObject {
 			}
 		}
 		if !started {
+			releaseTransport("Gate2 health probe")
 			gate2State = .failed("The Gate 2 probe could not be started.")
 		}
 	}
@@ -623,6 +687,7 @@ final class ZagRPPairingCore: ObservableObject {
 		case 112:
 			gate2State = .stagingVerify(message)
 		case 113:
+			releaseTransport("Gate2 health probe")
 			ZagLogger.shared.info("RPPairing", "Gate2 health probe completed")
 			let previous = gate2DeviceInfo ?? (name: "This iPhone", model: "", version: "", build: "")
 			let appResult: (Int, Bool)
@@ -639,6 +704,7 @@ final class ZagRPPairingCore: ObservableObject {
 				zagStoreFound: appResult.1
 			)
 		case -2:
+			releaseTransport("Gate2 health probe")
 			ZagLogger.shared.error("RPPairing", "Gate2 health probe failed: \(message)")
 			gate2State = .failed(message)
 		default:
@@ -973,6 +1039,13 @@ private enum Gate4InstallError: LocalizedError {
 		case .couldNotStart:
 			return "The RPPairing installer could not be started."
 		case .installFailed(let message):
+			if message.localizedCaseInsensitiveContains("pair-verify failed") &&
+				message.localizedCaseInsensitiveContains("socket io failed") {
+				return message + "\n\nThe iPhone's RPPairing connection closed before installation. " +
+				"Check that LocalDevVPN is connected and the device is reachable at 10.7.0.1, " +
+				"then retry. If it persists, run the RPPairing health probe and verify the saved pairing file. " +
+				"No installation was confirmed."
+			}
 			return message
 		}
 	}

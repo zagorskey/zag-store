@@ -13,7 +13,9 @@ enum ZagPrimaryTabIcons {
     enum Symbol {
         case discover
         case games
+        case collections
         case activity
+        case settings
     }
 
     static func label(for symbol: Symbol) -> some View {
@@ -24,13 +26,17 @@ enum ZagPrimaryTabIcons {
 
     private static let discoverImage = draw(.discover)
     private static let gamesImage = draw(.games)
+    private static let collectionsImage = draw(.collections)
     private static let activityImage = draw(.activity)
+    private static let settingsImage = draw(.settings)
 
     private static func image(for symbol: Symbol) -> UIImage {
         switch symbol {
         case .discover: return discoverImage
         case .games: return gamesImage
+        case .collections: return collectionsImage
         case .activity: return activityImage
+        case .settings: return settingsImage
         }
     }
 
@@ -167,6 +173,109 @@ enum ZagPrimaryTabIcons {
                         height: buttonRadius * 2
                     ))
                 }
+
+            case .collections:
+                // Custom trophy cup. Match the DualSense's 4.6...25.4pt
+                // vertical silhouette, with soft Bezier shoulders and handles.
+                let bowl = UIBezierPath()
+                bowl.move(to: CGPoint(x: 9.0, y: 5.2))
+                bowl.addCurve(to: CGPoint(x: 21.0, y: 5.2),
+                              controlPoint1: CGPoint(x: 12.0, y: 4.6),
+                              controlPoint2: CGPoint(x: 18.0, y: 4.6))
+                bowl.addCurve(to: CGPoint(x: 19.5, y: 15.8),
+                              controlPoint1: CGPoint(x: 21.0, y: 10.3),
+                              controlPoint2: CGPoint(x: 20.7, y: 13.6))
+                bowl.addCurve(to: CGPoint(x: 15.0, y: 18.2),
+                              controlPoint1: CGPoint(x: 18.6, y: 17.4),
+                              controlPoint2: CGPoint(x: 16.9, y: 18.2))
+                bowl.addCurve(to: CGPoint(x: 10.5, y: 15.8),
+                              controlPoint1: CGPoint(x: 13.1, y: 18.2),
+                              controlPoint2: CGPoint(x: 11.4, y: 17.4))
+                bowl.addCurve(to: CGPoint(x: 9.0, y: 5.2),
+                              controlPoint1: CGPoint(x: 9.3, y: 13.6),
+                              controlPoint2: CGPoint(x: 9.0, y: 10.3))
+                bowl.close()
+                context.setLineWidth(2.2)
+                context.addPath(bowl.cgPath)
+                context.strokePath()
+
+                // Handles tuck neatly into the upper half of the cup.
+                let handles = UIBezierPath()
+                handles.move(to: CGPoint(x: 9.1, y: 7.0))
+                handles.addCurve(to: CGPoint(x: 4.5, y: 7.9),
+                                 controlPoint1: CGPoint(x: 6.5, y: 6.3),
+                                 controlPoint2: CGPoint(x: 4.5, y: 6.4))
+                handles.addCurve(to: CGPoint(x: 10.1, y: 14.4),
+                                 controlPoint1: CGPoint(x: 4.5, y: 12.1),
+                                 controlPoint2: CGPoint(x: 6.4, y: 14.4))
+                handles.move(to: CGPoint(x: 20.9, y: 7.0))
+                handles.addCurve(to: CGPoint(x: 25.5, y: 7.9),
+                                 controlPoint1: CGPoint(x: 23.5, y: 6.3),
+                                 controlPoint2: CGPoint(x: 25.5, y: 6.4))
+                handles.addCurve(to: CGPoint(x: 19.9, y: 14.4),
+                                 controlPoint1: CGPoint(x: 25.5, y: 12.1),
+                                 controlPoint2: CGPoint(x: 23.6, y: 14.4))
+                context.setLineWidth(2.05)
+                context.addPath(handles.cgPath)
+                context.strokePath()
+
+                // Stem and foot end on the same baseline as the controller.
+                context.setLineWidth(2.3)
+                context.move(to: CGPoint(x: 15.0, y: 18.2))
+                context.addLine(to: CGPoint(x: 15.0, y: 22.1))
+                context.strokePath()
+                let foot = UIBezierPath()
+                foot.move(to: CGPoint(x: 10.5, y: 25.4))
+                foot.addCurve(to: CGPoint(x: 19.5, y: 25.4),
+                              controlPoint1: CGPoint(x: 12.4, y: 22.7),
+                              controlPoint2: CGPoint(x: 17.6, y: 22.7))
+                context.setLineWidth(2.25)
+                context.addPath(foot.cgPath)
+                context.strokePath()
+
+            case .settings:
+                // A precision-cut eight-tooth cog, drawn at the same 30pt
+                // optical scale as Games and Activity. Rounded transitions
+                // prevent jagged tips when the native dock downsamples it.
+                let centre = CGPoint(x: 15, y: 15)
+                let radii: [CGFloat] = [10.15, 10.7, 12.15, 12.15, 10.7, 10.15]
+                let pointCount = 8 * radii.count
+                let points: [CGPoint] = (0..<pointCount).map { index in
+                    let angle = CGFloat(index) * (2 * CGFloat.pi / CGFloat(pointCount))
+                        - CGFloat.pi / 2 - CGFloat.pi / 48
+                    let radius = radii[index % radii.count]
+                    return CGPoint(
+                        x: centre.x + cos(angle) * radius,
+                        y: centre.y + sin(angle) * radius
+                    )
+                }
+                let cog = UIBezierPath()
+                let cornerBlend: CGFloat = 0.18
+                for index in points.indices {
+                    let previous = points[(index + pointCount - 1) % pointCount]
+                    let current = points[index]
+                    let next = points[(index + 1) % pointCount]
+                    let entry = CGPoint(
+                        x: current.x + (previous.x - current.x) * cornerBlend,
+                        y: current.y + (previous.y - current.y) * cornerBlend
+                    )
+                    let exit = CGPoint(
+                        x: current.x + (next.x - current.x) * cornerBlend,
+                        y: current.y + (next.y - current.y) * cornerBlend
+                    )
+                    if index == 0 { cog.move(to: entry) }
+                    else { cog.addLine(to: entry) }
+                    cog.addQuadCurve(to: exit, controlPoint: current)
+                }
+                cog.close()
+                context.setLineWidth(2.2)
+                context.addPath(cog.cgPath)
+                context.strokePath()
+
+                // One strong, optically centred hub: legible at actual
+                // tab-bar size, without concentric rings or tiny ornament.
+                context.setLineWidth(2.35)
+                context.strokeEllipse(in: CGRect(x: 10.95, y: 10.95, width: 8.1, height: 8.1))
 
             case .activity:
                 // A clear live-activity signal, not a generic history clock:
