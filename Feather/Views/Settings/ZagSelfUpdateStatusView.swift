@@ -801,6 +801,7 @@ struct ZagSelfUpdateStatusView: View {
                         .foregroundStyle(.green)
                 }
             }
+            }
 
             if isAdmin && zagAdvancedSettingsUnlocked {
             Section {
