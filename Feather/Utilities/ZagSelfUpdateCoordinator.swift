@@ -4,6 +4,7 @@ import Combine
 import CryptoKit
 import CoreData
 import IDeviceSwift
+import Network
 
 /// Self-update preparation and launch reconciliation.
 /// Installation is intentionally not invoked until in-place RPPairing replacement
@@ -145,6 +146,57 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     // Discovery only: never download, sign, or install without user action.
     @Published private(set) var automaticCheckStatus = "Waiting for update check"
     static let automaticChecksKey = "ZagStore.updatePreferences.automaticChecks.v1"
+    static let automaticWiFiDownloadKey = "ZagStore.updatePreferences.wifiDownload.v1"
+    @Published private(set) var automaticDownloadStatus = "Not downloaded"
+    private var wifiMonitor: NWPathMonitor?
+    private var wifiAvailable = false
+    private var downloadInProgress = false
+    private var downloadedReleaseIdentity: String?
+
+    private func releaseIdentity(_ release: Release) -> String {
+        [release.version, release.build, release.sha256.lowercased()].joined(separator: "|")
+    }
+
+    private func downloadOnWiFiIfEnabled(_ release: Release) async {
+        guard UserDefaults.standard.bool(forKey: Self.automaticWiFiDownloadKey),
+              wifiAvailable, !downloadInProgress, pendingInstallation == nil else { return }
+        let identity = releaseIdentity(release)
+        guard downloadedReleaseIdentity != identity else { return }
+        downloadInProgress = true
+        automaticDownloadStatus = "Downloading on Wi-Fi…"
+        defer { downloadInProgress = false }
+        do {
+            let configuration = URLSessionConfiguration.default
+            configuration.allowsCellularAccess = false
+            configuration.waitsForConnectivity = false
+            let session = URLSession(configuration: configuration)
+            defer { session.invalidateAndCancel() }
+            let (temporary, response) = try await session.download(from: release.ipaURL)
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            guard wifiAvailable,
+                  let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw UpdateError.invalidRelease
+            }
+            let data = try Data(contentsOf: temporary)
+            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            guard digest.caseInsensitiveCompare(release.sha256) == .orderedSame else {
+                throw UpdateError.checksumMismatch
+            }
+            let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let destination = folder.appendingPathComponent("verified-release.ipa")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: temporary, to: destination)
+            preparedIPA = destination
+            downloadedReleaseIdentity = identity
+            automaticDownloadStatus = "Downloaded and SHA-256 verified — ready to sign"
+        } catch {
+            automaticDownloadStatus = "Wi-Fi download failed: " + error.localizedDescription
+        }
+    }
     private var lastAutomaticCheck: Date?
     private var lastCheckedChannel: UpdateChannel?
     private var checkGeneration = 0
@@ -180,6 +232,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             availableRelease = release
             if let release {
                 automaticCheckStatus = "Update available: \(release.version) (Build \(release.build)) — \(channel.rawValue.capitalized)"
+                await downloadOnWiFiIfEnabled(release)
             } else {
                 automaticCheckStatus = "Up to date — \(channel.rawValue.capitalized)"
             }
@@ -198,6 +251,8 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         checkGeneration += 1
         availableRelease = nil
         preparedIPA = nil
+        downloadedReleaseIdentity = nil
+        automaticDownloadStatus = "Not downloaded"
         lastAutomaticCheck = nil
         lastCheckedChannel = nil
         automaticCheckStatus = "Waiting for update check"
@@ -224,6 +279,19 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = Self.read(PendingInstallation.self, key: pendingKey)
         lastVerifiedInstallation = Self.read(PendingInstallation.self, key: completedKey)
         reconcileOnLaunch()
+        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
+        wifiMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                guard let self else { return }
+                let wasAvailable = self.wifiAvailable
+                self.wifiAvailable = path.status == .satisfied
+                if self.wifiAvailable && !wasAvailable, let release = self.availableRelease {
+                    await self.downloadOnWiFiIfEnabled(release)
+                }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "app.zagstore.selfupdate.wifi"))
         foregroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
@@ -345,6 +413,14 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         try validateMinimumIOSVersion(for: release)
         guard release.ipaURL.scheme?.lowercased() == "https" else {
             throw UpdateError.insecureDownload
+        }
+        if downloadedReleaseIdentity == releaseIdentity(release),
+           let cached = preparedIPA, FileManager.default.fileExists(atPath: cached.path) {
+            let digest = SHA256.hash(data: try Data(contentsOf: cached))
+                .map { String(format: "%02x", $0) }.joined()
+            if digest.caseInsensitiveCompare(release.sha256) == .orderedSame {
+                return cached
+            }
         }
         let (temporary, response) = try await URLSession.shared.download(from: release.ipaURL)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
