@@ -930,7 +930,7 @@ struct ZagSelfUpdateStatusView: View {
             }
 
         }
-        .listSectionSpacing(.custom(11))
+        .modifier(ZagSelfUpdateSectionSpacing())
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             inspectRecoveryFile(result)
         }
@@ -1115,5 +1115,17 @@ private struct ZagStoreUpdateBetaPreferencesView: View {
         }
         .navigationTitle("Release Channel")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+private struct ZagSelfUpdateSectionSpacing: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.listSectionSpacing(.custom(11))
+        } else {
+            content
+        }
     }
 }
