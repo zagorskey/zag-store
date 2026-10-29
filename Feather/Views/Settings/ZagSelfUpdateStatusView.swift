@@ -930,6 +930,7 @@ struct ZagSelfUpdateStatusView: View {
             }
 
         }
+        .listSectionSpacing(.custom(11))
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json]) { result in
             inspectRecoveryFile(result)
         }
