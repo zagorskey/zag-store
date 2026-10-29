@@ -637,6 +637,9 @@ struct ZagSelfUpdateStatusView: View {
                             .lineLimit(1)
                     }
                 }
+            }
+
+            Section {
                 if coordinator.availableRelease == nil {
                 Button {
                     guard !releaseCheckBusy else { return }
