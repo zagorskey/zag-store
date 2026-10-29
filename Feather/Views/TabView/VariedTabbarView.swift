@@ -957,7 +957,7 @@ private struct ZagSelfUpdateRotatingIcon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isAnimating || reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 120.0, paused: !isAnimating || reduceMotion)) { context in
             let angle = isAnimating && !reduceMotion
                 ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.0) * 120.0
                 : 0.0
