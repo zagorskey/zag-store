@@ -577,8 +577,9 @@ struct ZagSelfUpdateStatusView: View {
     @AppStorage("ZagStore.advancedSettingsUnlocked")
     private var zagAdvancedSettingsUnlocked = false
 
-    // Temporary local admin gate until Zag Account roles are introduced.
-    private var isAdmin: Bool { zagAdvancedSettingsUnlocked }
+    // No role authority exists yet. Fail closed: advanced unlock is not an admin role.
+    // Replace with the authenticated Zag Account admin role when roles ship.
+    private var isAdmin: Bool { false }
 
     @State private var showAdvancedTools = false
     @State private var showClearPendingConfirmation = false
@@ -743,7 +744,7 @@ struct ZagSelfUpdateStatusView: View {
                             }
                         } label: {
                             Text("Update Now")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.system(size: 19, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 54)
                                 .foregroundStyle(.white)
@@ -778,29 +779,6 @@ struct ZagSelfUpdateStatusView: View {
                 Section {
                     verifiedUpdateCelebration
                 }
-            }
-
-            if isAdmin {
-            Section {
-                HStack(spacing: 9) {
-                    Image(systemName: "app.badge.checkmark")
-                        .foregroundStyle(.secondary)
-                    Text("Zag Store \(installedVersion)")
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Text("Build \(installedBuild)")
-                        .foregroundStyle(.secondary)
-                }
-                if coordinator.pendingInstallation != nil {
-                    Label("Update awaiting verification", systemImage: "clock.arrow.circlepath")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else if coordinator.lastVerifiedInstallation != nil {
-                    Label("Installed update verified", systemImage: "checkmark.shield.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.green)
-                }
-            }
             }
 
             if isAdmin && zagAdvancedSettingsUnlocked {
