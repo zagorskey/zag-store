@@ -637,6 +637,7 @@ struct ZagSelfUpdateStatusView: View {
                             .lineLimit(1)
                     }
                 }
+                if coordinator.availableRelease == nil {
                 Button {
                     guard !releaseCheckBusy else { return }
                     releaseCheckBusy = true
@@ -667,7 +668,8 @@ struct ZagSelfUpdateStatusView: View {
                     Label("Check for Updates", systemImage: "arrow.clockwise")
                 }
                 .disabled(releaseCheckBusy)
-                if releaseCheckStatus != "Not checked" {
+                }
+                if coordinator.availableRelease == nil && releaseCheckStatus != "Not checked" {
                     Text(releaseCheckStatus)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
