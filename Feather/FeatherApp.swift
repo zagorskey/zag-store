@@ -548,14 +548,22 @@ final class ZagBackgroundUpdateRefresh {
 		// work, so an expiration or termination does not break the chain.
 		schedule()
 
+		// iOS requires exactly one completion, including when the task expires.
+		// Without it the system reduces future background refresh time.
+		let completion = ZagOnceCompletion { success in
+			task.setTaskCompleted(success: success)
+		}
+
 		let work = Task {
 			let success = await refreshRepositoriesAndUpdates()
-			guard !Task.isCancelled else { return }
-			task.setTaskCompleted(success: success)
+			completion.complete(success: success && !Task.isCancelled)
 		}
 
 		task.expirationHandler = {
 			work.cancel()
+			if completion.complete(success: false) {
+				Logger.misc.warning("[Zag Store Background] Update refresh expired before finishing")
+			}
 		}
 	}
 
