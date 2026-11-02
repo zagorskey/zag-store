@@ -1046,13 +1046,22 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
 
     /// Installer callbacks are not proof of replacement. A later launch
     /// must verify the expected executable before reporting success.
-    private func submitStagedUpdateToGate4(_ packageURL: URL, onStarted: () -> Void) async throws {
+    private func submitStagedUpdateToGate4(
+        _ packageURL: URL,
+        onStarted: () -> Void,
+        onFinished: @escaping ([ZagGate4Event]) -> Void
+    ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             do {
                 try ZagRPPairingCore.shared.installGate4IPA(
                     at: packageURL,
                     deviceIP: "10.7.0.1",
-                    completion: { result in continuation.resume(with: result) }
+                    completion: { result in
+                        // Snapshot this attempt's callbacks at the moment it
+                        // ended, before any later attempt can reset them.
+                        onFinished(ZagRPPairingCore.shared.gate4AttemptEvents)
+                        continuation.resume(with: result)
+                    }
                 )
                 onStarted()
             } catch {
@@ -1087,22 +1096,26 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
     ) async throws {
         let packageURL = try await prepareInstallationHandoff(signed, release: release)
         var installerStarted = false
+        var finishedEvents: [ZagGate4Event]?
         do {
-            try await submitStagedUpdateToGate4(packageURL, onStarted: { installerStarted = true })
+            try await submitStagedUpdateToGate4(
+                packageURL,
+                onStarted: { installerStarted = true },
+                onFinished: { finishedEvents = $0 }
+            )
         } catch {
-            // Release the record only if iOS cannot be replacing the app, so
-            // the user can retry. An ambiguous failure keeps it for launch
-            // verification. The rollback store is not involved either way.
+            // Release the record only if the callbacks prove the Upgrade
+            // request was never sent, so the user can retry. Anything else
+            // keeps it for launch verification. The rollback store is not
+            // involved either way.
             let progress: ZagSelfUpdateRetryPolicy.InstallerProgress = installerStarted
-                ? ZagSelfUpdateRetryPolicy.progress(
-                    afterCallbackCodes: ZagRPPairingCore.shared.gate4AttemptCallbackCodes
-                )
+                ? ZagSelfUpdateRetryPolicy.progress(afterEvents: finishedEvents)
                 : .notStarted
             if ZagSelfUpdateRetryPolicy.mayReleasePendingRecord(after: progress) {
                 clearFailedHandoff()
                 ZagLogger.shared.warning("SelfUpdate", "Installer failed before the Upgrade request; pending record released for retry")
             } else {
-                ZagLogger.shared.warning("SelfUpdate", "Installer failed after staging; pending record kept for launch verification")
+                ZagLogger.shared.warning("SelfUpdate", "Installer result is ambiguous; pending record kept for launch verification")
             }
             throw error
         }
