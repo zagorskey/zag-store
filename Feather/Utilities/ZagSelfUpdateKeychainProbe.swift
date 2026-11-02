@@ -14,7 +14,7 @@ enum ZagSelfUpdateKeychainProbe {
 
         var errorDescription: String? {
             switch self {
-            case .keychainStatus(let status): return "Keychain operation failed (OSStatus \\(status))."
+            case .keychainStatus(let status): return "Keychain operation failed (OSStatus \(status))."
             case .missingMarker: return "No continuity marker exists. Create one before the update."
             case .invalidMarker: return "The saved marker could not be decoded."
             }

@@ -125,9 +125,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case unsupportedIOSVersion
         case incompatibleSigningTeam
         case channelNotPublished
+        case keychainContinuityMismatch
 
         var errorDescription: String? {
             switch self {
+            case .keychainContinuityMismatch: return "The signed update would lose access to Zag Store's saved keychain data. Sign it with a certificate from the same team as the installed app."
             case .invalidRelease: return "The release metadata is incomplete or invalid."
             case .channelNotPublished: return "No release manifest has been published for this channel yet."
             case .incompatibleBundleIdentifier: return "The update does not match this Zag Store installation."
@@ -1016,11 +1018,14 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.signedIdentityMismatch
         }
         try validateSignedApp(signed, release: release)
-        guard let marker = try ZagSelfUpdateKeychainProbe.read(),
-              !marker.isEmpty,
+        // The marker lets iOS report the keychain access group this running
+        // app actually writes to. Provision it here so ordinary users are not
+        // blocked; the candidate must still be entitled to that exact group.
+        let marker = try ZagSelfUpdateKeychainProbe.createIfMissing()
+        guard !marker.isEmpty,
               let markerGroup = try ZagSelfUpdateKeychainProbe.markerAccessGroup(),
               try inspectKeychainAccessGroups(signed).candidate.contains(markerGroup) else {
-            throw UpdateError.signedIdentityMismatch
+            throw UpdateError.keychainContinuityMismatch
         }
         let core = ZagRPPairingCore.shared
         guard core.pairingFileExists else { throw UpdateError.pairingUnavailable }
