@@ -128,22 +128,13 @@ struct FeatherApp: App {
 				
 				return
 			}
-			/// feather://export-certificate?callback_template=<template>
-			/// ?callback_template=: This is how we callback to the application requesting the certificate, this will be a url scheme
-			/// 	example: livecontainer%3A%2F%2Fcertificate%3Fcert%3D%24%28BASE64_CERT%29%26password%3D%24%28PASSWORD%29
-			/// 	decoded: livecontainer://certificate?cert=$(BASE64_CERT)&password=$(PASSWORD)
-			/// $(BASE64_CERT) and $(PASSWORD) must be presenting in the callback template so we can replace them with the proper content
+			/// feather://export-certificate is intentionally disabled.
+			/// It sent the stored P12 and its password to a URL chosen by the
+			/// caller, which any web page or app could supply. Certificates can
+			/// still be exported deliberately from Settings → Certificates.
 			if url.host == "export-certificate" {
-				guard
-					let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-				else {
-					return
-				}
-				
-				let queryItems = components.queryItems?.reduce(into: [String: String]()) { $0[$1.name.lowercased()] = $1.value } ?? [:]
-				guard let callbackTemplate = queryItems["callback_template"]?.removingPercentEncoding else { return }
-				
-				FR.exportCertificateAndOpenUrl(using: callbackTemplate)
+				ZagLogger.shared.warning("DeepLink", "Ignored external certificate export request")
+				return
 			}
 			/// feather://source/<url>
 			if let fullPath = url.validatedScheme(after: "/source/") {
