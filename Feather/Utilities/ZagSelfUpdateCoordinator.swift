@@ -126,9 +126,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case incompatibleSigningTeam
         case channelNotPublished
         case keychainContinuityMismatch
+        case previousAttemptUnverified
 
         var errorDescription: String? {
             switch self {
+            case .previousAttemptUnverified: return "A previous update attempt has not been confirmed yet. Reopen Zag Store to verify it, or clear it in Zag Store Update and try again."
             case .keychainContinuityMismatch: return "The signed update would lose access to Zag Store's saved keychain data. Sign it with a certificate from the same team as the installed app."
             case .invalidRelease: return "The release metadata is incomplete or invalid."
             case .channelNotPublished: return "No release manifest has been published for this channel yet."
@@ -1044,7 +1046,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
 
     /// Installer callbacks are not proof of replacement. A later launch
     /// must verify the expected executable before reporting success.
-    private func submitStagedUpdateToGate4(_ packageURL: URL) async throws {
+    private func submitStagedUpdateToGate4(_ packageURL: URL, onStarted: () -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             do {
                 try ZagRPPairingCore.shared.installGate4IPA(
@@ -1052,6 +1054,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
                     deviceIP: "10.7.0.1",
                     completion: { result in continuation.resume(with: result) }
                 )
+                onStarted()
             } catch {
                 continuation.resume(throwing: error)
             }
@@ -1083,7 +1086,26 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         release: Release
     ) async throws {
         let packageURL = try await prepareInstallationHandoff(signed, release: release)
-        try await submitStagedUpdateToGate4(packageURL)
+        var installerStarted = false
+        do {
+            try await submitStagedUpdateToGate4(packageURL, onStarted: { installerStarted = true })
+        } catch {
+            // Release the record only if iOS cannot be replacing the app, so
+            // the user can retry. An ambiguous failure keeps it for launch
+            // verification. The rollback store is not involved either way.
+            let progress: ZagSelfUpdateRetryPolicy.InstallerProgress = installerStarted
+                ? ZagSelfUpdateRetryPolicy.progress(
+                    afterCallbackCodes: ZagRPPairingCore.shared.gate4AttemptCallbackCodes
+                )
+                : .notStarted
+            if ZagSelfUpdateRetryPolicy.mayReleasePendingRecord(after: progress) {
+                clearFailedHandoff()
+                ZagLogger.shared.warning("SelfUpdate", "Installer failed before the Upgrade request; pending record released for retry")
+            } else {
+                ZagLogger.shared.warning("SelfUpdate", "Installer failed after staging; pending record kept for launch verification")
+            }
+            throw error
+        }
     }
 
     /// Explicitly confirmed upgrade-only handoff. Never called during preparation.
@@ -1094,7 +1116,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         userConfirmedSelfReplacement: Bool
     ) async throws {
         guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
-        guard pendingInstallation == nil else { throw UpdateError.installationAlreadyRunning }
+        guard pendingInstallation == nil else { throw UpdateError.previousAttemptUnverified }
         guard signed.identifier == currentBundleID else { throw UpdateError.incompatibleBundleIdentifier }
         try await performPreparedHandoff(signed, release: release)
     }

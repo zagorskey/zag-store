@@ -173,6 +173,9 @@ final class ZagRPPairingCore: ObservableObject {
 
 	@Published private(set) var gate4State: Gate4State = .idle
 	@Published private(set) var gate4SelfUpdateCommandSent = false
+	/// Callback codes received for the current or most recent Gate4 attempt.
+	/// Used to tell whether a failure happened before the Upgrade request.
+	private(set) var gate4AttemptCallbackCodes: [Int32] = []
 	@Published private(set) var gate4LastEvent = "No Gate4 activity this session"
 	private static let gate4HistoryKey = "ZagStore.Gate4LastRecordedEvent.v1"
 	var gate4PreviousEvent: String {
@@ -233,6 +236,7 @@ final class ZagRPPairingCore: ObservableObject {
 		guard !isGate4Running, acquireTransport("Gate4 install") else {
 			throw Gate4InstallError.alreadyRunning
 		}
+		gate4AttemptCallbackCodes = []
 		gate4Completion = completion
 		gate4Progress = progress
 		let localURL: URL
@@ -275,6 +279,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	fileprivate func receiveGate4(code: Int32, message: String) {
+		gate4AttemptCallbackCodes.append(code)
 		recordGate4Event("Gate4 callback \(code): \(message)")
 		// Record native installation stages for diagnostics.
 		if code == 206 {
