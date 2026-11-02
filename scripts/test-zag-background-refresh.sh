@@ -1,13 +1,15 @@
 #!/bin/bash
 # Regression checks for background refresh completion and the iOS 26
-# continued-processing download identifier.
+# continued-processing download task.
 # Usage: bash scripts/test-zag-background-refresh.sh [path/to/built/Feather.app]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_SWIFT="$ROOT/Feather/FeatherApp.swift"
 MANAGER="$ROOT/Feather/Utilities/BackgroundTaskManager.swift"
+DOWNLOADS="$ROOT/Feather/Backend/Observable/DownloadManager.swift"
 PLIST="$ROOT/Feather/Resources/Info.plist"
+UTIL="$ROOT/Feather/Utilities"
 WORK=$(mktemp -d "${TMPDIR:-/tmp/}zag-background-tests.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 FAILURES=0
@@ -16,38 +18,77 @@ check() {
 	local label="$1"; shift
 	if "$@"; then echo "PASS  $label"; else echo "FAIL  $label"; FAILURES=$((FAILURES + 1)); fi
 }
+absent() { ! grep -q "$1" <<< "$2"; }
 
+# Print a Swift function body (from a signature prefix to the next "func ").
+function_body() {
+	awk -v sig="func $2" '
+		index($0, sig) { inside = 1; print; next }
+		inside && /^[[:space:]]*(private |fileprivate |static |@discardableResult )*func / { exit }
+		inside { print }
+	' "$1"
+}
+
+# Background update refresh (BGAppRefreshTask).
 handle=$(awk '/private func handle\(_ task: BGAppRefreshTask\)/ {inside=1} inside {print} inside && /^\t}$/ {exit}' "$APP_SWIFT")
 expiry=$(awk '/task.expirationHandler = \{/ {inside=1} inside {print} inside && /^\t\t}$/ {exit}' <<< "$handle")
-
 check "refresh completion goes through ZagOnceCompletion" grep -q 'ZagOnceCompletion' <<< "$handle"
 check "expiration handler reports completion" grep -q 'completion.complete(success: false)' <<< "$expiry"
-check "no early return that skips completion" bash -c "! grep -q 'guard !Task.isCancelled else { return }' <<< \"\$1\"" _ "$handle"
-check "Info.plist permits the userTask wildcard" grep -qF '.userTask.*</string>' "$PLIST"
+check "no early return that skips completion" absent 'guard !Task.isCancelled else { return }' "$handle"
+
+# Identifier permissions.
+check "Info.plist permits the userTask wildcard" grep -qF '<string>$(PRODUCT_BUNDLE_IDENTIFIER).userTask.*</string>' "$PLIST"
 check "refresh identifier still permitted" grep -qF 'com.cwd43.gu29.background-update-check' "$PLIST"
-check "download tasks use the permitted identifier" grep -q 'ZagBackgroundTaskIdentifiers.continuedDownloadPrefix' "$MANAGER"
+check "download tasks use the permitted identifier" grep -q 'ZagBackgroundTaskIdentifiers.continuedDownloadPrefix()' "$MANAGER"
 check "registration result is checked" grep -q 'let registered = BGTaskScheduler.shared.register' "$MANAGER"
-check "no force-unwrapped bundle identifier" bash -c "! grep -q 'bundleIdentifier!' '$MANAGER'"
+check "no force-unwrapped bundle identifier" absent 'bundleIdentifier!' "$(cat "$MANAGER")"
+
+# Continued-download task lifecycle.
+manager=$(cat "$MANAGER")
+check "manager completes tasks only through the ledger" \
+	bash -c "[[ \$(grep -c 'setTaskCompleted' <<< \"\$1\") -eq 2 ]] && grep -q 'complete: { success in' <<< \"\$1\"" _ "$manager"
+check "registration is tracked by the ledger" grep -q 'ledger.isRegistered(taskIdentifier)' <<< "$manager"
+check "expiry goes through the ledger before cancelling" grep -q 'self.ledger.expire(taskIdentifier, token: token) else { return }' <<< "$manager"
+check "download is cancelled on the main queue after expiry" grep -q 'DispatchQueue.main.async' <<< "$manager"
+check "queued request is cancelled when the download ends first" grep -q 'cancel(taskRequestWithIdentifier: taskIdentifier)' <<< "$manager"
+check "progress no longer completes the task early" absent 'stopTask' "$(function_body "$MANAGER" "updateProgress(")"
+check "no unsynchronised task dictionary" absent 'activeTasks' "$manager"
+check "cancelled downloads end their task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "cancelDownload(")"
+check "import result ends the task" grep -q 'stopTask(for: dl.id, success: err == nil)' <<< "$(function_body "$DOWNLOADS" "handlePachageFile(")"
+check "file handling failure ends the task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo")"
+check "transfer failure ends the task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError")"
 
 run_swift_tests() {
-	local name="$1" source="$2" tests="$3"
-	if swiftc -warnings-as-errors -parse-as-library "$source" "$tests" -o "$WORK/$name" 2>"$WORK/$name.log"; then
-		if "$WORK/$name"; then echo "PASS  $name"; else FAILURES=$((FAILURES + 1)); fi
+	local name="$1"; shift
+	if swiftc -warnings-as-errors -parse-as-library "$@" -o "$WORK/test" 2>"$WORK/test.log"; then
+		if "$WORK/test"; then echo "PASS  $name"; else echo "FAIL  $name"; FAILURES=$((FAILURES + 1)); fi
 	else
-		cat "$WORK/$name.log"; echo "FAIL  $name did not compile"; FAILURES=$((FAILURES + 1))
+		cat "$WORK/test.log"; echo "FAIL  $name did not compile"; FAILURES=$((FAILURES + 1))
 	fi
 }
 run_swift_tests "once-completion unit tests" \
-	"$ROOT/Feather/Utilities/ZagOnceCompletion.swift" "$ROOT/scripts/ZagOnceCompletionTests.swift"
+	"$UTIL/ZagOnceCompletion.swift" "$ROOT/scripts/ZagOnceCompletionTests.swift"
 run_swift_tests "identifier unit tests" \
-	"$ROOT/Feather/Utilities/ZagBackgroundTaskIdentifiers.swift" "$ROOT/scripts/ZagBackgroundTaskIdentifiersTests.swift"
+	"$UTIL/ZagBackgroundTaskIdentifiers.swift" "$ROOT/scripts/ZagBackgroundTaskIdentifiersTests.swift"
+run_swift_tests "continued-task ledger unit tests" \
+	"$UTIL/ZagOnceCompletion.swift" "$UTIL/ZagContinuedTaskLedger.swift" "$ROOT/scripts/ZagContinuedTaskLedgerTests.swift"
 
-# Optional: confirm the built Info.plist expanded the wildcard.
+# Optional: check the built Info.plist.
 if [[ $# -ge 1 ]]; then
 	ids=$(plutil -extract BGTaskSchedulerPermittedIdentifiers json -o - "$1/Info.plist")
 	bundle=$(plutil -extract CFBundleIdentifier raw "$1/Info.plist")
-	check "built plist expands the wildcard for $bundle" grep -qF "\"$bundle.userTask.*\"" <<< "$ids"
-	check "built plist has no unexpanded build setting" bash -c "! grep -qF '\$(' <<< \"\$1\"" _ "$ids"
+	check "built plist permits $bundle.userTask.*" grep -qF "\"$bundle.userTask.*\"" <<< "$ids"
+	check "built plist has no unexpanded build setting" absent '\$(' "$ids"
+	sample="$bundle.userTask.$(printf '%s' sample-download-id | md5 -q)"
+	matches_permitted() {
+		local pattern
+		while IFS= read -r pattern; do
+			# shellcheck disable=SC2053
+			[[ "$sample" == $pattern ]] && return 0
+		done < <(plutil -extract BGTaskSchedulerPermittedIdentifiers xml1 -o - "$1/Info.plist" | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+		return 1
+	}
+	check "generated identifier $sample matches a permitted pattern" matches_permitted "$1"
 fi
 
 if (( FAILURES > 0 )); then

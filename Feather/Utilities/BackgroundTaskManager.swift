@@ -14,12 +14,12 @@ import CryptoKit
 @available(iOS 26.0, *)
 class BackgroundTaskManager: ObservableObject {
 	static let shared = BackgroundTaskManager()
-	
+
 	// Only identifiers matching a permitted Info.plist wildcard may be registered.
 	private let identifierPrefix = ZagBackgroundTaskIdentifiers.continuedDownloadPrefix()
 
-	private var activeTasks: [String: BGContinuedProcessingTask] = [:]
-	private var registeredTasks: Set<String> = []
+	// Completes every task exactly once and never registers an identifier twice.
+	private let ledger = ZagContinuedTaskLedger()
 
 	private func identifier(for downloadId: String) -> String? {
 		identifierPrefix.map { $0 + downloadId.md5 }
@@ -31,53 +31,65 @@ class BackgroundTaskManager: ObservableObject {
 			return
 		}
 
-		if !registeredTasks.contains(taskIdentifier) {
-			let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
-				guard let task = task as? BGContinuedProcessingTask else { return }
-				self.activeTasks[task.identifier] = task
-				
-				task.expirationHandler = {
-					if let download = DownloadManager.shared.getDownload(by: downloadId) {
-						DownloadManager.shared.cancelDownload(download)
-					}
-					self.activeTasks.removeValue(forKey: task.identifier)
+		if !ledger.isRegistered(taskIdentifier) {
+			let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { [weak self] task in
+				guard let self, let task = task as? BGContinuedProcessingTask else {
+					task.setTaskCompleted(success: false)
+					return
 				}
+				self.launch(task, downloadId: downloadId)
 			}
 			guard registered else {
 				ZagLogger.shared.warning("Downloads", "Continued-processing task registration was refused")
 				return
 			}
-			self.registeredTasks.insert(taskIdentifier)
+			ledger.markRegistered(taskIdentifier)
 		}
 
+		ledger.willSubmit(taskIdentifier)
 		let request = BGContinuedProcessingTaskRequest(identifier: taskIdentifier, title: filename, subtitle: .localized("Downloading"))
 		request.strategy = .queue
 		do {
 			try BGTaskScheduler.shared.submit(request)
 		} catch {
+			ledger.submitFailed(taskIdentifier)
 			ZagLogger.shared.warning("Downloads", "Continued-processing task was not submitted: \(error.localizedDescription)")
 		}
 	}
-	
-	func updateProgress(for downloadId: String, progress: Double) {
-		guard let taskIdentifier = identifier(for: downloadId),
-		      let task = activeTasks[taskIdentifier] else { return }
-		task.progress.totalUnitCount = 100
-		task.progress.completedUnitCount = Int64(progress * 100)
-		
-		task.updateTitle(task.title, subtitle: "\(Int(progress * 100))%")
-		
-		if task.progress.completedUnitCount == task.progress.totalUnitCount {
-			stopTask(for: downloadId, success: true)
+
+	private func launch(_ task: BGContinuedProcessingTask, downloadId: String) {
+		let taskIdentifier = task.identifier
+		// If the download already ended, the ledger completes the task now.
+		guard let token = ledger.didLaunch(taskIdentifier, task: task, complete: { success in
+			task.setTaskCompleted(success: success)
+		}) else { return }
+
+		task.expirationHandler = { [weak self] in
+			guard let self, self.ledger.expire(taskIdentifier, token: token) else { return }
+			DispatchQueue.main.async {
+				if let download = DownloadManager.shared.getDownload(by: downloadId) {
+					DownloadManager.shared.cancelDownload(download)
+				}
+			}
 		}
 	}
-	
-	func stopTask(for downloadId: String, success: Bool) {
+
+	func updateProgress(for downloadId: String, progress: Double) {
 		guard let taskIdentifier = identifier(for: downloadId),
-		      let task = activeTasks[taskIdentifier] else { return }
-		
-		task.setTaskCompleted(success: success)
-		activeTasks.removeValue(forKey: taskIdentifier)
+		      let task = ledger.runningTask(taskIdentifier) as? BGContinuedProcessingTask else { return }
+		task.progress.totalUnitCount = 100
+		task.progress.completedUnitCount = Int64(progress * 100)
+
+		task.updateTitle(task.title, subtitle: "\(Int(progress * 100))%")
+	}
+
+	/// Ends the background task for a download that finished, failed or was
+	/// cancelled. Safe to call more than once.
+	func stopTask(for downloadId: String, success: Bool) {
+		guard let taskIdentifier = identifier(for: downloadId) else { return }
+		if ledger.finish(taskIdentifier, success: success) == .cancelQueuedRequest {
+			BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
+		}
 	}
 }
 

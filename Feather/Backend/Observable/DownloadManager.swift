@@ -201,6 +201,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
 					#if !targetEnvironment(macCatalyst)
 					if #available(iOS 26.0, *) {
 						BackgroundTaskManager.shared.updateProgress(for: dl.id, progress: 1.0)
+						BackgroundTaskManager.shared.stopTask(for: dl.id, success: err == nil)
 					}
 					
 					self._updateBackgroundAudioState()
@@ -233,6 +234,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
 				download.zagImported?(nil, error)
 				download.zagImported = nil
 				self.downloads.remove(at: index)
+
+				#if !targetEnvironment(macCatalyst)
+				if #available(iOS 26.0, *) {
+					BackgroundTaskManager.shared.stopTask(for: download.id, success: false)
+				}
+				#endif
 			}
 		}
 	}
@@ -273,6 +280,13 @@ extension DownloadManager: URLSessionDownloadDelegate {
 			   !data.isEmpty {
 				download.resumeData = data
 			}
+			// A failed transfer ends its background task. A retry continues
+			// in the foreground.
+			#if !targetEnvironment(macCatalyst)
+			if #available(iOS 26.0, *) {
+				BackgroundTaskManager.shared.stopTask(for: download.id, success: false)
+			}
+			#endif
 			let hasRepositoryCallback = download.zagImported != nil
 			download.canRetry = true
 			download.zagImported?(nil, error)
