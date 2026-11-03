@@ -5,6 +5,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.cwd43.gu29.background-update-check</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).userTask.*</string>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>

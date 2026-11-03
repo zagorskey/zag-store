@@ -173,6 +173,9 @@ final class ZagRPPairingCore: ObservableObject {
 
 	@Published private(set) var gate4State: Gate4State = .idle
 	@Published private(set) var gate4SelfUpdateCommandSent = false
+	/// Callbacks received for the current or most recent Gate4 attempt, in
+	/// order. Used to tell whether a failure happened before the Upgrade request.
+	private(set) var gate4AttemptEvents: [ZagGate4Event] = []
 	@Published private(set) var gate4LastEvent = "No Gate4 activity this session"
 	private static let gate4HistoryKey = "ZagStore.Gate4LastRecordedEvent.v1"
 	var gate4PreviousEvent: String {
@@ -233,6 +236,7 @@ final class ZagRPPairingCore: ObservableObject {
 		guard !isGate4Running, acquireTransport("Gate4 install") else {
 			throw Gate4InstallError.alreadyRunning
 		}
+		gate4AttemptEvents = []
 		gate4Completion = completion
 		gate4Progress = progress
 		let localURL: URL
@@ -246,7 +250,11 @@ final class ZagRPPairingCore: ObservableObject {
 			defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
 			try FileManager.default.copyItem(at: sourceURL, to: localURL)
 		} catch {
+			// No worker was started, so no callback will ever run these.
+			// The caller reports the thrown error instead.
 			releaseTransport("Gate4 install")
+			gate4Completion = nil
+			gate4Progress = nil
 			throw error
 		}
 
@@ -275,6 +283,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	fileprivate func receiveGate4(code: Int32, message: String) {
+		gate4AttemptEvents.append(ZagGate4Event(code: code, message: message))
 		recordGate4Event("Gate4 callback \(code): \(message)")
 		// Record native installation stages for diagnostics.
 		if code == 206 {

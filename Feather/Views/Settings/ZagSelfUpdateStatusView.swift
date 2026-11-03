@@ -591,6 +591,21 @@ struct ZagSelfUpdateStatusView: View {
     @State private var installBusy = false
     @State private var installStatus = "No installation attempted"
 
+    private static let preparationFailurePrefix = "Update could not be prepared: "
+
+    /// Failures shown to every user, not only in diagnostics.
+    private var userVisibleUpdateIssue: String? {
+        guard !releaseDownloadBusy, !installBusy else { return nil }
+        if installStatus.hasPrefix("FAILED") || installStatus.hasPrefix("UNVERIFIED") {
+            return installStatus
+        }
+        if releaseCheckStatus.hasPrefix(Self.preparationFailurePrefix) ||
+            releaseCheckStatus.hasPrefix("Update cancelled") {
+            return releaseCheckStatus
+        }
+        return nil
+    }
+
     private var candidateSummary: String {
         let request: NSFetchRequest<Signed> = Signed.fetchRequest()
         request.predicate = NSPredicate(format: "identifier == %@", Bundle.main.bundleIdentifier ?? "")
@@ -635,6 +650,19 @@ struct ZagSelfUpdateStatusView: View {
                              zagBetaChannel == "nightly" ? "Zag Store Nightly" : "Stable")
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                    }
+                }
+            }
+
+            if coordinator.pendingInstallation != nil && !gate4.isGate4Running && !installBusy {
+                Section {
+                    Label("Previous update not confirmed", systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                    Text("Zag Store could not confirm that the last update was installed. If iOS is still finishing it, wait and reopen Zag Store. Otherwise clear it and try again.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Clear and Try Again", role: .destructive) {
+                        showClearPendingConfirmation = true
                     }
                 }
             }
@@ -744,7 +772,7 @@ struct ZagSelfUpdateStatusView: View {
                                     releaseCheckStatus = "Verified and signed. Confirm installation to continue."
                                     showInstallConfirmation = true
                                 } catch {
-                                    releaseCheckStatus = "Download failed: " + error.localizedDescription
+                                    releaseCheckStatus = Self.preparationFailurePrefix + error.localizedDescription
                                 }
                             }
                         } label: {
@@ -756,6 +784,17 @@ struct ZagSelfUpdateStatusView: View {
                                 .background(Color(uiColor: UIColor(displayP3Red: 0.0, green: 0.54, blue: 1.0, alpha: 1)), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        // Starting again while an attempt is unconfirmed would
+                        // download and sign only to be refused at installation.
+                        .disabled(coordinator.pendingInstallation != nil)
+                        .opacity(coordinator.pendingInstallation != nil ? 0.5 : 1)
+                        }
+
+                        if let issue = userVisibleUpdateIssue {
+                            Text(issue)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                     }
