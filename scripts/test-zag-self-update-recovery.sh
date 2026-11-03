@@ -144,6 +144,46 @@ else
 	FAILURES=$((FAILURES + 1))
 fi
 
+# Device-family guard: an iPhone-only build must not replace a native iPad
+# installation, and an iPad-only build must not be handed to an iPhone.
+validate=$(function_body "$COORD" validateSignedApp)
+family_guard_before_team() {
+	local guard_line team
+	guard_line=$(grep -n 'ZagDeviceFamilyPolicy.allowsReplacement' <<< "$validate" | head -1 | cut -d: -f1)
+	team=$(grep -n 'try validateProvisioningTeam' <<< "$validate" | head -1 | cut -d: -f1)
+	[[ -n "$guard_line" && -n "$team" && "$guard_line" -lt "$team" ]]
+}
+check "signed candidates pass the device-family guard" family_guard_before_team
+check "guard reads the candidate's own Info.plist" \
+	grep -q 'candidate: ZagDeviceFamilyPolicy.families(fromInfoPlistValue: info\["UIDeviceFamily"\])' <<< "$validate"
+check "guard compares with the running installation" \
+	grep -q 'installed: ZagDeviceFamilyPolicy.families(fromInfoPlistValue: Bundle.main.object(forInfoDictionaryKey: "UIDeviceFamily"))' <<< "$validate"
+check "guard uses the hardware model, not the interface idiom" \
+	bash -c "grep -q 'device: ZagDeviceFamilyPolicy.currentDevice()' <<< \"\$1\" && ! grep -q 'userInterfaceIdiom' \"\$2\"" _ "$validate" "$ROOT/Feather/Utilities/ZagDeviceFamilyPolicy.swift"
+check "device-family mismatch has its own error" grep -q 'throw UpdateError.incompatibleDeviceFamily' <<< "$validate"
+for caller in signImportedRelease stageSignedSelfUpdate persistStagedHandoff; do
+	check "$caller validates the signed app" grep -q 'try validateSignedApp(signed, release: release)' <<< "$(function_body "$COORD" "$caller")"
+done
+staged_guard_before_marker() {
+	local stage_body v m
+	stage_body=$(function_body "$COORD" stageSignedSelfUpdate)
+	v=$(grep -n 'try validateSignedApp' <<< "$stage_body" | head -1 | cut -d: -f1)
+	m=$(grep -n 'ZagSelfUpdateKeychainProbe.createIfMissing' <<< "$stage_body" | head -1 | cut -d: -f1)
+	[[ -n "$v" && -n "$m" && "$v" -lt "$m" ]]
+}
+check "rejection happens before the keychain marker or pending record" staged_guard_before_marker
+
+if swiftc -warnings-as-errors -parse-as-library \
+	"$ROOT/Feather/Utilities/ZagDeviceFamilyPolicy.swift" \
+	"$ROOT/scripts/ZagDeviceFamilyPolicyTests.swift" \
+	-o "$WORK/family-tests" 2>"$WORK/family-swiftc.log"; then
+	if "$WORK/family-tests"; then echo "PASS  device-family policy unit tests"; else FAILURES=$((FAILURES + 1)); fi
+else
+	cat "$WORK/family-swiftc.log"
+	echo "FAIL  device-family policy tests did not compile"
+	FAILURES=$((FAILURES + 1))
+fi
+
 # Compile and run the pure policy tests.
 if swiftc -warnings-as-errors -parse-as-library \
 	"$ROOT/Feather/Utilities/ZagSelfUpdateRetryPolicy.swift" \
