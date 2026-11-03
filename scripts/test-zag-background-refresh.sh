@@ -48,15 +48,19 @@ manager=$(cat "$MANAGER")
 check "manager completes tasks only through the ledger" \
 	bash -c "[[ \$(grep -c 'setTaskCompleted' <<< \"\$1\") -eq 2 ]] && grep -q 'complete: { success in' <<< \"\$1\"" _ "$manager"
 check "registration is tracked by the ledger" grep -q 'ledger.isRegistered(taskIdentifier)' <<< "$manager"
-check "expiry goes through the ledger before cancelling" grep -q 'self.ledger.expire(taskIdentifier, token: token) else { return }' <<< "$manager"
+check "expiry goes through the ledger before cancelling" grep -q 'let expiredTransfer = self.ledger.expire(taskIdentifier, token: token) else { return }' <<< "$manager"
+check "expiry cancels only the expired transfer" grep -q 'ZagContinuedTaskLedger.download(using: expiredTransfer, in: manager.downloads, transfer: { $0.task })' <<< "$manager"
+check "expiry never looks a download up by identifier" absent 'getDownload(by:' "$manager"
+check "ledger calls are scoped to the transfer" \
+	bash -c "grep -q 'willSubmit(taskIdentifier, transfer: transfer)' <<< \"\$1\" && grep -q 'ledger.finish(taskIdentifier, transfer: transfer' <<< \"\$1\" && grep -q 'runningTask(taskIdentifier, transfer: transfer)' <<< \"\$1\"" _ "$manager"
 check "download is cancelled on the main queue after expiry" grep -q 'DispatchQueue.main.async' <<< "$manager"
 check "queued request is cancelled when the download ends first" grep -q 'cancel(taskRequestWithIdentifier: taskIdentifier)' <<< "$manager"
 check "progress no longer completes the task early" absent 'stopTask' "$(function_body "$MANAGER" "updateProgress(")"
 check "no unsynchronised task dictionary" absent 'activeTasks' "$manager"
-check "cancelled downloads end their task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "cancelDownload(")"
-check "import result ends the task" grep -q 'stopTask(for: dl.id, success: err == nil)' <<< "$(function_body "$DOWNLOADS" "handlePachageFile(")"
-check "file handling failure ends the task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo")"
-check "transfer failure ends the task" grep -q 'stopTask(for: download.id, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError")"
+check "cancelled downloads end their task" grep -q 'stopTask(for: download, success: false)' <<< "$(function_body "$DOWNLOADS" "cancelDownload(")"
+check "import result ends the task" grep -q 'stopTask(for: dl, success: err == nil)' <<< "$(function_body "$DOWNLOADS" "handlePachageFile(")"
+check "file handling failure ends the task" grep -q 'stopTask(for: download, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo")"
+check "transfer failure ends the task" grep -q 'stopTask(for: download, success: false)' <<< "$(function_body "$DOWNLOADS" "urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError")"
 
 run_swift_tests() {
 	local name="$1"; shift

@@ -5,6 +5,11 @@ import Foundation
 /// being cancelled, iOS expiring the task, or iOS starting the task only
 /// after the download has already ended.
 ///
+/// Every submission belongs to one transfer (the URLSessionTask that was
+/// running when it was submitted). Finishing, expiring and progress only act
+/// on the entry for that exact transfer, so an old task can never end or
+/// cancel a replacement download that reuses the identifier.
+///
 /// Thread-safe. iOS calls launch and expiration handlers on a background
 /// queue, while downloads report on the main queue.
 final class ZagContinuedTaskLedger: @unchecked Sendable {
@@ -13,8 +18,10 @@ final class ZagContinuedTaskLedger: @unchecked Sendable {
 	final class Token: @unchecked Sendable {
 		fileprivate let completion: ZagOnceCompletion
 		fileprivate let task: AnyObject
-		fileprivate init(task: AnyObject, complete: @escaping (Bool) -> Void) {
+		fileprivate weak var transfer: AnyObject?
+		fileprivate init(task: AnyObject, transfer: AnyObject?, complete: @escaping (Bool) -> Void) {
 			self.task = task
+			self.transfer = transfer
 			self.completion = ZagOnceCompletion(complete)
 		}
 	}
@@ -25,12 +32,18 @@ final class ZagContinuedTaskLedger: @unchecked Sendable {
 		/// The request had not started yet; cancel it with the scheduler.
 		/// If iOS starts it anyway, it is completed immediately.
 		case cancelQueuedRequest
-		/// Nothing to do: no task, or it was already completed.
+		/// Nothing to do: no task, already completed, or the entry belongs
+		/// to a different transfer.
 		case nothing
 	}
 
+	private final class WeakTransfer {
+		weak var value: AnyObject?
+		init(_ value: AnyObject) { self.value = value }
+	}
+
 	private enum State {
-		case queued
+		case queued(WeakTransfer)
 		case running(Token)
 		case finished(Bool)
 	}
@@ -53,21 +66,22 @@ final class ZagContinuedTaskLedger: @unchecked Sendable {
 
 	// MARK: Lifecycle
 
-	/// A request is about to be submitted. A task still running for this
-	/// identifier belongs to a download being replaced, so it is completed.
-	func willSubmit(_ id: String) {
+	/// A request is about to be submitted for `transfer`. A task still
+	/// running for this identifier belongs to a download being replaced, so
+	/// it is completed.
+	func willSubmit(_ id: String, transfer: AnyObject) {
 		lock.lock()
 		var replaced: Token?
 		if case .running(let token) = states[id] { replaced = token }
-		states[id] = .queued
+		states[id] = .queued(WeakTransfer(transfer))
 		lock.unlock()
 		replaced?.completion.complete(success: false)
 	}
 
 	/// The scheduler rejected the request, so no task will start.
-	func submitFailed(_ id: String) {
+	func submitFailed(_ id: String, transfer: AnyObject) {
 		lock.lock(); defer { lock.unlock() }
-		if case .queued = states[id] { states[id] = nil }
+		if case .queued(let owner) = states[id], owner.value === transfer { states[id] = nil }
 	}
 
 	/// iOS started the task. Returns a token while the download is still
@@ -76,14 +90,14 @@ final class ZagContinuedTaskLedger: @unchecked Sendable {
 	func didLaunch(_ id: String, task: AnyObject, complete: @escaping (Bool) -> Void) -> Token? {
 		lock.lock()
 		switch states[id] {
-		case .queued:
-			let token = Token(task: task, complete: complete)
+		case .queued(let owner):
+			let token = Token(task: task, transfer: owner.value, complete: complete)
 			states[id] = .running(token)
 			lock.unlock()
 			return token
 		case .running(let previous):
 			// Unexpected second launch: keep the newest task, end the old one.
-			let token = Token(task: task, complete: complete)
+			let token = Token(task: task, transfer: previous.transfer, complete: complete)
 			states[id] = .running(token)
 			lock.unlock()
 			previous.completion.complete(success: false)
@@ -100,40 +114,61 @@ final class ZagContinuedTaskLedger: @unchecked Sendable {
 		}
 	}
 
-	/// The download ended (finished, failed or cancelled).
+	/// The download using `transfer` ended (finished, failed or cancelled).
+	/// Does nothing if the identifier now belongs to another transfer.
 	@discardableResult
-	func finish(_ id: String, success: Bool) -> FinishOutcome {
+	func finish(_ id: String, transfer: AnyObject, success: Bool) -> FinishOutcome {
 		lock.lock()
 		switch states[id] {
-		case .running(let token):
+		case .running(let token) where token.transfer === transfer:
 			states[id] = nil
 			lock.unlock()
 			return token.completion.complete(success: success) ? .completedRunningTask : .nothing
-		case .queued:
+		case .queued(let owner) where owner.value === transfer:
 			states[id] = .finished(success)
 			lock.unlock()
 			return .cancelQueuedRequest
-		case .finished, nil:
+		default:
 			lock.unlock()
 			return .nothing
 		}
 	}
 
-	/// iOS is expiring the task. Returns true if this call completed it,
-	/// meaning the caller should cancel the download.
-	func expire(_ id: String, token: Token) -> Bool {
+	/// iOS is expiring the task. Returns the transfer to cancel, or nil.
+	///
+	/// Only the current task may cancel anything, and only the transfer it
+	/// was submitted for. A token that is no longer current is already
+	/// being completed by whoever replaced or finished it, so it is left
+	/// alone: completing it here could overwrite a successful result.
+	func expire(_ id: String, token: Token) -> AnyObject? {
 		lock.lock()
-		if case .running(let current) = states[id], current === token {
-			states[id] = nil
+		guard case .running(let current) = states[id], current === token else {
+			lock.unlock()
+			return nil
 		}
+		states[id] = nil
 		lock.unlock()
-		return token.completion.complete(success: false)
+		guard token.completion.complete(success: false) else { return nil }
+		return token.transfer
 	}
 
-	/// The running task for an identifier, for progress updates.
-	func runningTask(_ id: String) -> AnyObject? {
+	/// The running task for an identifier, if it belongs to `transfer`.
+	func runningTask(_ id: String, transfer: AnyObject) -> AnyObject? {
 		lock.lock(); defer { lock.unlock() }
-		if case .running(let token) = states[id] { return token.task }
+		if case .running(let token) = states[id], token.transfer === transfer { return token.task }
 		return nil
+	}
+
+	/// The download to cancel after an expiry: the one still using the
+	/// expired transfer. A replacement or retried download has a different
+	/// transfer and is never returned, even if it shares the identifier.
+	/// Call on the queue that owns `downloads`.
+	static func download<D: AnyObject>(
+		using expiredTransfer: AnyObject?,
+		in downloads: [D],
+		transfer: (D) -> AnyObject?
+	) -> D? {
+		guard let expiredTransfer else { return nil }
+		return downloads.first { transfer($0) === expiredTransfer }
 	}
 }
