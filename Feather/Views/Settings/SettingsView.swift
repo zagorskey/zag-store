@@ -96,7 +96,7 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 		case .diagnostics: return "Diagnostics"
 		case .health: return "Health"
 		case .refreshingApps: return "Refreshing Apps"
-		case .aboutUs: return "About Us"
+		case .aboutUs: return "About"
 		case .misc: return "Browse"
 		case .reset: return "Reset"
 		}
@@ -104,6 +104,7 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 }
 
 private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
+	.aboutUs,
 	.display,
 	.certificates,
 	.features,
@@ -111,8 +112,7 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.misc,
 	.refreshingApps,
 	.health,
-	.diagnostics,
-	.aboutUs
+	.diagnostics
 ]
 
 // Theme the switch track without recoloring navigation buttons or links.
@@ -516,7 +516,7 @@ extension SettingsView {
                 case .refreshingApps:
                     return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
                 case .aboutUs:
-                    return _settingsSearchMatches("About Us Zag Store Submit Feedback Bug Report")
+                    return _settingsSearchMatches("About About Us Zag Store Submit Feedback Bug Report")
                 case .misc:
                     return _settingsSearchMatches("Browse Documents Archives Certificates Files")
                 case .reset:
@@ -868,7 +868,7 @@ extension SettingsView {
 				)
 			}
 		} header: {
-			Text("About Us")
+			Text("About")
 		} footer: {
 			Text(.localized("If any issues occur within the app please report it via the GitHub repository. When submitting an issue, make sure to submit detailed information."))
 		}
