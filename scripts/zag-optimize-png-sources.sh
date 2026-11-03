@@ -9,7 +9,8 @@ before=0; after=0; improved=0; unchanged=0; failed=0
 while IFS= read -r -d '' file; do
   bytes=$(stat -f %z "$file")
   before=$((before+bytes))
-  tmp=$(mktemp "${TMPDIR:-/tmp/}zag-png.XXXXXXXX.png")
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp/}zag-png.XXXXXXXX")
+  tmp="$tmpdir/optimised.png"
   if pngcrush -q -brute "$file" "$tmp" >/dev/null 2>&1 && [ -s "$tmp" ]; then
     old_dims=$(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null | tail -2)
     new_dims=$(sips -g pixelWidth -g pixelHeight "$tmp" 2>/dev/null | tail -2)
@@ -28,7 +29,7 @@ while IFS= read -r -d '' file; do
     failed=$((failed+1))
     printf 'FAILED %s\n' "$file" >&2
   fi
-  rm -f "$tmp"
+  rm -rf "$tmpdir"
 done < <(find Feather Images -type f -iname '*.png' -print0)
 printf '\nPNG source bytes: %d -> %d; saved %d bytes\n' "$before" "$after" "$((before-after))"
 printf 'Optimised: %d; unchanged: %d; failed: %d\n' "$improved" "$unchanged" "$failed"
