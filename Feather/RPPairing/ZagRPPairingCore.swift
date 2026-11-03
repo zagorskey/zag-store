@@ -250,7 +250,11 @@ final class ZagRPPairingCore: ObservableObject {
 			defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
 			try FileManager.default.copyItem(at: sourceURL, to: localURL)
 		} catch {
+			// No worker was started, so no callback will ever run these.
+			// The caller reports the thrown error instead.
 			releaseTransport("Gate4 install")
+			gate4Completion = nil
+			gate4Progress = nil
 			throw error
 		}
 

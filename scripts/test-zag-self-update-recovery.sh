@@ -62,6 +62,39 @@ check "policy classifies the snapshot, not live state" \
 check "no classification from the shared live callback list" \
 	bash -c "! grep -qE 'gate4AttemptEvents|gate4AttemptCallbackCodes' <<< \"\$1\"" _ "$perform"
 
+# Gate4 callbacks reach Swift in order, on the main actor, one attempt at a time.
+CORE="$ROOT/Feather/RPPairing/ZagRPPairingCore.swift"
+bridge=$(awk '/^private func zagGate4Callback\(/ {inside=1} inside {print} inside && /^}$/ {exit}' "$CORE")
+install_swift=$(function_body "$CORE" installGate4IPA)
+receive=$(function_body "$CORE" receiveGate4)
+copies_before_hop() {
+	local copy hop
+	copy=$(grep -n 'String(cString:' <<< "$bridge" | head -1 | cut -d: -f1)
+	hop=$(grep -n 'DispatchQueue.main.async' <<< "$bridge" | head -1 | cut -d: -f1)
+	[[ -n "$copy" && -n "$hop" && "$copy" -lt "$hop" ]]
+}
+check "Gate4 C message is copied before leaving the native thread" copies_before_hop
+check "Gate4 callbacks are forwarded through the serial main queue only" \
+	bash -c "[[ \$(grep -c 'DispatchQueue' <<< \"\$1\") -eq 1 ]] && grep -q 'ZagRPPairingCore.shared.receiveGate4(code: code, message: text)' <<< \"\$1\"" _ "$bridge"
+check "Gate4 state is main-actor isolated" \
+	bash -c "grep -B1 '^final class ZagRPPairingCore' \"\$1\" | grep -q '^@MainActor'" _ "$CORE"
+event_before_completion() {
+	local append first_completion
+	append=$(grep -n 'gate4AttemptEvents.append' <<< "$receive" | head -1 | cut -d: -f1)
+	first_completion=$(grep -n 'gate4Completion?(' <<< "$receive" | head -1 | cut -d: -f1)
+	[[ -n "$append" && -n "$first_completion" && "$append" -lt "$first_completion" ]]
+}
+check "terminal callback is recorded before the completion snapshots it" event_before_completion
+guard_before_store() {
+	local guard_line store
+	guard_line=$(grep -n 'guard !isGate4Running' <<< "$install_swift" | head -1 | cut -d: -f1)
+	store=$(grep -n 'gate4Completion = completion' <<< "$install_swift" | head -1 | cut -d: -f1)
+	[[ -n "$guard_line" && -n "$store" && "$guard_line" -lt "$store" ]]
+}
+check "a running attempt is refused before its completion is replaced" guard_before_store
+check "every early failure clears the stored completion" \
+	bash -c "[[ \$(grep -cE '\bthrow ' <<< \"\$1\") -eq \$(( \$(grep -c 'gate4Completion = nil' <<< \"\$1\") + 1 )) ]]" _ "$install_swift"
+
 # The policy's assumptions about the native installer must still hold.
 RUST="$ROOT/RPPairingCore/rust-core/src/lib.rs"
 if [[ -f "$RUST" ]]; then
@@ -82,6 +115,30 @@ if [[ -f "$RUST" ]]; then
 	check "Rust found the 205 announcement" test -n "$before_205" -a "$before_205" != "$install_fn"
 	check "Rust sends no install or upgrade before 205" \
 		bash -c "! grep -qE 'upgrade_|install_package|AfcClient' <<< \"\$1\"" _ "$before_205"
+	entry=$(awk '/^pub unsafe extern "C" fn zag_gate4_install\(/ {inside=1} inside {print} inside && /^}$/ {exit}' "$RUST")
+	session=$(awk '/^async fn with_zag_device_session/ {inside=1} inside {print} inside && /^}$/ {exit}' "$RUST")
+	check "Rust Gate4 runs on one worker thread driven by block_on" \
+		bash -c "[[ \$(grep -c 'thread::spawn' <<< \"\$1\") -eq 1 ]] && grep -q 'runtime.block_on' <<< \"\$1\"" _ "$entry"
+	check "Rust Gate4 never spawns tasks that could emit out of order" \
+		bash -c "! grep -qE 'spawn' <<< \"\$1\$2\"" _ "$install_fn" "$session"
+	check "Rust emits -4 only after the installer returns" \
+		bash -c "! grep -q 'emit(callback, -4' <<< \"\$1\" && grep -q 'run_gate4_install(device_ip, pairing_path, ipa_path, callback).await' <<< \"\$2\"" _ "$install_fn" "$entry"
+	last_emit_is_207() {
+		local last
+		last=$(grep -n 'emit(callback, ' <<< "$install_fn" | tail -1)
+		grep -q 'emit(callback, 207' <<< "$last" && [[ $(grep -c 'emit(callback, 207' <<< "$install_fn") -eq 1 ]]
+	}
+	check "Rust 207 is the last callback of a successful install" last_emit_is_207
+	check "Rust returns false without starting a worker on bad input" \
+		bash -c "awk '/thread::spawn/ {exit} {print}' <<< \"\$1\" | grep -q 'return false' && ! awk '/thread::spawn/ {exit} {print}' <<< \"\$1\" | grep -q 'emit('" _ "$entry"
+	IDEVICE_IP=$(ls -d "$HOME"/.cargo/git/checkouts/idevicekit-zag-*/191f36c/idevice/src/services/installation_proxy.rs 2>/dev/null | head -1 || true)
+	if [[ -n "$IDEVICE_IP" ]]; then
+		watch=$(awk '/async fn watch_completion/ {inside=1} inside {print} inside && /^    }$/ {exit}' "$IDEVICE_IP")
+		check "idevice awaits each 206 progress callback inline" \
+			bash -c "grep -q 'callback((c, state.clone())).await' <<< \"\$1\" && ! grep -q 'spawn' <<< \"\$1\"" _ "$watch"
+	else
+		echo "SKIP  idevice crate source not in the cargo cache; 206 inline-await not checked"
+	fi
 else
 	echo "FAIL  Rust installer source missing (initialise the RPPairingCore submodule)"
 	FAILURES=$((FAILURES + 1))
