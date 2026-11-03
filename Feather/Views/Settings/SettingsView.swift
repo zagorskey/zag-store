@@ -231,6 +231,7 @@ struct SettingsView: View {
                     if !_settingsSearchQuery.isEmpty {
                         _settingsSearchResults
                     } else {
+					_supportSection
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
@@ -495,6 +496,9 @@ extension SettingsView {
     // and advanced settings only when unlocked.
     private var _settingsSearchResults: some View {
         Group {
+            if _settingsSearchMatches("Support Zag Store Donate Contribute Patreon PayPal Stripe Ko-fi GitHub Sponsors Buy Me a Coffee Independent") {
+                _supportSection
+            }
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
@@ -512,7 +516,7 @@ extension SettingsView {
                 case .refreshingApps:
                     return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
                 case .aboutUs:
-                    return _settingsSearchMatches("About Us Zag Store Support Patreon PayPal Stripe Submit Feedback Bug Report")
+                    return _settingsSearchMatches("About Us Zag Store Submit Feedback Bug Report")
                 case .misc:
                     return _settingsSearchMatches("Browse Documents Archives Certificates Files")
                 case .reset:
@@ -810,6 +814,16 @@ extension SettingsView {
 			? _storedCustomSettingsSectionOrder()
 			: zagDefaultSettingsSectionOrder
 	}
+	/// Always first, outside the reorderable sections. A plain Form row keeps
+	/// the native Settings margins, corner radius and spacing.
+	private var _supportSection: some View {
+		Section {
+			NavigationLink(destination: ZagSupportContributionsView().zagSettingsDestinationAvatar()) {
+				ZagSupportSettingsRow(accent: ZagWideGamutTint.color(hex: userTintColor))
+			}
+		}
+	}
+
 	@ViewBuilder
 	private var _backupAndRestoreSection: some View {
 		Section {
@@ -834,10 +848,7 @@ extension SettingsView {
 					FRAppIconView(size: 23)
 				}
 			}
-            
-            NavigationLink(destination: ZagSupportContributionsView().zagSettingsDestinationAvatar()) {
-                Label("Support Zag Store", systemImage: "heart")
-            }
+
 
 			Button(.localized("Submit Feedback"), systemImage: "safari") {
 				let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
@@ -2379,6 +2390,59 @@ private struct ZagInstallationDiagnosticsView: View {
 
 
 // MARK: - Voluntary support
+/// The Support Zag Store row at the top of Settings.
+private struct ZagSupportSettingsRow: View {
+	let accent: Color
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	@ScaledMetric(relativeTo: .headline) private var iconSize: CGFloat = 42
+	@State private var hasAppeared = false
+
+	var body: some View {
+		HStack(spacing: 14) {
+			icon
+			VStack(alignment: .leading, spacing: 2) {
+				Text("Support Zag Store")
+					.font(.headline)
+					.foregroundStyle(.primary)
+				Text("Help keep Zag Store independent.")
+					.font(.subheadline)
+					.foregroundStyle(.secondary)
+			}
+			.multilineTextAlignment(.leading)
+		}
+		.padding(.vertical, 6)
+		.accessibilityElement(children: .combine)
+		.accessibilityAddTraits(.isButton)
+		.onAppear { hasAppeared = true }
+	}
+
+	private var symbol: some View {
+		Image(systemName: "heart.fill")
+			.font(.system(size: iconSize * 0.44, weight: .semibold))
+			.foregroundStyle(accent)
+			.frame(width: iconSize, height: iconSize)
+			.accessibilityHidden(true)
+	}
+
+	@ViewBuilder
+	private var icon: some View {
+		// One gentle bounce when Settings first shows the row; none with Reduce Motion.
+		let bounce = !reduceMotion && hasAppeared
+		if #available(iOS 26.0, *) {
+			symbol
+				.symbolEffect(.bounce, value: bounce)
+				.glassEffect(.regular.tint(accent.opacity(0.16)), in: Circle())
+		} else if #available(iOS 17.0, *) {
+			symbol
+				.symbolEffect(.bounce, value: bounce)
+				.background(accent.opacity(0.14), in: Circle())
+		} else {
+			symbol
+				.background(accent.opacity(0.14), in: Circle())
+		}
+	}
+}
+
 private struct ZagSupportContributionsView: View {
     private enum SupportGroup: String, CaseIterable, Identifiable {
         case direct = "Direct"
