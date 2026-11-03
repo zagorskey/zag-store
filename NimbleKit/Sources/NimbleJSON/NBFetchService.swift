@@ -20,27 +20,52 @@ public struct NBRepositoryFetchMetric: Codable, Identifiable, Sendable {
 	public var id: String { url }
 }
 
+/// Stored in a file rather than UserDefaults. A metric is recorded for every
+/// repository on every refresh, and each UserDefaults write re-evaluates every
+/// SwiftUI view holding @AppStorage, including the app's root tab view, while
+/// the refresh animation is running.
 public enum NBRepositoryFetchDiagnostics {
-	private static let key = "ZagStore.RepositoryFetchMetrics"
+	/// Where builds before the file store kept the metrics.
+	private static let legacyKey = "ZagStore.RepositoryFetchMetrics"
+	private static let lock = NSLock()
+	private static let fileURL: URL? = FileManager.default
+		.urls(for: .cachesDirectory, in: .userDomainMask)
+		.first?
+		.appendingPathComponent("ZagStore-RepositoryFetchMetrics.json")
 
 	public static var metrics: [NBRepositoryFetchMetric] {
-		guard
-			let data = UserDefaults.standard.data(forKey: key),
-			let decoded = try? JSONDecoder().decode([NBRepositoryFetchMetric].self, from: data)
-		else { return [] }
-		return decoded.sorted { $0.recordedAt > $1.recordedAt }
+		lock.lock(); defer { lock.unlock() }
+		return load().sorted { $0.recordedAt > $1.recordedAt }
 	}
 
 	public static func record(_ metric: NBRepositoryFetchMetric) {
-		var current = metrics.filter { $0.url != metric.url }
+		lock.lock(); defer { lock.unlock() }
+		var current = load().filter { $0.url != metric.url }
 		current.append(metric)
-		if let data = try? JSONEncoder().encode(current) {
-			UserDefaults.standard.set(data, forKey: key)
+		guard let fileURL, let data = try? JSONEncoder().encode(current) else { return }
+		try? data.write(to: fileURL, options: .atomic)
+		// One-time migration: the file now holds the older metrics as well.
+		if UserDefaults.standard.object(forKey: legacyKey) != nil {
+			UserDefaults.standard.removeObject(forKey: legacyKey)
 		}
 	}
 
 	public static func clear() {
-		UserDefaults.standard.removeObject(forKey: key)
+		lock.lock(); defer { lock.unlock() }
+		if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
+		if UserDefaults.standard.object(forKey: legacyKey) != nil {
+			UserDefaults.standard.removeObject(forKey: legacyKey)
+		}
+	}
+
+	/// Caller holds `lock`.
+	private static func load() -> [NBRepositoryFetchMetric] {
+		let data = fileURL.flatMap { try? Data(contentsOf: $0) }
+			?? UserDefaults.standard.data(forKey: legacyKey)
+		guard let data,
+			let decoded = try? JSONDecoder().decode([NBRepositoryFetchMetric].self, from: data)
+		else { return [] }
+		return decoded
 	}
 }
 
@@ -141,6 +166,14 @@ public class NBFetchService {
 		let defaults = UserDefaults.standard
 		defaults.removeObject(forKey: validatorKey("etag", url: url))
 		defaults.removeObject(forKey: validatorKey("modified", url: url))
+	}
+
+	/// Every UserDefaults write re-evaluates all @AppStorage views (the root
+	/// tab view among them), so an unchanged validator is not written again.
+	private func storeValidator(_ value: String, forKey key: String) {
+		let defaults = UserDefaults.standard
+		guard defaults.string(forKey: key) != value else { return }
+		defaults.set(value, forKey: key)
 	}
 
 	public func retainCachedRepositories(for urls: Set<URL>) {
@@ -351,18 +384,11 @@ extension NBFetchService {
 					if http?.statusCode != 304, let payloadURL {
 						do {
 							try responseData.write(to: payloadURL, options: .atomic)
-							let defaults = UserDefaults.standard
 							if let etag = http?.value(forHTTPHeaderField: "ETag") {
-								defaults.set(
-									etag,
-									forKey: self.validatorKey("etag", url: url)
-								)
+								self.storeValidator(etag, forKey: self.validatorKey("etag", url: url))
 							}
 							if let modified = http?.value(forHTTPHeaderField: "Last-Modified") {
-								defaults.set(
-									modified,
-									forKey: self.validatorKey("modified", url: url)
-								)
+								self.storeValidator(modified, forKey: self.validatorKey("modified", url: url))
 							}
 						} catch {
 							print(

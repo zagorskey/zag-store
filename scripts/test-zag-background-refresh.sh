@@ -148,6 +148,28 @@ check "decoded rows are reused only while the stored bytes are unchanged" \
 check "build lookups are remembered for one reconciliation only" \
 	bash -c 'grep -q "buildVersionMemo = \[:\]" "$1" && grep -q "defer { buildVersionMemo = nil }" "$1"' _ "$SVM"
 
+FETCH="$ROOT/NimbleKit/Sources/NimbleJSON/NBFetchService.swift"
+diagnostics_off_defaults() {
+	local body; body=$(awk '/^public enum NBRepositoryFetchDiagnostics/{f=1} f&&/^}/{print; exit} f' "$FETCH")
+	[[ -n "$body" ]] && ! grep -q 'UserDefaults.standard.set' <<< "$body"
+}
+check "Fetch diagnostics are not stored in UserDefaults (root re-evaluated per repository)" diagnostics_off_defaults
+check "Cache validators are written only when they change" \
+	grep -q 'guard defaults.string(forKey: key) != value else { return }' "$FETCH"
+check "Fetch completion writes validators only through storeValidator" absent 'defaults.set(\s*$' "$(cat "$FETCH")"
+
+FETCH_WORK=$(mktemp -d "${TMPDIR:-/tmp}/zag-fetch-defaults.XXXXXX")
+if swiftc -warnings-as-errors -parse-as-library -module-name ZagFetchDefaultsTests \
+	"$FETCH" "$ROOT/scripts/ZagFetchDefaultsTests.swift" \
+	-o "$FETCH_WORK/tests" 2>"$FETCH_WORK/swiftc.log"; then
+	if (cd "$FETCH_WORK" && HOME="$FETCH_WORK" ./tests); then echo "PASS  fetch defaults behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
+else
+	cat "$FETCH_WORK/swiftc.log"
+	echo "FAIL  fetch defaults tests did not compile"
+	FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$FETCH_WORK"
+
 LIFECYCLE_WORK=$(mktemp -d "${TMPDIR:-/tmp}/zag-refresh-lifecycle.XXXXXX")
 if swiftc -warnings-as-errors -parse-as-library \
 	"$ROOT/Feather/Utilities/ZagRepositoryIndexState.swift" \
