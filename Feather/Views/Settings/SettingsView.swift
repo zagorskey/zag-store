@@ -2410,13 +2410,14 @@ private struct ZagSupportSettingsRow: View {
 		HStack(alignment: .center, spacing: 16) {
 			if !stacked {
 				icon
+					.offset(y: 8)
 			}
 			VStack(alignment: .leading, spacing: 14) {
 				if stacked {
 					icon
 				}
 				titles
-				Text("Enjoying Zag Store? Your support helps us make it even better for everyone.")
+				Text("Enjoying the experience? Your support helps us make it even better for everyone.")
 					.font(.footnote)
 					.foregroundStyle(.secondary)
 					.fixedSize(horizontal: false, vertical: true)
@@ -2434,7 +2435,7 @@ private struct ZagSupportSettingsRow: View {
 			Text("Support Zag Store")
 				.font(.title3.weight(.semibold))
 				.foregroundStyle(.primary)
-			Text("Help keep Zag Store independent.")
+			Text("Help keep it independent.")
 				.font(.subheadline)
 				.foregroundStyle(.secondary)
 		}
