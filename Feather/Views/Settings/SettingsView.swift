@@ -2394,23 +2394,24 @@ private struct ZagInstallationDiagnosticsView: View {
 private struct ZagSupportSettingsRow: View {
 	let accent: Color
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
-	@ScaledMetric(relativeTo: .headline) private var iconSize: CGFloat = 42
+	@ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 56
 	@State private var hasAppeared = false
 
 	var body: some View {
-		HStack(spacing: 14) {
+		HStack(spacing: 16) {
 			icon
-			VStack(alignment: .leading, spacing: 2) {
+			VStack(alignment: .leading, spacing: 5) {
 				Text("Support Zag Store")
-					.font(.headline)
+					.font(.title3.weight(.bold))
 					.foregroundStyle(.primary)
 				Text("Help keep Zag Store independent.")
 					.font(.subheadline)
 					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
 			}
 			.multilineTextAlignment(.leading)
 		}
-		.padding(.vertical, 6)
+		.padding(.vertical, 16)
 		.accessibilityElement(children: .combine)
 		.accessibilityAddTraits(.isButton)
 		.onAppear { hasAppeared = true }
