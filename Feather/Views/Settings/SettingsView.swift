@@ -2407,22 +2407,20 @@ private struct ZagSupportSettingsRow: View {
 		// At accessibility text sizes the icon sits above the text, so the
 		// text keeps the full width of the card.
 		let stacked = dynamicTypeSize.isAccessibilitySize
-		VStack(alignment: .leading, spacing: 14) {
-			if stacked {
+		HStack(alignment: .center, spacing: 16) {
+			if !stacked {
 				icon
-				titles
-			} else {
-				HStack(alignment: .center, spacing: 16) {
-					icon
-					titles
-				}
 			}
-			Text("Every contribution is optional. Nothing is ever locked behind payment.")
-				.font(.footnote)
-				.foregroundStyle(.secondary)
-				.fixedSize(horizontal: false, vertical: true)
-				// Aligned with the title's text column.
-				.padding(.leading, stacked ? 0 : iconSize + 16)
+			VStack(alignment: .leading, spacing: 14) {
+				if stacked {
+					icon
+				}
+				titles
+				Text("Enjoying Zag Store? Your support helps us make it even better for everyone.")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
+			}
 		}
 		.multilineTextAlignment(.leading)
 		.padding(.vertical, 14)
