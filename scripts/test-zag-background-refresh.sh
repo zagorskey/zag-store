@@ -95,6 +95,35 @@ if [[ $# -ge 1 ]]; then
 	check "generated identifier $sample matches a permitted pattern" matches_permitted "$1"
 fi
 
+
+# Refresh performance: each finished repository publishes SourcesViewModel.
+# Only views that render repository state may observe it, or every refresh
+# re-renders the tab root and every Apps row once per repository.
+VIEWS="$ROOT/Feather/Views"
+check "root tab view does not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/TabView/VariedTabbarView.swift")"
+check "root tab view does not observe UpdateManager" \
+	absent '@StateObject private var updateManager = UpdateManager.shared' "$(sed -n '/^struct VariedTabbarView/,/^}/p' "$VIEWS/TabView/VariedTabbarView.swift")"
+check "iOS 18 tab container does not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/TabView/Bars/ExtendedTabbarView.swift")"
+check "Apps page and Updates popup do not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/Library/LibraryView.swift")"
+cell_struct=$(sed -n '/^struct LibraryCellView/,/^}/p' "$VIEWS/Library/LibraryCellView.swift")
+check "Apps rows do not observe SourcesViewModel" absent 'SourcesViewModel' "$cell_struct"
+check "Apps row badge observes repository state itself" \
+	grep -q 'private struct ZagLibraryRepositoryBadge' "$VIEWS/Library/LibraryCellView.swift"
+check "Games index is not rebuilt per repository during a refresh" \
+	grep -q 'if sourcesModel.isRefreshing && !indexSignature.isEmpty { return }' "$VIEWS/TabView/TabEnum.swift"
+check "Updates popup caches rows once a refresh settles" \
+	grep -q 'guard !sourcesViewModel.isRefreshing else { return }' "$VIEWS/Library/LibraryView.swift"
+SVM="$VIEWS/Sources/SourcesViewModel.swift"
+check "visibleUpdates reuses decoded Updated Recently rows" \
+	grep -q 'let recent = _recentUpdateRows()' "$SVM"
+check "decoded rows are reused only while the stored bytes are unchanged" \
+	grep -q 'if let cache = recentRowsCache, cache.data == data {' "$SVM"
+check "build lookups are remembered for one reconciliation only" \
+	bash -c 'grep -q "buildVersionMemo = \[:\]" "$1" && grep -q "defer { buildVersionMemo = nil }" "$1"' _ "$SVM"
+
 if (( FAILURES > 0 )); then
 	echo "$FAILURES check(s) failed"
 	exit 1

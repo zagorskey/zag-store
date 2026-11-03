@@ -589,7 +589,7 @@ final class UpdateManager: ObservableObject {
 		let cutoff = Calendar.current.date(
 			byAdding: .day, value: -30, to: Date()
 		) ?? .distantPast
-		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		let recent = _recentUpdateRows()
 			.filter { ($0.completedAt ?? .distantPast) >= cutoff }
 		return updates.filter { update in
 			let bundleID = update.app.id ?? update.id
@@ -626,6 +626,31 @@ final class UpdateManager: ObservableObject {
 	}
 
 	private var repositoryRefreshDepth = 0
+
+	// visibleUpdates is read by every badge and several times per Updates
+	// popup render. Decode the stored Updated Recently rows only when their
+	// bytes change, instead of JSON-decoding them on every read.
+	private var recentRowsCache: (data: Data, rows: [ZagUpdateRowSnapshot])?
+
+	private func _recentUpdateRows() -> [ZagUpdateRowSnapshot] {
+		guard let data = UserDefaults.standard.data(
+			forKey: ZagUpdateRowSnapshot.recentKey
+		) else {
+			recentRowsCache = nil
+			return []
+		}
+		if let cache = recentRowsCache, cache.data == data {
+			return cache.rows
+		}
+		let rows = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		recentRowsCache = (data, rows)
+		return rows
+	}
+
+	// One reconciliation asks for the same Signed app's build several times
+	// (matching, then diagnostics). Each lookup lists its directory and reads
+	// its Info.plist, so remember results for the duration of one pass only.
+	private var buildVersionMemo: [NSManagedObjectID: String?]?
 
 	private init() {
 		persistedUpdateCount = UserDefaults.standard.integer(
@@ -792,6 +817,8 @@ final class UpdateManager: ObservableObject {
 		signedApps: [Signed],
 		importedApps: [Imported]
 	) {
+		buildVersionMemo = [:]
+		defer { buildVersionMemo = nil }
 		var localApps: [LocalApp] = []
 		let persistedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
@@ -1646,16 +1673,25 @@ final class UpdateManager: ObservableObject {
 
 
 	private func _buildVersion(for app: Signed) -> String? {
-		guard
-			let appURL = Storage.shared.getAppDirectory(for: app),
-			let bundle = Bundle(url: appURL)
-		else {
-			return nil
+		if let cached = buildVersionMemo?[app.objectID] {
+			return cached
 		}
+		let build: String? = {
+			guard
+				let appURL = Storage.shared.getAppDirectory(for: app),
+				let bundle = Bundle(url: appURL)
+			else {
+				return nil
+			}
 
-		return bundle.object(
-			forInfoDictionaryKey: "CFBundleVersion"
-		) as? String
+			return bundle.object(
+				forInfoDictionaryKey: "CFBundleVersion"
+			) as? String
+		}()
+		if buildVersionMemo != nil {
+			buildVersionMemo?[app.objectID] = .some(build)
+		}
+		return build
 	}
 
 	private func _isRepositoryReleaseNewer(

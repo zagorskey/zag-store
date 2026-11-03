@@ -92,7 +92,9 @@ struct LibraryView: View {
 
 
 
-	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	// Read only by handlers (and passed to SourceAppsView, which observes it).
+	// Observing it here re-rendered this view for every refreshed repository.
+	private let sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 	@State private var _selectedRepositorySource: AltSource?
 
@@ -2639,7 +2641,9 @@ struct ZagUpdatesPopup: View {
 			)
 		]
 	) private var sources: FetchedResults<AltSource>
-	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	// Read only by handlers (and passed to SourceAppsView, which observes it).
+	// Observing it here re-rendered this view for every refreshed repository.
+	private let sourcesViewModel = SourcesViewModel.shared
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 	@State private var isUpdatingAll = false
@@ -2795,7 +2799,15 @@ struct ZagUpdatesPopup: View {
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
 			.onReceive(sourcesViewModel.$sources) { _ in
+				// Each finished repository publishes. Re-encoding and saving every
+				// row snapshot per repository is redundant; cache once it settles.
+				guard !sourcesViewModel.isRefreshing else { return }
 				_cacheAvailableRows()
+			}
+			.onReceive(sourcesViewModel.$isRefreshing) { refreshing in
+				// @Published sends before the stored value changes.
+				guard !refreshing else { return }
+				DispatchQueue.main.async { _cacheAvailableRows() }
 			}
 			.onReceive(updateManager.$updates) { _ in
 				// @Published sends before the stored value changes. Cache after

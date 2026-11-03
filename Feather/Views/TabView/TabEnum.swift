@@ -866,7 +866,8 @@ private enum ZagGamesIndexBuilder {
 }
 
 private struct ZagGamesPage: View {
-    @StateObject private var sourcesModel = SourcesViewModel.shared
+    // Body never reads repository state; indexing is driven by onReceive.
+    private let sourcesModel = SourcesViewModel.shared
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
     @FocusState private var searchFieldFocused: Bool
@@ -1430,7 +1431,14 @@ private struct ZagGamesPage: View {
             }
             .onReceive(sourcesModel.objectWillChange) { _ in
                 // Defer indexing until the repository model finishes publishing.
-                DispatchQueue.main.async { rebuildIndexIfNeeded() }
+                DispatchQueue.main.async {
+                    // Each finished repository publishes. Rebuilding the whole
+                    // index per repository repeats the full scan N times; keep the
+                    // current index and rebuild once when the refresh ends. With no
+                    // index yet (first load), the first repository is indexed at once.
+                    if sourcesModel.isRefreshing && !indexSignature.isEmpty { return }
+                    rebuildIndexIfNeeded()
+                }
             }
             .navigationDestination(
                 isPresented: Binding(

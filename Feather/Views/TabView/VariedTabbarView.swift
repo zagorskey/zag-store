@@ -64,8 +64,11 @@ enum ZagWideGamutTint {
 struct VariedTabbarView: View {
 	@AppStorage("Feather.userTintColor") private var themeColorHex: String = "#0090FF"
 	@AppStorage(ZagWallpaperStore.enabledKey) private var wallpaperEnabled = false
-	@StateObject private var sourcesViewModel = SourcesViewModel.shared
-	@StateObject private var updateManager = UpdateManager.shared
+	// The root view only calls these models from handlers; its body never
+	// reads them. Observing them re-evaluated the whole tab hierarchy for
+	// every repository that finished during a refresh.
+	private let sourcesViewModel = SourcesViewModel.shared
+	private let updateManager = UpdateManager.shared
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var didStartInitialUpdateRefresh = false
 
@@ -141,9 +144,6 @@ struct VariedTabbarView: View {
 			)
 			guard configuredURLs == loadedURLs else { return }
 			updateManager.refresh(repositories: Array(activeSources.values))
-		}
-		.onReceive(sourcesViewModel.$sources) { _ in
-			// SourcesViewModel commits repository and update state together.
 		}
 	}
 

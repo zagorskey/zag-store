@@ -13,7 +13,9 @@ import NukeUI
 struct ExtendedTabbarView: View {
 	@Environment(\.horizontalSizeClass) var horizontalSizeClass
 	@AppStorage("Feather.tabCustomization") var customization = TabViewCustomization()
-	@StateObject var viewModel = SourcesViewModel.shared
+	// Passed to SourceAppsView, which observes it. This container never
+	// reads repository state, so it must not re-render on every publication.
+	private let viewModel = SourcesViewModel.shared
 	@StateObject private var updateManager = UpdateManager.shared
 	@StateObject private var selfUpdateCoordinator = ZagSelfUpdateCoordinator.shared
 	@AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"

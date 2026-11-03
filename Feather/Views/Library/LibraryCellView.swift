@@ -22,7 +22,8 @@ struct LibraryCellView: View {
 	}()
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 	@Environment(\.editMode) private var editMode
-	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+	// Repository state is observed only by the badge and menu label below,
+	// so a refreshed repository no longer re-renders every Apps row.
 
 	private var displayCertificate: CertificatePair? {
 		if let certificate = Storage.shared.getCertificate(from: app) {
@@ -122,35 +123,10 @@ struct LibraryCellView: View {
 						size: 62
 					)
 
-					if let repositoryIconURL {
-						Button {
-							guard let source = repositoryOrigin?.0 else { return }
-							UIImpactFeedbackGenerator(style: .light).impactOccurred()
-							onRepositoryBadgeTap?(source)
-						} label: {
-							LazyImage(url: repositoryIconURL) { state in
-								if let image = state.image {
-									image
-										.appIconStyle(
-											size: 20,
-											isCircle: true,
-											background: Color(
-												uiColor: .secondarySystemBackground
-											)
-										)
-										.offset(x: 46, y: 4)
-								}
-							}
-						}
-						.buttonStyle(.plain)
-						.accessibilityLabel(
-							Text("\(repositoryOrigin?.1.name ?? "Repository") repository")
-						)
-						.accessibilityHint(
-							Text("Opens this app's source repository")
-						)
-						.accessibilityAddTraits(.isButton)
-					}
+					ZagLibraryRepositoryBadge(
+						bundleID: app.identifier,
+						onTap: onRepositoryBadgeTap
+					)
 				}
 
 				NBTitleWithSubtitleView(
@@ -218,15 +194,7 @@ struct LibraryCellView: View {
 			if !isEditing {
 				_contextActions(for: app)
 
-				if let repositoryName = repositoryOrigin?.1.name {
-					Label(
-						"Source: \(repositoryName)",
-						systemImage: "shippingbox"
-					)
-					.disabled(true)
-
-					Divider()
-				}
+				ZagLibraryRepositorySourceLabel(bundleID: app.identifier)
 
 				Divider()
 
@@ -251,55 +219,6 @@ struct LibraryCellView: View {
 			)
 		}
 
-	}
-
-	// MARK: - Repository Origin
-
-	private var repositoryOrigin: (AltSource, ASRepository)? {
-		guard let bundleID = app.identifier, !bundleID.isEmpty else {
-			return nil
-		}
-
-		let origins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOrigins"
-		) as? [String: String]
-		let origin = origins?[bundleID]
-
-		if let origin {
-			if let match = sourcesViewModel.sources.first(where: { storedSource, repository in
-				storedSource.sourceURL?.absoluteString == origin ||
-				repository.id == origin ||
-				repository.website?.absoluteString == origin ||
-				repository.name == origin
-			}) {
-				return match
-			}
-		}
-
-		// Repository reconciliation records a unique legacy origin when it is
-		// safe to do so. Do not rescan every app in every repository from each
-		// visible row; that made scrolling cost grow with the entire catalog.
-		return nil
-	}
-
-	private var repositoryIconURL: URL? {
-		if let iconURL = repositoryOrigin?.1.currentIconURL {
-			return iconURL
-		}
-
-		guard let bundleID = app.identifier, !bundleID.isEmpty else {
-			return nil
-		}
-		let icons = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOriginIcons"
-		) as? [String: String]
-		guard
-			let value = icons?[bundleID],
-			let url = URL(string: value)
-		else {
-			return nil
-		}
-		return url
 	}
 
 	// MARK: - Description
@@ -901,3 +820,109 @@ extension LibraryCellView {
 
 }
 
+// MARK: - Repository Origin
+
+/// Resolves the repository an installed app came from, using provenance
+/// recorded by repository reconciliation. It never rescans every app in every
+/// repository, so its cost does not grow with the catalogue.
+enum ZagLibraryRepositoryOrigin {
+	static func resolve(
+		bundleID: String?,
+		in sources: [AltSource: ASRepository]
+	) -> (AltSource, ASRepository)? {
+		guard let bundleID, !bundleID.isEmpty else { return nil }
+		let origins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String]
+		guard let origin = origins?[bundleID] else { return nil }
+		return sources.first(where: { storedSource, repository in
+			storedSource.sourceURL?.absoluteString == origin ||
+			repository.id == origin ||
+			repository.website?.absoluteString == origin ||
+			repository.name == origin
+		})
+	}
+
+	static func iconURL(
+		bundleID: String?,
+		origin: (AltSource, ASRepository)?
+	) -> URL? {
+		if let iconURL = origin?.1.currentIconURL {
+			return iconURL
+		}
+		guard let bundleID, !bundleID.isEmpty else { return nil }
+		let icons = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOriginIcons"
+		) as? [String: String]
+		guard let value = icons?[bundleID] else { return nil }
+		return URL(string: value)
+	}
+}
+
+/// The small repository badge on an Apps row. It observes repository state
+/// itself, so a repository refresh re-renders only this badge.
+private struct ZagLibraryRepositoryBadge: View {
+	let bundleID: String?
+	let onTap: ((AltSource) -> Void)?
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+
+	var body: some View {
+		let origin = ZagLibraryRepositoryOrigin.resolve(
+			bundleID: bundleID,
+			in: sourcesViewModel.sources
+		)
+		if let repositoryIconURL = ZagLibraryRepositoryOrigin.iconURL(
+			bundleID: bundleID,
+			origin: origin
+		) {
+			Button {
+				guard let source = origin?.0 else { return }
+				UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				onTap?(source)
+			} label: {
+				LazyImage(url: repositoryIconURL) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 20,
+								isCircle: true,
+								background: Color(
+									uiColor: .secondarySystemBackground
+								)
+							)
+							.offset(x: 46, y: 4)
+					}
+				}
+			}
+			.buttonStyle(.plain)
+			.accessibilityLabel(
+				Text("\(origin?.1.name ?? "Repository") repository")
+			)
+			.accessibilityHint(
+				Text("Opens this app's source repository")
+			)
+			.accessibilityAddTraits(.isButton)
+		}
+	}
+}
+
+/// The "Source:" item in an Apps row's context menu.
+private struct ZagLibraryRepositorySourceLabel: View {
+	let bundleID: String?
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+
+	var body: some View {
+		if let repositoryName = ZagLibraryRepositoryOrigin.resolve(
+			bundleID: bundleID,
+			in: sourcesViewModel.sources
+		)?.1.name {
+			Label(
+				"Source: \(repositoryName)",
+				systemImage: "shippingbox"
+			)
+			.disabled(true)
+
+			Divider()
+		}
+	}
+}
