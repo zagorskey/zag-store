@@ -512,7 +512,7 @@ extension SettingsView {
                 case .refreshingApps:
                     return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
                 case .aboutUs:
-                    return _settingsSearchMatches("About Us Zag Store Submit Feedback Bug Report")
+                    return _settingsSearchMatches("About Us Zag Store Support Patreon PayPal Stripe Submit Feedback Bug Report")
                 case .misc:
                     return _settingsSearchMatches("Browse Documents Archives Certificates Files")
                 case .reset:
@@ -835,6 +835,10 @@ extension SettingsView {
 				}
 			}
             
+            NavigationLink(destination: ZagSupportContributionsView().zagSettingsDestinationAvatar()) {
+                Label("Support Zag Store", systemImage: "heart")
+            }
+
 			Button(.localized("Submit Feedback"), systemImage: "safari") {
 				let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
 					UIApplication.open(_makeGitHubIssueURL(url: _githubUrl))
@@ -2372,3 +2376,279 @@ private struct ZagInstallationDiagnosticsView: View {
 }
 
 
+
+
+// MARK: - Voluntary support
+private struct ZagSupportContributionsView: View {
+    private enum SupportGroup: String, CaseIterable, Identifiable {
+        case direct = "Direct"
+        case community = "Community"
+        var id: String { rawValue }
+    }
+
+    @State private var group: SupportGroup = .direct
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
+    @Environment(\.openURL) private var openURL
+
+    private let paypalURL = URL(string: "https://www.paypal.com/ncp/payment/QDG7HMX4ZDP46")!
+    private let stripeURL = URL(string: "https://buy.stripe.com/00wcN494EbB80hl4yYa3u00")!
+    private let kofiURL = URL(string: "https://ko-fi.com/zagstore")!
+    private let buyMeACoffeeURL = URL(string: "https://buymeacoffee.com/zagstore")!
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(spacing: 12) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 38, weight: .medium))
+                        .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
+                        .padding(.top, 10)
+                    Text("Support Zag Store")
+                        .font(.title2.bold())
+                    Text("Help us build a better, more open app discovery experience.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 8)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Section {
+                supportReason("Independent development", detail: "Support ongoing improvements and new features.", symbol: "chevron.left.forwardslash.chevron.right")
+                supportReason("Infrastructure and testing", detail: "Help cover servers, signing research and device testing.", symbol: "server.rack")
+                supportReason("Entirely voluntary", detail: "Every contribution helps, but no features are locked behind payment.", symbol: "heart")
+            }
+
+            Section {
+                Picker("Contribution methods", selection: $group) {
+                    ForEach(SupportGroup.allCases) { item in
+                        Text(item.rawValue).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Contribution methods")
+            }
+
+            if group == .direct {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .paypal)
+                            Text("PayPal")
+                        }
+                            .font(.headline)
+                        Text("Choose your contribution amount in GBP. Checkout is securely handled by PayPal.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(paypalURL)
+                        } label: {
+                            Text("Contribute with PayPal")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .stripe)
+                            Text("Stripe")
+                                .font(.headline)
+                        }
+                        Text("Choose a one-time contribution amount in GBP. Checkout is securely handled by Stripe.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(stripeURL)
+                        } label: {
+                            Text("Contribute with Stripe")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                } header: {
+                    Text("Direct contributions")
+                }
+            } else {
+                Section {
+                    comingSoonRow("Patreon", provider: .patreon)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .kofi)
+                            Text("Ko-fi")
+                                .font(.headline)
+                        }
+                        Text("Support Zag Store through our Ko-fi community page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(kofiURL)
+                        } label: {
+                            Text("Contribute with Ko-fi")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .buyMeACoffee)
+                            Text("Buy Me a Coffee")
+                                .font(.headline)
+                        }
+                        Text("Make a one-time contribution through our Buy Me a Coffee page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(buyMeACoffeeURL)
+                        } label: {
+                            Text("Contribute with Buy Me a Coffee")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .githubSponsors)
+                            Text("GitHub Sponsors")
+                                .font(.headline)
+                        }
+                        Text("Support Zag Store's development through our GitHub Sponsors page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(URL(string: "https://github.com/sponsors/zagorskey")!)
+                        } label: {
+                            Text("Contribute with GitHub Sponsors")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                } header: {
+                    Text("Community support")
+                } footer: {
+                    Text("Community contributions are securely handled by each provider. Patreon will be available later.")
+                }
+            }
+
+            Section {
+                Text("Contributions are voluntary and do not unlock features or special access. Zag Store is not a registered charity; contributions are not charitable or tax-deductible gifts.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Support Zag Store")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(ZagWideGamutTint.color(hex: themeColorHex))
+        .zagWallpaperSurface()
+    }
+
+    private func supportReason(_ title: String, detail: String, symbol: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
+                .frame(width: 30)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func comingSoonRow(_ name: String, provider: ZagContributionProviderIcon.Provider) -> some View {
+        HStack(spacing: 12) {
+            ZagContributionProviderIcon(provider: provider)
+            Text(name)
+            Spacer()
+            Text("Coming soon")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+    
+// MARK: - Zag Store contribution brand icons
+// Original brand silhouettes from Simple Icons, displayed unmodified in a
+// shared neutral rounded container. Brand marks remain owned by their holders.
+private struct ZagContributionProviderIcon: View {
+    enum Provider {
+        case paypal, stripe, patreon, kofi, buyMeACoffee, githubSponsors
+    }
+
+    let provider: Provider
+
+    private var asset: String {
+        switch provider {
+        case .paypal: return "ZagProviderPayPal"
+        case .stripe: return "ZagProviderStripe"
+        case .patreon: return "ZagProviderPatreon"
+        case .kofi: return "ZagProviderKofi"
+        case .buyMeACoffee: return "ZagProviderBuyMeACoffee"
+        case .githubSponsors: return "ZagProviderGitHubSponsors"
+        }
+    }
+
+    private var brandColor: Color {
+        switch provider {
+        case .paypal: return Color(red: 0.00, green: 0.36, blue: 0.73)
+        case .stripe: return Color(red: 0.39, green: 0.33, blue: 0.95)
+        case .patreon: return Color(red: 1.00, green: 0.27, blue: 0.29)
+        case .kofi: return Color(red: 0.17, green: 0.66, blue: 0.88)
+        case .buyMeACoffee: return Color(red: 0.98, green: 0.73, blue: 0.16)
+        case .githubSponsors: return Color(red: 0.91, green: 0.25, blue: 0.53)
+        }
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        switch provider {
+        case .paypal, .kofi, .buyMeACoffee:
+            // Full-colour vector assets retain their individually coloured paths.
+            Image(asset)
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+        default:
+            Image(asset)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(brandColor)
+        }
+    }
+
+    var body: some View {
+        artwork
+            .frame(width: 48, height: 48)
+            .frame(width: 62, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.16), lineWidth: 0.7)
+            }
+            .accessibilityHidden(true)
+    }
+}
