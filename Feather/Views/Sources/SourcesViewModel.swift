@@ -576,6 +576,10 @@ final class UpdateManager: ObservableObject {
 	@Published private(set) var updates: [AvailableUpdate] = []
 	@Published private(set) var persistedUpdateCount: Int
 	@Published private(set) var diagnosticsReport = "Run a repository refresh to capture update diagnostics."
+	/// Incremented as the last state change of every completed reconciliation.
+	/// When it publishes, updates, counts and completion state are already
+	/// final, so observers can persist them without deferring.
+	@Published private(set) var reconciliationGeneration = 0
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
@@ -1388,6 +1392,7 @@ final class UpdateManager: ObservableObject {
 			persistedUpdateCount,
 			forKey: Self.persistedUpdateCountKey
 		)
+		reconciliationGeneration &+= 1
 
 		notifyAboutNewUpdatesIfNeeded(updates)
 

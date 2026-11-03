@@ -27,6 +27,7 @@
 
 
 import SwiftUI
+import Combine
 
 
 
@@ -2232,36 +2233,6 @@ private struct ZagUpdateIconAppearanceModifier: ViewModifier {
 	}
 }
 
-struct ZagUpdateRowSnapshot: Codable, Identifiable {
-	let id: String
-	let bundleID: String
-	let name: String
-	let iconURL: String?
-	let sourceIconURL: String?
-	let releaseDateText: String?
-	let releaseNotes: String?
-	let metadataText: String?
-	let version: String
-	// Optional for compatibility with snapshots saved by older Zag Store builds.
-	let build: String?
-	let completedAt: Date?
-
-	static let availableKey = "ZagStore.availableUpdateRows"
-	static let recentKey = "ZagStore.updatedRecentlyRows"
-
-	static func load(_ key: String) -> [Self] {
-		guard let data = UserDefaults.standard.data(forKey: key),
-			  let rows = try? JSONDecoder().decode([Self].self, from: data)
-		else { return [] }
-		return rows
-	}
-
-	static func save(_ rows: [Self], key: String) {
-		guard let data = try? JSONEncoder().encode(rows) else { return }
-		UserDefaults.standard.set(data, forKey: key)
-	}
-}
-
 private struct ZagUpdateRow: View {
 	enum Mode {
 		case available
@@ -2798,21 +2769,12 @@ struct ZagUpdatesPopup: View {
 				let bundleIDs = updates.compactMap { $0.app.id }
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
-			.onReceive(sourcesViewModel.$sources) { _ in
-				// Each finished repository publishes. Re-encoding and saving every
-				// row snapshot per repository is redundant; cache once it settles.
-				guard !sourcesViewModel.isRefreshing else { return }
+			// Row snapshots derive only from UpdateManager's reconciled state.
+			// Persist once per completed reconciliation: this publishes after
+			// updates and completion state are final, so no deferral is needed
+			// and back-to-back refreshes each save their own final result.
+			.onReceive(updateManager.$reconciliationGeneration.dropFirst()) { _ in
 				_cacheAvailableRows()
-			}
-			.onReceive(sourcesViewModel.$isRefreshing) { refreshing in
-				// @Published sends before the stored value changes.
-				guard !refreshing else { return }
-				DispatchQueue.main.async { _cacheAvailableRows() }
-			}
-			.onReceive(updateManager.$updates) { _ in
-				// @Published sends before the stored value changes. Cache after
-				// publication, or a previous update snapshot may be saved again.
-				DispatchQueue.main.async { _cacheAvailableRows() }
 			}
 			.animation(.easeInOut(duration: 0.35), value: displayedAvailableCount)
 			.navigationTitle(.localized("App Updates"))

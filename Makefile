@@ -2,7 +2,10 @@ NAME := Feather
 SCHEME := Feather
 PLATFORMS := iphoneos maccatalyst
 
-TMP := $(TMPDIR)/$(NAME)
+# One DerivedData per checkout. A shared folder let one checkout's package
+# state re-resolve another's pinned dependencies, and `make clean` in one
+# checkout wiped the other's cache.
+TMP := $(TMPDIR)/$(NAME)-$(notdir $(CURDIR))
 CERT_JSON_URL := https://backloop.dev/pack.json
 
 .PHONY: all clean $(PLATFORMS)

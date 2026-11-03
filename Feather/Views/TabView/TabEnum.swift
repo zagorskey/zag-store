@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 import NimbleViews
 import NukeUI
 import AltSourceKit
@@ -885,7 +886,7 @@ private struct ZagGamesPage: View {
     @State private var verifiedFeaturedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var verifiedArtwork: [String: ZagFeaturedHero] = [:]
     @State private var isCheckingFeatured = false
-    @State private var indexSignature = ""
+    @State private var indexState = ZagRepositoryIndexState()
     @State private var indexWorker: Task<ZagGamesIndexSnapshot?, Never>?
     @State private var indexedArtworkRevision = 0
     @State private var indexedGameCount = 0
@@ -1148,17 +1149,25 @@ private struct ZagGamesPage: View {
 
     // Starting the scan must not block the Games tab transition.
     // Keep current results visible until the new version is ready.
-    private func rebuildIndexIfNeeded() {
-        let signature = sources.map { source in
+    private func indexSignature(for loaded: [AltSource: ASRepository]) -> String {
+        sources.map { source in
             let key = source.identifier ?? source.sourceURL?.absoluteString ?? source.objectID.uriRepresentation().absoluteString
-            return key + ":" + String(sourcesModel.sources[source]?.apps.count ?? -1)
+            return key + ":" + String(loaded[source]?.apps.count ?? -1)
         }.joined(separator: "|")
-        guard signature != indexSignature else { return }
-        indexSignature = signature
+    }
+
+    private func loadedCount(in loaded: [AltSource: ASRepository]) -> Int {
+        sources.reduce(0) { $0 + (loaded[$1] == nil ? 0 : 1) }
+    }
+
+    /// Starts the build that `indexState` asked for, from the repository
+    /// snapshot that triggered it (never from a later read of the model).
+    private func buildIndex(generation: Int?, from loaded: [AltSource: ASRepository]) {
+        guard let generation else { return }
 
         // Copy repository *values* on the main actor, without copying Core Data
         // source objects to a background executor.
-        let repositories = sources.compactMap { sourcesModel.sources[$0] }
+        let repositories = sources.compactMap { loaded[$0] }
         let indexStartedAt = ZagPerformanceMonitor.now()
         indexWorker?.cancel()
         let worker = Task.detached(priority: .userInitiated) {
@@ -1169,7 +1178,7 @@ private struct ZagGamesPage: View {
         Task { @MainActor in
             guard let snapshot = await worker.value,
                   !worker.isCancelled,
-                  indexSignature == signature else { return }
+                  indexState.accepts(generation: generation) else { return }
 
             indexedFeaturedGames = snapshot.featuredCandidates
             indexedEmulators = snapshot.emulators
@@ -1424,21 +1433,44 @@ private struct ZagGamesPage: View {
                 Text("Games").tag("Games")
                 Text("Emulators").tag("Emulators")
             }
-            .onAppear(perform: rebuildIndexIfNeeded)
+            .onAppear {
+                let loaded = sourcesModel.sources
+                buildIndex(
+                    generation: indexState.appeared(
+                        signature: indexSignature(for: loaded),
+                        loadedRepositoryCount: loadedCount(in: loaded)
+                    ),
+                    from: loaded
+                )
+            }
             // Resolve artwork only once the background index has been published.
             .task(id: indexedArtworkRevision) {
                 await refreshVerifiedFeatured()
             }
-            .onReceive(sourcesModel.objectWillChange) { _ in
-                // Defer indexing until the repository model finishes publishing.
-                DispatchQueue.main.async {
-                    // Each finished repository publishes. Rebuilding the whole
-                    // index per repository repeats the full scan N times; keep the
-                    // current index and rebuild once when the refresh ends. With no
-                    // index yet (first load), the first repository is indexed at once.
-                    if sourcesModel.isRefreshing && !indexSignature.isEmpty { return }
-                    rebuildIndexIfNeeded()
-                }
+            // Index from the values Combine publishes, not from the model read
+            // later: @Published emits before it stores the new value.
+            .onReceive(sourcesModel.$sources) { loaded in
+                buildIndex(
+                    generation: indexState.repositoriesPublished(
+                        signature: indexSignature(for: loaded),
+                        loadedRepositoryCount: loadedCount(in: loaded),
+                        isRefreshing: sourcesModel.isRefreshing
+                    ),
+                    from: loaded
+                )
+            }
+            // A refresh ends (finished, failed or cancelled) by clearing
+            // isRefreshing, after its final repository snapshot is stored.
+            .onReceive(sourcesModel.$isRefreshing.dropFirst()) { refreshing in
+                guard !refreshing else { return }
+                let loaded = sourcesModel.sources
+                buildIndex(
+                    generation: indexState.refreshEnded(
+                        signature: indexSignature(for: loaded),
+                        loadedRepositoryCount: loadedCount(in: loaded)
+                    ),
+                    from: loaded
+                )
             }
             .navigationDestination(
                 isPresented: Binding(

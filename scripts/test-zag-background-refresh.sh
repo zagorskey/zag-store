@@ -112,10 +112,34 @@ cell_struct=$(sed -n '/^struct LibraryCellView/,/^}/p' "$VIEWS/Library/LibraryCe
 check "Apps rows do not observe SourcesViewModel" absent 'SourcesViewModel' "$cell_struct"
 check "Apps row badge observes repository state itself" \
 	grep -q 'private struct ZagLibraryRepositoryBadge' "$VIEWS/Library/LibraryCellView.swift"
-check "Games index is not rebuilt per repository during a refresh" \
-	grep -q 'if sourcesModel.isRefreshing && !indexSignature.isEmpty { return }' "$VIEWS/TabView/TabEnum.swift"
-check "Updates popup caches rows once a refresh settles" \
-	grep -q 'guard !sourcesViewModel.isRefreshing else { return }' "$VIEWS/Library/LibraryView.swift"
+TABS="$VIEWS/TabView/TabEnum.swift"
+check "Games indexes from the published repository snapshot" \
+	grep -q '\.onReceive(sourcesModel\.\$sources) { loaded in' "$TABS"
+check "Games rebuilds when a refresh ends (finished, failed or cancelled)" \
+	grep -q '\.onReceive(sourcesModel\.\$isRefreshing\.dropFirst()) { refreshing in' "$TABS"
+check "Games shows only the newest build's result" grep -q 'indexState.accepts(generation: generation)' "$TABS"
+check "Games no longer depends on objectWillChange ordering" absent 'sourcesModel.objectWillChange' "$(cat "$TABS")"
+fetch_body=$(function_body "$VIEWS/Sources/SourcesViewModel.swift" fetchSources)
+refresh_cleared_in_defer() {
+	[[ $(grep -c 'self.isRefreshing = false' <<< "$fetch_body") == 1 ]] &&
+	awk '/defer {/{d=1} d && /self.isRefreshing = false/{found=1} d && /^\t\t}/{d=0} END{exit !found}' <<< "$fetch_body"
+}
+check "isRefreshing is cleared only in fetchSources' defer, after every snapshot" refresh_cleared_in_defer
+LIB="$VIEWS/Library/LibraryView.swift"
+check "Updates popup persists once per completed reconciliation" \
+	grep -q '\.onReceive(updateManager\.\$reconciliationGeneration\.dropFirst()) {' "$LIB"
+check "Updates popup no longer persists on repository publications" absent 'onReceive(sourcesViewModel\.\$' "$(cat "$LIB")"
+check "Updates popup persistence is not deferred" absent 'DispatchQueue.main.async { _cacheAvailableRows() }' "$(cat "$LIB")"
+generation_is_last() {
+	local body; body=$(sed -n '/func refresh(\n*/,/^\t}$/p' "$1")
+	local done_line gen_line
+	done_line=$(grep -n 'forKey: Self.persistedUpdateCountKey' "$1" | tail -1 | cut -d: -f1)
+	gen_line=$(grep -n 'reconciliationGeneration &+= 1' "$1" | cut -d: -f1)
+	local completed_line; completed_line=$(grep -n 'hasCompletedReconciliation = true' "$1" | cut -d: -f1)
+	[[ -n "$gen_line" && "$gen_line" -gt "$done_line" && "$gen_line" -gt "$completed_line" ]]
+}
+check "reconciliation signal publishes after updates and counts are final" \
+	generation_is_last "$VIEWS/Sources/SourcesViewModel.swift"
 SVM="$VIEWS/Sources/SourcesViewModel.swift"
 check "visibleUpdates reuses decoded Updated Recently rows" \
 	grep -q 'let recent = _recentUpdateRows()' "$SVM"
@@ -123,6 +147,20 @@ check "decoded rows are reused only while the stored bytes are unchanged" \
 	grep -q 'if let cache = recentRowsCache, cache.data == data {' "$SVM"
 check "build lookups are remembered for one reconciliation only" \
 	bash -c 'grep -q "buildVersionMemo = \[:\]" "$1" && grep -q "defer { buildVersionMemo = nil }" "$1"' _ "$SVM"
+
+LIFECYCLE_WORK=$(mktemp -d "${TMPDIR:-/tmp}/zag-refresh-lifecycle.XXXXXX")
+if swiftc -warnings-as-errors -parse-as-library \
+	"$ROOT/Feather/Utilities/ZagRepositoryIndexState.swift" \
+	"$ROOT/Feather/Views/Library/ZagUpdateRowSnapshot.swift" \
+	"$ROOT/scripts/ZagRefreshLifecycleTests.swift" \
+	-o "$LIFECYCLE_WORK/tests" 2>"$LIFECYCLE_WORK/swiftc.log"; then
+	if "$LIFECYCLE_WORK/tests"; then echo "PASS  refresh lifecycle behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
+else
+	cat "$LIFECYCLE_WORK/swiftc.log"
+	echo "FAIL  refresh lifecycle tests did not compile"
+	FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$LIFECYCLE_WORK"
 
 if (( FAILURES > 0 )); then
 	echo "$FAILURES check(s) failed"
