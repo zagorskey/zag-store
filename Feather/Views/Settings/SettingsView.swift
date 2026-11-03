@@ -817,10 +817,12 @@ extension SettingsView {
 	/// Always first, outside the reorderable sections. A plain Form row keeps
 	/// the native Settings margins, corner radius and spacing.
 	private var _supportSection: some View {
-		Section {
+		let accent = ZagWideGamutTint.color(hex: userTintColor)
+		return Section {
 			NavigationLink(destination: ZagSupportContributionsView().zagSettingsDestinationAvatar()) {
-				ZagSupportSettingsRow(accent: ZagWideGamutTint.color(hex: userTintColor))
+				ZagSupportSettingsRow(accent: accent)
 			}
+			.listRowBackground(ZagSupportCardBackground(accent: accent))
 		}
 	}
 
@@ -2390,56 +2392,120 @@ private struct ZagInstallationDiagnosticsView: View {
 
 
 // MARK: - Voluntary support
-/// The Support Zag Store row at the top of Settings.
+/// The Support Zag Store card at the top of Settings. It is a native Form
+/// row (so it keeps the Settings margins, corner radius and navigation),
+/// given more room, a theme-tinted Liquid Glass heart and a quiet wash of the
+/// theme colour. Everything is static: one bounce on first appearance only.
 private struct ZagSupportSettingsRow: View {
 	let accent: Color
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
-	@ScaledMetric(relativeTo: .headline) private var iconSize: CGFloat = 42
+	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
+	@ScaledMetric(relativeTo: .title3) private var iconSize: CGFloat = 54
 	@State private var hasAppeared = false
 
 	var body: some View {
-		HStack(spacing: 14) {
-			icon
-			VStack(alignment: .leading, spacing: 2) {
-				Text("Support Zag Store")
-					.font(.headline)
-					.foregroundStyle(.primary)
-				Text("Help keep Zag Store independent.")
-					.font(.subheadline)
-					.foregroundStyle(.secondary)
+		// At accessibility text sizes the icon sits above the text, so the
+		// text keeps the full width of the card.
+		let stacked = dynamicTypeSize.isAccessibilitySize
+		VStack(alignment: .leading, spacing: 14) {
+			if stacked {
+				icon
+				titles
+			} else {
+				HStack(alignment: .center, spacing: 16) {
+					icon
+					titles
+				}
 			}
-			.multilineTextAlignment(.leading)
+			Text("Every contribution is optional. Nothing is ever locked behind payment.")
+				.font(.footnote)
+				.foregroundStyle(.secondary)
+				.fixedSize(horizontal: false, vertical: true)
+				// Aligned with the title's text column.
+				.padding(.leading, stacked ? 0 : iconSize + 16)
 		}
-		.padding(.vertical, 6)
+		.multilineTextAlignment(.leading)
+		.padding(.vertical, 14)
 		.accessibilityElement(children: .combine)
 		.accessibilityAddTraits(.isButton)
 		.onAppear { hasAppeared = true }
 	}
 
-	private var symbol: some View {
+	private var titles: some View {
+		VStack(alignment: .leading, spacing: 3) {
+			Text("Support Zag Store")
+				.font(.title3.weight(.semibold))
+				.foregroundStyle(.primary)
+			Text("Help keep Zag Store independent.")
+				.font(.subheadline)
+				.foregroundStyle(.secondary)
+		}
+	}
+
+	private var heart: some View {
 		Image(systemName: "heart.fill")
-			.font(.system(size: iconSize * 0.44, weight: .semibold))
-			.foregroundStyle(accent)
+			.font(.system(size: iconSize * 0.42, weight: .semibold))
+			.foregroundStyle(.white)
+			.shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
 			.frame(width: iconSize, height: iconSize)
 			.accessibilityHidden(true)
 	}
 
 	@ViewBuilder
 	private var icon: some View {
-		// One gentle bounce when Settings first shows the row; none with Reduce Motion.
 		let bounce = !reduceMotion && hasAppeared
 		if #available(iOS 26.0, *) {
-			symbol
+			heart
 				.symbolEffect(.bounce, value: bounce)
-				.glassEffect(.regular.tint(accent.opacity(0.16)), in: Circle())
+				.glassEffect(.regular.tint(accent), in: Circle())
 		} else if #available(iOS 17.0, *) {
-			symbol
+			heart
 				.symbolEffect(.bounce, value: bounce)
-				.background(accent.opacity(0.14), in: Circle())
+				.background(Self.disc(accent), in: Circle())
 		} else {
-			symbol
-				.background(accent.opacity(0.14), in: Circle())
+			heart
+				.background(Self.disc(accent), in: Circle())
 		}
+	}
+
+	/// Pre-iOS 26: the theme colour as a softly lit disc.
+	private static func disc(_ accent: Color) -> LinearGradient {
+		LinearGradient(
+			colors: [accent.opacity(0.85), accent],
+			startPoint: .topLeading,
+			endPoint: .bottomTrailing
+		)
+	}
+}
+
+/// Row background for the Support card: the standard grouped cell colour with
+/// a restrained wash of the theme colour from the top leading corner and a
+/// faint highlight. The Form clips it to the section's native corner radius.
+private struct ZagSupportCardBackground: View {
+	let accent: Color
+	@Environment(\.colorScheme) private var colorScheme
+
+	var body: some View {
+		let dark = colorScheme == .dark
+		ZStack {
+			Color(uiColor: .secondarySystemGroupedBackground)
+			LinearGradient(
+				stops: [
+					.init(color: accent.opacity(dark ? 0.30 : 0.18), location: 0),
+					.init(color: accent.opacity(dark ? 0.10 : 0.06), location: 0.55),
+					.init(color: accent.opacity(0), location: 1)
+				],
+				startPoint: .topLeading,
+				endPoint: .bottomTrailing
+			)
+			RadialGradient(
+				colors: [Color.white.opacity(dark ? 0.07 : 0.45), Color.white.opacity(0)],
+				center: .topLeading,
+				startRadius: 0,
+				endRadius: 220
+			)
+		}
+		.accessibilityHidden(true)
 	}
 }
 
