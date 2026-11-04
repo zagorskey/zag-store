@@ -579,35 +579,100 @@ import Network
 			"idle: both open points at a check after the request")
 	}
 
-	static func shortcutCallbackTests() {
-		let run = "6F1C2E9A-1111-4222-8333-944455556666"
-		guard let url = ZagShortcutCallback.launchURL(shortcutName: "Zag Cellular Off", run: run),
-			  let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-			expect(false, "shortcut: launch URL builds"); return
-		}
-		expect(url.scheme == "shortcuts" && url.host == "x-callback-url" && url.path == "/run-shortcut",
-			"shortcut: uses the documented shortcuts://x-callback-url/run-shortcut format")
-		let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
-		expect(items["name"] == "Zag Cellular Off", "shortcut: the shortcut name survives encoding")
-		expect(items["x-success"] == "zagstore://shortcut-callback/success?run=\(run)", "shortcut: x-success decodes to Zag Store's callback (got \(items["x-success"] ?? "nil"))")
-		expect(items["x-cancel"] == "zagstore://shortcut-callback/cancel?run=\(run)", "shortcut: x-cancel decodes correctly")
-		expect(items["x-error"] == "zagstore://shortcut-callback/error?run=\(run)", "shortcut: x-error decodes correctly")
-		expect(items.count == 4, "shortcut: nested callback parameters do not leak into the outer query")
-		let odd = ZagShortcutCallback.launchURL(shortcutName: "Zag & Co = Off?", run: run)
-		let oddName = odd.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value }
-		expect(oddName == "Zag & Co = Off?", "shortcut: names with &, = and ? are encoded safely")
+	static func mobileDataToggleTests() {
+		typealias T = ZagMobileDataToggle
+		let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+		expect(T.shortcutName == "Zag Mobile Data Toggle" && T.setupActionTitle == "Apply Mobile Data Fix", "toggle: official names")
+		expect(T.setupPage.absoluteString == "https://zagstore.app/mobile-data-fix/", "toggle: stable https setup page, no iCloud link in the app")
 
-		// Shortcuts appends result / errorMessage to the callback URL.
-		func parse(_ string: String) -> ZagShortcutCallback.Outcome? { URL(string: string).flatMap(ZagShortcutCallback.parse) }
-		expect(parse("zagstore://shortcut-callback/success?run=\(run)&result=") == .success(run: run), "callback: success is recognised")
-		expect(parse("zagstore://shortcut-callback/cancel?run=\(run)") == .cancel(run: run), "callback: cancel is recognised")
-		expect(parse("zagstore://shortcut-callback/error?run=\(run)&errorMessage=Shortcut%20not%20found") == .error(run: run, message: "Shortcut not found"),
-			"callback: error carries Shortcuts' message")
-		for other in ["zagstore://settings", "zagstore://apps", "zagstore://settings/diagnostics/installation/rppairing",
-					  "zagstore://shortcut-callback/success", "zagstore://shortcut-callback/other?run=x",
-					  "feather://import-certificate?p12=x", "https://example.com/shortcut-callback/success?run=x"] {
-			expect(parse(other) == nil, "callback: \(other) is left to normal routing")
+		// URL generation and command encoding
+		let op = T.Operation(id: "6F1C2E9A-1111-4222-8333-944455556666", command: .off, startedAt: t0)
+		guard let url = T.launchURL(for: op), let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+			expect(false, "toggle: launch URL builds"); return
 		}
+		expect(url.scheme == "shortcuts" && url.host == "x-callback-url" && url.path == "/run-shortcut", "toggle: documented run-shortcut x-callback format")
+		let q = Dictionary(uniqueKeysWithValues: (comps.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+		expect(q["name"] == "Zag Mobile Data Toggle", "toggle: name encoded and decoded intact")
+		expect(q["input"] == "text" && q["text"] == "off", "toggle: command passed as text input")
+		expect(q["x-success"] == "zagstore://shortcut-callback/off/success?id=\(op.id)", "toggle: x-success scoped to command and id")
+		expect(q["x-cancel"] == "zagstore://shortcut-callback/off/cancel?id=\(op.id)", "toggle: x-cancel scoped")
+		expect(q["x-error"] == "zagstore://shortcut-callback/off/error?id=\(op.id)", "toggle: x-error scoped")
+		expect(q.count == 6, "toggle: nested callback parameters stay nested")
+		for command in T.Command.allCases {
+			let text = T.launchURL(for: .init(id: "x", command: command, startedAt: t0)).flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "text" }?.value }
+			expect(text == command.rawValue, "toggle: \(command.rawValue) is sent explicitly, never as a toggle")
+		}
+		let a = T.Operation.new(.status), b = T.Operation.new(.status)
+		expect(a.id != b.id && UUID(uuidString: a.id) != nil, "toggle: operation ids are fresh random UUIDs")
+		expect(T.Command.status.expectedResult() == "zag-mobile-data-toggle:v1:ready", "toggle: status reply is versioned")
+		expect(T.Command.off.expectedResult() == "zag-mobile-data-toggle:v1:off:done", "toggle: off reply")
+		expect(T.Command.on.expectedResult() == "zag-mobile-data-toggle:v1:on:done", "toggle: on reply")
+
+		// Callback parsing
+		func cb(_ s: String) -> T.Callback? { URL(string: s).flatMap(T.parse) }
+		let ok = cb("zagstore://shortcut-callback/off/success?id=\(op.id)&result=zag-mobile-data-toggle%3Av1%3Aoff%3Adone")
+		expect(ok?.result == "zag-mobile-data-toggle:v1:off:done" && ok?.parameterNames == ["id", "result"], "callback: result and parameter names read")
+		expect(cb("zagstore://shortcut-callback/status/error?id=x&errorMessage=Shortcut%20not%20found")?.errorMessage == "Shortcut not found", "callback: errorMessage read")
+		for bad in ["zagstore://shortcut-callback/off/success", "zagstore://shortcut-callback/reboot/success?id=x",
+					"zagstore://shortcut-callback/off/maybe?id=x", "zagstore://shortcut-callback/success?id=x"] {
+			expect(cb(bad) == nil, "callback: malformed \(bad) rejected")
+			expect(URL(string: bad).map(T.isCallback) == true, "callback: malformed \(bad) still kept away from the router")
+		}
+		for other in ["zagstore://settings", "zagstore://settings/diagnostics/installation/rppairing", "zagstore://apps",
+					  "feather://import-certificate?p12=x", "https://zagstore.app/shortcut-callback/off/success?id=x"] {
+			expect(URL(string: other).map(T.isCallback) == false, "callback: \(other) left to normal routing")
+		}
+
+		// Responses
+		expect(T.interpret(" zag-mobile-data-toggle:v1:ready\n") == .ready(version: 1), "response: whitespace tolerated")
+		expect(T.interpret("zag-mobile-data-toggle:v2:ready") == .ready(version: 2), "response: other version read")
+		expect(T.interpret("zag-mobile-data-toggle:v1:status:done") == .other, "response: status is never a done command")
+		expect(T.interpret("zag-mobile-data-toggle:v1:error:unknown-command") == .other, "response: unknown-command reply is not success")
+		expect(T.interpret("ready") == .other && T.interpret("") == .missing && T.interpret(nil) == .missing, "response: junk and empty")
+
+		// Validation
+		func eval(_ s: String, _ pending: T.Operation?, at: Date = t0.addingTimeInterval(2)) -> T.Decision {
+			T.evaluate(cb(s)!, pending: pending, now: at)
+		}
+		let base = "zagstore://shortcut-callback/off/success?id=\(op.id)&result="
+		expect(eval(base + "zag-mobile-data-toggle:v1:off:done", op) == .complete(.confirmed), "validate: matching reply confirmed")
+		expect(eval(base + "zag-mobile-data-toggle:v1:off:done", nil) == .ignore("no operation is waiting"), "validate: duplicate after completion ignored")
+		if case .ignore = eval("zagstore://shortcut-callback/off/success?id=OTHER&result=zag-mobile-data-toggle:v1:off:done", op) {} else { expect(false, "validate: wrong id ignored") }
+		if case .ignore = eval("zagstore://shortcut-callback/on/success?id=\(op.id)&result=zag-mobile-data-toggle:v1:on:done", op) {} else { expect(false, "validate: wrong command ignored") }
+		if case .ignore = eval(base + "zag-mobile-data-toggle:v1:off:done", op, at: t0.addingTimeInterval(T.operationLifetime + 1)) {} else { expect(false, "validate: expired operation ignored") }
+		expect(eval(base + "zag-mobile-data-toggle:v1:on:done", op) == .complete(.unexpectedResult), "validate: reply for the other command rejected")
+		expect(eval(base + "zag-mobile-data-toggle:v1:ready", op) == .complete(.unexpectedResult), "validate: status reply to off rejected")
+		expect(eval("zagstore://shortcut-callback/off/success?id=\(op.id)", op) == .complete(.missingResult), "validate: success without result is not proof")
+		expect(eval("zagstore://shortcut-callback/off/cancel?id=\(op.id)", op) == .complete(.cancelled), "validate: cancel")
+		expect(eval("zagstore://shortcut-callback/off/error?id=\(op.id)&errorMessage=not%20found", op) == .complete(.failed(message: "not found")), "validate: missing Shortcut reported as error")
+		let st = T.Operation(id: "S", command: .status, startedAt: t0)
+		expect(eval("zagstore://shortcut-callback/status/success?id=S&result=zag-mobile-data-toggle:v1:ready", st) == .complete(.confirmed), "validate: status v1 confirmed")
+		expect(eval("zagstore://shortcut-callback/status/success?id=S&result=zag-mobile-data-toggle:v2:ready", st) == .complete(.incompatible(found: 2)), "validate: other version is incompatible")
+		expect(eval("zagstore://shortcut-callback/status/success?id=S&result=hello", st) == .complete(.unexpectedResult), "validate: wrong reply rejected")
+
+		// Stored state
+		var r = T.Record()
+		expect(T.status(of: r, now: t0) == .notSetUp, "status: not set up")
+		r.setupPageOpenedAt = t0
+		if case .verificationRequired = T.status(of: r, now: t0) {} else { expect(false, "status: opening the website does not verify") }
+		r = T.record(r, after: .confirmed, now: t0)
+		expect(T.status(of: r, now: t0.addingTimeInterval(3600)) == .verified(version: 1, at: t0), "status: verified after handshake")
+		if case .verificationRequired = T.status(of: r, now: t0.addingTimeInterval(T.verificationLifetime + 1)) {} else { expect(false, "status: stale verification needs re-checking") }
+		expect(T.record(r, after: .cancelled, now: t0) == r, "status: cancel leaves state alone")
+		let failed = T.record(r, after: .failed(message: "not found"), now: t0.addingTimeInterval(10))
+		if case .failed = T.status(of: failed, now: t0.addingTimeInterval(11)) {} else { expect(false, "status: a failure withdraws Verified") }
+		for c in [T.Completion.noResponse, .timedOut, .missingResult, .unexpectedResult, .handOffRejected] {
+			if case .failed = T.status(of: T.record(r, after: c, now: t0.addingTimeInterval(5)), now: t0.addingTimeInterval(6)) {} else { expect(false, "status: \(c) withdraws Verified") }
+		}
+		expect(T.status(of: T.record(failed, after: .confirmed, now: t0.addingTimeInterval(20)), now: t0.addingTimeInterval(21)).isVerified, "status: a new handshake recovers")
+		expect(T.status(of: T.record(r, after: .incompatible(found: 2), now: t0), now: t0) == .updateRequired(found: 2), "status: update required")
+		var old = r; old.verifiedVersion = 0
+		if case .verificationRequired = T.status(of: old, now: t0) {} else { expect(false, "status: an older verified protocol needs re-checking") }
+		var future = r; future.verifiedAt = t0.addingTimeInterval(86_400)
+		if case .verificationRequired = T.status(of: future, now: t0) {} else { expect(false, "status: a verification dated in the future is not trusted") }
+		let roundTrip = try? JSONDecoder().decode(T.Record.self, from: JSONEncoder().encode(r))
+		expect(roundTrip == r, "status: record survives storage")
+		expect(!T.message(for: .failed(message: String(repeating: "x", count: 500))).contains(String(repeating: "x", count: 200)), "status: Shortcuts error text is truncated")
 	}
 
 	static func main() async {
@@ -617,7 +682,7 @@ import Network
 		reportTests()
 		endpointTests()
 		protocolStageTests()
-		shortcutCallbackTests()
+		mobileDataToggleTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

@@ -88,19 +88,25 @@ check "rust: production sessions keep the plain socket" grep -q 'Box::new(stream
 check "rust: the wire log never formats buffer contents" bash -c "! sed -n '/^struct TracedStream/,/^fn wire_summary/p' '$RUST' | grep -qE 'from_utf8|\{data|\{buf|filled\(\)\[|:\?\}\", data|hex'"
 check "swift: idle checks send nothing" bash -c "! sed -n '/static func idle(/,/^	}/p' '$TRACE' | grep -q 'send('"
 APP="$ROOT/Feather/FeatherApp.swift"
-SHORTCUT="$ROOT/Feather/Utilities/ZagShortcutLaunchTest.swift"
-check "shortcut: callbacks are handled before existing routing" bash -c "sed -n '/private func _handleURL/,/^	}/p' '$APP' | awk '/ZagShortcutLaunchTest.shared.handle/{a=NR} /ZagStoreRouter.open/{b=NR} END{exit !(a && b && a<b)}'"
-check "shortcut: the router has no shortcut route" absent 'shortcut-callback' "$(cat "$ROOT/Feather/Utils/ZagStoreRouter.swift")"
-check "shortcut: launched with the public UIApplication.open API" grep -q 'UIApplication.shared.open(url, options: \[:\])' "$SHORTCUT"
-check "shortcut: no private Settings URL schemes" bash -c "! grep -rqE 'App-Prefs:|prefs:root' '$ROOT/Feather'"
-check "shortcut: the test never touches installation or signing" bash -c "! grep -qE 'installGate4IPA|SigningHandler|ArchiveHandler' '$SHORTCUT'"
-check "shortcut: readiness is confirmed by a health check, not the callback" grep -q 'core.startGate2Probe()' "$SHORTCUT"
-check "shortcut: readiness checks are bounded" grep -q 'for (index, delay) in \[0.5, 2.0, 5.0\].enumerated()' "$SHORTCUT"
+CTRL="$ROOT/Feather/Utilities/ZagMobileDataToggleController.swift"
+FIXVIEW="$ROOT/Feather/Views/Settings/Installation/ZagMobileDataFixView.swift"
+check "toggle: callbacks are handled before existing routing" bash -c "sed -n '/private func _handleURL/,/^	}/p' '$APP' | awk '/ZagMobileDataToggleController.shared.handle/{a=NR} /ZagStoreRouter.open/{b=NR} END{exit !(a && b && a<b)}'"
+check "toggle: the router has no shortcut route" absent 'shortcut-callback' "$(cat "$ROOT/Feather/Utils/ZagStoreRouter.swift")"
+check "toggle: launched with the public UIApplication.open API" grep -q 'UIApplication.shared.open(url, options: \[:\])' "$CTRL"
+check "toggle: no private Settings URL schemes" bash -c "! grep -rqE 'App-Prefs:|prefs:root' '$ROOT/Feather'"
+check "toggle: never touches installation, signing or self-update" bash -c "! grep -qE 'installGate4IPA|SigningHandler|ArchiveHandler|ZagSelfUpdate' '$CTRL' '$FIXVIEW'"
+check "toggle: off is confirmed by the health check, not the callback" grep -q 'core.startGate2Probe()' "$CTRL"
+check "toggle: on is confirmed by the network path" grep -q 'physicalNetworks.contains("Cellular")' "$CTRL"
+check "toggle: no automatic retries" bash -c "[ \$(grep -c 'UIApplication.shared.open(url' '$CTRL') -eq 1 ]"
+check "toggle: the temporary launch test is gone" bash -c "[ ! -e '$ROOT/Feather/Utilities/ZagShortcutLaunchTest.swift' ] && ! grep -rq 'ZagShortcutLaunchTest' '$ROOT/Feather'"
+check "toggle: Settings row uses the approved labels" bash -c "grep -q 'Set up cellular installation support' '$FIXVIEW' && grep -q '\"Mobile Data Fix\"' '$FIXVIEW'"
+check "toggle: completions are saved to the stored record" grep -q 'update { \$0 = Toggle.record(\$0, after: completion) }' "$CTRL"
+check "toggle: row lives in Installation Settings" grep -q 'ZagMobileDataFixRow()' "$ROOT/Feather/Views/Settings/Installation/InstallationView.swift"
 check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b21b6610452fb1771880b4eae45"' "$ROOT/RPPairingCore/rust-core/Cargo.toml"
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagShortcutCallback.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else

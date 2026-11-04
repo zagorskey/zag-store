@@ -75,8 +75,8 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
-		// Temporary diagnostic: consumes only zagstore://shortcut-callback/…
-		if ZagShortcutLaunchTest.shared.handle(url) {
+		// Consumes only zagstore://shortcut-callback/…; all other links route as before.
+		if ZagMobileDataToggleController.shared.handle(url) {
 			return
 		}
 		if ZagStoreRouter.open(url) {

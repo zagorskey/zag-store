@@ -460,8 +460,8 @@ struct RPPairingDiagnosticsView: View {
 
 	private enum ReportState { case idle, preparing, copied }
 	@State private var traceState: ReportState = .idle
-	@StateObject private var shortcutTest = ZagShortcutLaunchTest.shared
-	@State private var shortcutLogCopied = false
+	@ObservedObject private var mobileDataToggle = ZagMobileDataToggleController.shared
+	@State private var toggleLogCopied = false
 	@State private var traceSummary: [String] = []
 
 	var body: some View {
@@ -591,36 +591,38 @@ struct RPPairingDiagnosticsView: View {
 			}
 
 			Section {
-				Button {
-					shortcutLogCopied = false
-					shortcutTest.start()
-				} label: {
-					Label(shortcutTest.running ? "Shortcut Test Running…" : "Run \"\(ZagShortcutLaunchTest.shortcutName)\" Shortcut", systemImage: "square.2.layers.3d")
-				}
-				.disabled(shortcutTest.running || pairingCore.isGate2Running)
-
-				if shortcutTest.running {
-					Button("Cancel Test", role: .cancel) { shortcutTest.cancel() }
+				ForEach(ZagMobileDataToggle.Command.allCases, id: \.self) { command in
+					Button {
+						toggleLogCopied = false
+						mobileDataToggle.run(command)
+					} label: {
+						Label("Run \(command.rawValue)", systemImage: command == .status ? "checkmark.shield" : (command == .off ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right"))
+					}
+					.disabled(mobileDataToggle.isBusy || pairingCore.isGate2Running)
 				}
 
-				ForEach(shortcutTest.events) { event in
+				if mobileDataToggle.isBusy {
+					Button("Cancel", role: .cancel) { mobileDataToggle.cancel() }
+				}
+
+				ForEach(mobileDataToggle.events) { event in
 					Text("+\(event.milliseconds) ms  \(event.text)")
 						.font(.footnote.monospaced())
 						.textSelection(.enabled)
 				}
 
-				if !shortcutTest.events.isEmpty {
+				if !mobileDataToggle.events.isEmpty {
 					Button {
-						UIPasteboard.general.string = shortcutTest.report()
-						shortcutLogCopied = true
+						UIPasteboard.general.string = mobileDataToggle.report()
+						toggleLogCopied = true
 					} label: {
-						Label(shortcutLogCopied ? "Log Copied" : "Copy Shortcut Test Log", systemImage: shortcutLogCopied ? "checkmark" : "doc.on.doc")
+						Label(toggleLogCopied ? "Log Copied" : "Copy Shortcut Log", systemImage: toggleLogCopied ? "checkmark" : "doc.on.doc")
 					}
 				}
 			} header: {
-				Text("Shortcut Launch Test (Temporary)")
+				Text(ZagMobileDataToggle.shortcutName)
 			} footer: {
-				Text("Opens the \"\(ZagShortcutLaunchTest.shortcutName)\" Shortcut directly from Zag Store, then records whether iOS handed it off, whether Shortcuts returned through the callback, and whether RPPairing became reachable, confirmed by a full health check. Zag Store never changes Cellular Data itself.")
+				Text("Runs the Shortcut with one command and records every callback parameter Shortcuts returns. After off, RPPairing readiness is confirmed by the full health check; after on, by the system network path.")
 			}
 
 			Section {
