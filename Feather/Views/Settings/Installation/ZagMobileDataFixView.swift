@@ -16,7 +16,7 @@ struct ZagMobileDataFixRow: View {
 					VStack(alignment: .leading, spacing: 2) {
 						Text(status.isVerified ? "Mobile Data Fix" : ZagMobileDataToggle.setupActionTitle)
 						if case .notSetUp = status {
-							Text("Set up cellular installation support")
+							Text("Enable app installation over Mobile Data")
 								.font(.footnote)
 								.foregroundStyle(.secondary)
 						}

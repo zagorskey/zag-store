@@ -99,7 +99,7 @@ check "toggle: off is confirmed by the health check, not the callback" grep -q '
 check "toggle: on is confirmed by the network path" grep -q 'physicalNetworks.contains("Cellular")' "$CTRL"
 check "toggle: no automatic retries" bash -c "[ \$(grep -c 'UIApplication.shared.open(url' '$CTRL') -eq 1 ]"
 check "toggle: the temporary launch test is gone" bash -c "[ ! -e '$ROOT/Feather/Utilities/ZagShortcutLaunchTest.swift' ] && ! grep -rq 'ZagShortcutLaunchTest' '$ROOT/Feather'"
-check "toggle: Settings row uses the approved labels" bash -c "grep -q 'Set up cellular installation support' '$FIXVIEW' && grep -q '\"Mobile Data Fix\"' '$FIXVIEW'"
+check "toggle: Settings row uses the approved labels" bash -c "grep -q 'Enable app installation over Mobile Data' '$FIXVIEW' && ! grep -rqi 'cellular installation' '$ROOT/Feather' && grep -q '\"Mobile Data Fix\"' '$FIXVIEW'"
 check "toggle: completions are saved to the stored record" grep -q 'update { \$0 = Toggle.record(\$0, after: completion) }' "$CTRL"
 check "toggle: Last Verified is absolute, never relative" bash -c "grep -q 'at.formatted(date: .abbreviated, time: .shortened)' '$FIXVIEW' && ! grep -qE 'style: \\.(relative|timer|offset)|RelativeDateTimeFormatter|doesRelativeDateFormatting' '$FIXVIEW'"
 check "toggle: the app has one setup URL, under /shortcuts/" bash -c "[ \$(grep -rho 'https://zagstore.app/[a-z/-]*' '$ROOT/Feather' | sort -u | grep -c mobile-data-fix) -eq 1 ] && grep -q 'https://zagstore.app/shortcuts/mobile-data-fix/' '$ROOT/Feather/Utilities/ZagMobileDataToggle.swift' && ! grep -rqE 'zagstore.app/mobile-data-fix|icloud.com/shortcuts|\.shortcut\"' '$ROOT/Feather'"
