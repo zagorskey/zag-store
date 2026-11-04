@@ -31,6 +31,7 @@ struct FeatherApp: App {
 				VariedTabbarView()
 					.environment(\.managedObjectContext, storage.context)
 					.onOpenURL(perform: _handleURL)
+					.modifier(ZagMobileDataInstallOverlay())
 					.overlay(alignment: .top) {
 						// Manual transfers float above the app rather than
 						// resizing the tab/navigation hierarchy.

@@ -105,6 +105,16 @@ check "toggle: Last Verified is absolute, never relative" bash -c "grep -q 'at.f
 check "toggle: the app has one setup URL, under /shortcuts/" bash -c "[ \$(grep -rho 'https://zagstore.app/[a-z/-]*' '$ROOT/Feather' | sort -u | grep -c mobile-data-fix) -eq 1 ] && grep -q 'https://zagstore.app/shortcuts/mobile-data-fix/' '$ROOT/Feather/Utilities/ZagMobileDataToggle.swift' && ! grep -rqE 'zagstore.app/mobile-data-fix|icloud.com/shortcuts|\.shortcut\"' '$ROOT/Feather'"
 check "toggle: user-facing text says Mobile Data, not Cellular Data" bash -c "! grep -n 'Cellular Data' '$CTRL' '$FIXVIEW' '$ROOT/Feather/Utilities/ZagMobileDataToggle.swift' && ! grep -n 'Cellular Data' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
 check "toggle: no Verification Failed label remains" bash -c "! grep -rn 'Verification Failed' '$ROOT/Feather'"
+COORD="$ROOT/Feather/Utilities/ZagMobileDataInstallCoordinator.swift"
+for f in Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Library/LibraryCellView.swift Feather/Views/Library/LibraryView.swift Feather/Views/Library/Install/InstallPreviewView.swift; do
+	check "install: $(basename $f) installs through Mobile Data Fix" grep -q 'ZagMobileDataInstallCoordinator.shared.install(jobID:' "$ROOT/$f"
+done
+check "install: installGate4IPA and the installer core are unchanged" bash -c "cd '$ROOT' && git diff --quiet 9575060b -- Feather/RPPairing/ZagRPPairingCore.swift"
+check "install: self-update never uses Mobile Data Fix" bash -c "! grep -q 'ZagMobileDataInstall' '$ROOT/Feather/Utilities/ZagSelfUpdateCoordinator.swift' && grep -q 'if isSelfInstall {' '$ROOT/Feather/Views/Library/Install/InstallPreviewView.swift'"
+check "install: diagnostics installs stay direct" bash -c "! grep -q 'ZagMobileDataInstallCoordinator.shared.install' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
+check "install: no background execution is requested" bash -c "! grep -qE 'beginBackgroundTask|BGTaskScheduler' '$COORD' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift'"
+check "install: consent text is exact" bash -c "grep -q 'Mobile Data Installation' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes.' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Allow Automatically' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift'"
+check "install: perform never repeats or queues a command" bash -c "grep -q 'guard !isBusy, waiter == nil else { return .handOffRejected }' '$CTRL'"
 check "toggle: row lives in Installation Settings" grep -q 'ZagMobileDataFixRow()' "$ROOT/Feather/Views/Settings/Installation/InstallationView.swift"
 check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b21b6610452fb1771880b4eae45"' "$ROOT/RPPairingCore/rust-core/Cargo.toml"
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml

@@ -62,6 +62,7 @@ struct ZagMobileDataFixView: View {
 	@AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
 	@ObservedObject private var controller = ZagMobileDataToggleController.shared
 	@StateObject private var pairingCore = ZagRPPairingCore.shared
+	@ObservedObject private var installCoordinator = ZagMobileDataInstallCoordinator.shared
 
 	var body: some View {
 		let status = controller.status
@@ -131,6 +132,19 @@ struct ZagMobileDataFixView: View {
 				Text("Setup")
 			} footer: {
 				Text("Add the Shortcut from zagstore.app, keep its name \"\(ZagMobileDataToggle.shortcutName)\", then return here and tap Verify. Verifying never changes Mobile Data.")
+			}
+
+			Section {
+				Toggle("Turn Off Mobile Data Automatically", isOn: Binding(
+					get: { installCoordinator.automaticHandling == true },
+					set: { installCoordinator.setAutomaticHandling($0) }
+				))
+			} header: {
+				Text("Installations")
+			} footer: {
+				Text(installCoordinator.automaticHandling == nil
+					? "Zag Store will ask the first time an installation needs Mobile Data turned off. It never turns Mobile Data on if it was already off."
+					: "When an installation over Mobile Data is blocked, Zag Store runs \(ZagMobileDataToggle.shortcutName) to turn Mobile Data off, installs, then turns it back on. It never turns Mobile Data on if it was already off.")
 			}
 		}
 		.tint(Color(hex: themeColorHex))
