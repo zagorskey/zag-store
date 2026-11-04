@@ -813,8 +813,10 @@ struct ZagLocalVPNToolbarStatus: View {
             Text("LOCAL")
                 .font(.system(size: 8, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
+            // 13.34 pt renders VPN as wide as LOCAL (26.73 vs 26.74 pt in SF
+            // Pro Rounded), so the three lines share one visual width.
             Text("VPN")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(size: 13.34, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
             Text(statusText)
                 .font(.system(size: 9, weight: .bold, design: .rounded))
