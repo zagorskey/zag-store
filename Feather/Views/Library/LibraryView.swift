@@ -1336,6 +1336,10 @@ extension LibraryView {
 	}
 
 	private func _refreshInstalledAppsFromDevice() {
+		// While Mobile Data Fix runs, returning from Shortcuts must not start
+		// an inventory session: it would hold the one RPPairing connection
+		// the install or removal needs. The operation refreshes afterwards.
+		guard !ZagMobileDataInstallCoordinator.shared.isBusy else { return }
 		guard rppairingCore.pairingFileExists else {
 			_reconcileManagedInstalledApps()
 			_updateRepositoryUpdates()
@@ -1457,21 +1461,18 @@ extension LibraryView {
 		}
 
 		// Mobile Data Fix wraps the unchanged RPPairing uninstall when Mobile
-		// Data blocks it; on Wi-Fi it runs directly as before.
+		// Data blocks it; on Wi-Fi it runs directly as before. With Mobile
+		// Data off, the removal is submitted once the connection is free and
+		// confirmed against the device's app list before Mobile Data returns.
 		Task { @MainActor in
+			let coordinator = ZagMobileDataInstallCoordinator.shared
 			do {
-				try await ZagMobileDataInstallCoordinator.shared.perform(.uninstall, jobID: "uninstall-\(identifier)") {
-					try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-						do {
-							try ZagRPPairingCore.shared.uninstallGate4App(
-								bundleID: identifier,
-								deviceIP: "10.7.0.1"
-							) { result in
-								continuation.resume(with: result)
-							}
-						} catch {
-							continuation.resume(throwing: error)
-						}
+				try await coordinator.perform(.uninstall, jobID: "uninstall-\(identifier)") {
+					if coordinator.usingMobileDataFix {
+						let confirmation = try await ZagRPPairingUninstall(env: Self.uninstallEnvironment()).run(bundleID: identifier)
+						coordinator.note("Uninstall confirmed: \(confirmation)")
+					} else {
+						try await Self.submitUninstall(identifier).get()
 					}
 				}
 				finishDirectRemoval()
@@ -1483,12 +1484,53 @@ extension LibraryView {
 					title: .localized("Remove App"),
 					message: reason.localizedDescription
 				)
+			} catch let reason as ZagRPPairingUninstallFailure {
+				// Mobile Data path: report the real result. The installed
+				// marker stays, because the app was not confirmed removed.
+				_removingBundleIDs.remove(identifier)
+				UIAlertController.showAlertWithOk(
+					title: .localized("Remove App"),
+					message: reason.localizedDescription
+				)
 			} catch {
 				// Fully Local Server and other non-RPPairing setups retain the
 				// existing LaunchServices uninstall path as a fallback.
 				tryLaunchServicesFallback()
 			}
 		}
+	}
+
+	/// The existing RPPairing uninstall, awaited.
+	private static func submitUninstall(_ bundleID: String) async -> Result<Void, Error> {
+		await withCheckedContinuation { continuation in
+			do {
+				try ZagRPPairingCore.shared.uninstallGate4App(bundleID: bundleID, deviceIP: "10.7.0.1") { result in
+					continuation.resume(returning: result)
+				}
+			} catch {
+				continuation.resume(returning: .failure(error))
+			}
+		}
+	}
+
+	@MainActor
+	private static func uninstallEnvironment() -> ZagRPPairingUninstall.Environment {
+		ZagRPPairingUninstall.Environment(
+			transportBusy: { ZagRPPairingCore.shared.isTransportBusy },
+			uninstall: { await submitUninstall($0) },
+			installedApps: {
+				await withCheckedContinuation { continuation in
+					do {
+						try ZagRPPairingCore.shared.refreshInstalledApps { continuation.resume(returning: $0) }
+					} catch {
+						continuation.resume(returning: .failure(error))
+					}
+				}
+			},
+			sleep: { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
+			now: { Date() },
+			log: { ZagMobileDataInstallCoordinator.shared.note($0) }
+		)
 	}
 
 	@ViewBuilder

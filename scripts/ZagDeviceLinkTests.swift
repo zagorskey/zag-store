@@ -888,6 +888,131 @@ import Network
 		expect(!T.canRunAutomatically(T.record(T.Record(), after: .incompatible(found: 2), now: t0), now: t0), "auto: never with another version")
 	}
 
+	@MainActor final class FakeUninstall {
+		var busyPolls = 0
+		var busyForever = false
+		var reply: Result<Void, Error> = .success(())
+		var replyDelaySteps = 0
+		var lists: [Result<Set<String>, Error>] = [.success(["other.app"])]
+		var calls: [String] = []
+		var clock: TimeInterval = 0
+
+		struct Lost: LocalizedError { var errorDescription: String? { "RPPairing pair-verify failed: socket io failed" } }
+
+		var environment: ZagRPPairingUninstall.Environment {
+			ZagRPPairingUninstall.Environment(
+				transportBusy: { [unowned self] in
+					if self.busyForever { return true }
+					if self.busyPolls > 0 { self.busyPolls -= 1; return true }
+					return false
+				},
+				uninstall: { [unowned self] id in
+					self.calls.append("uninstall:\(id)")
+					for _ in 0..<self.replyDelaySteps { self.clock += 1; await Task.yield() }
+					self.calls.append("reply")
+					return self.reply
+				},
+				installedApps: { [unowned self] in
+					self.calls.append("verify")
+					return self.lists.count > 1 ? self.lists.removeFirst() : self.lists[0]
+				},
+				sleep: { [unowned self] in self.clock += $0 },
+				now: { [unowned self] in Date(timeIntervalSince1970: self.clock) },
+				log: { _ in }
+			)
+		}
+
+		func run(_ id: String = "com.example.app") async -> Result<ZagRPPairingUninstallConfirmation, Error> {
+			do { return .success(try await ZagRPPairingUninstall(env: environment).run(bundleID: id)) }
+			catch { return .failure(error) }
+		}
+	}
+
+	@MainActor static func uninstallTests() async {
+		let id = "com.example.app"
+		func failure(_ r: Result<ZagRPPairingUninstallConfirmation, Error>) -> ZagRPPairingUninstallFailure? {
+			if case .failure(let e) = r { return e as? ZagRPPairingUninstallFailure }
+			return nil
+		}
+
+		// Unit behaviour
+		var u = FakeUninstall()
+		var r = await u.run()
+		expect((try? r.get()) == .verified && u.calls == ["uninstall:\(id)", "reply", "verify"], "uninstall: submitted once, confirmed by a fresh device list")
+		u = FakeUninstall(); u.busyPolls = 6
+		r = await u.run()
+		expect((try? r.get()) == .verified && u.calls.first == "uninstall:\(id)" && u.clock >= 3, "uninstall: waits for a busy connection (app-list refresh after Shortcuts) before submitting")
+		u = FakeUninstall(); u.busyForever = true
+		r = await u.run()
+		expect(failure(r) == .connectionBusy && u.calls.isEmpty, "uninstall: a connection busy for the whole wait is not submitted and fails")
+		u = FakeUninstall(); u.replyDelaySteps = 5
+		r = await u.run()
+		expect((try? r.get()) == .verified && u.calls == ["uninstall:\(id)", "reply", "verify"], "uninstall: delayed completion is awaited before verification")
+		u = FakeUninstall(); u.lists = [.success([id]), .success([id]), .success(["other.app"])]
+		r = await u.run()
+		expect((try? r.get()) == .verified && u.calls.filter { $0 == "verify" }.count == 3, "uninstall: a stale list that still shows the app is re-read until it is gone")
+		u = FakeUninstall(); u.lists = [.success([id])]
+		r = await u.run()
+		expect(failure(r) == .stillInstalled && u.calls.filter { $0 == "verify" }.count == ZagRPPairingUninstall.verifyDelays.count, "uninstall: still listed after every read is a verification timeout, not success")
+		u = FakeUninstall(); u.reply = .failure(FakeUninstall.Lost())
+		r = await u.run()
+		if case .requestFailed(let m)? = failure(r) {
+			expect(m.contains("pair-verify") && !u.calls.contains("verify"), "uninstall: request failure or connection loss is reported with its reason; nothing verified")
+		} else { expect(false, "uninstall: request failure is reported") }
+		u = FakeUninstall(); u.lists = [.failure(FakeUninstall.Lost())]
+		r = await u.run()
+		expect((try? r.get()) == .serviceCompleted, "uninstall: connection lost during verification keeps the installation service's completion")
+		u = FakeUninstall(); u.lists = [.failure(FakeUninstall.Lost()), .success([id])]
+		r = await u.run()
+		expect(failure(r) == .stillInstalled, "uninstall: one failed read then still listed is a failure")
+		u = FakeUninstall()
+		let cancelled = Task { @MainActor in await u.run() }
+		cancelled.cancel()
+		r = await cancelled.value
+		expect(failure(r) == .cancelled && u.calls.isEmpty, "uninstall: cancelled before submission removes nothing")
+
+		// Inside the Mobile Data flow: OFF → uninstall → verified → ON
+		func flowRun(_ f: FakeMobileData, _ u: FakeUninstall) async -> ZagMobileDataInstallOutcome {
+			let env = u.environment
+			var wrapped = env
+			wrapped.uninstall = { id in f.calls.append("uninstall"); let r = await env.uninstall(id); f.calls.append("reply"); return r }
+			wrapped.installedApps = { f.calls.append("verify"); return await env.installedApps() }
+			let flow = ZagMobileDataInstallFlow(environment: f.environment)
+			return await flow.run(jobID: "uninstall-\(id)") {
+				_ = try await ZagRPPairingUninstall(env: wrapped).run(bundleID: id)
+			}
+		}
+		func onIsLast(_ calls: [String]) -> Bool {
+			guard let on = calls.lastIndex(of: "on") else { return false }
+			return calls.indices.filter { ["uninstall", "reply", "verify"].contains(calls[$0]) }.allSatisfy { $0 < on }
+		}
+
+		var f = FakeMobileData.mobileDataBlocked()
+		u = FakeUninstall(); u.lists = [.success([id]), .success([])]
+		var o = await flowRun(f, u)
+		expect(f.calls == ["consent", "off", "uninstall", "reply", "verify", "verify", "on"] && o.installed && o.restoration == .restored,
+			"mobile data uninstall: OFF → uninstall → verified removal → ON (\(f.calls))")
+		f = FakeMobileData.mobileDataBlocked(); u = FakeUninstall(); u.replyDelaySteps = 8; u.busyPolls = 4
+		o = await flowRun(f, u)
+		expect(onIsLast(f.calls) && o.installed, "mobile data uninstall: ON never precedes a delayed reply or verification")
+		f = FakeMobileData.mobileDataBlocked(); u = FakeUninstall(); u.reply = .failure(FakeUninstall.Lost())
+		o = await flowRun(f, u)
+		expect(!o.installed && o.restoration == .restored && onIsLast(f.calls), "mobile data uninstall: request failure is reported, then Mobile Data is restored")
+		f = FakeMobileData.mobileDataBlocked(); u = FakeUninstall(); u.lists = [.success([id])]
+		o = await flowRun(f, u)
+		expect(!o.installed && (o.installError as? ZagRPPairingUninstallFailure) == .stillInstalled && onIsLast(f.calls), "mobile data uninstall: verification timeout is a failure, restored after verification ends")
+		f = FakeMobileData.mobileDataBlocked(); u = FakeUninstall(); u.busyForever = true
+		o = await flowRun(f, u)
+		expect(!o.installed && !f.calls.contains("uninstall") && f.calls.last == "on", "mobile data uninstall: busy connection fails without submitting; Mobile Data restored")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused, .reachable]; f.replies[.on] = .timedOut
+		u = FakeUninstall()
+		o = await flowRun(f, u)
+		expect(o.installed && o.restoration == .unconfirmed && f.record != nil, "mobile data uninstall: removal confirmed but restoration unconfirmed reports both and keeps recovery")
+		f = FakeMobileData(); u = FakeUninstall()
+		o = await flowRun(f, u)
+		expect(o.installed && !f.calls.contains("off") && !f.calls.contains("on"), "wifi uninstall: no Shortcut")
+	}
+
 	static func badgeTests() {
 		let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 		func model(_ result: ZagEndpointProbeResult?, interface: Bool = true, pairing: ZagRPPairingReadiness? = nil) -> ZagDeviceLinkModel {
@@ -932,6 +1057,7 @@ import Network
 		mobileDataToggleTests()
 		await mobileDataInstallTests()
 		badgeTests()
+		await uninstallTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

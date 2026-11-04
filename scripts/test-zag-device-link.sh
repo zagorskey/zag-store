@@ -111,20 +111,26 @@ for f in Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Libra
 done
 check "install: installGate4IPA and the installer core are unchanged" bash -c "cd '$ROOT' && git diff --quiet 9575060b -- Feather/RPPairing/ZagRPPairingCore.swift"
 check "install: self-update never uses Mobile Data Fix" bash -c "! grep -q 'ZagMobileDataInstall' '$ROOT/Feather/Utilities/ZagSelfUpdateCoordinator.swift' && grep -q 'if isSelfInstall {' '$ROOT/Feather/Views/Library/Install/InstallPreviewView.swift'"
-check "uninstall: Library removal goes through the shared coordinator" grep -q 'ZagMobileDataInstallCoordinator.shared.perform(.uninstall' "$ROOT/Feather/Views/Library/LibraryView.swift"
+check "uninstall: Library removal goes through the shared coordinator" grep -q 'coordinator.perform(.uninstall' "$ROOT/Feather/Views/Library/LibraryView.swift"
 check "uninstall: only one RPPairing uninstall entry point exists" bash -c "[ \$(grep -rn 'uninstallGate4App(' '$ROOT/Feather' | grep -vc 'func uninstallGate4App') -eq 1 ]"
 check "decision: no exact interface-count rule remains" bash -c "! grep -rqE 'count == 1 \\? \\.mobileDataOnly|mobileDataOnly' '$ROOT/Feather'"
 check "decision: Mobile Data Fix requires a refusal through LocalDevVPN" grep -q 'guard endpoint == .refused, tunnel else' "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift"
 OVERLAY="$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift"
 check "ui: no floating installation progress capsule" bash -c "! grep -qE 'StageCapsule|stageText|in: Capsule|coordinator.stage, coordinator' '$OVERLAY'"
-check "ui: no other floating Mobile Data progress UI" bash -c "! grep -rqE 'usingMobileDataFix' '$ROOT/Feather/Views' --include=*.swift --exclude=VariedTabbarView.swift"
+check "ui: no other floating Mobile Data progress UI" bash -c "! grep -rqE 'usingMobileDataFix' '$ROOT/Feather/Views' --include=*.swift --exclude=VariedTabbarView.swift --exclude=LibraryView.swift && [ \$(grep -c 'usingMobileDataFix' '$ROOT/Feather/Views/Library/LibraryView.swift') -eq 1 ]"
 check "ui: consent alert and recovery banner remain" bash -c "grep -q 'Allow Automatically' '$OVERLAY' && grep -q 'Mobile Data may still be off' '$OVERLAY' && grep -q 'Turn On Mobile Data' '$OVERLAY'"
-check "ui: app-row install progress unchanged" bash -c "cd '$ROOT' && git diff --quiet 4b2c3a21 -- Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Library/LibraryCellView.swift Feather/Views/Library/LibraryView.swift Feather/Views/Library/Install/InstallPreviewView.swift"
+check "ui: app-row install progress unchanged" bash -c "cd '$ROOT' && git diff --quiet 4b2c3a21 -- Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Library/LibraryCellView.swift Feather/Views/Library/Install/InstallPreviewView.swift && ! git diff 4b2c3a21 -- Feather/Views/Library/LibraryView.swift | grep -E '^[-+][^-+]' | grep -qE 'installGate4IPA|progress|Progress|zagPhase'"
 check "badge: toolbar uses the badge mapping, not the raw indicator" bash -c "grep -q 'ZagLocalVPNBadge.make' '$TABBAR' && ! grep -q 'private var indicator: ZagLinkIndicator' '$TABBAR'"
 check "badge: toolbar observes Shortcut verification and consent" bash -c "grep -q 'ZagMobileDataToggleController.shared' '$TABBAR' && grep -q 'automaticHandling == true' '$TABBAR'"
 check "badge: no badge probes while Mobile Data Fix runs" grep -q 'if ZagMobileDataInstallCoordinator.shared.usingMobileDataFix {' "$MONITOR"
 check "badge: rechecks when Mobile Data Fix finishes" grep -q 'zagDeviceLinkRecheckRequested' "$COORD"
 check "badge: toolbar size and typography unchanged" bash -c "grep -q '.frame(width: 44, height: 39)' '$TABBAR' && grep -q 'size: 9, weight: .bold' '$TABBAR'"
+LIBV="$ROOT/Feather/Views/Library/LibraryView.swift"
+check "uninstall: Wi-Fi path still calls the original RPPairing uninstall directly" bash -c "grep -q 'try await Self.submitUninstall(identifier).get()' '$LIBV' && grep -q 'try ZagRPPairingCore.shared.uninstallGate4App(bundleID: bundleID, deviceIP: \"10.7.0.1\")' '$LIBV'"
+check "uninstall: Mobile Data path verifies before the flow restores" grep -q 'if coordinator.usingMobileDataFix {' "$LIBV"
+check "uninstall: Mobile Data failures never fall back to LaunchServices" grep -q 'catch let reason as ZagRPPairingUninstallFailure' "$LIBV"
+check "uninstall: app-list refreshes pause while Mobile Data Fix runs" bash -c "grep -A4 'private func _refreshInstalledAppsFromDevice' '$LIBV' | grep -q 'ZagMobileDataInstallCoordinator.shared.isBusy' && grep -q '!ZagMobileDataInstallCoordinator.shared.isBusy' '$ROOT/Feather/Views/Sources/Apps/Detail/SourceAppsDetailView.swift'"
+check "badge: no status dot; the label alone is the third line" bash -c "body=\$(sed -n '/struct ZagLocalVPNToolbarStatus/,/struct ZagLocalVPNDetailsView/p' '$TABBAR'); ! grep -qE 'Circle\\(\\)|HStack' <<< \"\$body\" && grep -q 'VStack(spacing: 0)' <<< \"\$body\" && grep -q 'Text(statusText)' <<< \"\$body\""
 check "install: diagnostics installs stay direct" bash -c "! grep -q 'ZagMobileDataInstallCoordinator.shared.install' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
 check "install: no background execution is requested" bash -c "! grep -qE 'beginBackgroundTask|BGTaskScheduler' '$COORD' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift'"
 check "install: consent text is exact" bash -c "grep -q 'Mobile Data Installation' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes.' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Allow Automatically' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift'"
@@ -134,7 +140,7 @@ check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/Feather/Utilities/ZagRPPairingUninstall.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else

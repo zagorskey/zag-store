@@ -191,6 +191,11 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 		)
 	}
 
+	/// Adds an operation step to the decision log and the app log.
+	func note(_ line: String) {
+		record(line)
+	}
+
 	private func record(_ line: String) {
 		ZagLogger.shared.info("MobileDataFix", line)
 		decisionLog.append(line)
