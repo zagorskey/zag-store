@@ -22,7 +22,7 @@ enum ZagMobileDataToggle {
 	static let protocolName = "zag-mobile-data-toggle"
 	static let protocolVersion = 1
 	/// Stable entry point; the version-specific iCloud link lives on the page.
-	static let setupPage = URL(string: "https://zagstore.app/mobile-data-fix/")!
+	static let setupPage = URL(string: "https://zagstore.app/shortcuts/mobile-data-fix/")!
 	static let callbackHost = "shortcut-callback"
 	/// A verification older than this must be repeated before it is trusted.
 	static let verificationLifetime: TimeInterval = 7 * 24 * 60 * 60
@@ -215,7 +215,7 @@ enum ZagMobileDataToggle {
 			case .notSetUp: return "Not Set Up"
 			case .verificationRequired: return "Verification Required"
 			case .verified: return "Verified"
-			case .failed: return "Verification Failed"
+			case .failed: return "Failed"
 			case .updateRequired: return "Update Required"
 			}
 		}

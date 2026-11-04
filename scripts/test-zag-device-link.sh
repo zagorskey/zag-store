@@ -102,6 +102,9 @@ check "toggle: the temporary launch test is gone" bash -c "[ ! -e '$ROOT/Feather
 check "toggle: Settings row uses the approved labels" bash -c "grep -q 'Set up cellular installation support' '$FIXVIEW' && grep -q '\"Mobile Data Fix\"' '$FIXVIEW'"
 check "toggle: completions are saved to the stored record" grep -q 'update { \$0 = Toggle.record(\$0, after: completion) }' "$CTRL"
 check "toggle: Last Verified is absolute, never relative" bash -c "grep -q 'at.formatted(date: .abbreviated, time: .shortened)' '$FIXVIEW' && ! grep -qE 'style: \\.(relative|timer|offset)|RelativeDateTimeFormatter|doesRelativeDateFormatting' '$FIXVIEW'"
+check "toggle: the app has one setup URL, under /shortcuts/" bash -c "[ \$(grep -rho 'https://zagstore.app/[a-z/-]*' '$ROOT/Feather' | sort -u | grep -c mobile-data-fix) -eq 1 ] && grep -q 'https://zagstore.app/shortcuts/mobile-data-fix/' '$ROOT/Feather/Utilities/ZagMobileDataToggle.swift' && ! grep -rqE 'zagstore.app/mobile-data-fix|icloud.com/shortcuts|\.shortcut\"' '$ROOT/Feather'"
+check "toggle: user-facing text says Mobile Data, not Cellular Data" bash -c "! grep -n 'Cellular Data' '$CTRL' '$FIXVIEW' '$ROOT/Feather/Utilities/ZagMobileDataToggle.swift' && ! grep -n 'Cellular Data' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
+check "toggle: no Verification Failed label remains" bash -c "! grep -rn 'Verification Failed' '$ROOT/Feather'"
 check "toggle: row lives in Installation Settings" grep -q 'ZagMobileDataFixRow()' "$ROOT/Feather/Views/Settings/Installation/InstallationView.swift"
 check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b21b6610452fb1771880b4eae45"' "$ROOT/RPPairingCore/rust-core/Cargo.toml"
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml

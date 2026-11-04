@@ -6,7 +6,7 @@ import UIKit
 /// - One operation at a time, each with a random id and a bounded lifetime.
 /// - Only Zag Store's own callback URLs are consumed; they can never start
 ///   or resume an installation.
-/// - A callback is never taken as proof that Cellular Data changed: after
+/// - A callback is never taken as proof that Mobile Data changed: after
 ///   `off`, readiness is confirmed by the RPPairing health check; after `on`,
 ///   the system network path must show cellular again.
 /// - It only runs when the user taps, and never retries on its own.
@@ -162,7 +162,7 @@ final class ZagMobileDataToggleController: ObservableObject {
 				}
 			}
 			guard let self, self.activity == .checkingReadiness else { return }
-			self.finishReadiness("RemotePairing did not become reachable. Cellular Data may still be on.")
+			self.finishReadiness("RemotePairing did not become reachable. Mobile Data may still be on.")
 		}
 	}
 
@@ -201,12 +201,12 @@ final class ZagMobileDataToggleController: ObservableObject {
 				let summary = self.networkSummary()
 				self.log("Check: \(summary)")
 				if ZagLocalVPNMonitor.shared.physicalNetworks.contains("Cellular") {
-					self.finishReadiness("Cellular Data appears to be on.")
+					self.finishReadiness("Mobile Data appears to be on.")
 					return
 				}
 			}
 			guard let self, self.activity == .checkingReadiness else { return }
-			self.finishReadiness("The Shortcut replied, but Zag Store cannot confirm Cellular Data is back on. Check Control Center.")
+			self.finishReadiness("The Shortcut replied, but Zag Store cannot confirm Mobile Data is back on. Check Control Center.")
 		}
 	}
 

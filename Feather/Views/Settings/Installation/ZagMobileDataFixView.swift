@@ -95,7 +95,7 @@ struct ZagMobileDataFixView: View {
 						.foregroundStyle(.secondary)
 				}
 			} footer: {
-				Text("Over mobile data, iOS blocks the connection Zag Store uses to install apps. \(ZagMobileDataToggle.shortcutName) is an Apple Shortcut that turns Cellular Data off for the install and back on afterwards. Shortcuts opens briefly each time, and it only runs when you tap.")
+				Text("Over Mobile Data, iOS blocks the connection Zag Store uses to install apps. \(ZagMobileDataToggle.shortcutName) temporarily turns Mobile Data off during installation and allows it to be restored afterwards. Shortcuts opens briefly each time, and it only runs when you tap.")
 			}
 
 			Section {
@@ -130,7 +130,7 @@ struct ZagMobileDataFixView: View {
 			} header: {
 				Text("Setup")
 			} footer: {
-				Text("Add the Shortcut from zagstore.app, keep its name \"\(ZagMobileDataToggle.shortcutName)\", then return here and tap Verify. Verifying never changes Cellular Data.")
+				Text("Add the Shortcut from zagstore.app, keep its name \"\(ZagMobileDataToggle.shortcutName)\", then return here and tap Verify. Verifying never changes Mobile Data.")
 			}
 		}
 		.tint(Color(hex: themeColorHex))

@@ -583,7 +583,7 @@ import Network
 		typealias T = ZagMobileDataToggle
 		let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 		expect(T.shortcutName == "Zag Mobile Data Toggle" && T.setupActionTitle == "Apply Mobile Data Fix", "toggle: official names")
-		expect(T.setupPage.absoluteString == "https://zagstore.app/mobile-data-fix/", "toggle: stable https setup page, no iCloud link in the app")
+		expect(T.setupPage.absoluteString == "https://zagstore.app/shortcuts/mobile-data-fix/", "toggle: stable https setup page, no iCloud link in the app")
 
 		// URL generation and command encoding
 		let op = T.Operation(id: "6F1C2E9A-1111-4222-8333-944455556666", command: .off, startedAt: t0)
@@ -653,6 +653,8 @@ import Network
 		// Stored state
 		var r = T.Record()
 		expect(T.status(of: r, now: t0) == .notSetUp, "status: not set up")
+		expect(T.Status.failed(reason: "x").title == "Failed", "status: a failed verification is labelled Failed")
+		expect(T.Status.verified(version: 1, at: t0).title == "Verified", "status: success is still labelled Verified")
 		r.setupPageOpenedAt = t0
 		if case .verificationRequired = T.status(of: r, now: t0) {} else { expect(false, "status: opening the website does not verify") }
 		r = T.record(r, after: .confirmed, now: t0)
