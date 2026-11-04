@@ -579,6 +579,37 @@ import Network
 			"idle: both open points at a check after the request")
 	}
 
+	static func shortcutCallbackTests() {
+		let run = "6F1C2E9A-1111-4222-8333-944455556666"
+		guard let url = ZagShortcutCallback.launchURL(shortcutName: "Zag Cellular Off", run: run),
+			  let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+			expect(false, "shortcut: launch URL builds"); return
+		}
+		expect(url.scheme == "shortcuts" && url.host == "x-callback-url" && url.path == "/run-shortcut",
+			"shortcut: uses the documented shortcuts://x-callback-url/run-shortcut format")
+		let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+		expect(items["name"] == "Zag Cellular Off", "shortcut: the shortcut name survives encoding")
+		expect(items["x-success"] == "zagstore://shortcut-callback/success?run=\(run)", "shortcut: x-success decodes to Zag Store's callback (got \(items["x-success"] ?? "nil"))")
+		expect(items["x-cancel"] == "zagstore://shortcut-callback/cancel?run=\(run)", "shortcut: x-cancel decodes correctly")
+		expect(items["x-error"] == "zagstore://shortcut-callback/error?run=\(run)", "shortcut: x-error decodes correctly")
+		expect(items.count == 4, "shortcut: nested callback parameters do not leak into the outer query")
+		let odd = ZagShortcutCallback.launchURL(shortcutName: "Zag & Co = Off?", run: run)
+		let oddName = odd.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value }
+		expect(oddName == "Zag & Co = Off?", "shortcut: names with &, = and ? are encoded safely")
+
+		// Shortcuts appends result / errorMessage to the callback URL.
+		func parse(_ string: String) -> ZagShortcutCallback.Outcome? { URL(string: string).flatMap(ZagShortcutCallback.parse) }
+		expect(parse("zagstore://shortcut-callback/success?run=\(run)&result=") == .success(run: run), "callback: success is recognised")
+		expect(parse("zagstore://shortcut-callback/cancel?run=\(run)") == .cancel(run: run), "callback: cancel is recognised")
+		expect(parse("zagstore://shortcut-callback/error?run=\(run)&errorMessage=Shortcut%20not%20found") == .error(run: run, message: "Shortcut not found"),
+			"callback: error carries Shortcuts' message")
+		for other in ["zagstore://settings", "zagstore://apps", "zagstore://settings/diagnostics/installation/rppairing",
+					  "zagstore://shortcut-callback/success", "zagstore://shortcut-callback/other?run=x",
+					  "feather://import-certificate?p12=x", "https://example.com/shortcut-callback/success?run=x"] {
+			expect(parse(other) == nil, "callback: \(other) is left to normal routing")
+		}
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
@@ -586,6 +617,7 @@ import Network
 		reportTests()
 		endpointTests()
 		protocolStageTests()
+		shortcutCallbackTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

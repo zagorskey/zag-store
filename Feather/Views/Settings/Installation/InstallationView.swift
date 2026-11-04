@@ -460,6 +460,8 @@ struct RPPairingDiagnosticsView: View {
 
 	private enum ReportState { case idle, preparing, copied }
 	@State private var traceState: ReportState = .idle
+	@StateObject private var shortcutTest = ZagShortcutLaunchTest.shared
+	@State private var shortcutLogCopied = false
 	@State private var traceSummary: [String] = []
 
 	var body: some View {
@@ -586,6 +588,39 @@ struct RPPairingDiagnosticsView: View {
 				Text("Connection Trace")
 			} footer: {
 				Text("Tests whether TCP crosses LocalDevVPN and how the RemotePairing port answers on this network, then copies a redacted trace. Nothing is sent on these connections. Run it on Wi-Fi and on mobile data and compare.")
+			}
+
+			Section {
+				Button {
+					shortcutLogCopied = false
+					shortcutTest.start()
+				} label: {
+					Label(shortcutTest.running ? "Shortcut Test Running…" : "Run \"\(ZagShortcutLaunchTest.shortcutName)\" Shortcut", systemImage: "square.2.layers.3d")
+				}
+				.disabled(shortcutTest.running || pairingCore.isGate2Running)
+
+				if shortcutTest.running {
+					Button("Cancel Test", role: .cancel) { shortcutTest.cancel() }
+				}
+
+				ForEach(shortcutTest.events) { event in
+					Text("+\(event.milliseconds) ms  \(event.text)")
+						.font(.footnote.monospaced())
+						.textSelection(.enabled)
+				}
+
+				if !shortcutTest.events.isEmpty {
+					Button {
+						UIPasteboard.general.string = shortcutTest.report()
+						shortcutLogCopied = true
+					} label: {
+						Label(shortcutLogCopied ? "Log Copied" : "Copy Shortcut Test Log", systemImage: shortcutLogCopied ? "checkmark" : "doc.on.doc")
+					}
+				}
+			} header: {
+				Text("Shortcut Launch Test (Temporary)")
+			} footer: {
+				Text("Opens the \"\(ZagShortcutLaunchTest.shortcutName)\" Shortcut directly from Zag Store, then records whether iOS handed it off, whether Shortcuts returned through the callback, and whether RPPairing became reachable, confirmed by a full health check. Zag Store never changes Cellular Data itself.")
 			}
 
 			Section {
