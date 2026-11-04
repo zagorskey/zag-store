@@ -135,6 +135,12 @@ check "signed: Library install passes the bundle ID for confirmation" grep -q 'i
 check "signed: confirmation uses the list read before Mobile Data returns" grep -q 'ZagMobileDataInstallCoordinator.shared.takeInventory(jobID: uuid)' "$LIBV"
 check "signed: the list is captured inside the operation, before ON" bash -c "grep -A6 'func install(jobID: String, bundleID' '$COORD' | grep -q 'await self.captureInventory'"
 check "signed: no optimistic marking before the device list confirms" bash -c "sed -n '/private func _confirmInstalledApp/,/^\\t}/p' '$LIBV' | awk '/guard installedBundleIDs.contains/{g=1} /_markManagedAppInstalled/{ if(!g) bad=1 } END{exit bad}'"
+DLM="$ROOT/Feather/Backend/Observable/DownloadManager.swift"
+check "pause: uses genuine URLSession resume data" bash -c "grep -q 'cancel(byProducingResumeData:' '$DLM' && grep -q 'downloadTask(withResumeData: data)' '$DLM'"
+check "pause: a pause never reports the transfer as failed" bash -c "grep -B2 -A2 'Pausing cancels the transfer on purpose' '$DLM' | grep -q 'guard !download.isPaused else { return }'"
+check "pause: server restarts on resume are stopped, not accepted" grep -q 'ZagDownloadPauseError.serverRestarted' "$DLM"
+check "pause: background task stopped while paused and keep-alive ignores paused downloads" bash -c "grep -A12 'func pauseDownload' '$DLM' | grep -q 'stopTask(for: download, success: false)' && grep -q 'downloads.contains(where: { !\$0.isPaused })' '$DLM'"
+check "cancel: the Mobile Data flow honours a job cancel without cancelling Swift tasks" bash -c "grep -q 'cancelRequested: @escaping () -> Bool' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift' && ! grep -rq '\.cancel()' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift'"
 check "install: diagnostics installs stay direct" bash -c "! grep -q 'ZagMobileDataInstallCoordinator.shared.install' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
 check "install: no background execution is requested" bash -c "! grep -qE 'beginBackgroundTask|BGTaskScheduler' '$COORD' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift'"
 check "install: consent text is exact" bash -c "grep -q 'Mobile Data Installation' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes.' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Allow Automatically' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift'"
@@ -144,7 +150,7 @@ check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/Feather/Utilities/ZagRPPairingUninstall.swift" "$ROOT/Feather/Utilities/ZagRPPairingInventoryCheck.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/Feather/Utilities/ZagRPPairingUninstall.swift" "$ROOT/Feather/Utilities/ZagRPPairingInventoryCheck.swift" "$ROOT/Feather/Utilities/ZagInstallJob.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" "$ROOT/scripts/ZagInstallJobTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else

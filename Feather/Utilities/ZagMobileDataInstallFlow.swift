@@ -143,19 +143,27 @@ final class ZagMobileDataInstallFlow {
 
 	private let env: Environment
 	private(set) var isBusy = false
+	/// The current run's cancel request (the user cancelled the job). Checked
+	/// at the same safe points as task cancellation; never interrupts a
+	/// Shortcut command or the installer.
+	private var cancelRequested: () -> Bool = { false }
+
+	private var isCancelled: Bool { Task.isCancelled || cancelRequested() }
 
 	init(environment: Environment) {
 		env = environment
 	}
 
-	func run(jobID: String, install: () async throws -> Void) async -> ZagMobileDataInstallOutcome {
+	func run(jobID: String, cancelRequested: @escaping () -> Bool = { false }, install: () async throws -> Void) async -> ZagMobileDataInstallOutcome {
 		guard !isBusy else {
 			env.log("Rejected: another installation is preparing")
 			return ZagMobileDataInstallOutcome(notAttempted: .alreadyRunning, restoration: .notChanged, usedMobileDataFix: false)
 		}
 		isBusy = true
+		self.cancelRequested = cancelRequested
 		defer {
 			isBusy = false
+			self.cancelRequested = { false }
 			env.stage(.idle)
 		}
 
@@ -187,7 +195,7 @@ final class ZagMobileDataInstallFlow {
 		case .declined: return notAttempted(.consentDeclined)
 		case .disabled: return notAttempted(.automaticDisabled)
 		}
-		if Task.isCancelled { return notAttempted(.cancelled) }
+		if isCancelled { return notAttempted(.cancelled) }
 
 		// Saved before `off`, so a relaunch knows Mobile Data may be off.
 		env.saveRecord(ZagMobileDataRecoveryRecord(jobID: jobID, offRequestedAt: env.now()))
@@ -200,7 +208,7 @@ final class ZagMobileDataInstallFlow {
 		let reachable = await waitForInstaller()
 		env.log(reachable ? "Installer reachable" : "Installer still unreachable")
 
-		if off == .cancelled || Task.isCancelled {
+		if off == .cancelled || isCancelled {
 			let restoration = await restore(installerReachable: reachable)
 			return ZagMobileDataInstallOutcome(notAttempted: .cancelled, restoration: restoration, usedMobileDataFix: true)
 		}
@@ -243,7 +251,7 @@ final class ZagMobileDataInstallFlow {
 	private func waitForInstaller() async -> Bool {
 		for delay in Self.connectDelays {
 			await env.sleep(delay)
-			if Task.isCancelled { return false }
+			if isCancelled { return false }
 			if await env.endpoint() == .reachable { return true }
 		}
 		return false

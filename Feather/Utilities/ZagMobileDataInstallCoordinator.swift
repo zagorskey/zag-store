@@ -54,9 +54,12 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 	/// Mobile Data comes back on (it can't be read after), waiting for
 	/// `bundleID` to appear. The confirmation step then takes that list with
 	/// `takeInventory(jobID:)` instead of querying a refused endpoint.
-	func install(jobID: String, bundleID: String? = nil, _ install: () async throws -> Void) async throws {
+	///
+	/// `cancelRequested` is the job's cancel request: honoured before `off`,
+	/// or after it with Mobile Data restored, never once the installer runs.
+	func install(jobID: String, bundleID: String? = nil, cancelRequested: @escaping () -> Bool = { false }, _ install: () async throws -> Void) async throws {
 		inventorySnapshot = nil
-		try await perform(.install, jobID: jobID) {
+		try await perform(.install, jobID: jobID, cancelRequested: cancelRequested) {
 			try await install()
 			if self.usingMobileDataFix {
 				await self.captureInventory(jobID: jobID, bundleID: bundleID)
@@ -112,11 +115,11 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 	/// Shared by installation and uninstallation: one flow, one Shortcut
 	/// path, one recovery record. Throws the RPPairing operation's own
 	/// error, so a failed operation never reports success.
-	func perform(_ operation: Operation, jobID: String, _ body: () async throws -> Void) async throws {
+	func perform(_ operation: Operation, jobID: String, cancelRequested: @escaping () -> Bool = { false }, _ body: () async throws -> Void) async throws {
 		consentOperation = operation
 		decisionLog = []
 		record("\(operation.rawValue) \(jobID.prefix(8)) started")
-		let outcome = await flow.run(jobID: jobID, install: body)
+		let outcome = await flow.run(jobID: jobID, cancelRequested: cancelRequested, install: body)
 		if outcome.usedMobileDataFix {
 			NotificationCenter.default.post(name: .zagDeviceLinkRecheckRequested, object: nil)
 		}

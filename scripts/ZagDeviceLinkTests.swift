@@ -1135,6 +1135,10 @@ import Network
 		badgeTests()
 		await uninstallTests()
 		await inventoryTests()
+		installJobTests()
+		resumeHelperTests()
+		await pauseResumeTests()
+		await installCancelTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }
