@@ -545,7 +545,7 @@ extension SettingsView {
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
-                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Pages Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -591,22 +591,30 @@ extension SettingsView {
                     Label {
                         Text("Bottom Dock")
                     } icon: {
-                        Image(systemName: "dock.rectangle")
+                        ZagPhoneSettingsIcon(content: .dock)
                             .frame(width: 25, height: 25)
                             .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                     }
                 }
                 NavigationLink(destination: ZagSplashScreenSettingsView().zagSettingsDestinationAvatar()) {
-                    Label("Splash Screen", systemImage: "sparkles.tv")
+                    Label {
+                        Text("Splash Screen")
+                    } icon: {
+                        ZagPhoneSettingsIcon(content: .splash)
+                            .frame(width: 25, height: 25)
+                            .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
+                    }
                 }
                 NavigationLink(destination: ZagPagesSettingsView().zagSettingsDestinationAvatar()) {
-                    Label("Pages", systemImage: "square.on.square")
+                    Label("Main Pages", systemImage: "square.on.square")
                 }
                 NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
                     Label("App Icon", systemImage: "app.badge")
                 }
             } header: {
                 Text("Zag Store")
+            } footer: {
+                Text("Unleash full Zag Store customisation")
             }
 
 		case .certificates:
@@ -872,7 +880,14 @@ extension SettingsView {
                         .frame(width: 25, height: 25)
                 }
             }
-
+            .listRowSeparator(.hidden, edges: .bottom)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color(uiColor: .separator))
+                    .frame(height: 0.5)
+                    .padding(.leading, 60)
+                    .allowsHitTesting(false)
+            }
             Button {
 
                 let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
@@ -2859,5 +2874,46 @@ private struct ZagPagesSettingsView: View {
                 defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
             }
         }
+    }
+}
+
+
+// MARK: - Zag Store phone-shaped Settings icons
+/// A shared modern iPhone silhouette with a Dynamic Island and either the
+/// bottom dock or the same Z mark used by the Sources dock tab.
+private struct ZagPhoneSettingsIcon: View {
+    enum Content { case dock, splash }
+    let content: Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            ZStack {
+                RoundedRectangle(cornerRadius: w * 0.23, style: .continuous)
+                    .strokeBorder(lineWidth: 1.8)
+                    .frame(width: w * 0.68, height: h * 0.96)
+
+                Capsule()
+                    .fill(.primary)
+                    .frame(width: w * 0.23, height: h * 0.065)
+                    .offset(y: -h * 0.35)
+
+                switch content {
+                case .dock:
+                    RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                        .strokeBorder(lineWidth: 1.6)
+                        .frame(width: w * 0.49, height: h * 0.16)
+                        .offset(y: h * 0.29)
+                case .splash:
+                    ZagSourcesTabIcon.label
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: w * 0.34, height: h * 0.34)
+                }
+            }
+            .frame(width: w, height: h)
+        }
+        .accessibilityHidden(true)
     }
 }
