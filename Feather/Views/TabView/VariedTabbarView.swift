@@ -816,14 +816,9 @@ struct ZagLocalVPNToolbarStatus: View {
             Text("VPN")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
-            HStack(spacing: 3) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 4, height: 4)
-                Text(statusText)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(statusColor)
-            }
+            Text(statusText)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(statusColor)
         }
         .frame(width: 44, height: 39)
         .accessibilityLabel(accessibilityText)
