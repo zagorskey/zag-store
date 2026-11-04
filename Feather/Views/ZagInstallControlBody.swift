@@ -1,19 +1,20 @@
-import SwiftUI
 #if canImport(UIKit)
+import SwiftUI
 import UIKit
-#else
-import AppKit
-#endif
 
-// The morphing install control without any app dependencies, so the same
-// code runs in the app and in the visual test harness.
+// The morphing install control, drawn with Core Animation.
 //
-// One persistent view in a fixed 88 × 34 slot. Two animated values drive
-// everything, through ZagInstallControlFrame:
-//   compactness 0 (pill) … 1 (circle), and the target pill width.
-// Both change in one spring transaction, only when the control moves
-// between pill and circle or between two different pills. Progress ticks
-// update the ring without touching the morph.
+// Three concerns stay independent:
+// - Installation state: the row passes a ZagInstallControlMode.
+// - Morph: the capsule's size, corner radius and the label/ring fades are
+//   keyframe animations sampled from ZagInstallControlFrame. They're
+//   committed once per state change and then run in the render server, so a
+//   busy main thread can neither freeze nor skip them.
+// - Ring: the spinner is a repeating rotation and progress is strokeEnd,
+//   both on their own layers. Progress ticks only touch strokeEnd; a morph
+//   never restarts the spinner, and the spinner's phase follows the clock.
+//
+// Geometry is unchanged: a fixed 88 × 34 slot, the shape centred in it.
 
 struct ZagInstallControlBody: View {
 	let mode: ZagInstallControlMode
@@ -21,220 +22,357 @@ struct ZagInstallControlBody: View {
 	let fill: Color
 	let action: () -> Void
 
-	@Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-	@State private var compactness: Double
-	@State private var pillWidth: Double
-	/// The last pill and ring shown, so contents stay put while they fade.
-	@State private var shownPill: ZagInstallPill
-	@State private var shownRing: ZagInstallRing
-
 	init(mode: ZagInstallControlMode, tint: Color, fill: Color, action: @escaping () -> Void) {
 		self.mode = mode
 		self.tint = tint
 		self.fill = fill
 		self.action = action
-		let pill = mode.pill ?? ZagInstallPill(title: nil, accessibilityLabel: "")
-		_compactness = State(initialValue: mode.isCompact ? 1 : 0)
-		_pillWidth = State(initialValue: ZagInstallControlMeasure.pillWidth(pill))
-		_shownPill = State(initialValue: pill)
-		_shownRing = State(initialValue: mode.ring ?? .spinner(.none))
 	}
 
 	var body: some View {
-		let pill = mode.pill ?? shownPill
-		Button {
-			if mode.isInteractive { action() }
-		} label: {
-			ZagInstallControlFace(
-				compactness: compactness,
-				pillWidth: pillWidth,
-				contentWidth: ZagInstallControlMeasure.contentWidth(pill),
-				pill: pill,
-				ring: mode.ring ?? shownRing,
-				tint: tint,
-				fill: fill,
-				reduceMotion: reduceMotion
-			)
-		}
-		.buttonStyle(.borderless)
-		.allowsHitTesting(mode.isInteractive)
-		// Fixed slot, centred: the shape grows and shrinks around the slot's
-		// centre and the row never reflows. A wider pill (Resume) extends
-		// equally on both sides.
-		.frame(width: ZagInstallControlLayout.slotWidth, height: ZagInstallControlLayout.pillHeight)
-		.onChange(of: mode) { newMode in
-			_apply(newMode)
-		}
-	}
-
-	private func _apply(_ newMode: ZagInstallControlMode) {
-		// Contents first, outside the animation.
-		if let pill = newMode.pill { shownPill = pill }
-		if let ring = newMode.ring { shownRing = ring }
-
-		let targetCompactness: Double = newMode.isCompact ? 1 : 0
-		let targetWidth = newMode.pill.map(ZagInstallControlMeasure.pillWidth) ?? pillWidth
-		guard targetCompactness != compactness || targetWidth != pillWidth else { return }
-		// Reduce Motion: the width is set at once and only the contents
-		// cross-fade, so nothing resizes in motion.
-		if reduceMotion { pillWidth = targetWidth }
-		let animation: Animation = reduceMotion
-			? .easeInOut(duration: ZagInstallControlMotion.reduceMotionDuration)
-			: .spring(response: ZagInstallControlMotion.response, dampingFraction: ZagInstallControlMotion.dampingFraction)
-		withAnimation(animation) {
-			compactness = targetCompactness
-			pillWidth = targetWidth
-		}
+		ZagInstallControlRepresentable(mode: mode, tint: tint, fill: fill, action: action)
+			.frame(width: ZagInstallControlLayout.slotWidth, height: ZagInstallControlLayout.pillHeight)
+			.allowsHitTesting(mode.isInteractive)
 	}
 }
 
-/// One rendered frame of the morph. SwiftUI interpolates `animatableData`,
-/// so every size and opacity is recomputed from the same spring each frame.
-struct ZagInstallControlFace: View, Animatable {
-	var compactness: Double
-	var pillWidth: Double
-	let contentWidth: Double
-	let pill: ZagInstallPill
-	let ring: ZagInstallRing
+private struct ZagInstallControlRepresentable: UIViewRepresentable {
+	let mode: ZagInstallControlMode
 	let tint: Color
 	let fill: Color
-	var reduceMotion = false
+	let action: () -> Void
 
-	var animatableData: AnimatablePair<Double, Double> {
-		get { AnimatablePair(compactness, pillWidth) }
-		set {
-			compactness = newValue.first
-			pillWidth = newValue.second
-		}
+	func makeUIView(context: Context) -> ZagInstallControlView {
+		ZagInstallControlView()
 	}
 
-	var body: some View {
-		let frame = ZagInstallControlFrame.at(
-			compactness: compactness,
-			pillWidth: pillWidth,
-			contentWidth: contentWidth,
-			filled: pill.filled,
-			reduceMotion: reduceMotion
+	func updateUIView(_ view: ZagInstallControlView, context: Context) {
+		let mode = self.mode
+		let action = self.action
+		view.onTap = { if mode.isInteractive { action() } }
+		view.update(
+			mode: mode,
+			tint: UIColor(tint),
+			fill: UIColor(fill),
+			reduceMotion: context.environment.accessibilityReduceMotion
 		)
-		// The shape alone sets the size. Label and ring are overlays centred
-		// on it, so a wider label can never widen or shift the capsule.
-		Color.clear
-			.frame(width: frame.width, height: frame.height)
-			.background(
-				Capsule(style: .continuous)
-					.fill(fill)
-					.opacity(frame.fillOpacity)
-			)
-			.overlay(
-				_label
-					.opacity(frame.labelOpacity)
-			)
-			.overlay(
-				ZagInstallRingView(ring: ring, tint: tint, paused: reduceMotion)
-					.frame(width: ZagInstallControlLayout.circle, height: ZagInstallControlLayout.circle)
-					.opacity(frame.ringOpacity)
-			)
-			.contentShape(Capsule(style: .continuous))
+	}
+}
+
+final class ZagInstallControlView: UIControl {
+	var onTap: (() -> Void)?
+
+	private let capsule = CALayer()
+	private let labelHost = UIView()
+	private let iconView = UIImageView()
+	private let titleLabel = UILabel()
+	private let ringView = UIView()
+	private let track = CAShapeLayer()
+	private let progressArc = CAShapeLayer()
+	private let spinnerArc = CAShapeLayer()
+	private let glyphView = UIImageView()
+
+	private var mode: ZagInstallControlMode?
+	private var pill = ZagInstallPill(title: nil, accessibilityLabel: "")
+	private var ring: ZagInstallRing = .spinner(.none)
+	private var contentWidth = 0.0
+	private var reduceMotion = false
+	private var tint: UIColor = .systemBlue
+	private var fillColor: UIColor = .systemGray5
+
+	/// Target of the current or last morph, and when it started.
+	private var compactness = 0.0
+	private var pillWidth = ZagInstallControlLayout.slotWidth
+	private var morph: (start: CFTimeInterval, c0: Double, w0: Double, reduce: Bool)?
+
+	private static let spinKey = "zag.spin"
+	private static let morphKey = "zag.morph"
+	private static let spinPeriod = 0.85
+
+	override init(frame: CGRect) {
+		super.init(frame: frame)
+		clipsToBounds = false
+		backgroundColor = .clear
+
+		capsule.cornerCurve = .continuous
+		layer.addSublayer(capsule)
+
+		titleLabel.font = .systemFont(ofSize: ZagInstallControlLayout.titleSize, weight: .bold)
+		titleLabel.numberOfLines = 1
+		iconView.contentMode = .center
+		labelHost.isUserInteractionEnabled = false
+		labelHost.addSubview(iconView)
+		labelHost.addSubview(titleLabel)
+		addSubview(labelHost)
+
+		let size = ZagInstallControlLayout.circle
+		ringView.isUserInteractionEnabled = false
+		ringView.bounds = CGRect(x: 0, y: 0, width: size, height: size)
+		let circle = UIBezierPath(
+			arcCenter: CGPoint(x: size / 2, y: size / 2), radius: size / 2,
+			startAngle: -.pi / 2, endAngle: 1.5 * .pi, clockwise: true
+		).cgPath
+		for arc in [track, progressArc, spinnerArc] {
+			arc.frame = ringView.bounds
+			arc.path = circle
+			arc.fillColor = nil
+			arc.lineWidth = ZagInstallControlLayout.ringStroke
+			arc.lineCap = .round
+			ringView.layer.addSublayer(arc)
+		}
+		progressArc.strokeEnd = 0
+		spinnerArc.strokeStart = 0.08
+		spinnerArc.strokeEnd = 0.72
+		glyphView.contentMode = .center
+		glyphView.frame = ringView.bounds
+		ringView.addSubview(glyphView)
+		addSubview(ringView)
+
+		addTarget(self, action: #selector(_tapped), for: .touchUpInside)
+		NotificationCenter.default.addObserver(
+			self, selector: #selector(_restoreSpin),
+			name: UIApplication.willEnterForegroundNotification, object: nil
+		)
 	}
 
-	private var _label: some View {
-		HStack(spacing: ZagInstallControlLayout.iconSpacing) {
-			if let image = pill.systemImage {
-				Image(systemName: image)
-					.font(pill.title == nil
-						? .system(size: pill.iconSize, weight: .regular)
-						: .system(size: ZagInstallControlLayout.titleSize, weight: .bold))
-			}
-			if let title = pill.title {
-				Text(title)
-					.font(.system(size: ZagInstallControlLayout.titleSize, weight: .bold))
-					.lineLimit(1)
+	required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+	override var intrinsicContentSize: CGSize {
+		CGSize(width: ZagInstallControlLayout.slotWidth, height: ZagInstallControlLayout.pillHeight)
+	}
+
+	override var isHighlighted: Bool {
+		didSet {
+			guard isHighlighted != oldValue else { return }
+			UIView.animate(withDuration: isHighlighted ? 0.08 : 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+				self.alpha = self.isHighlighted ? 0.45 : 1
 			}
 		}
-		.foregroundStyle(tint)
-		// Natural size: never truncated, compressed or clipped. It fades
-		// out before the capsule edge reaches it.
-		.fixedSize()
 	}
-}
 
-struct ZagInstallRingView: View {
-	let ring: ZagInstallRing
-	let tint: Color
-	var paused = false
+	@objc private func _tapped() { onTap?() }
 
-	var body: some View {
-		ZStack {
-			Circle()
-				.stroke(tint.opacity(0.22), lineWidth: ZagInstallControlLayout.ringStroke)
-			switch ring {
-			case .progress(let value, let glyph):
-				Circle()
-					.trim(from: 0, to: max(0.03, min(1, value)))
-					.stroke(tint, style: StrokeStyle(lineWidth: ZagInstallControlLayout.ringStroke, lineCap: .round))
-					.rotationEffect(.degrees(-90))
-					.animation(.smooth, value: value)
-				if glyph == .none, value >= 1 {
-					Image(systemName: "checkmark")
-						.font(.footnote.bold())
-						.foregroundStyle(tint)
-				}
-			case .spinner:
-				// Driven by the clock, so it never restarts when the row
-				// scrolls off-screen and back.
-				TimelineView(.animation(paused: paused)) { context in
-					let period = 0.85
-					let turn = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
-					Circle()
-						.trim(from: 0.08, to: 0.72)
-						.stroke(tint, style: StrokeStyle(lineWidth: ZagInstallControlLayout.ringStroke, lineCap: .round))
-						.rotationEffect(.degrees(turn * 360 - 90))
-				}
-			}
-			switch ring.glyph {
-			case .pause:
-				Image(systemName: "pause.fill").font(.footnote).foregroundStyle(tint)
-			case .stop:
-				Image(systemName: "square.fill").font(.footnote).foregroundStyle(tint)
-			case .none:
-				EmptyView()
-			}
+	// MARK: Layout
+
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		let centre = CGPoint(x: bounds.midX, y: bounds.midY)
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		capsule.position = centre
+		CATransaction.commit()
+		ringView.center = centre
+		labelHost.center = centre
+	}
+
+	override func didMoveToWindow() {
+		super.didMoveToWindow()
+		guard window != nil else { return }
+		_restoreSpin()
+		// Animations are dropped when a layer leaves the window; settle on
+		// the target instead of leaving a half-finished frame.
+		if capsule.animation(forKey: Self.morphKey) == nil { _applyStatic() }
+	}
+
+	// MARK: Update
+
+	func update(mode newMode: ZagInstallControlMode, tint newTint: UIColor, fill newFill: UIColor, reduceMotion newReduce: Bool) {
+		reduceMotion = newReduce
+		if newTint != tint || newFill != fillColor || mode == nil {
+			tint = newTint
+			fillColor = newFill
+			_applyColours()
 		}
+		if let p = newMode.pill, p != pill || mode == nil { _setPill(p) }
+		if let r = newMode.ring { _setRing(r, animated: mode != nil) }
+
+		let targetC: Double = newMode.isCompact ? 1 : 0
+		let targetW = newMode.pill.map(ZagInstallControlMeasure.pillWidth) ?? pillWidth
+		if mode == nil {
+			// First appearance (including scrolling back on-screen): no morph.
+			compactness = targetC
+			pillWidth = targetW
+			_applyStatic()
+		} else if targetC != compactness || targetW != pillWidth {
+			_morph(toCompactness: targetC, width: targetW)
+		}
+		mode = newMode
+		accessibilityElementsHidden = true
+	}
+
+	private func _applyColours() {
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		capsule.backgroundColor = fillColor.cgColor
+		titleLabel.textColor = tint
+		iconView.tintColor = tint
+		glyphView.tintColor = tint
+		track.strokeColor = tint.withAlphaComponent(0.22).cgColor
+		progressArc.strokeColor = tint.cgColor
+		spinnerArc.strokeColor = tint.cgColor
+		CATransaction.commit()
+	}
+
+	private func _setPill(_ p: ZagInstallPill) {
+		pill = p
+		contentWidth = ZagInstallControlMeasure.contentWidth(p)
+		titleLabel.text = p.title
+		titleLabel.isHidden = p.title == nil
+		if let name = p.systemImage {
+			let config = p.title == nil
+				? UIImage.SymbolConfiguration(pointSize: p.iconSize, weight: .regular)
+				: UIImage.SymbolConfiguration(pointSize: ZagInstallControlLayout.titleSize, weight: .bold)
+			iconView.image = UIImage(systemName: name, withConfiguration: config)?.withRenderingMode(.alwaysTemplate)
+			iconView.isHidden = false
+		} else {
+			iconView.image = nil
+			iconView.isHidden = true
+		}
+		// Lay the label out at its natural size, centred: never truncated.
+		let titleSize = p.title == nil ? .zero : titleLabel.sizeThatFits(CGSize(width: 1000, height: 100))
+		let iconSize = iconView.image?.size ?? .zero
+		let spacing = (p.title != nil && p.systemImage != nil) ? ZagInstallControlLayout.iconSpacing : 0
+		let width = iconSize.width + spacing + titleSize.width
+		let height = max(iconSize.height, titleSize.height, ZagInstallControlLayout.pillHeight)
+		labelHost.bounds = CGRect(x: 0, y: 0, width: width, height: height)
+		iconView.frame = CGRect(x: 0, y: (height - iconSize.height) / 2, width: iconSize.width, height: iconSize.height)
+		titleLabel.frame = CGRect(x: iconSize.width + spacing, y: (height - titleSize.height) / 2, width: titleSize.width, height: titleSize.height)
+		labelHost.center = CGPoint(x: bounds.midX, y: bounds.midY)
+	}
+
+	// MARK: Ring
+
+	private func _setRing(_ r: ZagInstallRing, animated: Bool) {
+		let previous = ring
+		ring = r
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		switch r {
+		case .progress(let value, _):
+			spinnerArc.isHidden = true
+			spinnerArc.removeAnimation(forKey: Self.spinKey)
+			progressArc.isHidden = false
+			let target = CGFloat(max(0.03, min(1, value)))
+			let wasProgress: Bool = { if case .progress = previous { return true } else { return false } }()
+			if animated, wasProgress, abs(progressArc.strokeEnd - target) > 0.0005 {
+				// Continue from what is on screen, so frequent ticks glide.
+				let from = progressArc.presentation()?.strokeEnd ?? progressArc.strokeEnd
+				let glide = CABasicAnimation(keyPath: "strokeEnd")
+				glide.fromValue = from
+				glide.toValue = target
+				glide.duration = 0.5
+				glide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+				progressArc.add(glide, forKey: "zag.progress")
+			}
+			progressArc.strokeEnd = target
+		case .spinner:
+			progressArc.isHidden = true
+			progressArc.removeAnimation(forKey: "zag.progress")
+			spinnerArc.isHidden = false
+			_ensureSpin()
+		}
+		CATransaction.commit()
+		_setGlyph(for: r)
+	}
+
+	private func _setGlyph(for r: ZagInstallRing) {
+		let footnote = UIImage.SymbolConfiguration(textStyle: .footnote)
+		let image: UIImage?
+		switch (r, r.glyph) {
+		case (_, .pause): image = UIImage(systemName: "pause.fill", withConfiguration: footnote)
+		case (_, .stop): image = UIImage(systemName: "square.fill", withConfiguration: footnote)
+		case (.progress(let v, _), .none) where v >= 1:
+			image = UIImage(systemName: "checkmark", withConfiguration: footnote.applying(UIImage.SymbolConfiguration(weight: .bold)))
+		default: image = nil
+		}
+		glyphView.image = image?.withRenderingMode(.alwaysTemplate)
+	}
+
+	/// The spinner rotates in the render server. Its phase follows the
+	/// clock, so re-adding it (scrolling back, returning to the app) never
+	/// visibly restarts it.
+	@objc private func _restoreSpin() {
+		guard case .spinner = ring else { return }
+		_ensureSpin()
+	}
+
+	private func _ensureSpin() {
+		guard spinnerArc.animation(forKey: Self.spinKey) == nil else { return }
+		let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+		spin.fromValue = 0
+		spin.toValue = 2 * Double.pi
+		spin.duration = Self.spinPeriod
+		spin.repeatCount = .infinity
+		spin.isRemovedOnCompletion = false
+		spin.timeOffset = fmod(CACurrentMediaTime(), Self.spinPeriod)
+		spinnerArc.add(spin, forKey: Self.spinKey)
+	}
+
+	// MARK: Morph
+
+	private func _currentFrame() -> ZagInstallControlFrame {
+		.at(compactness: compactness, pillWidth: pillWidth, contentWidth: contentWidth, filled: pill.filled, reduceMotion: reduceMotion)
+	}
+
+	private func _applyStatic() {
+		capsule.removeAnimation(forKey: Self.morphKey)
+		labelHost.layer.removeAnimation(forKey: Self.morphKey)
+		ringView.layer.removeAnimation(forKey: Self.morphKey)
+		morph = nil
+		_set(_currentFrame())
+	}
+
+	private func _set(_ f: ZagInstallControlFrame) {
+		CATransaction.begin()
+		CATransaction.setDisableActions(true)
+		capsule.bounds = CGRect(x: 0, y: 0, width: f.width, height: f.height)
+		capsule.cornerRadius = f.cornerRadius
+		capsule.opacity = Float(f.fillOpacity)
+		labelHost.layer.opacity = Float(f.labelOpacity)
+		ringView.layer.opacity = Float(f.ringOpacity)
+		CATransaction.commit()
+	}
+
+	private func _morph(toCompactness c1: Double, width w1: Double) {
+		// Start from where the shape is now, including mid-morph.
+		var c0 = compactness, w0 = pillWidth
+		if let morph, capsule.animation(forKey: Self.morphKey) != nil {
+			let p = ZagInstallControlMotion.progress(elapsed: CACurrentMediaTime() - morph.start, reduceMotion: morph.reduce)
+			c0 = morph.c0 + (compactness - morph.c0) * p
+			w0 = morph.w0 + (pillWidth - morph.w0) * p
+		}
+		if reduceMotion { w0 = w1 }
+		compactness = c1
+		pillWidth = w1
+
+		let keys = ZagInstallControlMotion.keyframes(
+			fromCompactness: c0, toCompactness: c1, fromWidth: w0, toWidth: w1,
+			contentWidth: contentWidth, filled: pill.filled, reduceMotion: reduceMotion
+		)
+		let times = keys.frames.indices.map { NSNumber(value: Double($0) / Double(keys.frames.count - 1)) }
+		func animation(_ path: String, _ values: [Any]) -> CAKeyframeAnimation {
+			let a = CAKeyframeAnimation(keyPath: path)
+			a.values = values
+			a.keyTimes = times
+			a.duration = keys.duration
+			a.calculationMode = .linear
+			return a
+		}
+		let start = CACurrentMediaTime()
+		morph = (start, c0, w0, reduceMotion)
+
+		// Final values first, then the animations from the same transaction.
+		_set(keys.frames.last!)
+		let shape = CAAnimationGroup()
+		shape.animations = [
+			animation("bounds.size", keys.frames.map { NSValue(cgSize: CGSize(width: $0.width, height: $0.height)) }),
+			animation("cornerRadius", keys.frames.map { $0.cornerRadius }),
+			animation("opacity", keys.frames.map { $0.fillOpacity }),
+		]
+		shape.duration = keys.duration
+		capsule.add(shape, forKey: Self.morphKey)
+		labelHost.layer.add(animation("opacity", keys.frames.map { $0.labelOpacity }), forKey: Self.morphKey)
+		ringView.layer.add(animation("opacity", keys.frames.map { $0.ringOpacity }), forKey: Self.morphKey)
 	}
 }
-
-/// Measures labels with the same fonts the face renders, so the pill width
-/// is known before the morph starts.
-enum ZagInstallControlMeasure {
-	static func pillWidth(_ pill: ZagInstallPill) -> Double {
-		ZagInstallControlLayout.pillWidth(contentWidth: contentWidth(pill))
-	}
-
-	static func contentWidth(_ pill: ZagInstallPill) -> Double {
-		let size = pill.title == nil ? pill.iconSize : ZagInstallControlLayout.titleSize
-		let symbol = pill.systemImage.map { symbolWidth($0, pointSize: size, bold: pill.title != nil) }
-		let title = pill.title.map(titleWidth)
-		return ZagInstallControlLayout.contentWidth(titleWidth: title, symbolWidth: symbol)
-	}
-
-	static func titleWidth(_ title: String) -> Double {
-		#if canImport(UIKit)
-		let font = UIFont.systemFont(ofSize: ZagInstallControlLayout.titleSize, weight: .bold)
-		#else
-		let font = NSFont.systemFont(ofSize: ZagInstallControlLayout.titleSize, weight: .bold)
-		#endif
-		return Double((title as NSString).size(withAttributes: [.font: font]).width).rounded(.up)
-	}
-
-	static func symbolWidth(_ name: String, pointSize: Double, bold: Bool) -> Double {
-		#if canImport(UIKit)
-		let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: bold ? .bold : .regular)
-		return (UIImage(systemName: name, withConfiguration: config).map { Double($0.size.width) } ?? pointSize).rounded(.up)
-		#else
-		let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: bold ? .bold : .regular)
-		let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config)
-		return (image.map { Double($0.size.width) } ?? pointSize).rounded(.up)
-		#endif
-	}
-}
+#endif

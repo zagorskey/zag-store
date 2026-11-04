@@ -173,3 +173,58 @@ enum ZagInstallControlMotion {
 		return false
 	}
 }
+
+// MARK: - Keyframes
+
+/// The morph as a list of frames sampled from the spring, so it can be
+/// handed to Core Animation and run outside the app's main thread. A busy
+/// main thread then can't freeze or skip it.
+struct ZagInstallControlKeyframes: Equatable {
+	var duration: Double
+	var compactness: [Double]
+	var pillWidths: [Double]
+	var frames: [ZagInstallControlFrame]
+}
+
+extension ZagInstallControlMotion {
+	/// Angular frequency of the critically damped spring.
+	static var omega: Double { 2 * .pi / response }
+
+	/// Critically damped spring progress 0 → 1 at `time` seconds.
+	static func springProgress(_ time: Double) -> Double {
+		guard time > 0 else { return 0 }
+		let x = omega * time
+		return 1 - (1 + x) * exp(-x)
+	}
+
+	/// Settled to within 0.1 %: (1 + x)e^-x = 0.001 at x ≈ 9.233.
+	static var springDuration: Double { 9.233 / omega }
+
+	/// Progress of a morph `elapsed` seconds after it started (used when a
+	/// new state interrupts a morph that is still running).
+	static func progress(elapsed: Double, reduceMotion: Bool) -> Double {
+		if reduceMotion {
+			let p = min(1, max(0, elapsed / reduceMotionDuration))
+			return p * p * (3 - 2 * p)
+		}
+		return elapsed >= springDuration ? 1 : springProgress(elapsed)
+	}
+
+	static func keyframes(
+		fromCompactness c0: Double, toCompactness c1: Double,
+		fromWidth w0: Double, toWidth w1: Double,
+		contentWidth: Double, filled: Bool, reduceMotion: Bool,
+		count: Int = 72
+	) -> ZagInstallControlKeyframes {
+		let duration = reduceMotion ? reduceMotionDuration : springDuration
+		var cs: [Double] = [], ws: [Double] = [], fs: [ZagInstallControlFrame] = []
+		for i in 0...count {
+			let time = duration * Double(i) / Double(count)
+			let p = i == count ? 1 : progress(elapsed: time, reduceMotion: reduceMotion)
+			let c = c0 + (c1 - c0) * p, w = w0 + (w1 - w0) * p
+			cs.append(c); ws.append(w)
+			fs.append(.at(compactness: c, pillWidth: w, contentWidth: contentWidth, filled: filled, reduceMotion: reduceMotion))
+		}
+		return .init(duration: duration, compactness: cs, pillWidths: ws, frames: fs)
+	}
+}

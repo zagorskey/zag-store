@@ -486,6 +486,26 @@ extension ZagDeviceLinkTests {
 			expect(reduced.allSatisfy { $0.width == w || ($0.fillOpacity == 0 && $0.labelOpacity == 0) }, "control: \(name) Reduce Motion switches size only while nothing size-dependent is visible")
 		}
 
+		// Keyframes handed to Core Animation
+		let spring = stride(from: 0.0, through: 1.0, by: 0.01).map(M.springProgress)
+		expect(zip(spring, spring.dropFirst()).allSatisfy { $0 <= $1 } && spring.allSatisfy { $0 <= 1 }, "keyframes: the spring rises monotonically and never overshoots")
+		expect(abs(M.springDuration - 0.617) < 0.01 && M.springProgress(M.springDuration) > 0.998, "keyframes: the morph settles in about 0.62 s")
+		for (name, p, toCompact) in [("Get → circle", get, true), ("circle → Open", open, false), ("circle → Resume", resume, false), ("Resume → circle", resume, true)] {
+			let w = Measure.pillWidth(p), c = Measure.contentWidth(p)
+			let k = M.keyframes(fromCompactness: toCompact ? 0 : 1, toCompactness: toCompact ? 1 : 0, fromWidth: w, toWidth: w, contentWidth: c, filled: true, reduceMotion: false)
+			let widths = k.frames.map(\.width)
+			expect(k.frames.first == F.at(compactness: toCompact ? 0 : 1, pillWidth: w, contentWidth: c) && k.frames.last == F.at(compactness: toCompact ? 1 : 0, pillWidth: w, contentWidth: c),
+				"keyframes: \(name) starts and ends exactly on the model's frames")
+			expect(zip(widths, widths.dropFirst()).allSatisfy { toCompact ? $0 >= $1 : $0 <= $1 }, "keyframes: \(name) width changes in one direction, no snap back")
+			expect(zip(widths, widths.dropFirst()).allSatisfy { abs($0 - $1) <= 12 }, "keyframes: \(name) has no jump larger than 12 pt between samples")
+			expect(k.frames.allSatisfy { $0.labelOpacity == 0 || $0.ringOpacity == 0 }, "keyframes: \(name) label and ring never overlap")
+			let r = M.keyframes(fromCompactness: toCompact ? 0 : 1, toCompactness: toCompact ? 1 : 0, fromWidth: w, toWidth: w, contentWidth: c, filled: true, reduceMotion: true)
+			expect(Set(r.frames.map(\.width)).count == 2 && r.duration == M.reduceMotionDuration, "keyframes: \(name) under Reduce Motion only cross-fades")
+		}
+		// Interruption picks up where the morph is
+		let half = M.progress(elapsed: 0.15, reduceMotion: false)
+		expect(half > 0.3 && half < 0.9 && M.progress(elapsed: 5, reduceMotion: false) == 1, "keyframes: an interrupted morph continues from its current progress")
+
 		// One coordinated spring, no overshoot
 		expect(M.dampingFraction >= 1, "control: the morph spring is critically damped (no overshoot)")
 		// Progress ticks never restart the morph
