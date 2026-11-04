@@ -3,6 +3,7 @@ import NimbleViews
 
 // MARK: - Zag Store About
 struct AboutView: View {
+    @State private var gradientRotation: Double = 0
     // Only show a recorded successful update, never filesystem creation dates
     // (which may incorrectly resolve to the Unix epoch).
     @AppStorage("ZagStore.lastSuccessfulUpdateTimestamp") private var lastSuccessfulUpdateTimestamp: Double = 0
@@ -37,12 +38,23 @@ struct AboutView: View {
             .listRowBackground(EmptyView())
 
             Section {
-                HStack(spacing: 14) {
+                Button {
+                    UIApplication.open("https://github.com/zagosrkey")
+                } label: {
+                    HStack(spacing: 14) {
                     Image("ZagAuthorPortrait")
                         .resizable()
                         .scaledToFill()
                         .frame(width: 46, height: 46)
                         .clipShape(Circle())
+                        .padding(3)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(
+                                    AngularGradient(colors: [.blue, .purple, .pink, .orange, .blue], center: .center, angle: .degrees(gradientRotation)),
+                                    lineWidth: 2.5
+                                )
+                        }
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("ZAGORSKI")
@@ -53,8 +65,18 @@ struct AboutView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right")
+                        .foregroundStyle(.secondary.opacity(0.65))
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .padding(.vertical, 4)
+                .onAppear {
+                    withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
+                        gradientRotation = 360
+                    }
+                }
             } header: {
                 Text("Credits")
             }
