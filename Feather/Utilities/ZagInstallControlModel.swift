@@ -1,9 +1,10 @@
 import Foundation
 
-// The App Store-style install control as one element: a pill (Get, Install,
-// Update, Resume, Open …) that contracts into the 31 pt progress circle and
-// expands back. These are the rules; ZagInstallControl renders them.
-// Foundation only, so geometry and timing are tested on the host.
+// The App Store-style install control as one element: a capsule (Get,
+// Install, Update, Resume, Open …) that contracts symmetrically into the
+// 31 pt progress circle and expands back. These are the rules;
+// ZagInstallControlBody renders them. Foundation only, so the geometry is
+// tested on the host.
 
 enum ZagInstallGlyph: Equatable {
 	case none
@@ -24,11 +25,33 @@ struct ZagInstallPill: Equatable {
 	var accessibilityLabel: String
 }
 
-enum ZagInstallControlMode: Equatable {
-	case pill(ZagInstallPill)
+/// What the compact circle shows.
+enum ZagInstallRing: Equatable {
 	/// Determinate ring, 0…1.
 	case progress(Double, ZagInstallGlyph)
 	/// Indeterminate ring (signing, packaging, Mobile Data Fix).
+	case spinner(ZagInstallGlyph)
+
+	var glyph: ZagInstallGlyph {
+		switch self {
+		case .progress(_, let glyph), .spinner(let glyph): return glyph
+		}
+	}
+
+	/// Same kind of ring, ignoring the progress value. Progress ticks
+	/// never count as a state change.
+	func sameKind(as other: ZagInstallRing) -> Bool {
+		switch (self, other) {
+		case (.progress(_, let a), .progress(_, let b)): return a == b
+		case (.spinner(let a), .spinner(let b)): return a == b
+		default: return false
+		}
+	}
+}
+
+enum ZagInstallControlMode: Equatable {
+	case pill(ZagInstallPill)
+	case progress(Double, ZagInstallGlyph)
 	case spinner(ZagInstallGlyph)
 
 	var isCompact: Bool {
@@ -36,12 +59,20 @@ enum ZagInstallControlMode: Equatable {
 		return true
 	}
 
-	var glyph: ZagInstallGlyph {
+	var pill: ZagInstallPill? {
+		if case .pill(let pill) = self { return pill }
+		return nil
+	}
+
+	var ring: ZagInstallRing? {
 		switch self {
-		case .pill: return .none
-		case .progress(_, let glyph), .spinner(let glyph): return glyph
+		case .pill: return nil
+		case .progress(let value, let glyph): return .progress(value, glyph)
+		case .spinner(let glyph): return .spinner(glyph)
 		}
 	}
+
+	var glyph: ZagInstallGlyph { ring?.glyph ?? .none }
 
 	/// Taps reach the control only when they do something; otherwise they
 	/// fall through to the row (Library rows open the app's details).
@@ -53,77 +84,92 @@ enum ZagInstallControlMode: Equatable {
 	}
 }
 
-struct ZagInstallControlGeometry: Equatable {
-	/// The existing pill and ring sizes; none are new.
-	static let pillWidth = 88.0
+enum ZagInstallControlLayout {
+	/// The layout slot every row reserves: the existing 88 × 34 pill.
+	static let slotWidth = 88.0
 	static let pillHeight = 34.0
+	/// The existing progress ring.
 	static let circle = 31.0
+	static let ringStroke = 2.3
+	/// ZagActionPill's horizontal padding.
+	static let horizontalPadding = 14.0
+	/// Label typography, unchanged from ZagActionPill.
+	static let titleSize = 17.0
+	/// Symbol to title spacing for icon + title pills (Resume).
+	static let iconSpacing = 5.0
 
+	/// Pill width from the measured label: never narrower than the existing
+	/// 88 pt pill, wider when the label needs it, so nothing truncates.
+	static func pillWidth(contentWidth: Double) -> Double {
+		max(slotWidth, (contentWidth + 2 * horizontalPadding).rounded(.up))
+	}
+
+	/// Content width for a label: symbol, spacing, title.
+	static func contentWidth(titleWidth: Double?, symbolWidth: Double?) -> Double {
+		let parts = [symbolWidth, titleWidth].compactMap { $0 }
+		return parts.reduce(0, +) + (parts.count == 2 ? iconSpacing : 0)
+	}
+}
+
+/// One frame of the morph. `compactness` is 0 for the pill and 1 for the
+/// circle; it is the only animated value besides the pill width, so every
+/// size and opacity below is derived from the same spring.
+struct ZagInstallControlFrame: Equatable {
 	var width: Double
 	var height: Double
-	var cornerRadius: Double
 	var fillOpacity: Double
 	var labelOpacity: Double
 	var ringOpacity: Double
 
-	static func of(_ mode: ZagInstallControlMode) -> ZagInstallControlGeometry {
-		switch mode {
-		case .pill(let pill):
-			return .init(width: pillWidth, height: pillHeight, cornerRadius: pillHeight / 2,
-						 fillOpacity: pill.filled ? 1 : 0, labelOpacity: 1, ringOpacity: 0)
-		case .progress, .spinner:
-			return .init(width: circle, height: circle, cornerRadius: circle / 2,
-						 fillOpacity: 0, labelOpacity: 0, ringOpacity: 1)
-		}
+	var cornerRadius: Double { height / 2 }
+
+	/// Edges around the fixed centre of the layout slot.
+	func edges(centreX: Double) -> (left: Double, right: Double) {
+		(centreX - width / 2, centreX + width / 2)
 	}
 
-	/// Position inside the fixed 88 × 34 action frame: anchored to the
-	/// trailing edge and centred vertically, so the row never reflows.
-	var origin: (x: Double, y: Double) {
-		(Self.pillWidth - width, (Self.pillHeight - height) / 2)
+	static func at(
+		compactness rawT: Double,
+		pillWidth: Double,
+		contentWidth: Double,
+		filled: Bool = true,
+		reduceMotion: Bool = false
+	) -> ZagInstallControlFrame {
+		let t = clamp(rawT)
+		typealias L = ZagInstallControlLayout
+		// Reduce Motion: the shape doesn't resize in motion; it switches
+		// size at the midpoint, while the contents cross-fade.
+		let shapeT = reduceMotion ? (t < 0.5 ? 0 : 1) : t
+		let width = pillWidth + (L.circle - pillWidth) * shapeT
+		let height = L.pillHeight + (L.circle - L.pillHeight) * shapeT
+
+		// The label is visible only while the capsule is wide enough to hold
+		// it with padding, and it's gone before the ring starts to appear.
+		let fits = reduceMotion ? 1 : clamp((width - contentWidth - L.horizontalPadding) / L.horizontalPadding)
+		let label = min(fits, clamp(1 - t / 0.45))
+		let ring = clamp((t - 0.5) / 0.5)
+		// The capsule fill hands over to the ring's track as the circle settles.
+		// Reduce Motion: the fill is gone before the size switches.
+		let fill = filled ? (reduceMotion ? clamp(1 - t / 0.5) : clamp(1 - (t - 0.5) / 0.5)) : 0
+		return .init(width: width, height: height, fillOpacity: fill, labelOpacity: label, ringOpacity: ring)
 	}
+
+	private static func clamp(_ v: Double) -> Double { min(1, max(0, v)) }
 }
 
 enum ZagInstallControlMotion {
-	enum Curve: Equatable {
-		case none
-		/// Critically damped enough that nothing overshoots.
-		case spring(response: Double, damping: Double)
-		case easeIn(duration: Double, delay: Double)
-		case easeOut(duration: Double)
-		case easeInOut(duration: Double)
-	}
+	/// Critically damped: no overshoot, so the width never passes its
+	/// target and the circle never grows past 31 pt.
+	static let response = 0.42
+	static let dampingFraction = 1.0
+	/// Reduce Motion cross-fade.
+	static let reduceMotionDuration = 0.2
 
-	struct Spec: Equatable {
-		/// Width, height and corner radius.
-		var morph: Curve
-		var label: Curve
-		var ring: Curve
-		var fill: Curve
-	}
-
-	static let morphResponse = 0.42
-	static let morphDamping = 0.9
-
-	/// Contracting: the label leaves first, the ring arrives as the circle
-	/// settles. Expanding: the ring leaves first, the label arrives as the
-	/// pill reaches full width. Reduce Motion: no geometry animation, only
-	/// short cross-fades.
-	static func spec(toCompact: Bool, reduceMotion: Bool) -> Spec {
-		if reduceMotion {
-			let fade = Curve.easeInOut(duration: 0.15)
-			return Spec(morph: .none, label: fade, ring: fade, fill: fade)
-		}
-		let morph = Curve.spring(response: morphResponse, damping: morphDamping)
-		if toCompact {
-			return Spec(morph: morph,
-						label: .easeOut(duration: 0.12),
-						ring: .easeIn(duration: 0.18, delay: 0.2),
-						fill: .easeIn(duration: 0.18, delay: 0.2))
-		}
-		return Spec(morph: morph,
-					label: .easeIn(duration: 0.18, delay: 0.16),
-					ring: .easeOut(duration: 0.1),
-					fill: .easeOut(duration: 0.12))
+	/// The morph runs only when the control changes between pill and circle
+	/// or between two different pills. Progress ticks never start it.
+	static func shouldMorph(from old: ZagInstallControlMode, to new: ZagInstallControlMode) -> Bool {
+		if old.isCompact != new.isCompact { return true }
+		if let a = old.pill, let b = new.pill { return a != b }
+		return false
 	}
 }

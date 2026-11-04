@@ -439,57 +439,71 @@ extension ZagDeviceLinkTests {
 // MARK: - App Store-style control
 
 extension ZagDeviceLinkTests {
-	static func installControlTests() {
-		typealias G = ZagInstallControlGeometry
+	@MainActor static func installControlTests() {
+		typealias L = ZagInstallControlLayout
+		typealias F = ZagInstallControlFrame
 		typealias M = ZagInstallControlMotion
-		let get = ZagInstallControlMode.pill(ZagInstallPill(title: "Get", accessibilityLabel: "Get"))
-		let open = ZagInstallControlMode.pill(ZagInstallPill(title: "Open", accessibilityLabel: "Open"))
-		let resume = ZagInstallControlMode.pill(ZagInstallPill(title: "Resume", systemImage: "icloud.and.arrow.down", accessibilityLabel: "Resume"))
-		let downloading = ZagInstallControlMode.progress(0.4, .pause)
-		let installing = ZagInstallControlMode.spinner(.none)
+		typealias Measure = ZagInstallControlMeasure
+		func pill(_ t: String?, _ i: String? = nil) -> ZagInstallPill { ZagInstallPill(title: t, systemImage: i, accessibilityLabel: t ?? "") }
+		let get = pill("Get"), open = pill("Open"), update = pill("Update"), install = pill("Install")
+		let resume = pill("Resume", "icloud.and.arrow.down")
+		let steps = stride(from: 0.0, through: 1.0, by: 0.05).map { $0 }
+		let centre = L.slotWidth / 2
 
-		// Geometry: existing sizes only
-		let pill = G.of(get), circle = G.of(downloading)
-		expect(pill.width == 88 && pill.height == 34 && pill.cornerRadius == 17, "control: the pill keeps the 88 × 34 capsule")
-		expect(circle.width == 31 && circle.height == 31 && circle.cornerRadius == 15.5, "control: the circle keeps the 31 pt ring size")
-		expect(pill.labelOpacity == 1 && pill.ringOpacity == 0 && circle.labelOpacity == 0 && circle.ringOpacity == 1,
-			"control: label and ring are never both visible at rest")
-		expect(G.of(resume) == pill && G.of(open) == pill, "control: Resume and Open return to exactly the original pill")
+		// Content-measured widths
+		for p in [get, open, update, install] {
+			expect(Measure.pillWidth(p) == L.slotWidth, "control: \(p.title!) keeps the existing 88 pt pill")
+		}
+		let resumeContent = Measure.contentWidth(resume)
+		expect(resumeContent > Measure.titleWidth("Resume") + 10, "control: Resume content includes the symbol and spacing (\(resumeContent) pt)")
+		expect(Measure.pillWidth(resume) >= resumeContent + 2 * L.horizontalPadding && Measure.pillWidth(resume) > L.slotWidth,
+			"control: Resume pill is widened to its content (\(Measure.pillWidth(resume)) pt), never forced into 88 pt")
+		expect(L.titleSize == 17, "control: pill titles keep 17 pt bold")
 
-		// Trailing anchor and stable row
-		expect(pill.origin.x == 0 && circle.origin.x == 57 && circle.origin.x + circle.width == 88,
-			"control: the circle ends on the pill's trailing edge")
-		expect(circle.origin.y == 1.5 && pill.origin.y == 0, "control: centred vertically in the fixed action frame")
-		expect([get, downloading, installing, resume, open].allSatisfy { G.of($0).width <= G.pillWidth && G.of($0).height <= G.pillHeight },
-			"control: no state exceeds the fixed 88 × 34 frame, so the row never reflows")
+		for (name, p) in [("Get", get), ("Resume", resume), ("Open", open), ("Update", update)] {
+			let w = Measure.pillWidth(p), c = Measure.contentWidth(p)
+			let frames = steps.map { F.at(compactness: $0, pillWidth: w, contentWidth: c) }
+			// Invariant centre, equal edge movement
+			expect(frames.allSatisfy { let e = $0.edges(centreX: centre); return abs((e.left + e.right) / 2 - centre) < 1e-9 },
+				"control: \(name) morph keeps the horizontal centre fixed at every step")
+			let pairs = zip(frames, frames.dropFirst())
+			expect(pairs.allSatisfy { a, b in
+				let ea = a.edges(centreX: centre), eb = b.edges(centreX: centre)
+				return abs((eb.left - ea.left) + (eb.right - ea.right)) < 1e-9 && eb.left >= ea.left - 1e-9
+			}, "control: \(name) edges move inward by equal amounts (and outward on the way back)")
+			// End states
+			let end = frames.last!, start = frames.first!
+			expect(end.width == L.circle && end.height == L.circle && end.cornerRadius == L.circle / 2, "control: \(name) ends as the 31 pt circle")
+			expect(start.width == w && start.height == L.pillHeight && start.cornerRadius == L.pillHeight / 2, "control: \(name) starts as the full capsule")
+			expect(start.labelOpacity == 1 && start.ringOpacity == 0 && end.labelOpacity == 0 && end.ringOpacity == 1, "control: \(name) shows only its label as a pill and only the ring as a circle")
+			// Label only when it fits; never with the ring
+			expect(frames.allSatisfy { $0.labelOpacity == 0 || $0.width >= c + L.horizontalPadding }, "control: \(name) label is visible only when the capsule is wide enough (no clipping)")
+			expect(frames.allSatisfy { $0.labelOpacity == 0 || $0.ringOpacity == 0 }, "control: \(name) label and ring never overlap")
+			expect(frames.allSatisfy { $0.height <= L.pillHeight && $0.height >= L.circle }, "control: \(name) height stays within 31…34 pt (row never reflows)")
+			// Reduce Motion
+			let reduced = steps.map { F.at(compactness: $0, pillWidth: w, contentWidth: c, reduceMotion: true) }
+			expect(Set(reduced.map(\.width)) == [w, L.circle], "control: \(name) Reduce Motion never animates the size")
+			expect(reduced.allSatisfy { $0.width == w || ($0.fillOpacity == 0 && $0.labelOpacity == 0) }, "control: \(name) Reduce Motion switches size only while nothing size-dependent is visible")
+		}
 
-		// The sequence Get → circle → Resume → circle → Open
-		let sequence = [get, downloading, resume, .progress(0.6, .pause), installing, .progress(1, .none), open]
-		let compact = sequence.map(\.isCompact)
-		expect(compact == [false, true, false, true, true, true, false], "control: Get → circle → Resume → circle → installing → Open")
-		expect(M.spec(toCompact: true, reduceMotion: false).morph == M.spec(toCompact: false, reduceMotion: false).morph,
-			"control: contracting and expanding use the same morph curve (reversible)")
-		if case .spring(_, let damping) = M.spec(toCompact: true, reduceMotion: false).morph {
-			expect(damping >= 0.85, "control: no visible overshoot (damping \(damping))")
-		} else { expect(false, "control: the morph is a spring") }
-		let shrink = M.spec(toCompact: true, reduceMotion: false)
-		if case .easeOut(let out) = shrink.label, case .easeIn(_, let delay) = shrink.ring {
-			expect(out <= delay, "control: contracting, the label is gone before the ring appears (no overlap)")
-		} else { expect(false, "control: contracting fades are ordered") }
-		let grow = M.spec(toCompact: false, reduceMotion: false)
-		if case .easeOut(let out) = grow.ring, case .easeIn(_, let delay) = grow.label {
-			expect(out <= delay, "control: expanding, the ring is gone before the label appears (no overlap)")
-		} else { expect(false, "control: expanding fades are ordered") }
-
-		// Reduce Motion
-		let reduced = M.spec(toCompact: true, reduceMotion: true)
-		expect(reduced.morph == .none && reduced.label != .none && reduced.ring != .none, "control: Reduce Motion skips the morph and only cross-fades")
+		// One coordinated spring, no overshoot
+		expect(M.dampingFraction >= 1, "control: the morph spring is critically damped (no overshoot)")
+		// Progress ticks never restart the morph
+		expect(!M.shouldMorph(from: .progress(0.3, .pause), to: .progress(0.31, .pause)), "control: progress ticks don't restart the morph")
+		expect(!M.shouldMorph(from: .spinner(.none), to: .progress(0.5, .none)), "control: spinner → install progress doesn't restart the morph")
+		expect(!M.shouldMorph(from: .pill(get), to: .pill(get)), "control: an unchanged pill doesn't animate")
+		for (a, b, label) in [(ZagInstallControlMode.pill(get), ZagInstallControlMode.progress(0, .pause), "Get → circle"),
+							 (.pill(update), .spinner(.none), "Update → circle"), (.pill(install), .spinner(.none), "Install → circle"),
+							 (.progress(0.4, .pause), .pill(resume), "circle → Resume"), (.pill(resume), .progress(0.4, .pause), "Resume → circle"),
+							 (.progress(1, .none), .pill(open), "circle → Open"), (.spinner(.none), .pill(update), "circle → Update on failure")] {
+			expect(M.shouldMorph(from: a, to: b), "control: \(label) morphs")
+		}
 
 		// No fake pause; interactivity
+		let installing = ZagInstallControlMode.spinner(.none)
 		expect(installing.glyph == .none && !installing.isInteractive, "control: no pause while signing, packaging or installing; taps reach the row")
-		expect(downloading.isInteractive && ZagInstallControlMode.progress(0.4, .stop).isInteractive, "control: a download can be paused or stopped by tapping")
+		expect(ZagInstallControlMode.progress(0.4, .pause).isInteractive && ZagInstallControlMode.progress(0.4, .stop).isInteractive, "control: a download can be paused or stopped by tapping")
 		expect(!ZagInstallControlMode.progress(0.9, .none).isInteractive, "control: importing is not tappable")
-		let disabled = ZagInstallControlMode.pill(ZagInstallPill(title: "Get", enabled: false, accessibilityLabel: "Get"))
-		expect(!disabled.isInteractive, "control: a claimed action ignores repeated taps")
+		expect(!ZagInstallControlMode.pill(ZagInstallPill(title: "Get", enabled: false, accessibilityLabel: "Get")).isInteractive, "control: a claimed action ignores repeated taps")
 	}
 }
