@@ -817,7 +817,8 @@ struct DownloadButtonView: View {
 						do {
 							try ZagRPPairingCore.shared.installGate4IPA(
 								at: packageURL,
-								deviceIP: "10.7.0.1",
+								deviceIP: ZagDeviceLink.peerAddress,
+								retryTransientFailures: true,
 								progress: { percent in
 									installationProgress = Double(percent) / 100.0
 								}

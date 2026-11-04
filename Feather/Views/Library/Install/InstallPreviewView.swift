@@ -141,7 +141,8 @@ struct InstallPreviewView: View {
 								do {
 									try ZagRPPairingCore.shared.installGate4IPA(
 									at: packageUrl,
-									deviceIP: "10.7.0.1",
+									deviceIP: ZagDeviceLink.peerAddress,
+									retryTransientFailures: true,
 									progress: { percent in
 										viewModel.installProgress = Double(percent) / 100.0
 									}

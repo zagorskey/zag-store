@@ -638,7 +638,8 @@ extension LibraryCellView {
 					do {
 						try ZagRPPairingCore.shared.installGate4IPA(
 							at: packageURL,
-							deviceIP: "10.7.0.1",
+							deviceIP: ZagDeviceLink.peerAddress,
+							retryTransientFailures: true,
 							completion: { result in
 								continuation.resume(with: result)
 							}
