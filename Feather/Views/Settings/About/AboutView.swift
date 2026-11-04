@@ -21,8 +21,12 @@ struct AboutView: View {
                         .font(.largeTitle.bold())
                         .foregroundStyle(.primary)
 
-                    Text("Version \(Bundle.main.version)")
-                        .font(.footnote)
+                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") · Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("Last updated: \(lastUpdatedText)")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
