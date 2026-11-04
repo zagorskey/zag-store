@@ -199,6 +199,14 @@ private struct RPPairingView: View {
 		}
 
 		Section {
+			ZagMobileDataFixRow()
+		} header: {
+			Text("Mobile Data")
+		} footer: {
+			Text("Install over 4G or 5G by letting an Apple Shortcut turn Cellular Data off during the install.")
+		}
+
+		Section {
 			NavigationLink {
 				RPPairingDiagnosticsView()
                     .zagSettingsDestinationAvatar()
