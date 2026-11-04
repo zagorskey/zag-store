@@ -655,9 +655,10 @@ extension SettingsView {
 				}
 
 				if let cert = selectedCertificate {
-					VStack(alignment: .leading, spacing: 8) {
-						CertificatesCellView(cert: cert)
-						Divider().frame(maxWidth: .infinity)
+					VStack(alignment: .leading, spacing: 0) {
+                        CertificatesCellView(cert: cert)
+                            .padding(.vertical, 2)
+                        Divider().frame(maxWidth: .infinity)
 					}
 					.contentShape(Rectangle())
 					.onTapGesture { _selectedCertificateInfo = cert }
@@ -905,8 +906,10 @@ extension SettingsView {
                 } icon: {
                     ZagGitHubToolbarGlyph()
                         .frame(width: 25, height: 25)
+                        .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                 }
             }
+            .listRowSeparator(.hidden, edges: .bottom)
 
             Button {
 
@@ -924,8 +927,14 @@ extension SettingsView {
 					actions: [bugAction, chooseAction]
 				)
             } label: {
-                Label("Feedback", systemImage: "text.bubble")
-                    .labelStyle(.titleAndIcon)
+                Label {
+                    Text("Feedback")
+                } icon: {
+                    Image(systemName: "text.bubble")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 25, height: 25)
+                }
             }
         } header: {
             Text("About")
