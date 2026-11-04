@@ -592,7 +592,7 @@ extension SettingsView {
                         Text("Bottom Dock")
                     } icon: {
                         ZagPhoneSettingsIcon(content: .dock)
-                            .frame(width: 25, height: 25)
+                             .frame(width: 25, height: 25)
                             .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                     }
                 }
@@ -872,22 +872,20 @@ extension SettingsView {
             Button {
                 UIApplication.open("https://github.com/zagorskey/zag-store")
             } label: {
-                Label {
-                    Text("GitHub")
-                } icon: {
-                    ZagGitHubMark()
-                        .fill(ZagWideGamutTint.color(hex: userTintColor))
-                        .frame(width: 25, height: 25)
+                HStack {
+                    Label {
+                                        Text("GitHub")
+                                    } icon: {
+                                        ZagGitHubMark()
+                                            .fill(ZagWideGamutTint.color(hex: userTintColor))
+                                            .frame(width: 25, height: 25)
+                                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "arrow.up.right")
+                        .foregroundStyle(.secondary.opacity(0.65))
                 }
             }
-            .listRowSeparator(.hidden, edges: .bottom)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(Color(uiColor: .separator))
-                    .frame(height: 0.5)
-                    .padding(.leading, 60)
-                    .allowsHitTesting(false)
-            }
+
             Button {
 
                 let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
@@ -2896,15 +2894,24 @@ private struct ZagPhoneSettingsIcon: View {
 
                 Capsule()
                     .fill(.primary)
-                    .frame(width: w * 0.23, height: h * 0.065)
+                    .frame(width: w * 0.18, height: h * 0.052)
                     .offset(y: -h * 0.35)
 
                 switch content {
                 case .dock:
-                    RoundedRectangle(cornerRadius: 2.2, style: .continuous)
-                        .strokeBorder(lineWidth: 1.6)
-                        .frame(width: w * 0.49, height: h * 0.16)
-                        .offset(y: h * 0.29)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                            .fill(.primary.opacity(0.20))
+                        HStack(spacing: w * 0.055) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                    .fill(.primary)
+                                    .frame(width: w * 0.085, height: h * 0.085)
+                            }
+                        }
+                    }
+                    .frame(width: w * 0.49, height: h * 0.17)
+                    .offset(y: h * 0.29)
                 case .splash:
                     Image(uiImage: ZagSourcesTabIcon.image)
                         .renderingMode(.template)
