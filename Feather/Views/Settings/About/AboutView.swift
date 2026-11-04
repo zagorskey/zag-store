@@ -3,11 +3,14 @@ import NimbleViews
 
 // MARK: - Zag Store About
 struct AboutView: View {
-    // Installation/update time from the app bundle's filesystem creation date.
-    // If unavailable, avoid displaying an invented timestamp.
+    // Only show a recorded successful update, never filesystem creation dates
+    // (which may incorrectly resolve to the Unix epoch).
+    @AppStorage("ZagStore.lastSuccessfulUpdateTimestamp") private var lastSuccessfulUpdateTimestamp: Double = 0
+
     private var lastUpdatedText: String {
-        guard let values = try? Bundle.main.bundleURL.resourceValues(forKeys: [.creationDateKey]),
-              let date = values.creationDate else { return "Unavailable" }
+        guard lastSuccessfulUpdateTimestamp > 0 else { return "Never" }
+        let date = Date(timeIntervalSince1970: lastSuccessfulUpdateTimestamp)
+        guard date > Date(timeIntervalSince1970: 946684800), date <= Date() else { return "Never" }
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 
@@ -23,10 +26,10 @@ struct AboutView: View {
 
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") · Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white)
 
                     Text("Last updated: \(lastUpdatedText)")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
