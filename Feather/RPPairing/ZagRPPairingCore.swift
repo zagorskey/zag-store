@@ -115,6 +115,12 @@ final class ZagRPPairingCore: ObservableObject {
 	// All native RPPairing workers open their own socket. Never overlap them.
 	// Gate2 is queued behind an automatic inventory request for diagnostics.
 	private var transportOwner: String?
+	/// True while any native RPPairing worker owns the transport.
+	var isTransportBusy: Bool { transportOwner != nil }
+	/// Timed, redacted steps of the latest health check, for the report.
+	private(set) var gate2Steps: [ZagDiagnosticStep] = []
+	private(set) var gate2Failure: String?
+	private var gate2StartedAt = Date()
 	private var pendingGate2IP: String?
 	private func acquireTransport(_ operation: String) -> Bool {
 		guard transportOwner == nil else {
@@ -315,9 +321,9 @@ final class ZagRPPairingCore: ObservableObject {
 			// interface and no answer, LocalDevVPN is off: fail now rather than
 			// spend another full connection timeout.
 			let tunnel = ZagTunnelInterface.containsLocalDevTunnel(ZagTunnelInterface.current())
-			let probe = await ZagLockdownProbe.query(host: self?.gate4DeviceIP ?? ZagDeviceLink.peerAddress, timeout: 2)
+			let probe = await ZagEndpointProbe.connect(host: self?.gate4DeviceIP ?? ZagDeviceLink.peerAddress, timeout: 2)
 			guard let self, self.gate4RetryPlan.active else { return }
-			if ZagDeviceLinkTransitions.status(tunnelPresent: tunnel, probe: probe) == .tunnelUnavailable {
+			if ZagDeviceLinkModel.tunnelIsDown(probe, interfacePresent: tunnel) {
 				self.gate4RetryPlan.end()
 				self.receiveGate4(code: -4, message: message)
 				return
@@ -708,6 +714,9 @@ final class ZagRPPairingCore: ObservableObject {
 			return
 		}
 		ZagLogger.shared.info("RPPairing", "Gate2 health probe starting | deviceIP=\(deviceIP)")
+		gate2Steps = []
+		gate2Failure = nil
+		gate2StartedAt = Date()
 		gate2State = .starting
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
@@ -721,6 +730,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	fileprivate func receiveGate2(code: Int32, message: String) {
+		recordGate2Step(code: code, message: message)
 		switch code {
 		case 101:
 			gate2State = .starting
@@ -730,6 +740,8 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .pairing(message)
 		case 104:
 			gate2State = .pairRecord(message)
+			// The iPhone accepted the saved credentials over the real transport.
+			publishReadiness(.verified(Date()))
 		case 105:
 			gate2State = .coreDevice(message)
 		case 106:
@@ -769,6 +781,7 @@ final class ZagRPPairingCore: ObservableObject {
 			case .some(let result): appResult = result
 			case .none: appResult = (0, false)
 			}
+			publishReadiness(.verified(Date()))
 			gate2State = .complete(
 				name: previous.name,
 				model: previous.model,
@@ -780,10 +793,43 @@ final class ZagRPPairingCore: ObservableObject {
 		case -2:
 			releaseTransport("Gate2 health probe")
 			ZagLogger.shared.error("RPPairing", "Gate2 health probe failed: \(message)")
+			gate2Failure = message
+			let kind = ZagRPPairingFailure.classify(message, installationStarted: false)
+			if kind != .other { publishReadiness(.failed(kind, Date())) }
 			gate2State = .failed(message)
 		default:
 			break
 		}
+	}
+
+	private func recordGate2Step(code: Int32, message: String) {
+		let stage: String
+		var detail = message
+		switch code {
+		case 101: stage = "Start"
+		case 102: stage = "RemotePairing endpoint (\(ZagDeviceLink.peerAddress):\(ZagDeviceLink.rsdPort))"
+		case 103: stage = "Pair-Verify started"
+		case 104: stage = "Pairing credentials accepted"
+		case 105: stage = "TLS-PSK device tunnel"
+		case 106: stage = "RSD"
+		case 107:
+			stage = "Device information"
+			// Never record the device name.
+			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+			detail = fields.dropFirst().filter { !$0.isEmpty }.joined(separator: ", ")
+		case 108: stage = "Installation Proxy"
+		case 109: stage = "Installed Apps Lookup"
+		case 110: stage = "AFC"
+		case 111: stage = "PublicStaging Write"
+		case 112: stage = "PublicStaging Verify"
+		case 113: stage = "Complete"
+		case -2:
+			let reached = gate2Steps.last?.stage ?? "Start"
+			stage = "After \(reached)"
+		default: return
+		}
+		let elapsed = Int(Date().timeIntervalSince(gate2StartedAt) * 1000)
+		gate2Steps.append(ZagDiagnosticStep(stage: stage, detail: detail, elapsedMilliseconds: elapsed, failed: code == -2))
 	}
 
 	var pairingFileExists: Bool {

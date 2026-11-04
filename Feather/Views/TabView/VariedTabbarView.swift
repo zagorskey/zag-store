@@ -759,183 +759,35 @@ private struct ZagAccountAvatarEditor: View {
 }
 
 
-// Watches the LocalDevVPN device link in three separate layers: the tunnel
-// interface, a lockdown QueryType reply, and the outcome of the latest real
-// RPPairing session. Nothing depends on Wi-Fi, so it behaves the same on
-// cellular. Probes never overlap, a network change during a probe is never
-// lost, and no RPPairing handshake is run just to update the toolbar.
-@MainActor
-private final class ZagLocalVPNReachability: ObservableObject {
-    static let shared = ZagLocalVPNReachability()
-
-    @Published private(set) var status: ZagDeviceLinkStatus = .checking
-    @Published private(set) var tunnelPresent = false
-    @Published private(set) var pairing: ZagRPPairingReadiness = .unknown
-    @Published private(set) var lastSuccess: Date?
-    @Published private(set) var lastResponseMilliseconds: Int?
-
-    var checking: Bool { status == .checking }
-
-    private var scheduler = ZagDeviceProbeScheduler()
-    private var probeTask: Task<Void, Never>?
-    private var tickTask: Task<Void, Never>?
-    private var debounceTask: Task<Void, Never>?
-    private var observers: [NSObjectProtocol] = []
-    private let pathMonitor = NWPathMonitor()
-    private let pathQueue = DispatchQueue(label: "zag.localvpn.path")
-    private var started = false
-    private var active = true
-
-    private init() {}
-
-    func startIfNeeded() {
-        guard !started else { return }
-        started = true
-        active = UIApplication.shared.applicationState == .active
-
-        observers.append(NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.active = true
-                self?.refresh()
-            }
-        })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: UIApplication.willResignActiveNotification,
-            object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.suspend() }
-        })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .zagDeviceLinkRecheckRequested,
-            object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refresh() }
-        })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .zagRPPairingReadinessDidChange,
-            object: nil, queue: .main
-        ) { [weak self] note in
-            guard let readiness = note.object as? ZagRPPairingReadiness else { return }
-            Task { @MainActor [weak self] in
-                guard let self, self.pairing != readiness else { return }
-                self.pairing = readiness
-            }
-        })
-
-        // Wi-Fi and cellular changes, and the VPN connecting or disconnecting,
-        // all arrive as path updates. Bursts are coalesced into one check.
-        pathMonitor.pathUpdateHandler = { [weak self] _ in
-            Task { @MainActor [weak self] in self?.pathChanged() }
-        }
-        pathMonitor.start(queue: pathQueue)
-        if active { refresh() }
-    }
-
-    /// Checks now, or right after the probe that is already running.
-    func refresh() {
-        guard active else { return }
-        debounceTask?.cancel()
-        tickTask?.cancel()
-        guard let generation = scheduler.request() else { return }
-        startProbe(generation)
-    }
-
-    private func pathChanged() {
-        guard active else { return }
-        debounceTask?.cancel()
-        debounceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            self?.refresh()
-        }
-    }
-
-    private func suspend() {
-        active = false
-        debounceTask?.cancel()
-        tickTask?.cancel()
-        probeTask?.cancel()
-        probeTask = nil
-        scheduler.cancel()
-        if status == .checking { status = .tunnelUnavailable }
-    }
-
-    private func startProbe(_ generation: Int) {
-        let tunnel = ZagTunnelInterface.containsLocalDevTunnel(ZagTunnelInterface.current())
-        if tunnelPresent != tunnel { tunnelPresent = tunnel }
-        let interim = ZagDeviceLinkTransitions.statusWhileChecking(status)
-        if status != interim { status = interim }
-        probeTask = Task { @MainActor [weak self] in
-            let result = await ZagLockdownProbe.query()
-            self?.finishProbe(generation, tunnel: tunnel, result: result)
-        }
-    }
-
-    private func finishProbe(_ generation: Int, tunnel: Bool, result: ZagDeviceProbeResult) {
-        let outcome = scheduler.finish(generation)
-        guard outcome.accepted else { return }
-        probeTask = nil
-        let next = ZagDeviceLinkTransitions.status(tunnelPresent: tunnel, probe: result)
-        if status != next { status = next }
-        if case .lockdownReachable(let milliseconds) = result {
-            lastSuccess = Date()
-            lastResponseMilliseconds = milliseconds
-        }
-        if let queued = outcome.next {
-            startProbe(queued)
-            return
-        }
-        scheduleTick()
-    }
-
-    private func scheduleTick() {
-        tickTask?.cancel()
-        let interval = ZagDeviceLinkTransitions.pollInterval(for: status)
-        tickTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.refresh()
-        }
-    }
-}
-
 struct ZagLocalVPNToolbarStatus: View {
-    @StateObject private var monitor = ZagLocalVPNReachability.shared
+    @StateObject private var monitor = ZagLocalVPNMonitor.shared
     @State private var showDetails = false
 
-    /// The device service answers but the last real session was rejected.
-    private var pairingFailed: Bool {
-        if case .failed(let kind, _) = monitor.pairing { return ZagRPPairingFailure.suggestsRepairing(kind) }
-        return false
-    }
+    private var indicator: ZagLinkIndicator { monitor.model.indicator }
 
     private var statusColor: Color {
-        switch monitor.status {
-        case .checking, .tunnelUnavailable: return .secondary
-        case .serviceUnreachable: return .orange
-        case .reachable:
-            return pairingFailed ? .orange : Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1))
+        switch indicator {
+        case .checking, .off: return .secondary
+        case .warning: return .orange
+        case .on: return Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1))
         }
     }
 
     private var statusText: String {
-        switch monitor.status {
+        switch indicator {
         case .checking: return "…"
-        case .tunnelUnavailable: return "—"
-        case .serviceUnreachable: return "!"
-        case .reachable: return pairingFailed ? "!" : "ON"
+        case .off: return "—"
+        case .warning: return "!"
+        case .on: return "ON"
         }
     }
 
     private var accessibilityText: String {
-        switch monitor.status {
+        switch indicator {
         case .checking: return "Checking local VPN connection"
-        case .tunnelUnavailable: return "Local VPN tunnel not detected"
-        case .serviceUnreachable: return "Local VPN connected, device services not responding"
-        case .reachable: return pairingFailed ? "Device services reachable, RPPairing verification failed" : "Local VPN device services reachable"
+        case .off: return "Local VPN not connected or status unknown"
+        case .warning: return "Local VPN connected, device connection failed"
+        case .on: return "Local VPN device connection reachable"
         }
     }
 
@@ -970,34 +822,50 @@ struct ZagLocalVPNToolbarStatus: View {
 }
 
 private struct ZagLocalVPNDetailsView: View {
-    @ObservedObject private var monitor = ZagLocalVPNReachability.shared
+    @ObservedObject private var monitor = ZagLocalVPNMonitor.shared
+
+    private var model: ZagDeviceLinkModel { monitor.model }
+
+    private var tunnelText: (String, Color) {
+        switch model.tunnel {
+        case .unknown: return ("Unknown", .secondary)
+        case .interfaceDetected: return ("Detected, no answer", .secondary)
+        case .operational: return ("Connected", .green)
+        case .disconnected: return ("Not connected", .secondary)
+        }
+    }
 
     private var serviceText: (String, Color) {
-        switch monitor.status {
-        case .checking: return ("Checking…", .secondary)
-        case .tunnelUnavailable: return ("Not reachable", .secondary)
-        case .serviceUnreachable(let failure): return (failure.summary, .orange)
-        case .reachable: return ("Responding", .green)
+        if model.checking, model.service == .notChecked { return ("Checking…", .secondary) }
+        switch model.service {
+        case .notChecked: return ("Not checked", .secondary)
+        case .reachable: return ("Reachable", .green)
+        case .unreachable(let failure, _): return (failure.summary, .orange)
+        case .noResponse: return ("No response", .secondary)
         }
     }
 
     private var pairingText: (String, Color) {
-        switch monitor.pairing {
-        case .unknown: return ("Not checked this session", .secondary)
+        switch model.pairing {
+        case .notChecked: return ("Not checked", .secondary)
         case .verified: return ("Verified", .green)
-        case .failed(let kind, _):
-            return (ZagRPPairingFailure.suggestsRepairing(kind) ? "Rejected" : "Last session failed", .orange)
+        case .failed: return ("Failed", .orange)
+        case .awaitingRevalidation: return ("Earlier success; recheck", .secondary)
         }
     }
 
     private var guidance: String? {
-        switch monitor.status {
-        case .tunnelUnavailable:
-            return "LocalDevVPN does not appear to be connected. Open LocalDevVPN and connect it, then return to Zag Store."
-        case .serviceUnreachable:
-            return "LocalDevVPN is connected, but the iPhone's lockdown service did not answer through it. Reconnect LocalDevVPN and refresh."
+        if case .failed(let kind, _) = model.pairing, model.indicator == .warning {
+            return ZagRPPairingFailure.explanation(kind)
+        }
+        switch model.service {
+        case .noResponse:
+            return model.tunnel == .disconnected
+                ? "LocalDevVPN does not appear to be connected. Connect it, then return to Zag Store."
+                : "Nothing answered through the tunnel. Reconnect LocalDevVPN and refresh."
+        case .unreachable:
+            return "The tunnel works, but the iPhone did not accept the RemotePairing connection. Run the RPPairing health check for details."
         default:
-            if case .failed(let kind, _) = monitor.pairing { return ZagRPPairingFailure.explanation(kind) }
             return nil
         }
     }
@@ -1013,13 +881,12 @@ private struct ZagLocalVPNDetailsView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(monitor.checking)
+                .disabled(model.checking)
                 .accessibilityLabel("Refresh Local VPN status")
             }
             Divider()
             LabeledContent("Tunnel") {
-                Text(monitor.tunnelPresent ? "Detected" : "Not detected")
-                    .foregroundStyle(monitor.tunnelPresent ? .green : .secondary)
+                Text(tunnelText.0).foregroundStyle(tunnelText.1)
             }
             LabeledContent("Device service") {
                 Text(serviceText.0)
@@ -1027,8 +894,7 @@ private struct ZagLocalVPNDetailsView: View {
                     .multilineTextAlignment(.trailing)
             }
             LabeledContent("RPPairing") {
-                Text(pairingText.0)
-                    .foregroundStyle(pairingText.1)
+                Text(pairingText.0).foregroundStyle(pairingText.1)
             }
             LabeledContent("Last successful check") {
                 if let date = monitor.lastSuccess {
@@ -1038,7 +904,7 @@ private struct ZagLocalVPNDetailsView: View {
                 }
             }
             LabeledContent("Response time") {
-                if let milliseconds = monitor.lastResponseMilliseconds {
+                if let milliseconds = model.lastResponseMilliseconds {
                     Text("\(milliseconds) ms")
                 } else {
                     Text("—").foregroundStyle(.secondary)
@@ -1049,7 +915,7 @@ private struct ZagLocalVPNDetailsView: View {
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Asks the iPhone's lockdown service for a reply through the local tunnel, on Wi-Fi or mobile data. RPPairing shows the result of the most recent installation.")
+            Text("Checks that the iPhone accepts the RemotePairing connection through the local tunnel, on Wi-Fi or mobile data. RPPairing shows the latest health check or installation.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

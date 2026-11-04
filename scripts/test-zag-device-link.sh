@@ -19,16 +19,22 @@ CORE="$ROOT/Feather/RPPairing/ZagRPPairingCore.swift"
 LINK="$ROOT/Feather/Utilities/ZagDeviceLink.swift"
 PROBE="$ROOT/Feather/Utilities/ZagLockdownProbe.swift"
 SELFUPDATE="$ROOT/Feather/Utilities/ZagSelfUpdateCoordinator.swift"
-monitor=$(sed -n '/^private final class ZagLocalVPNReachability/,/^struct ZagLocalVPNToolbarStatus/p' "$TABBAR")
+MONITOR="$ROOT/Feather/Utilities/ZagLocalVPNMonitor.swift"
+monitor=$(cat "$MONITOR")
 
-check "indicator probes lockdown QueryType, not a bare TCP connect" grep -q 'ZagLockdownProbe.query()' <<< "$monitor"
+check "indicator checks the RemotePairing endpoint the transport uses" grep -q 'ZagEndpointProbe.connect()' <<< "$monitor"
+check "legacy lockdown QueryType is only used for the report" test "$(grep -c 'ZagLockdownProbe.query()' <<< "$monitor")" = 1
+check "legacy lockdown result never reaches the status model" absent 'legacy' "$(sed -n '/private func finishProbe/,/^	}/p' "$MONITOR")"
 check "indicator serialises probes through the scheduler" grep -q 'scheduler.request()' <<< "$monitor"
 check "indicator runs a queued re-check when a probe ends" grep -q 'outcome.next' <<< "$monitor"
 check "path changes are debounced, not dropped" grep -q 'func pathChanged' <<< "$monitor"
 check "indicator has no fixed repeating timer" absent 'Timer.scheduledTimer' "$monitor"
 check "indicator stops probing when inactive" grep -q 'scheduler.cancel()' <<< "$monitor"
+check "indicator skips probes while a real session owns the transport" grep -q 'isTransportBusy' <<< "$monitor"
 check "indicator never runs an RPPairing handshake" absent 'zag_' "$monitor"
-for file in "$TABBAR" "$LINK" "$PROBE" "$CORE"; do
+check "real sessions publish readiness (health check and install)" test "$(grep -c 'publishReadiness(.verified(Date()))' "$CORE")" = 3
+check "toolbar has no private probe of its own" absent 'NWConnection' "$(cat "$TABBAR")"
+for file in "$TABBAR" "$LINK" "$PROBE" "$CORE" "$MONITOR"; do
 	name=$(basename "$file")
 	check "$name has no Wi-Fi-only interface requirement" absent 'requiredInterfaceType' "$(cat "$file")"
 	check "$name has no SSID dependency" absent 'NEHotspotNetwork' "$(cat "$file")"

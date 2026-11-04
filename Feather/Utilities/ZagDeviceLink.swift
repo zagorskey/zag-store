@@ -87,33 +87,207 @@ enum ZagDeviceProbeFailure: Equatable {
 	}
 }
 
+/// Result of the optional legacy lockdown QueryType on port 62078. This is
+/// diagnostic evidence only: the RPPairing transport never uses that port,
+/// and on iOS 17+ the device may reset or refuse it while RPPairing works.
 enum ZagDeviceProbeResult: Equatable {
 	case lockdownReachable(milliseconds: Int)
 	case failed(ZagDeviceProbeFailure)
 }
 
-/// What the toolbar shows. The three layers stay separate:
-/// tunnel present, device service answering, and RPPairing verified.
-enum ZagDeviceLinkStatus: Equatable {
-	case checking
-	/// No tunnel interface carries the LocalDevVPN address.
-	case tunnelUnavailable
-	/// The tunnel looks present but lockdownd did not answer properly.
-	case serviceUnreachable(ZagDeviceProbeFailure)
-	case reachable(milliseconds: Int)
+/// Result of a connect-only check of the RemotePairing endpoint
+/// (10.7.0.1:49152), the first connection every RPPairing session makes.
+enum ZagEndpointProbeResult: Equatable {
+	case accepted(milliseconds: Int)
+	case failed(ZagDeviceProbeFailure)
 
-	var isReachable: Bool {
-		if case .reachable = self { return true }
-		return false
+	/// A refusal or reset is an answer from the iPhone's own network stack,
+	/// so the tunnel carried the packet even though nothing accepted it.
+	var deviceAnswered: Bool {
+		switch self {
+		case .accepted: return true
+		case .failed(let failure): return failure == .refused || failure == .reset
+		}
 	}
 }
 
-/// The outcome of the most recent real RPPairing session, taken from an
-/// install or health probe. The toolbar never runs a handshake to fill it.
+/// The outcome of a real RPPairing session (health check or installation).
 enum ZagRPPairingReadiness: Equatable {
 	case unknown
 	case verified(Date)
 	case failed(ZagRPPairingFailureKind, Date)
+}
+
+// MARK: - Status model
+
+/// Three independent layers, each with explicit "not checked" semantics.
+enum ZagTunnelState: Equatable {
+	case unknown
+	/// A LocalDevVPN-style interface exists, but nothing has answered yet.
+	case interfaceDetected
+	/// The iPhone answered through the tunnel (accepted, refused or reset).
+	case operational
+	/// No tunnel interface and no answer.
+	case disconnected
+}
+
+enum ZagServiceState: Equatable {
+	case notChecked
+	/// The RemotePairing endpoint accepted a connection.
+	case reachable(Date)
+	/// The iPhone answered but did not accept (refused or reset).
+	case unreachable(ZagDeviceProbeFailure, Date)
+	/// Nothing answered within the timeout.
+	case noResponse(ZagDeviceProbeFailure, Date)
+
+	var date: Date? {
+		switch self {
+		case .notChecked: return nil
+		case .reachable(let date), .unreachable(_, let date), .noResponse(_, let date): return date
+		}
+	}
+}
+
+enum ZagPairingState: Equatable {
+	case notChecked
+	case verified(Date)
+	case failed(ZagRPPairingFailureKind, Date)
+	/// Verified earlier, but the network changed, the tunnel dropped or the
+	/// result expired. Shown as history, not as current readiness.
+	case awaitingRevalidation(lastSuccess: Date)
+
+	var date: Date? {
+		switch self {
+		case .notChecked: return nil
+		case .verified(let date), .failed(_, let date), .awaitingRevalidation(let date): return date
+		}
+	}
+}
+
+enum ZagLinkIndicator: Equatable {
+	/// The RemotePairing endpoint accepted a connection in the latest check,
+	/// or a real RPPairing session verified more recently than any failure.
+	case on
+	/// A confirmed failure: the iPhone refused or reset the endpoint, or the
+	/// latest real session failed after the endpoint was last reachable.
+	case warning
+	/// No tunnel, or no reliable status yet.
+	case off
+	/// A check is running and nothing has been established yet.
+	case checking
+}
+
+/// Pure state for the Local VPN indicator. Every input carries the time it
+/// was observed, and older evidence never replaces newer evidence.
+struct ZagDeviceLinkModel: Equatable {
+	/// A verified RPPairing session is trusted for this long without a new
+	/// session, after which it is shown as awaiting revalidation.
+	static let pairingFreshness: TimeInterval = 10 * 60
+
+	private(set) var tunnel: ZagTunnelState = .unknown
+	private(set) var service: ZagServiceState = .notChecked
+	private(set) var pairing: ZagPairingState = .notChecked
+	private(set) var checking = false
+	private(set) var physicalNetwork: String?
+	private(set) var lastResponseMilliseconds: Int?
+
+	mutating func probeStarted() {
+		checking = true
+	}
+
+	/// A probe that ran from `startedAt` to `finishedAt`. If a real session
+	/// produced evidence while it ran, that evidence is newer and wins.
+	mutating func probeFinished(_ result: ZagEndpointProbeResult, interfacePresent: Bool, startedAt: Date, finishedAt: Date) {
+		checking = false
+		if let evidence = pairing.date, evidence > startedAt, case .verified = pairing { return }
+		switch result {
+		case .accepted(let milliseconds):
+			tunnel = .operational
+			service = .reachable(finishedAt)
+			lastResponseMilliseconds = milliseconds
+		case .failed(let failure):
+			if result.deviceAnswered {
+				tunnel = .operational
+				service = .unreachable(failure, finishedAt)
+			} else {
+				tunnel = interfacePresent ? .interfaceDetected : .disconnected
+				service = .noResponse(failure, finishedAt)
+				if tunnel == .disconnected { invalidatePairing() }
+			}
+		}
+	}
+
+	/// A probe was skipped or abandoned (app inactive, transport busy).
+	mutating func probeAbandoned() {
+		checking = false
+	}
+
+	/// Evidence from a real RPPairing session.
+	mutating func pairingEvent(_ readiness: ZagRPPairingReadiness) {
+		switch readiness {
+		case .unknown:
+			return
+		case .verified(let date):
+			guard isNewer(date) else { return }
+			pairing = .verified(date)
+			// A verified session connected to the endpoint, so it was reachable.
+			tunnel = .operational
+			if (service.date ?? .distantPast) < date { service = .reachable(date) }
+		case .failed(let kind, let date):
+			guard isNewer(date) else { return }
+			pairing = .failed(kind, date)
+		}
+	}
+
+	/// The physical network changed (Wi-Fi, cellular, none). A verified
+	/// session no longer proves the new path works.
+	mutating func networkChanged(to network: String?) {
+		if physicalNetwork != nil, network != physicalNetwork { invalidatePairing() }
+		physicalNetwork = network
+	}
+
+	mutating func expire(now: Date) {
+		if case .verified(let date) = pairing, now.timeIntervalSince(date) > Self.pairingFreshness {
+			pairing = .awaitingRevalidation(lastSuccess: date)
+		}
+	}
+
+	var indicator: ZagLinkIndicator {
+		// A real session failure newer than the last time the endpoint was
+		// reachable is a confirmed problem, even if the port still accepts.
+		if case .failed(let kind, let date) = pairing, kind != .installation, kind != .other,
+		   date >= (service.date ?? .distantPast) {
+			return .warning
+		}
+		switch service {
+		case .reachable: return .on
+		case .unreachable: return .warning
+		case .noResponse: return .off
+		case .notChecked:
+			if case .verified = pairing { return .on }
+			return checking ? .checking : .off
+		}
+	}
+
+	/// Seconds until the next automatic check: frequent while not ON,
+	/// relaxed once ON.
+	var pollInterval: TimeInterval {
+		indicator == .on ? 60 : 12
+	}
+
+	/// True when a failed endpoint probe shows the tunnel is gone: nothing
+	/// answered and no tunnel interface exists. Used to stop retries early.
+	static func tunnelIsDown(_ result: ZagEndpointProbeResult, interfacePresent: Bool) -> Bool {
+		!result.deviceAnswered && !interfacePresent
+	}
+
+	private func isNewer(_ date: Date) -> Bool {
+		date >= (pairing.date ?? .distantPast)
+	}
+
+	private mutating func invalidatePairing() {
+		if case .verified(let date) = pairing { pairing = .awaitingRevalidation(lastSuccess: date) }
+	}
 }
 
 // MARK: - Tunnel interface
@@ -191,37 +365,6 @@ struct ZagDeviceProbeScheduler: Equatable {
 		running = nil
 		recheckPending = false
 		generation += 1
-	}
-}
-
-/// Pure status transitions used by the monitor.
-enum ZagDeviceLinkTransitions {
-	/// While already ON, a re-check keeps showing ON instead of flickering
-	/// to "checking".
-	static func statusWhileChecking(_ current: ZagDeviceLinkStatus) -> ZagDeviceLinkStatus {
-		current.isReachable ? current : .checking
-	}
-
-	static func status(tunnelPresent: Bool, probe: ZagDeviceProbeResult?) -> ZagDeviceLinkStatus {
-		switch probe {
-		case .lockdownReachable(let milliseconds)?:
-			return .reachable(milliseconds: milliseconds)
-		case .failed(let failure)?:
-			// A refused or timed-out connection with no tunnel interface means
-			// LocalDevVPN is off. With the interface present it means the
-			// device service itself did not answer.
-			if !tunnelPresent, failure == .refused || failure == .timedOut { return .tunnelUnavailable }
-			if !tunnelPresent, case .waiting = failure { return .tunnelUnavailable }
-			return .serviceUnreachable(failure)
-		case nil:
-			return tunnelPresent ? .checking : .tunnelUnavailable
-		}
-	}
-
-	/// Seconds until the next automatic check: frequent while not reachable,
-	/// relaxed once ON.
-	static func pollInterval(for status: ZagDeviceLinkStatus) -> TimeInterval {
-		status.isReachable ? 60 : 12
 	}
 }
 
@@ -333,5 +476,136 @@ struct ZagGate4RetryPlan: Equatable {
 
 	mutating func end() {
 		active = false
+	}
+}
+
+// MARK: - Diagnostic report
+
+/// One recorded step of a real RPPairing session.
+struct ZagDiagnosticStep: Equatable {
+	let stage: String
+	let detail: String
+	let elapsedMilliseconds: Int
+	let failed: Bool
+}
+
+/// Builds a plain-text, redacted report for physical-device testing. It
+/// never includes the device name, UDIDs, serials, keys or pairing data.
+enum ZagDiagnosticReport {
+	struct Input {
+		var generatedAt: Date
+		var iOSVersion: String
+		var deviceModel: String
+		var physicalNetworks: [String]
+		var tunnelInterfaces: [String]
+		var model: ZagDeviceLinkModel
+		var endpointProbe: ZagEndpointProbeResult?
+		var legacyLockdownProbe: ZagDeviceProbeResult?
+		var steps: [ZagDiagnosticStep]
+		var sessionFailure: String?
+	}
+
+	static func make(_ input: Input) -> String {
+		let time = ISO8601DateFormatter()
+		var lines: [String] = []
+		lines.append("Zag Store RPPairing diagnostic report")
+		lines.append("Generated: \(time.string(from: input.generatedAt))")
+		lines.append("Device: \(input.deviceModel), iOS \(input.iOSVersion)")
+		lines.append("Physical network: \(input.physicalNetworks.isEmpty ? "none" : input.physicalNetworks.joined(separator: ", "))")
+		lines.append("Tunnel interfaces (10.7.x.x): \(input.tunnelInterfaces.isEmpty ? "none" : input.tunnelInterfaces.joined(separator: ", "))")
+		lines.append("Target endpoint: \(ZagDeviceLink.peerAddress):\(ZagDeviceLink.rsdPort) (RemotePairing)")
+		lines.append("")
+		lines.append("Toolbar: \(describe(input.model.indicator))")
+		lines.append("Tunnel: \(describe(input.model.tunnel))")
+		lines.append("Device service: \(describe(input.model.service))")
+		lines.append("RPPairing: \(describe(input.model.pairing))")
+		if let probe = input.endpointProbe {
+			lines.append("RemotePairing endpoint check: \(describe(probe))")
+		}
+		if let legacy = input.legacyLockdownProbe {
+			lines.append("Legacy lockdown \(ZagDeviceLink.lockdownPort) QueryType (informational, not used by RPPairing): \(describe(legacy))")
+		}
+		lines.append("")
+		if input.steps.isEmpty {
+			lines.append("Health check: not run this session")
+		} else {
+			lines.append("Health check steps:")
+			for step in input.steps {
+				lines.append("  [\(step.elapsedMilliseconds) ms] \(step.failed ? "FAILED " : "")\(step.stage): \(step.detail)")
+			}
+			if let failure = input.sessionFailure {
+				let kind = ZagRPPairingFailure.classify(failure, installationStarted: false)
+				lines.append("First failing operation: \(input.steps.last { $0.failed }?.stage ?? "unknown")")
+				lines.append("Failure category: \(kind)")
+			}
+		}
+		return redact(lines.joined(separator: "\n"))
+	}
+
+	/// Removes long hexadecimal identifiers (UDIDs, ECIDs, key material),
+	/// UUIDs and email addresses.
+	static func redact(_ text: String) -> String {
+		var result = text
+		let patterns = [
+			"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}",
+			"\\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}\\b",
+			"\\b[0-9A-Fa-f]{20,}\\b",
+			"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+		]
+		for pattern in patterns {
+			result = result.replacingOccurrences(of: pattern, with: "<redacted>", options: .regularExpression)
+		}
+		return result
+	}
+
+	static func describe(_ indicator: ZagLinkIndicator) -> String {
+		switch indicator {
+		case .on: return "ON"
+		case .warning: return "! (confirmed failure)"
+		case .off: return "— (no tunnel or no reliable status)"
+		case .checking: return "… (checking)"
+		}
+	}
+
+	static func describe(_ tunnel: ZagTunnelState) -> String {
+		switch tunnel {
+		case .unknown: return "Unknown"
+		case .interfaceDetected: return "Interface detected, no answer yet"
+		case .operational: return "Operational (the iPhone answered through it)"
+		case .disconnected: return "Disconnected"
+		}
+	}
+
+	static func describe(_ service: ZagServiceState) -> String {
+		switch service {
+		case .notChecked: return "Not checked"
+		case .reachable: return "Reachable (connection accepted)"
+		case .unreachable(let failure, _): return "Unreachable: \(failure.summary)"
+		case .noResponse(let failure, _): return "No response: \(failure.summary)"
+		}
+	}
+
+	static func describe(_ pairing: ZagPairingState) -> String {
+		let time = ISO8601DateFormatter()
+		switch pairing {
+		case .notChecked: return "Not checked"
+		case .verified(let date): return "Verified at \(time.string(from: date))"
+		case .failed(let kind, let date): return "Failed (\(kind)) at \(time.string(from: date))"
+		case .awaitingRevalidation(let date): return "Previous success at \(time.string(from: date)), awaiting revalidation"
+		}
+	}
+
+	static func describe(_ probe: ZagEndpointProbeResult) -> String {
+		switch probe {
+		case .accepted(let ms): return "accepted in \(ms) ms"
+		case .failed(let failure): return failure.summary
+		}
+	}
+
+	static func describe(_ probe: ZagDeviceProbeResult) -> String {
+		switch probe {
+		case .lockdownReachable(let ms): return "valid reply in \(ms) ms"
+		case .failed(let failure): return failure.summary
+		}
 	}
 }

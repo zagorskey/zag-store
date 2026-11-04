@@ -180,6 +180,38 @@ import Network
 		try await Task.sleep(nanoseconds: 100_000_000)
 		expect(counting.connections == 3, "probe: one connection per probe (got \(counting.connections) for 3)")
 		counting.stop()
+
+		// The RemotePairing endpoint check is connect-only. Against a server
+		// that resets anything that sends a lockdown request (the behaviour
+		// seen on iOS 27 over Wi-Fi), it still reports the endpoint accepted.
+		let endpoint = try FakeServer(mode: .silent)
+		let endpointPort = await endpoint.start()
+		let accepted = await ZagEndpointProbe.connect(host: "127.0.0.1", port: endpointPort, timeout: 2)
+		try await Task.sleep(nanoseconds: 150_000_000)
+		if case .accepted = accepted { expect(true, "endpoint: an accepting endpoint is reachable") }
+		else { expect(false, "endpoint: an accepting endpoint is reachable (got \(accepted))") }
+		expect(endpoint.requests.isEmpty, "endpoint: the check sends no bytes (no handshake started)")
+		endpoint.stop()
+
+		let resetting = try FakeServer(mode: .acceptThenClose)
+		let resettingPort = await resetting.start()
+		let legacy = await ZagLockdownProbe.query(host: "127.0.0.1", port: resettingPort, timeout: 2)
+		let sameEndpoint = await ZagEndpointProbe.connect(host: "127.0.0.1", port: resettingPort, timeout: 2)
+		if case .accepted = sameEndpoint, case .failed = legacy {
+			expect(true, "endpoint: a failed legacy QueryType does not make an accepting endpoint unreachable")
+		} else {
+			expect(false, "endpoint: legacy failure independent of endpoint (legacy \(legacy), endpoint \(sameEndpoint))")
+		}
+		resetting.stop()
+
+		let closedEndpoint = try await closedPort()
+		let refusedEndpoint = await ZagEndpointProbe.connect(host: "127.0.0.1", port: closedEndpoint, timeout: 2)
+		expect(refusedEndpoint == .failed(.refused) && refusedEndpoint.deviceAnswered,
+			"endpoint: a refused endpoint is classified as refused, with the device answering")
+
+		let hangingEndpoint = Task { await ZagEndpointProbe.connect(host: "192.0.2.1", port: 49152, timeout: 0.6) }
+		let unreachable = await hangingEndpoint.value
+		expect(!unreachable.deviceAnswered, "endpoint: an unroutable address is never counted as an answer (got \(unreachable))")
 	}
 
 	// MARK: Pure logic tests
@@ -216,38 +248,127 @@ import Network
 		expect(!stale.finish(old).accepted && stale.running == fresh, "scheduler: a late stale result does not end the current probe")
 	}
 
-	static func statusTests() {
-		typealias T = ZagDeviceLinkTransitions
-		expect(T.status(tunnelPresent: true, probe: .lockdownReachable(milliseconds: 4)) == .reachable(milliseconds: 4),
-			"status: a lockdown reply is reachable")
-		expect(T.status(tunnelPresent: false, probe: .lockdownReachable(milliseconds: 4)).isReachable,
-			"status: a lockdown reply wins even if the tunnel interface was not recognised")
-		expect(T.status(tunnelPresent: false, probe: .failed(.timedOut)) == .tunnelUnavailable,
-			"status: no tunnel interface and no reply means LocalDevVPN is off")
-		expect(T.status(tunnelPresent: true, probe: .failed(.refused)) == .serviceUnreachable(.refused),
-			"status: tunnel present but refused is a device-service failure, not VPN off")
-		expect(T.status(tunnelPresent: true, probe: .failed(.invalidResponse("x"))) == .serviceUnreachable(.invalidResponse("x")),
-			"status: TCP success with a bad reply is never reachable")
-		expect(T.statusWhileChecking(.reachable(milliseconds: 3)) == .reachable(milliseconds: 3),
-			"status: a re-check while ON keeps ON (no flicker)")
-		expect(T.statusWhileChecking(.tunnelUnavailable) == .checking, "status: a re-check while not ON shows checking")
-		expect(T.pollInterval(for: .reachable(milliseconds: 3)) == 60 && T.pollInterval(for: .tunnelUnavailable) == 12,
-			"status: polling relaxes to 60 s once reachable")
+	static func modelTests() {
+		let t0 = Date(timeIntervalSince1970: 1_000_000)
+		func at(_ seconds: TimeInterval) -> Date { t0.addingTimeInterval(seconds) }
 
-		// VPN disconnect, then reconnect.
-		var status = T.status(tunnelPresent: true, probe: .lockdownReachable(milliseconds: 5))
-		status = T.status(tunnelPresent: false, probe: .failed(.timedOut))
-		expect(status == .tunnelUnavailable, "status: VPN disconnect turns ON into tunnel unavailable")
-		status = T.statusWhileChecking(status)
-		status = T.status(tunnelPresent: true, probe: .lockdownReachable(milliseconds: 6))
-		expect(status == .reachable(milliseconds: 6), "status: VPN reconnect returns to reachable")
+		// 1. A successful real RPPairing diagnostic is represented correctly.
+		var m = ZagDeviceLinkModel()
+		expect(m.indicator == .off && m.pairing == .notChecked && m.service == .notChecked,
+			"model: nothing checked shows not checked, not success or failure")
+		m.pairingEvent(.verified(at(1)))
+		expect(m.pairing == .verified(at(1)) && m.tunnel == .operational && m.indicator == .on,
+			"model: a verified health check is ON with RPPairing verified")
+
+		// 2. The optional legacy lockdown probe cannot affect status at all:
+		// the model has no input for it. The endpoint probe failing *before*
+		// a newer verification cannot overwrite it.
+		var raced = ZagDeviceLinkModel()
+		raced.probeStarted()
+		raced.pairingEvent(.verified(at(5)))
+		raced.probeFinished(.failed(.reset), interfacePresent: true, startedAt: at(4), finishedAt: at(6))
+		expect(raced.pairing == .verified(at(5)) && raced.indicator == .on,
+			"model: a probe that started before a real verification cannot overwrite it")
+
+		// A genuinely newer refusal is a real new failure.
+		var newer = m
+		newer.probeFinished(.failed(.refused), interfacePresent: true, startedAt: at(10), finishedAt: at(11))
+		expect(newer.indicator == .warning && newer.service == .unreachable(.refused, at(11)),
+			"model: a refusal after the verification is reported, not masked")
+
+		// 3. A genuine VPN disconnection invalidates stale readiness.
+		var dropped = m
+		dropped.probeFinished(.failed(.timedOut), interfacePresent: false, startedAt: at(20), finishedAt: at(23))
+		expect(dropped.tunnel == .disconnected && dropped.pairing == .awaitingRevalidation(lastSuccess: at(1)) && dropped.indicator == .off,
+			"model: VPN disconnect turns a verified session into awaiting revalidation")
+		dropped.probeFinished(.accepted(milliseconds: 4), interfacePresent: true, startedAt: at(30), finishedAt: at(30))
+		expect(dropped.indicator == .on && dropped.pairing == .awaitingRevalidation(lastSuccess: at(1)),
+			"model: VPN reconnect is ON again, but RPPairing still needs revalidation")
+
+		// A network change (Wi-Fi to cellular) also invalidates readiness.
+		var moved = ZagDeviceLinkModel()
+		moved.networkChanged(to: "Wi-Fi")
+		moved.pairingEvent(.verified(at(1)))
+		moved.networkChanged(to: "Wi-Fi")
+		expect(moved.pairing == .verified(at(1)), "model: the same network does not invalidate readiness")
+		moved.networkChanged(to: "Cellular")
+		expect(moved.pairing == .awaitingRevalidation(lastSuccess: at(1)), "model: Wi-Fi to cellular invalidates readiness")
+		var expiring = ZagDeviceLinkModel()
+		expiring.pairingEvent(.verified(at(0)))
+		expiring.expire(now: at(ZagDeviceLinkModel.pairingFreshness - 1))
+		expect(expiring.pairing == .verified(at(0)), "model: a recent verification is still trusted")
+		expiring.expire(now: at(ZagDeviceLinkModel.pairingFreshness + 1))
+		expect(expiring.pairing == .awaitingRevalidation(lastSuccess: at(0)), "model: verification expires after 10 minutes")
+
+		// 4. Rapid Wi-Fi/cellular transitions do not leave a stuck state.
+		var flapping = ZagDeviceLinkModel()
+		for (index, network) in ["Wi-Fi", "Cellular", "Wi-Fi", "Cellular", "Cellular"].enumerated() {
+			flapping.networkChanged(to: network)
+			flapping.probeStarted()
+			flapping.probeFinished(.accepted(milliseconds: 3), interfacePresent: true, startedAt: at(Double(index)), finishedAt: at(Double(index) + 0.1))
+		}
+		expect(!flapping.checking && flapping.indicator == .on, "model: rapid transitions end in a settled state")
+		var abandoned = ZagDeviceLinkModel()
+		abandoned.probeStarted()
+		expect(abandoned.indicator == .checking, "model: a first check shows checking")
+		abandoned.probeAbandoned()
+		expect(!abandoned.checking && abandoned.indicator == .off, "model: an abandoned probe never stays checking (backgrounding)")
+
+		// 5. Older results cannot overwrite newer ones.
+		var ordered = ZagDeviceLinkModel()
+		ordered.pairingEvent(.verified(at(10)))
+		ordered.pairingEvent(.failed(.pairingRejected, at(5)))
+		expect(ordered.pairing == .verified(at(10)), "model: an older failure cannot overwrite a newer verification")
+		ordered.pairingEvent(.failed(.pairingRejected, at(12)))
+		expect(ordered.pairing == .failed(.pairingRejected, at(12)) && ordered.indicator == .warning,
+			"model: a newer real failure replaces the verification and shows !")
+		ordered.probeFinished(.accepted(milliseconds: 3), interfacePresent: true, startedAt: at(13), finishedAt: at(14))
+		expect(ordered.indicator == .on, "model: a later reachable endpoint supersedes an older session failure")
+
+		// 6 and 7. Refused or reset (the iPhone answered) differ from no answer.
+		var answered = ZagDeviceLinkModel()
+		answered.probeFinished(.failed(.reset), interfacePresent: true, startedAt: at(0), finishedAt: at(1))
+		expect(answered.tunnel == .operational && answered.service == .unreachable(.reset, at(1)) && answered.indicator == .warning,
+			"model: a reset means the tunnel works and the service rejected the connection")
+		var silent = ZagDeviceLinkModel()
+		silent.probeFinished(.failed(.timedOut), interfacePresent: true, startedAt: at(0), finishedAt: at(3))
+		expect(silent.tunnel == .interfaceDetected && silent.indicator == .off,
+			"model: a timeout with an interface is not reported as a confirmed failure")
+		expect(!ZagDeviceLinkModel.tunnelIsDown(.failed(.refused), interfacePresent: false),
+			"retry: a refusal proves the tunnel carried the packet")
+		expect(ZagDeviceLinkModel.tunnelIsDown(.failed(.timedOut), interfacePresent: false),
+			"retry: no answer and no interface means the tunnel is down")
+		expect(!ZagDeviceLinkModel.tunnelIsDown(.failed(.timedOut), interfacePresent: true),
+			"retry: a timeout with the interface present still allows a retry")
+
+		var calm = ZagDeviceLinkModel()
+		calm.probeFinished(.accepted(milliseconds: 3), interfacePresent: true, startedAt: at(0), finishedAt: at(0))
+		expect(calm.pollInterval == 60 && silent.pollInterval == 12, "model: polling relaxes to 60 s once ON")
 
 		expect(ZagTunnelInterface.isLocalDevTunnel(name: "utun4", ipv4: "10.7.1.1"), "tunnel: LocalDevVPN default address is recognised")
-		expect(ZagTunnelInterface.isLocalDevTunnel(name: "utun2", ipv4: "10.7.0.0"), "tunnel: StosVPN address is recognised")
 		expect(!ZagTunnelInterface.isLocalDevTunnel(name: "en0", ipv4: "10.7.1.1"), "tunnel: a physical interface is not the tunnel")
 		expect(!ZagTunnelInterface.isLocalDevTunnel(name: "utun3", ipv4: "10.8.0.2"), "tunnel: another VPN's address is not LocalDevVPN")
-		expect(!ZagTunnelInterface.containsLocalDevTunnel([("pdp_ip0", "100.64.3.2"), ("en0", "192.168.1.4")]),
-			"tunnel: cellular and Wi-Fi alone are not the tunnel")
+	}
+
+	static func reportTests() {
+		var model = ZagDeviceLinkModel()
+		model.networkChanged(to: "Cellular")
+		let report = ZagDiagnosticReport.make(.init(
+			generatedAt: Date(timeIntervalSince1970: 0), iOSVersion: "27.2", deviceModel: "iPhone",
+			physicalNetworks: ["Cellular"], tunnelInterfaces: ["utun5"], model: model,
+			endpointProbe: .failed(.refused), legacyLockdownProbe: .failed(.reset),
+			steps: [
+				ZagDiagnosticStep(stage: "RemotePairing endpoint", detail: "reachable", elapsedMilliseconds: 12, failed: false),
+				ZagDiagnosticStep(stage: "After RemotePairing endpoint", detail: "pair-verify failed for 00008130-0001A2B3C4D5E6F7 peer 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b owner someone@example.com", elapsedMilliseconds: 40, failed: true),
+			],
+			sessionFailure: "RPPairing pair-verify failed: socket io failed"
+		))
+		expect(report.contains("Physical network: Cellular") && report.contains("10.7.0.1:49152"), "report: includes network type and target endpoint")
+		expect(report.contains("First failing operation: After RemotePairing endpoint") && report.contains("Failure category: connectionInterrupted"),
+			"report: names the first failing operation and its category")
+		expect(report.contains("informational, not used by RPPairing"), "report: legacy lockdown is labelled as informational")
+		expect(!report.contains("00008130-0001A2B3C4D5E6F7") && !report.contains("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b") && !report.contains("someone@example.com"),
+			"report: UDIDs, hex identifiers and emails are redacted")
 	}
 
 	static func classificationTests() {
@@ -297,7 +418,8 @@ import Network
 	static func main() async {
 		parserTests()
 		schedulerTests()
-		statusTests()
+		modelTests()
+		reportTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

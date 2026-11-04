@@ -1,9 +1,26 @@
 import Foundation
 import Network
 
-/// One short lockdown `QueryType` exchange with the iPhone's device services.
+/// Connect-only check of the RemotePairing endpoint that every RPPairing
+/// session opens first. It sends nothing and closes as soon as the
+/// connection is accepted, so it never starts a pairing handshake.
+enum ZagEndpointProbe {
+	static func connect(
+		host: String = ZagDeviceLink.peerAddress,
+		port: UInt16 = ZagDeviceLink.rsdPort,
+		timeout: TimeInterval = 3
+	) async -> ZagEndpointProbeResult {
+		switch await ZagLockdownProbe.run(host: host, port: port, timeout: timeout, sendQuery: false) {
+		case .lockdownReachable(let milliseconds): return .accepted(milliseconds: milliseconds)
+		case .failed(let failure): return .failed(failure)
+		}
+	}
+}
+
+/// One short lockdown `QueryType` exchange on the legacy lockdown port.
+/// Diagnostic evidence only: the RPPairing transport does not use this port.
 ///
-/// The connection uses default TCP parameters, so it is never tied to Wi-Fi
+/// Both probes use default TCP parameters, so they are never tied to Wi-Fi
 /// or cellular: the system routes the peer address into the LocalDevVPN
 /// tunnel on any network. The connection is always cancelled when the probe
 /// ends, whatever the outcome.
@@ -13,7 +30,11 @@ enum ZagLockdownProbe {
 		port: UInt16 = ZagDeviceLink.lockdownPort,
 		timeout: TimeInterval = 3
 	) async -> ZagDeviceProbeResult {
-		let attempt = Attempt(host: host, port: port, timeout: timeout)
+		await run(host: host, port: port, timeout: timeout, sendQuery: true)
+	}
+
+	static func run(host: String, port: UInt16, timeout: TimeInterval, sendQuery: Bool) async -> ZagDeviceProbeResult {
+		let attempt = Attempt(host: host, port: port, timeout: timeout, sendQuery: sendQuery)
 		return await withTaskCancellationHandler {
 			await withCheckedContinuation { continuation in
 				attempt.start { continuation.resume(returning: $0) }
@@ -29,6 +50,7 @@ enum ZagLockdownProbe {
 		private let connection: NWConnection
 		private let queue = DispatchQueue(label: "app.zagstore.lockdown-probe")
 		private let timeout: TimeInterval
+		private let sendsQuery: Bool
 		private let lock = NSLock()
 		private var completion: ((ZagDeviceProbeResult) -> Void)?
 		private var finished = false
@@ -36,7 +58,8 @@ enum ZagLockdownProbe {
 		private var waitingReason: String?
 		private let startedAt = ProcessInfo.processInfo.systemUptime
 
-		init(host: String, port: UInt16, timeout: TimeInterval) {
+		init(host: String, port: UInt16, timeout: TimeInterval, sendQuery: Bool) {
+			sendsQuery = sendQuery
 			connection = NWConnection(
 				host: NWEndpoint.Host(host),
 				port: NWEndpoint.Port(rawValue: port) ?? 62078,
@@ -59,7 +82,11 @@ enum ZagLockdownProbe {
 				guard let self else { return }
 				switch state {
 				case .ready:
-					self.sendQuery()
+					if self.sendsQuery {
+						self.sendQuery()
+					} else {
+						self.finish(.lockdownReachable(milliseconds: self.elapsedMilliseconds))
+					}
 				case .waiting(let error):
 					// Network.framework reports a refused connection as
 					// `.waiting`; that is a definite answer, so finish now.
@@ -105,8 +132,7 @@ enum ZagLockdownProbe {
 				if let data { self.received.append(data) }
 				switch ZagLockdownQuery.parse(self.received) {
 				case .lockdown:
-					let milliseconds = Int((ProcessInfo.processInfo.systemUptime - self.startedAt) * 1000)
-					self.finish(.lockdownReachable(milliseconds: milliseconds))
+					self.finish(.lockdownReachable(milliseconds: self.elapsedMilliseconds))
 				case .invalid(let reason):
 					self.finish(.failed(.invalidResponse(reason)))
 				case .needMoreData:
@@ -120,6 +146,10 @@ enum ZagLockdownProbe {
 					}
 				}
 			}
+		}
+
+		private var elapsedMilliseconds: Int {
+			Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
 		}
 
 		func finish(_ result: ZagDeviceProbeResult) {
