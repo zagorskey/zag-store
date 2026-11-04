@@ -41,6 +41,7 @@ extension EnvironmentValues {
 // Shared avatar for pushed Settings destinations. Keep it on the destination
 // (not the parent) so the native back button and existing actions remain intact.
 private struct ZagSettingsDestinationAvatar: ViewModifier {
+    var showClose = true
     @Environment(\.zagInsideAccountPopup) private var insideAccountPopup
     @Environment(\.zagAccountClose) private var closeAccount
     func body(content: Content) -> some View {
@@ -54,7 +55,7 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
                         .tint(.primary)
                         .padding(.trailing, -2)
                 }
-            } else if let closeAccount {
+            } else if showClose, let closeAccount {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: closeAccount) {
                         Image(systemName: "xmark")
@@ -68,8 +69,8 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
 }
 
 extension View {
-    func zagSettingsDestinationAvatar() -> some View {
-        modifier(ZagSettingsDestinationAvatar())
+    func zagSettingsDestinationAvatar(showClose: Bool = true) -> some View {
+        modifier(ZagSettingsDestinationAvatar(showClose: showClose))
     }
 }
 
@@ -619,7 +620,7 @@ extension SettingsView {
 
 		case .certificates:
 			Section {
-				NavigationLink(destination: CertificatesView().zagSettingsDestinationAvatar()) {
+				NavigationLink(destination: CertificatesView().zagSettingsDestinationAvatar(showClose: false)) {
 					Label {
                         Text(.localized("Certificates"))
                     } icon: {
