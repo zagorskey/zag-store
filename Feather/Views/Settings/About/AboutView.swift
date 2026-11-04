@@ -25,9 +25,13 @@ struct AboutView: View {
                         .font(.largeTitle.bold())
                         .foregroundStyle(.primary)
 
-                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") · Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
+                    (
+                        Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")")
+                            .foregroundColor(.white)
+                        + Text(" · Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")")
+                            .foregroundColor(.secondary)
+                    )
+                    .font(.subheadline)
 
                     Text("Last updated: \(lastUpdatedText)")
                         .font(.caption)
@@ -39,7 +43,7 @@ struct AboutView: View {
 
             Section {
                 Button {
-                    UIApplication.open("https://github.com/zagosrkey")
+                    UIApplication.open("https://github.com/zagorskey")
                 } label: {
                     HStack(spacing: 14) {
                     Image("ZagAuthorPortrait")
@@ -52,13 +56,13 @@ struct AboutView: View {
                             Circle()
                                 .strokeBorder(
                                     AngularGradient(colors: [.blue, .purple, .pink, .orange, .blue], center: .center, angle: .degrees(gradientRotation)),
-                                    lineWidth: 2.5
+                                    lineWidth: 1.5
                                 )
                         }
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("ZAGORSKI")
-                            .font(.body)
+                            .font(.body.weight(.bold))
                             .foregroundStyle(.primary)
                         Text("Author")
                             .font(.subheadline)
