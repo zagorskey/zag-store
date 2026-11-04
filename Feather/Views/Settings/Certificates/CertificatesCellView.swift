@@ -47,32 +47,34 @@ struct CertificatesCellView: View {
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Text(title)
+                            .font(.system(size: 19, weight: .bold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        Button {
+                            _copyCertificateName()
+                        } label: {
+                            Image(systemName: isCopyFeedbackActive ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(isCopyFeedbackActive ? copyFeedbackColor : Color.secondary)
+                                .frame(width: 25, height: 25)
+                                .background(Color.primary.opacity(0.05), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Copy Certificate Name")
+                        .accessibilityHint("Copies the original provisioning profile name")
+                    }
 
                     Text(profile?.TeamName ?? profile?.AppIDName ?? "Unknown signing team")
-                        .font(.subheadline)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 4)
-
-                Button {
-                    _copyCertificateName()
-                } label: {
-                    Image(systemName: isCopyFeedbackActive ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(isCopyFeedbackActive ? copyFeedbackColor : Color.secondary)
-                        .frame(width: 34, height: 34)
-                        .background(Color.primary.opacity(0.05), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy Certificate Name")
-                .accessibilityHint("Copies the original provisioning profile name")
             }
 
             HStack(spacing: 8) {
@@ -91,14 +93,14 @@ struct CertificatesCellView: View {
 
                 if let profileExpiry {
                     Label {
-                        Text(profileExpiry, style: .date)
+                        Text(profileExpiry.formatted(.dateTime.day().month(.abbreviated).year()))
                     } icon: {
                         Image(systemName: "calendar")
                     }
                     .foregroundStyle(.secondary)
                 }
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
 
