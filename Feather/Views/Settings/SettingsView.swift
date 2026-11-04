@@ -429,38 +429,50 @@ struct SettingsView: View {
 }
 
 // Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
+// Exact Octicons GitHub mark supplied as the shape reference.
+// The 16×16 vector is scaled to the same 23-point height as neighbouring toolbar icons.
+private struct ZagGitHubMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 8, y: 0))
+        path.addCurve(to: CGPoint(x: 0, y: 8), control1: CGPoint(x: 3.58, y: 0), control2: CGPoint(x: 0, y: 3.58))
+        path.addCurve(to: CGPoint(x: 5.47, y: 15.59), control1: CGPoint(x: 0, y: 11.54), control2: CGPoint(x: 2.29, y: 14.53))
+        path.addCurve(to: CGPoint(x: 6.02, y: 15.21), control1: CGPoint(x: 5.87, y: 15.66), control2: CGPoint(x: 6.02, y: 15.42))
+        path.addCurve(to: CGPoint(x: 6.01, y: 13.72), control1: CGPoint(x: 6.02, y: 15.02), control2: CGPoint(x: 6.01, y: 14.39))
+        path.addCurve(to: CGPoint(x: 3.32, y: 12.78), control1: CGPoint(x: 4, y: 14.09), control2: CGPoint(x: 3.48, y: 13.23))
+        path.addCurve(to: CGPoint(x: 2.5, y: 11.65), control1: CGPoint(x: 3.23, y: 12.55), control2: CGPoint(x: 2.84, y: 11.84))
+        path.addCurve(to: CGPoint(x: 2.49, y: 11.12), control1: CGPoint(x: 2.22, y: 11.5), control2: CGPoint(x: 1.82, y: 11.13))
+        path.addCurve(to: CGPoint(x: 3.72, y: 11.94), control1: CGPoint(x: 3.12, y: 11.11), control2: CGPoint(x: 3.57, y: 11.7))
+        path.addCurve(to: CGPoint(x: 6.05, y: 12.6), control1: CGPoint(x: 4.44, y: 13.15), control2: CGPoint(x: 5.59, y: 12.81))
+        path.addCurve(to: CGPoint(x: 6.56, y: 11.53), control1: CGPoint(x: 6.12, y: 12.08), control2: CGPoint(x: 6.33, y: 11.73))
+        path.addCurve(to: CGPoint(x: 2.92, y: 7.58), control1: CGPoint(x: 4.78, y: 11.33), control2: CGPoint(x: 2.92, y: 10.64))
+        path.addCurve(to: CGPoint(x: 3.74, y: 5.43), control1: CGPoint(x: 2.92, y: 6.71), control2: CGPoint(x: 3.23, y: 5.99))
+        path.addCurve(to: CGPoint(x: 3.82, y: 3.31), control1: CGPoint(x: 3.66, y: 5.23), control2: CGPoint(x: 3.38, y: 4.41))
+        path.addCurve(to: CGPoint(x: 6.02, y: 4.13), control1: CGPoint(x: 3.82, y: 3.31), control2: CGPoint(x: 4.49, y: 3.1))
+        path.addCurve(to: CGPoint(x: 8.02, y: 3.86), control1: CGPoint(x: 6.66, y: 3.95), control2: CGPoint(x: 7.34, y: 3.86))
+        path.addCurve(to: CGPoint(x: 10.02, y: 4.13), control1: CGPoint(x: 8.7, y: 3.86), control2: CGPoint(x: 9.38, y: 3.95))
+        path.addCurve(to: CGPoint(x: 12.22, y: 3.31), control1: CGPoint(x: 11.55, y: 3.09), control2: CGPoint(x: 12.22, y: 3.31))
+        path.addCurve(to: CGPoint(x: 12.3, y: 5.43), control1: CGPoint(x: 12.66, y: 4.41), control2: CGPoint(x: 12.38, y: 5.23))
+        path.addCurve(to: CGPoint(x: 13.12, y: 7.58), control1: CGPoint(x: 12.81, y: 5.99), control2: CGPoint(x: 13.12, y: 6.7))
+        path.addCurve(to: CGPoint(x: 9.47, y: 11.53), control1: CGPoint(x: 13.12, y: 10.65), control2: CGPoint(x: 11.25, y: 11.33))
+        path.addCurve(to: CGPoint(x: 10.01, y: 13.01), control1: CGPoint(x: 9.76, y: 11.78), control2: CGPoint(x: 10.01, y: 12.26))
+        path.addCurve(to: CGPoint(x: 10, y: 15.21), control1: CGPoint(x: 10.01, y: 14.08), control2: CGPoint(x: 10, y: 14.94))
+        path.addCurve(to: CGPoint(x: 10.55, y: 15.59), control1: CGPoint(x: 10, y: 15.42), control2: CGPoint(x: 10.15, y: 15.67))
+        path.addCurve(to: CGPoint(x: 16, y: 8), control1: CGPoint(x: 13.71, y: 14.53), control2: CGPoint(x: 16, y: 11.53))
+        path.addCurve(to: CGPoint(x: 8, y: 0), control1: CGPoint(x: 16, y: 3.58), control2: CGPoint(x: 12.42, y: 0))
+        path.closeSubpath()
+        return path.applying(CGAffineTransform(translationX: rect.minX, y: rect.minY).scaledBy(x: rect.width / 16, y: rect.height / 16))
+    }
+}
+
 private struct ZagGitHubToolbarGlyph: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        GeometryReader { geometry in
-            let k = min(geometry.size.width, geometry.size.height) / 24
-            Path { path in
-                func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-                path.move(to: pt(12, 1.8))
-                path.addCurve(to: pt(5, 4.5), control1: pt(9, 2), control2: pt(6.8, 3))
-                path.addLine(to: pt(2.9, 3.2))
-                path.addLine(to: pt(3.5, 7.4))
-                path.addCurve(to: pt(5, 18), control1: pt(1.6, 10), control2: pt(2.4, 15.5))
-                path.addCurve(to: pt(9.2, 20.3), control1: pt(6, 19.2), control2: pt(7.5, 20))
-                path.addLine(to: pt(9.2, 17.2))
-                path.addCurve(to: pt(7, 15), control1: pt(7.7, 17), control2: pt(7, 16.2))
-                path.addCurve(to: pt(9.4, 13.8), control1: pt(7, 14.2), control2: pt(8, 13.8))
-                path.addLine(to: pt(14.6, 13.8))
-                path.addCurve(to: pt(17, 15), control1: pt(16, 13.8), control2: pt(17, 14.2))
-                path.addCurve(to: pt(14.8, 17.2), control1: pt(17, 16.2), control2: pt(16.3, 17))
-                path.addLine(to: pt(14.8, 20.3))
-                path.addCurve(to: pt(19, 18), control1: pt(16.5, 20), control2: pt(18, 19.2))
-                path.addCurve(to: pt(20.4, 7.2), control1: pt(21.6, 15.5), control2: pt(22.4, 10))
-                path.addLine(to: pt(21.1, 3.2))
-                path.addLine(to: pt(19, 4.5))
-                path.addCurve(to: pt(12, 1.8), control1: pt(17.2, 3), control2: pt(15, 1.8))
-                path.closeSubpath()
-            }
+        ZagGitHubMark()
             .fill(colorScheme == .dark ? Color.white : Color.black)
-        }
-        .frame(width: 23, height: 23)
-        .accessibilityHidden(true)
+            .frame(width: 23, height: 23)
+            .accessibilityHidden(true)
     }
 }
 
