@@ -26,6 +26,7 @@ struct ZagInstallControl: View {
 		.accessibilityLabel(Text(_accessibilityLabel))
 		.accessibilityAddTraits(.isButton)
 		.modifier(CancelAccessibility(cancel: cancelAction))
+		.onAppear { ZagMainThreadStallMonitor.shared.start() }
 	}
 
 	private var _accessibilityLabel: String {
