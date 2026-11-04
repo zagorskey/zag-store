@@ -247,6 +247,22 @@ enum ZagMobileDataToggle {
 		return .notSetUp
 	}
 
+	/// Whether an installation may run the Shortcut without a fresh `status`
+	/// check: verified, or verified for v1 but older than 7 days (the `off`
+	/// reply itself must still match exactly). Never after a failure, a
+	/// version mismatch or without any successful verification.
+	static func canRunAutomatically(_ record: Record, now: Date = Date()) -> Bool {
+		switch status(of: record, now: now) {
+		case .verified:
+			return true
+		case .verificationRequired:
+			guard let at = record.verifiedAt, record.verifiedVersion == protocolVersion else { return false }
+			return at <= now.addingTimeInterval(60)
+		case .notSetUp, .failed, .updateRequired:
+			return false
+		}
+	}
+
 	/// How a finished operation changes the stored state. A cancellation
 	/// changes nothing; every other failure withdraws Verified.
 	static func record(_ record: Record, after completion: Completion, now: Date = Date()) -> Record {

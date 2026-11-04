@@ -110,7 +110,7 @@ check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else
