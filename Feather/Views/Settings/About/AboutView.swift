@@ -3,6 +3,14 @@ import NimbleViews
 
 // MARK: - Zag Store About
 struct AboutView: View {
+    // Installation/update time from the app bundle's filesystem creation date.
+    // If unavailable, avoid displaying an invented timestamp.
+    private var lastUpdatedText: String {
+        guard let values = try? Bundle.main.bundleURL.resourceValues(forKeys: [.creationDateKey]),
+              let date = values.creationDate else { return "Unavailable" }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
     var body: some View {
         NBList(.localized("About")) {
             Section {
@@ -41,7 +49,7 @@ struct AboutView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                Text("Author")
+                Text("Credits")
             }
         }
     }
