@@ -655,14 +655,11 @@ extension SettingsView {
 				}
 
 				if let cert = selectedCertificate {
-					VStack(alignment: .leading, spacing: 0) {
-                        CertificatesCellView(cert: cert)
-                            .padding(.vertical, 2)
-                        Divider().frame(maxWidth: .infinity)
-					}
+					CertificatesCellView(cert: cert)
+                        .padding(.vertical, 0)
 					.contentShape(Rectangle())
 					.onTapGesture { _selectedCertificateInfo = cert }
-					.listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
 					.swipeActions(edge: .trailing) {
 						Button(role: .destructive) {
 							_pendingCertificateDelete = cert
@@ -681,7 +678,7 @@ extension SettingsView {
 			} header: {
 				Text(.localized("Certificates"))
 			} footer: {
-				Text(.localized("Add and manage certificates used for signing apps."))
+				Text("Manage certificated used for signing apps.")
 			}
 
 		case .features:
@@ -904,12 +901,11 @@ extension SettingsView {
                 Label {
                     Text("GitHub")
                 } icon: {
-                    ZagGitHubToolbarGlyph()
+                    ZagGitHubMark()
+                        .fill(ZagWideGamutTint.color(hex: userTintColor))
                         .frame(width: 25, height: 25)
-                        .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                 }
             }
-            .listRowSeparator(.hidden, edges: .bottom)
 
             Button {
 
@@ -2477,7 +2473,6 @@ private struct ZagSupportSettingsRow: View {
 		HStack(alignment: .center, spacing: 16) {
 			if !stacked {
 				icon
-					.offset(y: 8)
 			}
 			VStack(alignment: .leading, spacing: 14) {
 				if stacked {
