@@ -61,6 +61,9 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 		decisionLog = []
 		record("\(operation.rawValue) \(jobID.prefix(8)) started")
 		let outcome = await flow.run(jobID: jobID, install: body)
+		if outcome.usedMobileDataFix {
+			NotificationCenter.default.post(name: .zagDeviceLinkRecheckRequested, object: nil)
+		}
 		record("Result: \(outcome.installed ? "succeeded" : "failed") (\(outcome.notAttempted.map { "not attempted: \($0)" } ?? (outcome.installError == nil ? "operation succeeded" : "operation failed"))); Mobile Data \(outcome.restoration)")
 		usingMobileDataFix = false
 		if outcome.restoration == .unconfirmed {

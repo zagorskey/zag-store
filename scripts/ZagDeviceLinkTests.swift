@@ -888,6 +888,40 @@ import Network
 		expect(!T.canRunAutomatically(T.record(T.Record(), after: .incompatible(found: 2), now: t0), now: t0), "auto: never with another version")
 	}
 
+	static func badgeTests() {
+		let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+		func model(_ result: ZagEndpointProbeResult?, interface: Bool = true, pairing: ZagRPPairingReadiness? = nil) -> ZagDeviceLinkModel {
+			var m = ZagDeviceLinkModel()
+			if let result { m.probeStarted(); m.probeFinished(result, interfacePresent: interface, startedAt: t0, finishedAt: t0.addingTimeInterval(1)) }
+			if let pairing { m.pairingEvent(pairing) }
+			return m
+		}
+		func badge(_ m: ZagDeviceLinkModel, wifi: Bool = false, ready: Bool = false, running: Bool = false) -> ZagLocalVPNBadge {
+			ZagLocalVPNBadge.make(model: m, wifiConnected: wifi, mobileDataFixReady: ready, mobileDataFixRunning: running)
+		}
+		let reachable = model(.accepted(milliseconds: 12))
+		let refused = model(.failed(.refused))
+		let disconnected = model(.failed(.timedOut), interface: false)
+
+		expect(badge(reachable, wifi: true) == .reachable, "badge: Wi-Fi with RPPairing reachable is green (reachable)")
+		expect(badge(reachable, wifi: false, ready: true) == .reachable, "badge: a reachable endpoint stays reachable, never relabelled as the fix")
+		expect(badge(refused, ready: true) == .mobileDataFixReady, "badge: Mobile Data + LocalDevVPN + authorised verified fix is green (fix ready)")
+		expect(badge(refused, ready: true) != .reachable, "badge: the fix never claims the endpoint is directly reachable")
+		expect(badge(refused, ready: false) == .attention, "badge: Mobile Data with the fix unavailable or unauthorised is amber")
+		expect(badge(refused, wifi: true, ready: true) == .attention, "badge: a refusal on Wi-Fi is amber, not the Mobile Data fix")
+		expect(badge(model(.failed(.reset)), ready: true) == .attention, "badge: a reset is not the Mobile Data block")
+		expect(badge(disconnected) == .failed && badge(disconnected, ready: true) == .failed, "badge: LocalDevVPN disconnected is red")
+		expect(badge(model(.failed(.timedOut), interface: true)) == .attention, "badge: tunnel present but silent is amber")
+		expect(badge(model(.accepted(milliseconds: 5), pairing: .failed(.pairingRejected, t0.addingTimeInterval(5)))) == .failed, "badge: rejected credentials are red")
+		expect(badge(model(.accepted(milliseconds: 5), pairing: .failed(.connectionInterrupted, t0.addingTimeInterval(5)))) == .attention, "badge: a transient session failure is amber")
+		for m in [refused, disconnected, reachable, model(nil)] {
+			expect(badge(m, ready: true, running: true) == .working, "badge: a running Mobile Data Fix shows working, never failure")
+		}
+		expect(badge(model(nil)) == .unknown, "badge: nothing checked yet is neutral")
+		var checking = ZagDeviceLinkModel(); checking.probeStarted()
+		expect(badge(checking) == .checking, "badge: a first check in progress is neutral")
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
@@ -897,6 +931,7 @@ import Network
 		protocolStageTests()
 		mobileDataToggleTests()
 		await mobileDataInstallTests()
+		badgeTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

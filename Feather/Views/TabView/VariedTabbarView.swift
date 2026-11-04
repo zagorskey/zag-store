@@ -761,33 +761,50 @@ private struct ZagAccountAvatarEditor: View {
 
 struct ZagLocalVPNToolbarStatus: View {
     @StateObject private var monitor = ZagLocalVPNMonitor.shared
+    @ObservedObject private var mobileDataFix = ZagMobileDataInstallCoordinator.shared
+    @ObservedObject private var shortcut = ZagMobileDataToggleController.shared
     @State private var showDetails = false
 
-    private var indicator: ZagLinkIndicator { monitor.model.indicator }
+    private var badge: ZagLocalVPNBadge {
+        ZagLocalVPNBadge.make(
+            model: monitor.model,
+            wifiConnected: monitor.physicalNetworks.contains("Wi-Fi"),
+            mobileDataFixReady: ZagMobileDataToggle.canRunAutomatically(shortcut.record)
+                && mobileDataFix.automaticHandling == true,
+            mobileDataFixRunning: mobileDataFix.usingMobileDataFix
+        )
+    }
+
+    private static let green = Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1))
 
     private var statusColor: Color {
-        switch indicator {
-        case .checking, .off: return .secondary
-        case .warning: return .orange
-        case .on: return Color(uiColor: UIColor(displayP3Red: 0, green: 1, blue: 0.22, alpha: 1))
+        switch badge {
+        case .checking, .unknown: return .secondary
+        case .attention: return .orange
+        case .failed: return .red
+        case .reachable, .mobileDataFixReady, .working: return Self.green
         }
     }
 
     private var statusText: String {
-        switch indicator {
-        case .checking: return "…"
-        case .off: return "—"
-        case .warning: return "!"
-        case .on: return "ON"
+        switch badge {
+        case .checking, .working: return "…"
+        case .unknown: return "—"
+        case .attention, .failed: return "!"
+        case .reachable: return "ON"
+        case .mobileDataFixReady: return "AUTO"
         }
     }
 
     private var accessibilityText: String {
-        switch indicator {
+        switch badge {
         case .checking: return "Checking local VPN connection"
-        case .off: return "Local VPN not connected or status unknown"
-        case .warning: return "Local VPN connected, device connection failed"
-        case .on: return "Local VPN device connection reachable"
+        case .unknown: return "Local VPN status unknown"
+        case .attention: return "Local VPN connected, device connection unavailable"
+        case .failed: return "Local VPN not connected or device connection failed"
+        case .reachable: return "Local VPN device connection reachable"
+        case .mobileDataFixReady: return "Local VPN connected, installs use Mobile Data Fix"
+        case .working: return "Mobile Data Fix in progress"
         }
     }
 
@@ -855,6 +872,12 @@ private struct ZagLocalVPNDetailsView: View {
     }
 
     private var guidance: String? {
+        if case .unreachable(.refused, _) = model.service,
+           !monitor.physicalNetworks.contains("Wi-Fi"),
+           ZagMobileDataToggle.canRunAutomatically(ZagMobileDataToggleController.shared.record),
+           ZagMobileDataInstallCoordinator.shared.automaticHandling == true {
+            return "The iPhone refuses device services while Mobile Data is on. Installs and removals turn Mobile Data off briefly with Mobile Data Fix."
+        }
         if case .failed(let kind, _) = model.pairing, model.indicator == .warning {
             return ZagRPPairingFailure.explanation(kind)
         }

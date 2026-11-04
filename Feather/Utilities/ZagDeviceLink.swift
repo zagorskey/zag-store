@@ -206,6 +206,57 @@ enum ZagPairingState: Equatable {
 	}
 }
 
+/// What the toolbar badge shows. Built from the device-link evidence plus
+/// Mobile Data Fix readiness; it never runs a probe of its own.
+enum ZagLocalVPNBadge: Equatable {
+	/// RemotePairing accepted, or a real session verified recently.
+	case reachable
+	/// RemotePairing refuses because of Mobile Data, and the verified,
+	/// authorised Mobile Data Fix will handle installs. The endpoint is not
+	/// directly reachable; installs work through the fix.
+	case mobileDataFixReady
+	/// A Mobile Data Fix install or removal is running.
+	case working
+	/// Connected, but RPPairing is unavailable and the fix can't help now.
+	case attention
+	/// LocalDevVPN is not connected, or the credentials were rejected.
+	case failed
+	case checking
+	case unknown
+
+	static func make(
+		model: ZagDeviceLinkModel,
+		wifiConnected: Bool,
+		mobileDataFixReady: Bool,
+		mobileDataFixRunning: Bool
+	) -> ZagLocalVPNBadge {
+		if mobileDataFixRunning { return .working }
+		if case .failed(let kind, let date) = model.pairing,
+		   kind == .pairingRejected || kind == .pairingFile,
+		   date >= (model.service.date ?? .distantPast) {
+			return .failed
+		}
+		switch model.indicator {
+		case .on: return .reachable
+		case .checking: return .checking
+		case .off:
+			switch model.tunnel {
+			case .disconnected: return .failed
+			// The tunnel interface exists but nothing answers through it.
+			case .interfaceDetected: return .attention
+			case .unknown, .operational: return .unknown
+			}
+		case .warning:
+			// The Mobile Data block: the iPhone refuses RemotePairing through
+			// a working tunnel while Wi-Fi is absent.
+			if case .unreachable(.refused, _) = model.service, !wifiConnected, mobileDataFixReady {
+				return .mobileDataFixReady
+			}
+			return .attention
+		}
+	}
+}
+
 enum ZagLinkIndicator: Equatable {
 	/// The RemotePairing endpoint accepted a connection in the latest check,
 	/// or a real RPPairing session verified more recently than any failure.

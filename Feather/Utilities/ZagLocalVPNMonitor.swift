@@ -18,7 +18,7 @@ final class ZagLocalVPNMonitor: ObservableObject {
 
 	@Published private(set) var model = ZagDeviceLinkModel()
 	@Published private(set) var lastSuccess: Date?
-	private(set) var physicalNetworks: [String] = []
+	@Published private(set) var physicalNetworks: [String] = []
 
 	private var scheduler = ZagDeviceProbeScheduler()
 	private var probeTask: Task<Void, Never>?
@@ -87,6 +87,13 @@ final class ZagLocalVPNMonitor: ObservableObject {
 		// While a real RPPairing session runs, it is the evidence; a second
 		// connection would only compete with it.
 		if ZagRPPairingCore.shared.isTransportBusy {
+			scheduleTick()
+			return
+		}
+		// Mobile Data Fix checks the installer itself and is toggling Mobile
+		// Data; a badge probe now would only add a connection and show a
+		// passing state. It asks for a recheck when it finishes.
+		if ZagMobileDataInstallCoordinator.shared.usingMobileDataFix {
 			scheduleTick()
 			return
 		}

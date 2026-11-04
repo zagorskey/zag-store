@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Root-level UI for Mobile Data Fix during installations: the one-time
-/// consent, the current stage while the fix runs, and recovery when Zag
-/// Store can't confirm Mobile Data is back on.
+/// Root-level UI for Mobile Data Fix: the one-time consent, and recovery
+/// when Zag Store can't confirm Mobile Data is back on. Progress is shown
+/// on the app row, not here.
 struct ZagMobileDataInstallOverlay: ViewModifier {
 	@ObservedObject private var coordinator = ZagMobileDataInstallCoordinator.shared
 	@Environment(\.scenePhase) private var scenePhase
@@ -11,16 +11,12 @@ struct ZagMobileDataInstallOverlay: ViewModifier {
 		content
 			.overlay(alignment: .top) {
 				VStack(spacing: 8) {
-					if coordinator.usingMobileDataFix, let text = Self.stageText(coordinator.stage, coordinator.consentOperation) {
-						ZagMobileDataStageCapsule(text: text)
-					}
 					if coordinator.recovery != nil, coordinator.stage == .idle {
 						ZagMobileDataRecoveryBanner(coordinator: coordinator)
 					}
 				}
 				.padding(.horizontal, 16)
 				.padding(.top, 4)
-				.animation(.smooth, value: coordinator.stage)
 				.animation(.smooth, value: coordinator.recovery)
 			}
 			.alert("Mobile Data Installation", isPresented: $coordinator.consentRequested) {
@@ -37,35 +33,6 @@ struct ZagMobileDataInstallOverlay: ViewModifier {
 			.onAppear { coordinator.refreshRecovery() }
 	}
 
-	static func stageText(_ stage: ZagMobileDataInstallStage, _ operation: ZagMobileDataInstallCoordinator.Operation) -> String? {
-		switch stage {
-		case .idle: return nil
-		case .checkingConnection: return operation == .install ? "Preparing installation" : "Preparing removal"
-		case .disablingMobileData: return "Temporarily turning off Mobile Data"
-		case .connecting: return "Connecting to installation service"
-		case .installing: return operation == .install ? "Installing" : "Removing app"
-		case .restoringMobileData: return "Restoring Mobile Data"
-		}
-	}
-}
-
-private struct ZagMobileDataStageCapsule: View {
-	let text: String
-
-	var body: some View {
-		HStack(spacing: 8) {
-			ProgressView().controlSize(.small)
-			Text(text)
-				.font(.subheadline.weight(.medium))
-				.lineLimit(2)
-				.multilineTextAlignment(.leading)
-		}
-		.padding(.horizontal, 16)
-		.padding(.vertical, 10)
-		.zagMobileDataGlass(in: Capsule())
-		.accessibilityElement(children: .combine)
-		.transition(.move(edge: .top).combined(with: .opacity))
-	}
 }
 
 private struct ZagMobileDataRecoveryBanner: View {
