@@ -632,20 +632,23 @@ extension LibraryCellView {
 					)
 				}
 
-				try await withCheckedThrowingContinuation {
-					(continuation: CheckedContinuation<Void, Error>) in
+				// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
+				try await ZagMobileDataInstallCoordinator.shared.install(jobID: app.uuid ?? UUID().uuidString) {
+					try await withCheckedThrowingContinuation {
+						(continuation: CheckedContinuation<Void, Error>) in
 
-					do {
-						try ZagRPPairingCore.shared.installGate4IPA(
-							at: packageURL,
-							deviceIP: ZagDeviceLink.peerAddress,
-							retryTransientFailures: true,
-							completion: { result in
-								continuation.resume(with: result)
-							}
-						)
-					} catch {
-						continuation.resume(throwing: error)
+						do {
+							try ZagRPPairingCore.shared.installGate4IPA(
+								at: packageURL,
+								deviceIP: ZagDeviceLink.peerAddress,
+								retryTransientFailures: true,
+								completion: { result in
+									continuation.resume(with: result)
+								}
+							)
+						} catch {
+							continuation.resume(throwing: error)
+						}
 					}
 				}
 

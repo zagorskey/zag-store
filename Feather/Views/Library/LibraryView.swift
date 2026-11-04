@@ -3655,17 +3655,20 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 		defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
 
-		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			Task { @MainActor in
-				do {
-					try ZagRPPairingCore.shared.installGate4IPA(
-						at: packageURL,
-						deviceIP: ZagDeviceLink.peerAddress,
-						retryTransientFailures: true,
-						completion: { result in continuation.resume(with: result) }
-					)
-				} catch {
-					continuation.resume(throwing: error)
+		// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
+		try await ZagMobileDataInstallCoordinator.shared.install(jobID: signedUUID) {
+			try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+				Task { @MainActor in
+					do {
+						try ZagRPPairingCore.shared.installGate4IPA(
+							at: packageURL,
+							deviceIP: ZagDeviceLink.peerAddress,
+							retryTransientFailures: true,
+							completion: { result in continuation.resume(with: result) }
+						)
+					} catch {
+						continuation.resume(throwing: error)
+					}
 				}
 			}
 		}

@@ -813,25 +813,28 @@ struct DownloadButtonView: View {
 					try await proxy.install(at: packageURL, suspend: false)
 					installationProgress = 1
 				} else {
-					try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-						do {
-							try ZagRPPairingCore.shared.installGate4IPA(
-								at: packageURL,
-								deviceIP: ZagDeviceLink.peerAddress,
-								retryTransientFailures: true,
-								progress: { percent in
-									installationProgress = Double(percent) / 100.0
+					// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
+					try await ZagMobileDataInstallCoordinator.shared.install(jobID: signed.uuid ?? UUID().uuidString) {
+						try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+							do {
+								try ZagRPPairingCore.shared.installGate4IPA(
+									at: packageURL,
+									deviceIP: ZagDeviceLink.peerAddress,
+									retryTransientFailures: true,
+									progress: { percent in
+										installationProgress = Double(percent) / 100.0
+									}
+								) { result in
+									switch result {
+									case .success: continuation.resume()
+									case .failure(let error): continuation.resume(throwing: error)
+									}
 								}
-							) { result in
-								switch result {
-								case .success: continuation.resume()
-								case .failure(let error): continuation.resume(throwing: error)
+								} catch {
+									continuation.resume(throwing: error)
 								}
 							}
-							} catch {
-								continuation.resume(throwing: error)
-							}
-						}
+					}
 					installationProgress = 1
 				}
 
