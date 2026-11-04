@@ -869,8 +869,6 @@ extension SettingsView {
 			}
 		} header: {
 			Text("About")
-		} footer: {
-			Text(.localized("If any issues occur within the app please report it via the GitHub repository. When submitting an issue, make sure to submit detailed information."))
 		}
 	}
     
