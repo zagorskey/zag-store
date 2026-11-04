@@ -459,6 +459,9 @@ struct RPPairingDiagnosticsView: View {
 	@State private var reportState: ReportState = .idle
 
 	private enum ReportState { case idle, preparing, copied }
+	@State private var traceState: ReportState = .idle
+	@State private var traceSummary: [String] = []
+	@State private var directAddress: String?
 
 	var body: some View {
 		NBList("RPPairing Diagnostics") {
@@ -527,6 +530,51 @@ struct RPPairingDiagnosticsView: View {
 				Text("Health Checks")
 			} footer: {
 				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup. The copied report includes the network type, timings and the first failing step, without device names, identifiers or keys.")
+			}
+
+			Section {
+				Button {
+					traceState = .preparing
+					Task { @MainActor in
+						guard !pairingCore.isTransportBusy else {
+							traceSummary = ["A device session is running. Try again when it finishes."]
+							traceState = .idle
+							return
+						}
+						let result = await ZagTransportTrace.run()
+						directAddress = result.tunnelAddress
+						traceSummary = ZagTransportTrace.findings(result)
+						UIPasteboard.general.string = ZagTransportTrace.report(
+							result,
+							deviceSummary: "\(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)"
+						)
+						traceState = .copied
+					}
+				} label: {
+					switch traceState {
+					case .idle: Label("Run Connection Trace", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+					case .preparing: Label("Tracing…", systemImage: "hourglass")
+					case .copied: Label("Trace Copied", systemImage: "checkmark")
+					}
+				}
+				.disabled(traceState == .preparing || pairingCore.isGate2Running)
+
+				ForEach(traceSummary, id: \.self) { finding in
+					Text(finding).font(.footnote).textSelection(.enabled)
+				}
+
+				if let directAddress, pairingCore.pairingFileExists {
+					Button {
+						pairingCore.startGate2Probe(deviceIP: directAddress)
+					} label: {
+						Label("Health Check via \(directAddress) (Experimental)", systemImage: "flask")
+					}
+					.disabled(pairingCore.isGate2Running)
+				}
+			} header: {
+				Text("Connection Trace")
+			} footer: {
+				Text("Tests whether TCP crosses LocalDevVPN and how the RemotePairing port answers on this network, then copies a redacted trace. Nothing is sent on these connections. Run it on Wi-Fi and on mobile data and compare.")
 			}
 
 			Section {

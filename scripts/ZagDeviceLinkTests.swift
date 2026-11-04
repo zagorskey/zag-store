@@ -415,6 +415,57 @@ import Network
 		expect(plan.delayAfterFailure(.deviceUnreachable) == nil, "retry: nothing is retried after the install ended")
 	}
 
+	static func traceTests() async throws {
+		// Real measurements on loopback: the "peer" is 127.0.0.1, so our own
+		// listeners are reachable, and a closed port stands in for a
+		// RemotePairing listener that rejects the connection.
+		let closed = try await closedPort()
+		let live = await ZagTransportTrace.run(peer: "127.0.0.1", servicePort: closed, tunnelAddress: "127.0.0.1", timeout: 1)
+		expect(live.routeSource == "127.0.0.1", "trace: route source is measured (got \(live.routeSource ?? "nil"))")
+		if case .accepted? = live.tunnelLoopback { expect(true, "trace: own listener reachable through the peer address") }
+		else { expect(false, "trace: own listener reachable (got \(String(describing: live.tunnelLoopback)))") }
+		if case .accepted? = live.tunnelLoopbackNoCellular { expect(true, "trace: a no-cellular listener is reachable off cellular") }
+		else { expect(false, "trace: no-cellular listener off cellular (got \(String(describing: live.tunnelLoopbackNoCellular)))") }
+		expect(live.remotePairingViaTunnel == .failed(.refused), "trace: a closed service port is refused")
+		expect(live.steps.count == 9, "trace: every stage is timestamped (got \(live.steps.count))")
+		let liveFindings = ZagTransportTrace.findings(live)
+		expect(liveFindings.contains { $0.contains("own TCP stack") }, "trace: refusal with a working tunnel is attributed to the local stack")
+		expect(!liveFindings.contains { $0.contains("Hypothesis") }, "trace: no cellular hypothesis without cellular evidence")
+
+		// The cellular pattern this trace is designed to confirm or rule out.
+		var cellular = ZagTransportTraceResult()
+		cellular.tunnelInterfaces = ["utun5 10.7.1.1"]
+		cellular.peerPathUsesCellular = true
+		cellular.tunnelLoopback = .accepted(milliseconds: 4)
+		cellular.tunnelLoopbackNoCellular = .failed(.refused)
+		cellular.remotePairingViaTunnel = .failed(.refused)
+		cellular.remotePairingDirect = .accepted(milliseconds: 2)
+		let cf = ZagTransportTrace.findings(cellular)
+		expect(cf.contains { $0.contains("cases A and B ruled out") }, "trace: a working tunnel loopback rules out cases A and B")
+		expect(cf.contains { $0.hasPrefix("Hypothesis") && $0.contains("excludes cellular") }, "trace: cellular restriction pattern is labelled as a hypothesis")
+		expect(cf.contains { $0.contains("depends on the arrival interface") }, "trace: direct acceptance shows the listener is running")
+
+		// The tunnel itself failing must not be blamed on RemotePairing.
+		var broken = ZagTransportTraceResult()
+		broken.tunnelInterfaces = ["utun5 10.7.1.1"]
+		broken.tunnelLoopback = .failed(.timedOut)
+		broken.remotePairingViaTunnel = .failed(.timedOut)
+		let bf = ZagTransportTrace.findings(broken)
+		expect(bf.contains { $0.contains("case A or B") } && !bf.contains { $0.contains("own TCP stack") },
+			"trace: a silent tunnel points at the tunnel, not the listener")
+
+		var wifi = cellular
+		wifi.peerPathUsesCellular = false
+		wifi.tunnelLoopbackNoCellular = .accepted(milliseconds: 3)
+		wifi.remotePairingViaTunnel = .accepted(milliseconds: 3)
+		let wf = ZagTransportTrace.findings(wifi)
+		expect(!wf.contains { $0.contains("Hypothesis") } && wf.contains { $0.contains("accepted a connection through the tunnel") },
+			"trace: the Wi-Fi pattern reports acceptance and no restriction")
+
+		let report = ZagTransportTrace.report(cellular, generatedAt: Date(timeIntervalSince1970: 0), deviceSummary: "iPhone, iOS 27.2")
+		expect(report.contains("Findings:") && report.contains("cellular=yes"), "trace: report includes path flags and findings")
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
@@ -423,6 +474,7 @@ import Network
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }
+		do { try await traceTests() } catch { expect(false, "trace tests threw \(error)") }
 		if failures > 0 {
 			print("\(failures) device link test(s) failed")
 			exit(1)

@@ -51,9 +51,14 @@ gate4=$(sed -n '/fileprivate func receiveGate4(/,/^	}/p' "$CORE")
 check "the pairing file is deleted in exactly one place" test "$(grep -c 'removeItem(at: Self.pairingFileURL' "$CORE")" = 1
 check "that place is the explicit Forget Pairing action" grep -q 'removeItem(at: Self.pairingFileURL' <<< "$forget"
 check "Gate4 failures never forget or rewrite pairing" bash -c "! grep -qE 'forgetPairing|pairingFileURL' <<< \"\$1\"" _ "$gate4"
+TRACE="$ROOT/Feather/Utilities/ZagTransportTrace.swift"
+check "trace sends no data on any connection" absent '.send(' "$(cat "$TRACE")"
+check "trace uses no private socket options" bash -c "! grep -qE 'SO_RESTRICT|IP_BOUND_IF|setsockopt' '$TRACE'"
+check "trace never reads pairing credentials" absent 'pairingFile' "$(cat "$TRACE")"
+check "trace never starts an RPPairing session" absent 'zag_' "$(cat "$TRACE")"
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else
