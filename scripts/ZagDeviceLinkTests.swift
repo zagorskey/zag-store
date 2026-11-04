@@ -681,6 +681,7 @@ import Network
 		typealias Command = ZagMobileDataToggle.Command
 		var networks: [ZagMobileDataNetwork] = [.wifi]
 		var endpoints: [ZagMobileDataEndpoint] = [.reachable]
+		var tunnel = true
 		var ready = true
 		var consent: ZagMobileDataConsent = .allowed
 		var replies: [Command: ZagMobileDataToggle.Completion] = [.off: .confirmed, .on: .confirmed]
@@ -689,9 +690,10 @@ import Network
 		var stages: [ZagMobileDataInstallStage] = []
 		var endpointChecks = 0
 		var recordSavedBeforeOff: Bool?
-		var installError: Error?
-		var holdInstall = false
-		var heldInstall: CheckedContinuation<Void, Never>?
+		var operationError: Error?
+		var holdOperation = false
+		var heldOperation: CheckedContinuation<Void, Never>?
+		var operationName = "install"
 
 		private func next<T>(_ list: inout [T]) -> T { list.count > 1 ? list.removeFirst() : list[0] }
 
@@ -699,6 +701,7 @@ import Network
 			ZagMobileDataInstallFlow.Environment(
 				network: { [unowned self] in self.next(&self.networks) },
 				endpoint: { [unowned self] in self.endpointChecks += 1; return self.next(&self.endpoints) },
+				tunnelPresent: { [unowned self] in self.tunnel },
 				shortcutReady: { [unowned self] in self.ready },
 				consent: { [unowned self] in self.calls.append("consent"); return self.consent },
 				runShortcut: { [unowned self] command in
@@ -716,15 +719,26 @@ import Network
 			)
 		}
 
-		func install() async throws {
-			calls.append("install")
-			if holdInstall { await withCheckedContinuation { heldInstall = $0 } }
-			if let installError { throw installError }
+		/// Stands in for installGate4IPA or uninstallGate4App.
+		func operation() async throws {
+			calls.append(operationName)
+			if holdOperation { await withCheckedContinuation { heldOperation = $0 } }
+			if let operationError { throw operationError }
 		}
 
 		func run(job: String = "job-1") async -> ZagMobileDataInstallOutcome {
 			let flow = ZagMobileDataInstallFlow(environment: environment)
-			return await flow.run(jobID: job) { try await self.install() }
+			return await flow.run(jobID: job) { try await self.operation() }
+		}
+
+		/// The device failure: Wi-Fi off, Mobile Data on, LocalDevVPN up,
+		/// installer refused (os 61). After `off` the port answers; after
+		/// `on` it refuses again.
+		static func mobileDataBlocked(_ interfaces: ZagMobileDataNetwork = .cellular) -> FakeMobileData {
+			let f = FakeMobileData()
+			f.networks = [interfaces]
+			f.endpoints = [.refused, .reachable, .refused]
+			return f
 		}
 	}
 
@@ -733,113 +747,134 @@ import Network
 	@MainActor static func mobileDataInstallTests() async {
 		let off = ZagMobileDataToggle.Command.off, on = ZagMobileDataToggle.Command.on
 
-		// 1. Wi-Fi: no Shortcut, no endpoint probe
+		// Regression: the device failure. The old flow needed the interface
+		// list to be exactly ["Cellular"]; any other report went straight to
+		// the installer, which failed with os 61 and never ran the Shortcut.
+		for listed in [ZagMobileDataNetwork.cellular, .other, .none] {
+			let f = FakeMobileData.mobileDataBlocked(listed)
+			let o = await f.run()
+			expect(f.calls == ["consent", "off", "install", "on"] && o.installed && o.restoration == .restored && f.record == nil,
+				"regression: refused through LocalDevVPN with interfaces \(listed) runs OFF → install → ON (calls \(f.calls))")
+		}
+		expect(ZagMobileDataNetwork.classify(["Cellular", "Cellular"]) == .cellular, "classify: several Mobile Data interfaces are Mobile Data")
+		expect(ZagMobileDataNetwork.classify(["Cellular", "Wired"]) == .cellular, "classify: Mobile Data with another interface is Mobile Data")
+		expect(ZagMobileDataNetwork.classify(["Cellular", "Wi-Fi"]) == .wifi && ZagMobileDataNetwork.classify([]) == .none, "classify: Wi-Fi wins; nothing listed is none")
+
+		// Wi-Fi: no Shortcut, no probe
 		var f = FakeMobileData()
 		var o = await f.run()
-		expect(f.calls == ["install"] && f.endpointChecks == 0 && o.installed && !o.usedMobileDataFix && o.restoration == .notChanged, "install: Wi-Fi installs directly with no Shortcut (calls \(f.calls))")
-
-		// 2. Mobile Data: OFF → install → ON, record saved first and cleared after
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]
+		expect(f.calls == ["install"] && f.endpointChecks == 0 && o.installed && !o.usedMobileDataFix, "install: Wi-Fi installs directly with no Shortcut")
+		f = FakeMobileData(); f.operationName = "uninstall"
 		o = await f.run()
-		expect(f.calls == ["consent", "off", "install", "on"], "install: Mobile Data runs OFF → install → ON (calls \(f.calls))")
-		expect(f.recordSavedBeforeOff == true && f.record == nil && o.installed && o.restoration == .restored, "install: recovery record saved before off, cleared once Mobile Data is back")
-		expect(f.stages == [.checkingConnection, .disablingMobileData, .connecting, .installing, .restoringMobileData, .idle], "install: stages in order (got \(f.stages))")
+		expect(f.calls == ["uninstall"] && o.installed, "uninstall: Wi-Fi removes directly with no Shortcut")
 
-		// 3. Shortcut not set up or unverified
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.ready = false
+		// Unrelated failures never turn Mobile Data off
+		f = FakeMobileData(); f.networks = [.wifi]; f.endpoints = [.refused]
+		o = await f.run()
+		expect(f.calls == ["install"], "install: a refusal on Wi-Fi is not a Mobile Data block")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused]; f.tunnel = false
+		o = await f.run()
+		expect(f.calls == ["install"], "install: a refusal without LocalDevVPN is not a Mobile Data block")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.unreachable]
+		o = await f.run()
+		expect(f.calls == ["install"], "install: no answer at all (LocalDevVPN down) keeps today's behaviour")
+
+		// Order, record and stages
+		f = FakeMobileData.mobileDataBlocked()
+		o = await f.run()
+		expect(f.recordSavedBeforeOff == true && f.record == nil, "install: recovery record saved before off, cleared once Mobile Data is back")
+		expect(f.stages == [.checkingConnection, .disablingMobileData, .connecting, .installing, .restoringMobileData, .idle], "install: stages in order")
+		expect(f.calls.filter { $0 == "off" }.count == 1 && f.calls.filter { $0 == "on" }.count == 1, "install: one OFF and one ON per job")
+
+		// Uninstall: same safeguards; failure is reported, never success
+		f = FakeMobileData.mobileDataBlocked(); f.operationName = "uninstall"
+		o = await f.run()
+		expect(f.calls == ["consent", "off", "uninstall", "on"] && o.installed, "uninstall: Mobile Data runs OFF → uninstall → ON")
+		f = FakeMobileData.mobileDataBlocked(); f.operationName = "uninstall"; f.operationError = FakeInstallError()
+		o = await f.run()
+		expect(!o.installed && o.installError != nil && o.restoration == .restored && f.calls.last == "on", "uninstall: a failed uninstall is reported as failed and Mobile Data is restored")
+
+		// Shortcut not ready / missing
+		f = FakeMobileData.mobileDataBlocked(); f.ready = false
 		o = await f.run()
 		expect(o.notAttempted == .shortcutNotReady && f.calls.isEmpty && f.record == nil, "install: unverified Shortcut is never run")
-		// 3b. Shortcut deleted: off fails, Mobile Data still on, no ON
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.replies[off] = .failed(message: "not found")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused]; f.replies[off] = .failed(message: "not found")
 		o = await f.run()
-		expect(o.notAttempted == .connectionUnavailable && f.calls == ["consent", "off"] && f.record == nil && o.restoration == .notChanged, "install: missing Shortcut fails without ON (calls \(f.calls))")
+		expect(o.notAttempted == .connectionUnavailable && f.calls == ["consent", "off"] && f.record == nil && o.restoration == .notChanged, "install: deleted Shortcut fails without ON (installer still refused)")
 
-		// 4. OFF timeout while Mobile Data stayed on: no repeat, no ON
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.replies[off] = .timedOut
+		// OFF callback lost or late
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused]; f.replies[off] = .timedOut
 		o = await f.run()
-		expect(f.calls.filter { $0 == "off" }.count == 1 && !f.calls.contains("on") && o.notAttempted == .connectionUnavailable, "install: OFF timeout is not retried (calls \(f.calls))")
-
-		// 5. OFF ran but its callback was lost: installer reachable, continue
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]; f.replies[off] = .noResponse
+		expect(f.calls.filter { $0 == "off" }.count == 1 && !f.calls.contains("on") && o.notAttempted == .connectionUnavailable, "install: OFF timeout with Mobile Data still on is not retried")
+		f = FakeMobileData.mobileDataBlocked(); f.replies[off] = .noResponse
 		o = await f.run()
 		expect(f.calls == ["consent", "off", "install", "on"] && o.installed, "install: lost OFF callback continues once the installer answers, without resending off")
 
-		// 6. Installer unreachable after OFF while Mobile Data is off: restore
-		f = FakeMobileData(); f.networks = [.mobileDataOnly, .none, .mobileDataOnly]; f.endpoints = [.refused, .unreachable]
+		// Unreachable after OFF while Mobile Data is off (no answer): restore
+		f = FakeMobileData(); f.networks = [.cellular, .none, .cellular]; f.endpoints = [.refused, .unreachable]
 		o = await f.run()
-		expect(o.notAttempted == .connectionUnavailable && f.calls == ["consent", "off", "on"] && o.restoration == .restored, "install: unreachable after OFF restores Mobile Data (calls \(f.calls))")
+		expect(o.notAttempted == .connectionUnavailable && f.calls == ["consent", "off", "on"] && o.restoration == .restored, "install: unreachable after OFF restores Mobile Data")
 
-		// 7. Installation failure: reported, Mobile Data still restored
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]; f.installError = FakeInstallError()
+		// Operation failure
+		f = FakeMobileData.mobileDataBlocked(); f.operationError = FakeInstallError()
 		o = await f.run()
-		expect(o.installError != nil && !o.installed && o.restoration == .restored && f.calls.last == "on", "install: failure is reported separately from restoration")
+		expect(o.installError != nil && !o.installed && o.restoration == .restored, "install: failure is reported separately from restoration")
 
-		// 8. Cancellation in Shortcuts (Mobile Data unchanged) and before starting
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.replies[off] = .cancelled
+		// Cancellation
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused]; f.replies[off] = .cancelled
 		o = await f.run()
 		expect(o.notAttempted == .cancelled && f.calls == ["consent", "off"] && f.record == nil, "install: cancel in Shortcuts installs nothing and sends no ON")
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]; f.replies[off] = .cancelled
+		f = FakeMobileData.mobileDataBlocked(); f.replies[off] = .cancelled
 		o = await f.run()
 		expect(o.notAttempted == .cancelled && f.calls == ["consent", "off", "on"], "install: cancel after Mobile Data went off restores it and installs nothing")
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]
+		f = FakeMobileData.mobileDataBlocked()
 		let cancelled = Task { @MainActor in await f.run() }
 		cancelled.cancel()
 		o = await cancelled.value
 		expect(o.notAttempted == .cancelled && !f.calls.contains("off") && f.record == nil, "install: a cancelled task never turns Mobile Data off")
 
-		// 9. ON timeout: no repeat, record kept for manual recovery
-		f = FakeMobileData(); f.networks = [.mobileDataOnly, .none]; f.endpoints = [.refused, .reachable]; f.replies[on] = .timedOut
+		// Restoration not confirmed (installer keeps answering = still off)
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused, .reachable]; f.replies[on] = .timedOut
 		o = await f.run()
 		expect(o.installed && o.restoration == .unconfirmed && f.calls.filter { $0 == "on" }.count == 1 && f.record?.onRequestedAt != nil, "install: ON timeout is not retried and leaves a recovery record")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused, .reachable]; f.replies[on] = .failed(message: "x")
+		o = await f.run()
+		expect(o.installed && o.restoration == .unconfirmed && f.record != nil, "install: success with restoration failure reports both")
+		f = FakeMobileData(); f.networks = [.cellular]; f.endpoints = [.refused, .reachable]
+		o = await f.run()
+		expect(o.restoration == .unconfirmed, "install: an ON reply alone is not proof; the installer still answering means not restored")
 
-		// 10. Relaunch after termination during the handoff
+		// Relaunch after termination
 		f = FakeMobileData(); f.record = ZagMobileDataRecoveryRecord(jobID: "old", offRequestedAt: .distantPast)
 		f.networks = [.none]; f.endpoints = [.reachable]
 		o = await f.run(job: "job-2")
 		expect(o.installed && f.calls == ["install"] && f.record?.jobID == "old", "relaunch: Mobile Data still off → installs directly, keeps the old record, sends no ON")
-		f = FakeMobileData(); f.record = ZagMobileDataRecoveryRecord(jobID: "old", offRequestedAt: .distantPast)
-		f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]
+		f = FakeMobileData.mobileDataBlocked(); f.record = ZagMobileDataRecoveryRecord(jobID: "old", offRequestedAt: .distantPast)
 		o = await f.run(job: "job-2")
-		expect(o.installed && f.record == nil && f.calls == ["consent", "off", "install", "on"], "relaunch: Mobile Data back on resolves the old record")
+		expect(o.installed && f.record == nil && f.calls == ["consent", "off", "install", "on"], "relaunch: refusal shows Mobile Data back on and resolves the old record")
 
-		// 11. Duplicate callbacks are rejected by the protocol layer (see toggle
-		// tests); the flow itself sends each command at most once.
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused, .reachable]
-		_ = await f.run()
-		expect(f.calls.filter { $0 == "off" }.count == 1 && f.calls.filter { $0 == "on" }.count == 1, "install: one OFF and one ON per job")
-
-		// 12. Repeated Install taps
-		f = FakeMobileData(); f.holdInstall = true
+		// Repeated taps
+		f = FakeMobileData(); f.holdOperation = true
 		let flow = ZagMobileDataInstallFlow(environment: f.environment)
-		let first = Task { @MainActor in await flow.run(jobID: "a") { try await f.install() } }
-		for _ in 0..<50 where f.heldInstall == nil { await Task.yield() }
-		let second = await flow.run(jobID: "b") { try await f.install() }
-		f.heldInstall?.resume()
+		let first = Task { @MainActor in await flow.run(jobID: "a") { try await f.operation() } }
+		for _ in 0..<50 where f.heldOperation == nil { await Task.yield() }
+		let second = await flow.run(jobID: "b") { try await f.operation() }
+		f.heldOperation?.resume()
 		let firstOutcome = await first.value
 		expect(second.notAttempted == .alreadyRunning && firstOutcome.installed && f.calls == ["install"], "install: a second tap while one is running is rejected")
 
-		// 13. Mobile Data already off before the job: never turned on
+		// Mobile Data already off: never turned on
 		f = FakeMobileData(); f.networks = [.none]; f.endpoints = [.reachable]
 		o = await f.run()
 		expect(f.calls == ["install"] && o.restoration == .notChanged, "install: Mobile Data already off is left off")
 
-		// 14. Consent
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.consent = .declined
+		// Consent
+		f = FakeMobileData.mobileDataBlocked(); f.consent = .declined
 		o = await f.run()
 		expect(o.notAttempted == .consentDeclined && f.calls == ["consent"] && f.record == nil, "install: Not Now changes nothing")
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.refused]; f.consent = .disabled
+		f = FakeMobileData.mobileDataBlocked(); f.consent = .disabled
 		o = await f.run()
 		expect(o.notAttempted == .automaticDisabled && !f.calls.contains("off"), "install: switched-off automatic handling changes nothing")
-
-		// 15. Installed, but restoration could not be confirmed
-		f = FakeMobileData(); f.networks = [.mobileDataOnly, .none]; f.endpoints = [.refused, .reachable]; f.replies[on] = .failed(message: "x")
-		o = await f.run()
-		expect(o.installed && o.restoration == .unconfirmed && f.record != nil, "install: success with restoration failure reports both")
-
-		// Other networks or failures keep today's behaviour
-		f = FakeMobileData(); f.networks = [.mobileDataOnly]; f.endpoints = [.unreachable]
-		o = await f.run()
-		expect(f.calls == ["install"], "install: LocalDevVPN off (no refusal) goes to the installer as today")
 
 		// Automatic eligibility
 		typealias T = ZagMobileDataToggle

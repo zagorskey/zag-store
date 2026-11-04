@@ -111,6 +111,10 @@ for f in Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Libra
 done
 check "install: installGate4IPA and the installer core are unchanged" bash -c "cd '$ROOT' && git diff --quiet 9575060b -- Feather/RPPairing/ZagRPPairingCore.swift"
 check "install: self-update never uses Mobile Data Fix" bash -c "! grep -q 'ZagMobileDataInstall' '$ROOT/Feather/Utilities/ZagSelfUpdateCoordinator.swift' && grep -q 'if isSelfInstall {' '$ROOT/Feather/Views/Library/Install/InstallPreviewView.swift'"
+check "uninstall: Library removal goes through the shared coordinator" grep -q 'ZagMobileDataInstallCoordinator.shared.perform(.uninstall' "$ROOT/Feather/Views/Library/LibraryView.swift"
+check "uninstall: only one RPPairing uninstall entry point exists" bash -c "[ \$(grep -rn 'uninstallGate4App(' '$ROOT/Feather' | grep -vc 'func uninstallGate4App') -eq 1 ]"
+check "decision: no exact interface-count rule remains" bash -c "! grep -rqE 'count == 1 \\? \\.mobileDataOnly|mobileDataOnly' '$ROOT/Feather'"
+check "decision: Mobile Data Fix requires a refusal through LocalDevVPN" grep -q 'guard endpoint == .refused, tunnel else' "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift"
 check "install: diagnostics installs stay direct" bash -c "! grep -q 'ZagMobileDataInstallCoordinator.shared.install' '$ROOT/Feather/Views/Settings/Installation/InstallationView.swift'"
 check "install: no background execution is requested" bash -c "! grep -qE 'beginBackgroundTask|BGTaskScheduler' '$COORD' '$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift'"
 check "install: consent text is exact" bash -c "grep -q 'Mobile Data Installation' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes.' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift' && grep -q 'Allow Automatically' '$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.swift'"

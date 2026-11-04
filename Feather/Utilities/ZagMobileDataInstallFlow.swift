@@ -6,10 +6,15 @@ import Foundation
 // the host. ZagMobileDataInstallCoordinator supplies the real dependencies.
 //
 // Rules:
-// - Wi-Fi, or an installer port that answers: install directly, no Shortcut.
-// - Mobile Data is the only network and the port refuses (os 61): this is the
-//   case Mobile Data Fix handles, and only with a verified Shortcut and the
-//   user's approval.
+// - Wi-Fi, or an installer port that answers: run directly, no Shortcut.
+// - The decision rests on the RPPairing failure itself, not on interface
+//   lists: Mobile Data Fix is used only when the installer port refuses
+//   (os 61) through the LocalDevVPN tunnel and Wi-Fi is absent. That is the
+//   Mobile Data block. Other failures keep today's behaviour. It also needs
+//   a verified Shortcut and the user's approval.
+// - Mobile Data is judged on or off by the same port: refused means on,
+//   answering means off. Interface lists are only a fallback when the port
+//   gives no answer, because LocalDevVPN makes them unreliable.
 // - The recovery record is saved before `off` and kept until Mobile Data is
 //   seen on again or the user resolves it.
 // - `off` and `on` are each sent at most once per job, never repeated after a
@@ -19,11 +24,19 @@ import Foundation
 
 enum ZagMobileDataNetwork: Equatable {
 	case wifi
-	/// Mobile Data is the only physical network.
-	case mobileDataOnly
-	/// No physical network: Mobile Data is off and Wi-Fi is not connected.
+	/// A Mobile Data interface is listed (possibly several).
+	case cellular
+	/// No physical network listed.
 	case none
 	case other
+
+	/// Classifies the interface list. Any Wi-Fi wins; any number of cellular
+	/// interfaces counts as Mobile Data.
+	static func classify(_ interfaces: [String]) -> ZagMobileDataNetwork {
+		if interfaces.contains("Wi-Fi") { return .wifi }
+		if interfaces.contains("Cellular") { return .cellular }
+		return interfaces.isEmpty ? .none : .other
+	}
 }
 
 enum ZagMobileDataEndpoint: Equatable {
@@ -76,17 +89,17 @@ enum ZagMobileDataInstallError: LocalizedError, Equatable {
 	var errorDescription: String? {
 		switch self {
 		case .alreadyRunning:
-			return "Another installation is already preparing. Try again when it finishes."
+			return "Another installation or removal is in progress. Try again when it finishes."
 		case .shortcutNotReady:
-			return "Installing over Mobile Data needs Mobile Data Fix. Set it up in Settings → Installation → Apply Mobile Data Fix, or connect to Wi-Fi."
+			return "Installing or removing apps over Mobile Data needs Mobile Data Fix. Set it up in Settings → Installation → Apply Mobile Data Fix, or connect to Wi-Fi."
 		case .consentDeclined:
-			return "This installation needs Mobile Data turned off briefly. Connect to Wi-Fi, or allow Mobile Data Fix and try again."
+			return "This needs Mobile Data turned off briefly. Connect to Wi-Fi, or allow Mobile Data Fix and try again."
 		case .automaticDisabled:
 			return "Automatic Mobile Data handling is off. Turn off Mobile Data in Control Center, or turn the setting back on in Mobile Data Fix, then try again."
 		case .cancelled:
-			return "Installation cancelled. The signed app is still in your Library."
+			return "Cancelled. Nothing was installed or removed."
 		case .connectionUnavailable:
-			return "Zag Store couldn't reach the installation service after asking to turn Mobile Data off. The signed app is still in your Library."
+			return "Zag Store couldn't reach the installation service after asking to turn Mobile Data off. Nothing was installed or removed."
 		}
 	}
 }
@@ -107,6 +120,8 @@ final class ZagMobileDataInstallFlow {
 	struct Environment {
 		var network: () async -> ZagMobileDataNetwork
 		var endpoint: () async -> ZagMobileDataEndpoint
+		/// Whether the LocalDevVPN tunnel interface exists.
+		var tunnelPresent: () -> Bool
 		var shortcutReady: () -> Bool
 		var consent: () async -> ZagMobileDataConsent
 		var runShortcut: (ZagMobileDataToggle.Command) async -> ZagMobileDataToggle.Completion
@@ -151,13 +166,14 @@ final class ZagMobileDataInstallFlow {
 			return await installDirectly(install)
 		}
 		let endpoint = await env.endpoint()
-		guard network == .mobileDataOnly, endpoint == .refused else {
-			env.log("Network \(network), installer \(endpoint): installing directly")
+		let tunnel = env.tunnelPresent()
+		guard endpoint == .refused, tunnel else {
+			env.log("Decision: direct (network \(network), LocalDevVPN \(tunnel ? "present" : "absent"), installer \(endpoint))")
 			return await installDirectly(install)
 		}
+		env.log("Decision: Mobile Data Fix (network \(network), LocalDevVPN present, installer refused)")
 
-		// Mobile Data is on and blocking the installer. Any earlier record is
-		// resolved: Mobile Data is active again.
+		// The refusal shows Mobile Data is on, so any earlier record is resolved.
 		if let earlier = env.loadRecord() {
 			env.log("Earlier record \(earlier.jobID) resolved: Mobile Data is active")
 			env.saveRecord(nil)
@@ -236,9 +252,8 @@ final class ZagMobileDataInstallFlow {
 	/// Sends `on` at most once, and only when Mobile Data may be off because
 	/// of this job. Keeps the recovery record unless Mobile Data is seen on.
 	private func restore(installerReachable: Bool) async -> ZagMobileDataRestoration {
-		if !installerReachable, await env.network() == .mobileDataOnly {
-			// The installer is still blocked and Mobile Data is active, so
-			// `off` changed nothing.
+		if !installerReachable, await mobileDataActive() {
+			// The installer is still refused, so `off` changed nothing.
 			env.log("Mobile Data is still on; nothing to restore")
 			env.saveRecord(nil)
 			return .notChanged
@@ -254,7 +269,7 @@ final class ZagMobileDataInstallFlow {
 		env.log("on finished: \(on)")
 		for delay in Self.restoreDelays {
 			await env.sleep(delay)
-			if await env.network() == .mobileDataOnly {
+			if await mobileDataActive() {
 				env.log("Mobile Data is active again")
 				env.saveRecord(nil)
 				return .restored
@@ -262,5 +277,15 @@ final class ZagMobileDataInstallFlow {
 		}
 		env.log("Could not confirm Mobile Data is on; keeping the recovery record")
 		return .unconfirmed
+	}
+
+	/// Refused through the tunnel: Mobile Data is on. Answering: it is off.
+	/// No answer at all: fall back to the interface list.
+	private func mobileDataActive() async -> Bool {
+		switch await env.endpoint() {
+		case .refused: return env.tunnelPresent()
+		case .reachable: return false
+		case .unreachable: return await env.network() == .cellular
+		}
 	}
 }

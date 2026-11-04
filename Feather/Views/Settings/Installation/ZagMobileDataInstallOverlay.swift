@@ -11,7 +11,7 @@ struct ZagMobileDataInstallOverlay: ViewModifier {
 		content
 			.overlay(alignment: .top) {
 				VStack(spacing: 8) {
-					if coordinator.usingMobileDataFix, let text = Self.stageText(coordinator.stage) {
+					if coordinator.usingMobileDataFix, let text = Self.stageText(coordinator.stage, coordinator.consentOperation) {
 						ZagMobileDataStageCapsule(text: text)
 					}
 					if coordinator.recovery != nil, coordinator.stage == .idle {
@@ -27,7 +27,9 @@ struct ZagMobileDataInstallOverlay: ViewModifier {
 				Button("Allow Automatically") { coordinator.answerConsent(allow: true) }
 				Button("Not Now", role: .cancel) { coordinator.answerConsent(allow: false) }
 			} message: {
-				Text("Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes.")
+				Text(coordinator.consentOperation == .install
+					? "Zag Store needs to temporarily turn off Mobile Data to install this app. It will restore your connection when installation finishes."
+					: "Zag Store needs to temporarily turn off Mobile Data to remove this app. It will restore your connection when removal finishes.")
 			}
 			.onChange(of: scenePhase) { phase in
 				if phase == .active { coordinator.refreshRecovery() }
@@ -35,13 +37,13 @@ struct ZagMobileDataInstallOverlay: ViewModifier {
 			.onAppear { coordinator.refreshRecovery() }
 	}
 
-	static func stageText(_ stage: ZagMobileDataInstallStage) -> String? {
+	static func stageText(_ stage: ZagMobileDataInstallStage, _ operation: ZagMobileDataInstallCoordinator.Operation) -> String? {
 		switch stage {
 		case .idle: return nil
-		case .checkingConnection: return "Preparing installation"
+		case .checkingConnection: return operation == .install ? "Preparing installation" : "Preparing removal"
 		case .disablingMobileData: return "Temporarily turning off Mobile Data"
 		case .connecting: return "Connecting to installation service"
-		case .installing: return "Installing"
+		case .installing: return operation == .install ? "Installing" : "Removing app"
 		case .restoringMobileData: return "Restoring Mobile Data"
 		}
 	}

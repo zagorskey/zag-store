@@ -469,6 +469,7 @@ struct RPPairingDiagnosticsView: View {
 	private enum ReportState { case idle, preparing, copied }
 	@State private var traceState: ReportState = .idle
 	@ObservedObject private var mobileDataToggle = ZagMobileDataToggleController.shared
+	@ObservedObject private var mobileDataInstall = ZagMobileDataInstallCoordinator.shared
 	@State private var toggleLogCopied = false
 	@State private var traceSummary: [String] = []
 
@@ -619,9 +620,21 @@ struct RPPairingDiagnosticsView: View {
 						.textSelection(.enabled)
 				}
 
-				if !mobileDataToggle.events.isEmpty {
+				if !mobileDataInstall.decisionLog.isEmpty {
+					DisclosureGroup("Last Install or Removal Decision") {
+						ForEach(Array(mobileDataInstall.decisionLog.enumerated()), id: \.offset) { _, line in
+							Text(line)
+								.font(.footnote.monospaced())
+								.textSelection(.enabled)
+						}
+					}
+				}
+
+				if !mobileDataToggle.events.isEmpty || !mobileDataInstall.decisionLog.isEmpty {
 					Button {
 						UIPasteboard.general.string = mobileDataToggle.report()
+							+ "\n\nLast install or removal decision\n"
+							+ mobileDataInstall.decisionLog.joined(separator: "\n")
 						toggleLogCopied = true
 					} label: {
 						Label(toggleLogCopied ? "Log Copied" : "Copy Shortcut Log", systemImage: toggleLogCopied ? "checkmark" : "doc.on.doc")

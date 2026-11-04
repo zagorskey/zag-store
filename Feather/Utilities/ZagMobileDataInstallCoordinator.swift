@@ -22,6 +22,14 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 	@Published private(set) var recoveryMessage: String?
 	@Published private(set) var restoringFromBanner = false
 	@Published var consentRequested = false
+	/// What the pending consent is for, so the alert names the right action.
+	@Published private(set) var consentOperation: Operation = .install
+	/// The latest operation's decisions, for RPPairing Diagnostics.
+	@Published private(set) var decisionLog: [String] = []
+
+	enum Operation: String {
+		case install, uninstall
+	}
 	/// nil: ask the first time. true: approved. false: switched off in Settings.
 	@Published private(set) var automaticHandling: Bool?
 
@@ -42,11 +50,23 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 	/// Mobile Data Fix when Mobile Data is blocking it. Throws the
 	/// installer's error, or why installation was not started.
 	func install(jobID: String, _ install: () async throws -> Void) async throws {
-		let outcome = await flow.run(jobID: jobID, install: install)
+		try await perform(.install, jobID: jobID, install)
+	}
+
+	/// Shared by installation and uninstallation: one flow, one Shortcut
+	/// path, one recovery record. Throws the RPPairing operation's own
+	/// error, so a failed operation never reports success.
+	func perform(_ operation: Operation, jobID: String, _ body: () async throws -> Void) async throws {
+		consentOperation = operation
+		decisionLog = []
+		record("\(operation.rawValue) \(jobID.prefix(8)) started")
+		let outcome = await flow.run(jobID: jobID, install: body)
+		record("Result: \(outcome.installed ? "succeeded" : "failed") (\(outcome.notAttempted.map { "not attempted: \($0)" } ?? (outcome.installError == nil ? "operation succeeded" : "operation failed"))); Mobile Data \(outcome.restoration)")
 		usingMobileDataFix = false
 		if outcome.restoration == .unconfirmed {
+			let done = operation == .install ? "The app was installed" : "The app was removed"
 			recoveryMessage = outcome.installed
-				? "The app was installed, but Zag Store couldn't confirm Mobile Data is back on."
+				? "\(done), but Zag Store couldn't confirm Mobile Data is back on."
 				: "Zag Store couldn't confirm Mobile Data is back on."
 		}
 		if let reason = outcome.notAttempted { throw reason }
@@ -93,7 +113,7 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 			ZagLogger.shared.info("MobileDataFix", "Manual restore: on finished \(result)")
 			for delay in ZagMobileDataInstallFlow.restoreDelays {
 				try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-				if currentNetwork() == .mobileDataOnly {
+				if await mobileDataActive() {
 					saveRecord(nil)
 					return
 				}
@@ -109,14 +129,25 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 		saveRecord(nil)
 	}
 
-	/// Clears the record when the system shows Mobile Data active again.
+	/// Clears the record when the installer port shows Mobile Data on again
+	/// (refused through LocalDevVPN), or, without an answer, the system
+	/// lists Mobile Data.
 	func refreshRecovery() {
 		guard recovery != nil, !isBusy, !restoringFromBanner else { return }
 		ZagLocalVPNMonitor.shared.startIfNeeded()
-		if currentNetwork() == .mobileDataOnly {
+		Task { @MainActor in
+			guard recovery != nil, !isBusy, !restoringFromBanner, await mobileDataActive() else { return }
 			ZagLogger.shared.info("MobileDataFix", "Mobile Data is active again; recovery resolved")
 			recoveryMessage = nil
 			saveRecord(nil)
+		}
+	}
+
+	private func mobileDataActive() async -> Bool {
+		switch await probeInstaller() {
+		case .refused: return Self.tunnelPresent()
+		case .reachable: return false
+		case .unreachable: return currentNetwork() == .cellular
 		}
 	}
 
@@ -126,15 +157,17 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 		ZagMobileDataInstallFlow.Environment(
 			network: { [unowned self] in
 				ZagLocalVPNMonitor.shared.startIfNeeded()
-				return self.currentNetwork()
+				let interfaces = ZagLocalVPNMonitor.shared.physicalNetworks
+				let network = ZagMobileDataNetwork.classify(interfaces)
+				self.record("Interfaces [\(interfaces.joined(separator: ", "))] → \(network)")
+				return network
 			},
-			endpoint: {
-				switch await ZagEndpointProbe.connect(timeout: 2) {
-				case .accepted: return .reachable
-				case .failed(.refused): return .refused
-				case .failed: return .unreachable
-				}
+			endpoint: { [unowned self] in
+				let result = await self.probeInstaller()
+				self.record("Installer \(ZagDeviceLink.peerAddress):\(ZagDeviceLink.rsdPort) → \(result)")
+				return result
 			},
+			tunnelPresent: { Self.tunnelPresent() },
 			shortcutReady: {
 				ZagMobileDataToggle.canRunAutomatically(ZagMobileDataToggleController.shared.record)
 					&& !ZagMobileDataToggleController.shared.isBusy
@@ -151,15 +184,30 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 				if stage == .disablingMobileData { self.usingMobileDataFix = true }
 				if stage == .idle { self.usingMobileDataFix = false }
 			},
-			log: { ZagLogger.shared.info("MobileDataFix", $0) }
+			log: { [unowned self] in self.record($0) }
 		)
 	}
 
+	private func record(_ line: String) {
+		ZagLogger.shared.info("MobileDataFix", line)
+		decisionLog.append(line)
+		if decisionLog.count > 40 { decisionLog.removeFirst(decisionLog.count - 40) }
+	}
+
+	private func probeInstaller() async -> ZagMobileDataEndpoint {
+		switch await ZagEndpointProbe.connect(timeout: 2) {
+		case .accepted: return .reachable
+		case .failed(.refused): return .refused
+		case .failed: return .unreachable
+		}
+	}
+
+	private static func tunnelPresent() -> Bool {
+		ZagTunnelInterface.containsLocalDevTunnel(ZagTunnelInterface.current())
+	}
+
 	private func currentNetwork() -> ZagMobileDataNetwork {
-		let networks = ZagLocalVPNMonitor.shared.physicalNetworks
-		if networks.contains("Wi-Fi") { return .wifi }
-		if networks.contains("Cellular") { return networks.count == 1 ? .mobileDataOnly : .other }
-		return networks.isEmpty ? .none : .other
+		ZagMobileDataNetwork.classify(ZagLocalVPNMonitor.shared.physicalNetworks)
 	}
 
 	private func saveRecord(_ record: ZagMobileDataRecoveryRecord?) {
