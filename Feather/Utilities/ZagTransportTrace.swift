@@ -21,6 +21,27 @@ struct ZagTraceStep: Equatable {
 	let milliseconds: Int
 }
 
+/// What the peer does with a connection on which nothing is sent.
+enum ZagIdleOutcome: Equatable {
+	/// Still open when the wait ended: the service is waiting for a request.
+	case stillOpen(waitedMilliseconds: Int)
+	/// The peer closed the connection (end of stream) without any request.
+	case closedByPeer(milliseconds: Int)
+	/// The peer reset the connection without any request.
+	case reset(milliseconds: Int)
+	/// The peer sent bytes first (count only).
+	case dataReceived(bytes: Int, milliseconds: Int)
+	/// The connection was never established.
+	case notConnected(ZagDeviceProbeFailure)
+
+	var rejectsWithoutRequest: Bool {
+		switch self {
+		case .closedByPeer, .reset: return true
+		default: return false
+		}
+	}
+}
+
 struct ZagTransportTraceResult: Equatable {
 	var systemNetworks: [String] = []
 	var systemPathExpensive: Bool?
@@ -40,6 +61,9 @@ struct ZagTransportTraceResult: Equatable {
 	var remotePairingViaTunnel: ZagEndpointProbeResult?
 	var remotePairingDirect: ZagEndpointProbeResult?
 	var remotePairingLoopback: ZagEndpointProbeResult?
+	/// Idle connections to the RemotePairing port: nothing is sent.
+	var idleViaTunnel: ZagIdleOutcome?
+	var idleLoopback: ZagIdleOutcome?
 	var steps: [ZagTraceStep] = []
 	var skipped: String?
 }
@@ -49,7 +73,8 @@ enum ZagTransportTrace {
 		peer: String = ZagDeviceLink.peerAddress,
 		servicePort: UInt16 = ZagDeviceLink.rsdPort,
 		tunnelAddress overrideAddress: String? = nil,
-		timeout: TimeInterval = 2
+		timeout: TimeInterval = 2,
+		idleWait: TimeInterval = 3
 	) async -> ZagTransportTraceResult {
 		var result = ZagTransportTraceResult()
 		let clock = ProcessInfo.processInfo.systemUptime
@@ -93,6 +118,11 @@ enum ZagTransportTrace {
 		}
 		result.remotePairingLoopback = await ZagEndpointProbe.connect(host: "127.0.0.1", port: servicePort, timeout: timeout)
 		step("RemotePairing 127.0.0.1:\(servicePort)", describe(result.remotePairingLoopback))
+
+		result.idleViaTunnel = await idle(host: peer, port: servicePort, connectTimeout: timeout, wait: idleWait)
+		step("Idle \(peer):\(servicePort), nothing sent", describe(result.idleViaTunnel))
+		result.idleLoopback = await idle(host: "127.0.0.1", port: servicePort, connectTimeout: timeout, wait: idleWait)
+		step("Idle 127.0.0.1:\(servicePort), nothing sent", describe(result.idleLoopback))
 		return result
 	}
 
@@ -155,6 +185,19 @@ enum ZagTransportTrace {
 		if case .accepted? = r.remotePairingLoopback {
 			out.append("Observed: the RemotePairing port accepts on 127.0.0.1, so the listener is bound to all addresses.")
 		}
+
+		switch (r.idleLoopback, r.idleViaTunnel) {
+		case (let loopback?, .stillOpen?) where loopback.rejectsWithoutRequest:
+			out.append("Observed: with nothing sent, the service \(describe(loopback)) on loopback, but kept the tunnel connection open and waited for a request. The loopback rejection does not depend on what Zag Store sends; it depends on how the connection arrives (source address or interface).")
+		case (let loopback?, _) where loopback.rejectsWithoutRequest:
+			out.append("Observed: with nothing sent, the service \(describe(loopback)) on loopback. The rejection does not depend on request content.")
+		case (.stillOpen?, .stillOpen?):
+			out.append("Observed: the service waits for a request on both loopback and the tunnel. A loopback rejection therefore happens after the request is read; see the health check's wire log.")
+		case (.stillOpen?, _):
+			out.append("Observed: the service keeps an idle loopback connection open and waits for a request.")
+		default:
+			break
+		}
 		return out
 	}
 
@@ -173,6 +216,17 @@ enum ZagTransportTrace {
 		lines.append("Findings:")
 		for finding in findings(r) { lines.append("- \(finding)") }
 		return ZagDiagnosticReport.redact(lines.joined(separator: "\n"))
+	}
+
+	static func describe(_ outcome: ZagIdleOutcome?) -> String {
+		guard let outcome else { return "not run" }
+		switch outcome {
+		case .stillOpen(let ms): return "kept open for \(ms) ms"
+		case .closedByPeer(let ms): return "closed the connection after \(ms) ms"
+		case .reset(let ms): return "reset the connection after \(ms) ms"
+		case .dataReceived(let bytes, let ms): return "sent \(bytes) bytes first after \(ms) ms"
+		case .notConnected(let failure): return "not connected (\(failure.summary))"
+		}
 	}
 
 	static func describe(_ result: ZagEndpointProbeResult?) -> String {
@@ -309,6 +363,62 @@ enum ZagTransportTrace {
 		return await ZagEndpointProbe.connect(host: peer, port: port, timeout: timeout)
 	}
 
+	/// Connects, sends nothing, and reports what the peer does within `wait`.
+	/// The connection is always cancelled at the end.
+	static func idle(host: String, port: UInt16, connectTimeout: TimeInterval, wait: TimeInterval) async -> ZagIdleOutcome {
+		let connection = NWConnection(
+			host: NWEndpoint.Host(host),
+			port: NWEndpoint.Port(rawValue: port) ?? 49152,
+			using: .tcp
+		)
+		let once = Once<ZagIdleOutcome>()
+		let start = ProcessInfo.processInfo.systemUptime
+		func elapsed() -> Int { Int((ProcessInfo.processInfo.systemUptime - start) * 1000) }
+		func classify(_ error: NWError) -> ZagIdleOutcome {
+			if case .posix(let code) = error {
+				switch code {
+				case .ECONNRESET, .ECONNABORTED, .EPIPE: return .reset(milliseconds: elapsed())
+				case .ECONNREFUSED: return .notConnected(.refused)
+				default: break
+				}
+			}
+			return .notConnected(.failed(error.debugDescription))
+		}
+		let outcome: ZagIdleOutcome = await withCheckedContinuation { continuation in
+			once.set { continuation.resume(returning: $0) }
+			let connected = Flag()
+			connection.stateUpdateHandler = { state in
+				switch state {
+				case .ready:
+					connected.set()
+					queue.asyncAfter(deadline: .now() + wait) { once.fire(.stillOpen(waitedMilliseconds: elapsed())) }
+					connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, isComplete, error in
+						if let data, !data.isEmpty {
+							once.fire(.dataReceived(bytes: data.count, milliseconds: elapsed()))
+						} else if let error {
+							once.fire(classify(error))
+						} else if isComplete {
+							once.fire(.closedByPeer(milliseconds: elapsed()))
+						}
+					}
+				case .waiting(let error):
+					if case .posix(.ECONNREFUSED) = error { once.fire(.notConnected(.refused)) }
+				case .failed(let error):
+					once.fire(connected.value ? classify(error) : .notConnected(.failed(error.debugDescription)))
+				default:
+					break
+				}
+			}
+			connection.start(queue: queue)
+			queue.asyncAfter(deadline: .now() + connectTimeout) {
+				if !connected.value { once.fire(.notConnected(.timedOut)) }
+			}
+		}
+		connection.stateUpdateHandler = nil
+		connection.cancel()
+		return outcome
+	}
+
 	private static func typeName(_ type: NWInterface.InterfaceType) -> String {
 		switch type {
 		case .wifi: return "Wi-Fi"
@@ -321,6 +431,14 @@ enum ZagTransportTrace {
 	}
 
 	private static let queue = DispatchQueue(label: "app.zagstore.transport-trace")
+
+	/// A thread-safe one-way flag.
+	private final class Flag: @unchecked Sendable {
+		private let lock = NSLock()
+		private var isSet = false
+		func set() { lock.lock(); isSet = true; lock.unlock() }
+		var value: Bool { lock.lock(); defer { lock.unlock() }; return isSet }
+	}
 
 	/// Delivers a value to one continuation exactly once.
 	private final class Once<Value>: @unchecked Sendable {

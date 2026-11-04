@@ -82,6 +82,11 @@ check "rust: the health check is the diagnostic caller" bash -c "sed -n '/^async
 check "rust: handshake completion maps to callback 114" bash -c "sed -n '/^async fn run_gate2_probe/,/^}/p' '$RUST' | grep -q '6 => 114'"
 check "swift: callback 114 is recorded as a stage" grep -q 'case 114: stage = "Handshake completed; Pair-Verify started"' "$CORE"
 check "rust: error detail never prints debug payloads" absent '{error:?}' "$(sed -n '/^fn error_detail/,/^}/p' "$RUST")"
+control=$(grep -A4 'let control: Box<dyn idevice::ReadWrite> = if diagnostic {' <<< "$session")
+check "rust: only diagnostic sessions trace the control socket" grep -q 'Box::new(TracedStream::new(stream, wire.clone()))' <<< "$(sed -n 2p <<< "$control")"
+check "rust: production sessions keep the plain socket" grep -q 'Box::new(stream)' <<< "$(sed -n 4p <<< "$control")"
+check "rust: the wire log never formats buffer contents" bash -c "! sed -n '/^struct TracedStream/,/^fn wire_summary/p' '$RUST' | grep -qE 'from_utf8|\{data|\{buf|filled\(\)\[|:\?\}\", data|hex'"
+check "swift: idle checks send nothing" bash -c "! sed -n '/static func idle(/,/^	}/p' '$TRACE' | grep -q 'send('"
 check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b21b6610452fb1771880b4eae45"' "$ROOT/RPPairingCore/rust-core/Cargo.toml"
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"

@@ -427,7 +427,9 @@ import Network
 		if case .accepted? = live.tunnelLoopbackNoCellular { expect(true, "trace: a no-cellular listener is reachable off cellular") }
 		else { expect(false, "trace: no-cellular listener off cellular (got \(String(describing: live.tunnelLoopbackNoCellular)))") }
 		expect(live.remotePairingViaTunnel == .failed(.refused), "trace: a closed service port is refused")
-		expect(live.steps.count == 9, "trace: every stage is timestamped (got \(live.steps.count))")
+		expect(live.steps.count == 11, "trace: every stage is timestamped (got \(live.steps.count))")
+		if case .notConnected(.refused)? = live.idleLoopback { expect(true, "idle: a closed port is reported as not connected") }
+		else { expect(false, "idle: closed port (got \(String(describing: live.idleLoopback)))") }
 		let liveFindings = ZagTransportTrace.findings(live)
 		expect(liveFindings.contains { $0.contains("own TCP stack") }, "trace: refusal with a working tunnel is attributed to the local stack")
 		expect(!liveFindings.contains { $0.contains("Hypothesis") }, "trace: no cellular hypothesis without cellular evidence")
@@ -548,6 +550,35 @@ import Network
 		expect(report.contains("Total duration: 86 ms"), "report: total duration")
 	}
 
+	static func idleTests() async throws {
+		// A peer that waits for a request keeps the connection open.
+		let waiting = try FakeServer(mode: .silent)
+		let waitingPort = await waiting.start()
+		let open = await ZagTransportTrace.idle(host: "127.0.0.1", port: waitingPort, connectTimeout: 1, wait: 0.5)
+		if case .stillOpen = open { expect(true, "idle: a waiting service is kept open") }
+		else { expect(false, "idle: waiting service (got \(open))") }
+		expect(waiting.requests.isEmpty, "idle: nothing is sent")
+		waiting.stop()
+
+		// A peer that closes without any request is reported as rejecting.
+		let closing = try FakeServer(mode: .acceptThenClose)
+		let closingPort = await closing.start()
+		let closed = await ZagTransportTrace.idle(host: "127.0.0.1", port: closingPort, connectTimeout: 1, wait: 1)
+		expect(closed.rejectsWithoutRequest, "idle: a peer closing without a request is detected (got \(closed))")
+		closing.stop()
+
+		var source = ZagTransportTraceResult()
+		source.idleLoopback = .reset(milliseconds: 85)
+		source.idleViaTunnel = .stillOpen(waitedMilliseconds: 3000)
+		expect(ZagTransportTrace.findings(source).contains { $0.contains("does not depend on what Zag Store sends") },
+			"idle: loopback reset with an open tunnel points at how the connection arrives")
+		var content = ZagTransportTraceResult()
+		content.idleLoopback = .stillOpen(waitedMilliseconds: 3000)
+		content.idleViaTunnel = .stillOpen(waitedMilliseconds: 3000)
+		expect(ZagTransportTrace.findings(content).contains { $0.contains("after the request is read") },
+			"idle: both open points at a check after the request")
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
@@ -559,6 +590,7 @@ import Network
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }
 		do { try await traceTests() } catch { expect(false, "trace tests threw \(error)") }
+		do { try await idleTests() } catch { expect(false, "idle tests threw \(error)") }
 		if failures > 0 {
 			print("\(failures) device link test(s) failed")
 			exit(1)
