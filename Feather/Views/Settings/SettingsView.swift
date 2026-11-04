@@ -75,7 +75,6 @@ extension View {
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
-	case pages
 	case certificates
 	case features
 	case diagnostics
@@ -89,8 +88,7 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .display: return "Display"
-		case .pages: return "Pages"
+		case .display: return "Zag Store"
 		case .certificates: return "Certificates"
 		case .features: return "Features"
 		case .diagnostics: return "Diagnostics"
@@ -108,7 +106,6 @@ private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.certificates,
 	.display,
 	.features,
-	.pages,
 	.misc,
 	.refreshingApps,
 	.health,
@@ -548,9 +545,7 @@ extension SettingsView {
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
-                    return _settingsSearchMatches("Display Appearance App Icon")
-                case .pages:
-                    return _settingsSearchMatches("Pages Customise Dock Reset to Default Animated Splash Screen Splash Sound Mute Unmute Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Pages Remember Last Page Default Start Page")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -588,60 +583,31 @@ extension SettingsView {
 	private func _settingsSection(_ section: ZagSettingsSection) -> some View {
 		switch section {
 		case .display:
-			Section {
-				NavigationLink(destination: AppearanceView().zagSettingsDestinationAvatar()) {
-					Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
-				}
-				NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
-					Label(.localized("App Icon"), systemImage: "app.badge")
-				}
-			} header: {
-				Text("Display")
-			}
-
-		case .pages:
-			Section {
-                NavigationLink(destination: ZagDockCustomizationView().zagSettingsDestinationAvatar()) {
-                    Label { Text("Customise Dock") } icon: { Image(systemName: "square.grid.3x2").foregroundStyle(ZagWideGamutTint.color(hex: userTintColor)) }
+            Section {
+                NavigationLink(destination: AppearanceView().zagSettingsDestinationAvatar()) {
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
                 }
-				Toggle(isOn: $_animatedSplashEnabled) {
-					Label("Animated Splash Screen", systemImage: "sparkles.rectangle.stack")
-				}
-				Toggle(isOn: $_splashSoundEnabled) {
-					Label("Splash Sound", systemImage: _splashSoundEnabled ? "speaker.wave.2" : "speaker.slash")
-				}
-				.disabled(!_animatedSplashEnabled)
-				Toggle(isOn: $_rememberLastPage) {
-					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
-				}
-
-				Picker(selection: $_defaultStartPage) {
-					ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
-						Text(tab.title).tag(tab.rawValue)
-					}
-				} label: {
-					Label("Default Start Page", systemImage: "rectangle.portrait.and.arrow.right")
-				}
-				.disabled(_rememberLastPage)
-                .onChange(of: _dockTabs) { _ in
-                    if !ZagDockConfiguration.tabs.contains(where: { $0.rawValue == _defaultStartPage }) {
-                        _defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+                NavigationLink(destination: ZagDockCustomizationView().zagSettingsDestinationAvatar()) {
+                    Label {
+                        Text("Bottom Dock")
+                    } icon: {
+                        Image(systemName: "dock.rectangle")
+                            .frame(width: 25, height: 25)
+                            .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                     }
                 }
-			}
-			header: {
-				Text("Pages")
-			}
-			footer: {
-				Text(
-					(
-						_rememberLastPage
-							? "Zag Store will reopen on the last main page you used."
-							: "Choose which main page Zag Store opens on."
-					)
-					+ " The cinematic splash plays only on cold launches. Tap anywhere during video playback to skip. Sound can be muted separately; the iPhone silent switch is respected."
-				)
-			}
+                NavigationLink(destination: ZagSplashScreenSettingsView().zagSettingsDestinationAvatar()) {
+                    Label("Splash Screen", systemImage: "sparkles.tv")
+                }
+                NavigationLink(destination: ZagPagesSettingsView().zagSettingsDestinationAvatar()) {
+                    Label("Pages", systemImage: "square.on.square")
+                }
+                NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
+                    Label("App Icon", systemImage: "app.badge")
+                }
+            } header: {
+                Text("Zag Store")
+            }
 
 		case .certificates:
 			Section {
@@ -2841,5 +2807,57 @@ private struct ZagContributionProviderIcon: View {
                     .strokeBorder(.primary.opacity(0.16), lineWidth: 0.7)
             }
             .accessibilityHidden(true)
+    }
+}
+
+
+// MARK: - Dedicated startup preferences
+private struct ZagSplashScreenSettingsView: View {
+    @AppStorage("ZagStore.animatedSplashEnabled") private var animatedSplashEnabled = true
+    @AppStorage("ZagStore.splashSoundEnabled") private var splashSoundEnabled = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Animated Splash Screen", isOn: $animatedSplashEnabled)
+                Toggle("Splash Sound", isOn: $splashSoundEnabled)
+                    .disabled(!animatedSplashEnabled)
+            } footer: {
+                Text("The cinematic splash plays on cold launches. Tap during playback to skip. Sound respects the iPhone silent switch.")
+            }
+        }
+        .navigationTitle("Splash Screen")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ZagPagesSettingsView: View {
+    @AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+    @AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var defaultStartPage = TabEnum.sources.rawValue
+    @AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Remember Last Page", isOn: $rememberLastPage)
+                Picker("Default Start Page", selection: $defaultStartPage) {
+                    ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
+                        Text(tab.title).tag(tab.rawValue)
+                    }
+                }
+                .disabled(rememberLastPage)
+            } footer: {
+                Text(rememberLastPage
+                    ? "Zag Store will reopen on the last main page you used."
+                    : "Choose which main page Zag Store opens on.")
+            }
+        }
+        .navigationTitle("Pages")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: dockTabs) { _ in
+            if !ZagDockConfiguration.tabs.contains(where: { $0.rawValue == defaultStartPage }) {
+                defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+            }
+        }
     }
 }
