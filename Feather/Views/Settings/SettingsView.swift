@@ -562,7 +562,7 @@ extension SettingsView {
                 case .refreshingApps:
                     return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
                 case .aboutUs:
-                    return _settingsSearchMatches("About About Us Zag Store Submit Feedback Bug Report")
+                    return _settingsSearchMatches("About About Us Zag Store GitHub Feedback Bug Report")
                 case .misc:
                     return _settingsSearchMatches("Browse Documents Archives Certificates Files")
                 case .reset:
@@ -649,7 +649,7 @@ extension SettingsView {
 					Label {
                         Text(.localized("Certificates"))
                     } icon: {
-                        Image(systemName: _certificates.isEmpty ? "checkmark.seal" : "checkmark.seal.fill")
+                        Image(systemName: _certificates.isEmpty ? "checkmark.shield" : "checkmark.shield.fill")
                             .foregroundStyle(_certificates.isEmpty ? Color.primary : Color(uiColor: UIColor(displayP3Red: 0.12, green: 0.83, blue: 0.34, alpha: 1)))
                     }
 				}
@@ -893,13 +893,24 @@ extension SettingsView {
 				Label {
 					Text("Zag Store")
 				} icon: {
-					FRAppIconView(size: 23)
+					FRAppIconView(size: 25)
 				}
 			}
 
+            Button {
+                UIApplication.open("https://github.com/zagorskey/zag-store")
+            } label: {
+                Label {
+                    Text("GitHub")
+                } icon: {
+                    ZagGitHubToolbarGlyph()
+                        .frame(width: 25, height: 25)
+                }
+            }
 
-			Button(.localized("Submit Feedback"), systemImage: "safari") {
-				let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
+            Button {
+
+                let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
 					UIApplication.open(_makeGitHubIssueURL(url: _githubUrl))
 				}
 				
@@ -912,9 +923,12 @@ extension SettingsView {
 					message: nil,
 					actions: [bugAction, chooseAction]
 				)
-			}
-		} header: {
-			Text("About")
+            } label: {
+                Label("Feedback", systemImage: "text.bubble")
+                    .labelStyle(.titleAndIcon)
+            }
+        } header: {
+            Text("About")
 		}
 	}
     
@@ -2486,7 +2500,7 @@ private struct ZagSupportSettingsRow: View {
 	}
 
 	private var heart: some View {
-		Image(systemName: "heart.fill")
+		Image(systemName: "sparkles.rectangle.stack.fill")
 			.font(.system(size: iconSize * 0.42, weight: .semibold))
 			.foregroundStyle(.white)
 			.shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
