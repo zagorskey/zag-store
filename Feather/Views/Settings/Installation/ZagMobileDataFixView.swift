@@ -73,10 +73,20 @@ struct ZagMobileDataFixView: View {
 					ZagMobileDataFixStatusLabel(status: status)
 				}
 				if case .verified(_, let at) = status {
-					HStack {
-						Text("Last Verified")
-						Spacer()
-						Text(at, style: .relative).foregroundStyle(.secondary)
+					// Absolute date and time in the device's locale, calendar and
+					// time zone. Stacks when it doesn't fit on one line.
+					let verified = at.formatted(date: .abbreviated, time: .shortened)
+					ViewThatFits(in: .horizontal) {
+						HStack {
+							Text("Last Verified")
+							Spacer()
+							Text(verified).foregroundStyle(.secondary)
+						}
+						.lineLimit(1)
+						VStack(alignment: .leading, spacing: 2) {
+							Text("Last Verified")
+							Text(verified).foregroundStyle(.secondary)
+						}
 					}
 				}
 				if let detail = Self.detail(for: status) {
