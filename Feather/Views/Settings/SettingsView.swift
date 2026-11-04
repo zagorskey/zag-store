@@ -314,6 +314,14 @@ struct SettingsView: View {
 						}
 						.accessibilityLabel("Back")
 					}
+					if !embeddedInAccountNavigation {
+						Button {
+							UIApplication.open("https://github.com/zagorskey/zag-store")
+						} label: {
+							ZagGitHubToolbarGlyph()
+						}
+						.accessibilityLabel("GitHub Repository")
+					}
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -340,21 +348,6 @@ struct SettingsView: View {
 						}
 						.accessibilityLabel("Settings Options")
 
-						if !embeddedInAccountNavigation {
-						Button {
-							if _advancedSettingsUnlocked {
-								withAnimation(.snappy) {
-									_advancedSettingsUnlocked = false
-								}
-								UIImpactFeedbackGenerator(style: .light).impactOccurred()
-							} else {
-								_presentAdvancedSettingsWarning()
-							}
-						} label: {
-							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
-						}
-						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
-						}
 					}
 				}
 
@@ -377,11 +370,16 @@ struct SettingsView: View {
 						.accessibilityLabel("Close")
 					} else {
 						Button {
-							UIApplication.open("https://github.com/zagorskey/zag-store")
+							if _advancedSettingsUnlocked {
+								withAnimation(.snappy) { _advancedSettingsUnlocked = false }
+								UIImpactFeedbackGenerator(style: .light).impactOccurred()
+							} else {
+								_presentAdvancedSettingsWarning()
+							}
 						} label: {
-							Image(systemName: "chevron.left.forwardslash.chevron.right")
+							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
 						}
-						.accessibilityLabel("GitHub Repository")
+						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
 						ZagProfileToolbarButton()
 							.tint(.primary)
 							.padding(.trailing, -2)
@@ -428,6 +426,40 @@ struct SettingsView: View {
 			)
 		}
 	}
+}
+
+// Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
+private struct ZagGitHubToolbarGlyph: View {
+    var body: some View {
+        GeometryReader { geometry in
+            let k = min(geometry.size.width, geometry.size.height) / 24
+            Path { path in
+                func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
+                path.move(to: pt(12, 2))
+                path.addCurve(to: pt(5, 4.5), control1: pt(9, 2), control2: pt(6.8, 3))
+                path.addLine(to: pt(3.3, 3.6))
+                path.addLine(to: pt(3.6, 7.2))
+                path.addCurve(to: pt(5, 18), control1: pt(1.6, 10), control2: pt(2.4, 15.5))
+                path.addCurve(to: pt(9.2, 20.3), control1: pt(6, 19.2), control2: pt(7.5, 20))
+                path.addLine(to: pt(9.2, 17.2))
+                path.addCurve(to: pt(7, 15), control1: pt(7.7, 17), control2: pt(7, 16.2))
+                path.addCurve(to: pt(9.4, 13.8), control1: pt(7, 14.2), control2: pt(8, 13.8))
+                path.addLine(to: pt(14.6, 13.8))
+                path.addCurve(to: pt(17, 15), control1: pt(16, 13.8), control2: pt(17, 14.2))
+                path.addCurve(to: pt(14.8, 17.2), control1: pt(17, 16.2), control2: pt(16.3, 17))
+                path.addLine(to: pt(14.8, 20.3))
+                path.addCurve(to: pt(19, 18), control1: pt(16.5, 20), control2: pt(18, 19.2))
+                path.addCurve(to: pt(20.4, 7.2), control1: pt(21.6, 15.5), control2: pt(22.4, 10))
+                path.addLine(to: pt(20.7, 3.6))
+                path.addLine(to: pt(19, 4.5))
+                path.addCurve(to: pt(12, 2), control1: pt(17.2, 3), control2: pt(15, 2))
+                path.closeSubpath()
+            }
+            .fill(.primary)
+        }
+        .frame(width: 23, height: 23)
+        .accessibilityHidden(true)
+    }
 }
 
 // MARK: - View extension
