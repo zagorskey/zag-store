@@ -302,9 +302,64 @@ pub unsafe extern "C" fn zag_gate2_probe(
     true
 }
 
+/// How a device session authenticates.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SessionMode {
+    /// Installs, inventory and self-update: `RemotePairingClient::connect`,
+    /// then the verified credentials are written back. Unchanged.
+    Production,
+    /// Health check only: the handshake and pair-verify run as separate,
+    /// separately reported steps; no pair-setup fallback; pair-verify uses an
+    /// in-memory copy of the credentials, and nothing is ever written back.
+    Diagnostic,
+}
+
+/// An error with its source chain and, for socket errors, the I/O error kind
+/// and OS error number. Contains no payloads or key material.
+fn error_detail(error: &idevice::IdeviceError) -> String {
+    let mut text = format!("{error} [idevice code {}", error.code());
+    if let idevice::IdeviceError::Socket(io) = error {
+        text.push_str(&format!("; io kind {:?}", io.kind()));
+        match io.raw_os_error() {
+            Some(code) => text.push_str(&format!("; os error {code}")),
+            None => text.push_str("; no os error"),
+        }
+    }
+    text.push(']');
+    let mut source = std::error::Error::source(error);
+    while let Some(inner) = source {
+        text.push_str(&format!(" <- {inner}"));
+        source = inner.source();
+    }
+    text
+}
+
+/// The same for a plain I/O error (TCP connect).
+fn io_error_detail(error: &std::io::Error) -> String {
+    match error.raw_os_error() {
+        Some(code) => format!("{error} [io kind {:?}; os error {code}]", error.kind()),
+        None => format!("{error} [io kind {:?}; no os error]", error.kind()),
+    }
+}
+
 async fn with_zag_device_session<F, Fut, T, P>(
     device_ip: &str,
     pairing_path: &PathBuf,
+    progress: P,
+    operation: F,
+) -> Result<T, String>
+where
+    P: FnMut(u8, String),
+    F: FnOnce(idevice::tcp::handle::AdapterHandle, RsdHandshake) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    with_zag_device_session_mode(device_ip, pairing_path, SessionMode::Production, progress, operation).await
+}
+
+async fn with_zag_device_session_mode<F, Fut, T, P>(
+    device_ip: &str,
+    pairing_path: &PathBuf,
+    mode: SessionMode,
     mut progress: P,
     operation: F,
 ) -> Result<T, String>
@@ -313,6 +368,7 @@ where
     F: FnOnce(idevice::tcp::handle::AdapterHandle, RsdHandshake) -> Fut,
     Fut: std::future::Future<Output = Result<T, String>>,
 {
+    let diagnostic = mode == SessionMode::Diagnostic;
     let ip: IpAddr = device_ip
         .parse()
         .map_err(|error| format!("Invalid LocalDevVPN device address {device_ip}: {error}"))?;
@@ -324,29 +380,66 @@ where
     let stream = timeout(Duration::from_secs(8), TcpStream::connect((ip, 49152)))
         .await
         .map_err(|_| format!("Timed out reaching RPPairing at {device_ip}:49152"))?
-        .map_err(|error| format!("Unable to reach RPPairing at {device_ip}:49152: {error}"))?;
+        .map_err(|error| {
+            if diagnostic {
+                format!("Unable to reach RPPairing at {device_ip}:49152: {}", io_error_detail(&error))
+            } else {
+                format!("Unable to reach RPPairing at {device_ip}:49152: {error}")
+            }
+        })?;
 
-    progress(1, format!("RPPairing reachable at {device_ip}:49152"));
+    if diagnostic {
+        // Socket addresses only: the local address and port the kernel chose.
+        let local = stream.local_addr().map(|a| a.to_string()).unwrap_or_else(|_| "unknown".into());
+        let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_else(|_| "unknown".into());
+        progress(1, format!("RPPairing reachable at {device_ip}:49152 (local {local}, peer {peer})"));
+    } else {
+        progress(1, format!("RPPairing reachable at {device_ip}:49152"));
+    }
     progress(2, "Verifying saved RPPairing credentials".to_string());
 
     let conn = RpPairingSocket::new(stream);
     let mut rpc = RemotePairingClient::new(conn, "Zag Store");
 
-    rpc.connect(&mut pairing_file, || async { "000000".to_string() })
-        .await
-        .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
+    match mode {
+        SessionMode::Production => {
+            rpc.connect(&mut pairing_file, || async { "000000".to_string() })
+                .await
+                .map_err(|error| format!("RPPairing pair-verify failed: {error}"))?;
 
-    pairing_file
-        .write_to_file(pairing_path)
-        .await
-        .map_err(|error| format!("Unable to persist verified RPPairing credentials: {error}"))?;
+            pairing_file
+                .write_to_file(pairing_path)
+                .await
+                .map_err(|error| format!("Unable to persist verified RPPairing credentials: {error}"))?;
+        }
+        SessionMode::Diagnostic => {
+            rpc.attempt_pair_verify()
+                .await
+                .map_err(|error| format!("RPPairing handshake failed: {}", error_detail(&error)))?;
+            progress(6, "RPPairing handshake completed".to_string());
+
+            // validate_pairing only reads the credentials but takes them
+            // mutably; it gets a copy so the stored file can never change.
+            let mut verify_copy = pairing_file.clone();
+            rpc.validate_pairing(&mut verify_copy)
+                .await
+                .map_err(|error| format!("RPPairing pair-verify failed: {}", error_detail(&error)))?;
+            drop(verify_copy);
+        }
+    }
 
     progress(3, "Saved RPPairing credentials verified".to_string());
 
     let tunnel_port = rpc
         .create_tcp_listener()
         .await
-        .map_err(|error| format!("RPPairing createListener failed: {error}"))?;
+        .map_err(|error| {
+            if diagnostic {
+                format!("RPPairing createListener failed: {}", error_detail(&error))
+            } else {
+                format!("RPPairing createListener failed: {error}")
+            }
+        })?;
 
     let tunnel_stream = timeout(
         Duration::from_secs(8),
@@ -355,12 +448,22 @@ where
     .await
     .map_err(|_| format!("Timed out reaching RPPairing tunnel at {device_ip}:{tunnel_port}"))?
     .map_err(|error| {
-        format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}")
+        if diagnostic {
+            format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {}", io_error_detail(&error))
+        } else {
+            format!("Unable to reach RPPairing tunnel at {device_ip}:{tunnel_port}: {error}")
+        }
     })?;
 
     let tunnel = connect_tls_psk_tunnel_native(tunnel_stream, rpc.encryption_key())
         .await
-        .map_err(|error| format!("TLS-PSK CDTunnel failed: {error}"))?;
+        .map_err(|error| {
+            if diagnostic {
+                format!("TLS-PSK CDTunnel failed: {}", error_detail(&error))
+            } else {
+                format!("TLS-PSK CDTunnel failed: {error}")
+            }
+        })?;
 
     let client_ip: IpAddr = tunnel
         .info
@@ -393,7 +496,13 @@ where
 
     let handshake = RsdHandshake::new(rsd_stream)
         .await
-        .map_err(|error| format!("RSD handshake failed: {error}"))?;
+        .map_err(|error| {
+            if diagnostic {
+                format!("RSD handshake failed: {}", error_detail(&error))
+            } else {
+                format!("RSD handshake failed: {error}")
+            }
+        })?;
 
     progress(
         5,
@@ -408,9 +517,10 @@ async fn run_gate2_probe(
     pairing_path: PathBuf,
     callback: ZagRPPairingCallback,
 ) -> Result<(), String> {
-    with_zag_device_session(
+    with_zag_device_session_mode(
         &device_ip,
         &pairing_path,
+        SessionMode::Diagnostic,
         |stage, message| {
             let code = match stage {
                 1 => 102,
@@ -418,6 +528,7 @@ async fn run_gate2_probe(
                 3 => 104,
                 4 => 105,
                 5 => 106,
+                6 => 114,
                 _ => return,
             };
             emit(callback, code, message);
@@ -1844,4 +1955,42 @@ async fn run_gate4_uninstall(
 
     emit(callback, 307, format!("Uninstalled {bundle_id}"));
     Ok(())
+}
+
+#[cfg(test)]
+mod diagnostic_error_tests {
+    use super::*;
+
+    #[test]
+    fn socket_errors_keep_kind_and_os_code() {
+        let reset = idevice::IdeviceError::Socket(std::io::Error::from_raw_os_error(54));
+        let text = error_detail(&reset);
+        assert!(text.starts_with("device socket io failed [idevice code 1"), "{text}");
+        assert!(text.contains("io kind ConnectionReset"), "{text}");
+        assert!(text.contains("os error 54"), "{text}");
+    }
+
+    #[test]
+    fn end_of_stream_is_distinguished_from_reset() {
+        let eof = idevice::IdeviceError::Socket(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "early eof"));
+        let text = error_detail(&eof);
+        assert!(text.contains("io kind UnexpectedEof"), "{text}");
+        assert!(text.contains("no os error"), "{text}");
+        assert!(text.contains("<- early eof"), "the source chain is preserved: {text}");
+    }
+
+    #[test]
+    fn broken_pipe_and_refusal_keep_their_codes() {
+        let pipe = error_detail(&idevice::IdeviceError::Socket(std::io::Error::from_raw_os_error(32)));
+        assert!(pipe.contains("io kind BrokenPipe") && pipe.contains("os error 32"), "{pipe}");
+        let refused = io_error_detail(&std::io::Error::from_raw_os_error(61));
+        assert!(refused.contains("io kind ConnectionRefused") && refused.contains("os error 61"), "{refused}");
+    }
+
+    #[test]
+    fn protocol_errors_are_not_reported_as_socket_errors() {
+        let text = error_detail(&idevice::IdeviceError::UnexpectedResponse("missing handshake response".into()));
+        assert!(!text.contains("io kind"), "{text}");
+        assert!(text.contains("idevice code"), "{text}");
+    }
 }
