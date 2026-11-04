@@ -30,7 +30,7 @@ struct CertificatesCellView: View {
         } ?? false
         let needsAttention = cert.revoked || !isCurrent || !hasP12 || expiringSoon
 
-        return VStack(alignment: .leading, spacing: 13) {
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: needsAttention ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
                     .font(.system(size: 24, weight: .medium))
@@ -48,7 +48,7 @@ struct CertificatesCellView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: 5) {
                         Text(title)
                             .font(.system(size: 19, weight: .bold))
                             .lineLimit(2)
@@ -58,9 +58,9 @@ struct CertificatesCellView: View {
                             _copyCertificateName()
                         } label: {
                             Image(systemName: isCopyFeedbackActive ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(isCopyFeedbackActive ? copyFeedbackColor : Color.secondary)
-                                .frame(width: 25, height: 25)
+                                .frame(width: 21, height: 21)
                                 .background(Color.primary.opacity(0.05), in: Circle())
                         }
                         .buttonStyle(.plain)
@@ -77,7 +77,7 @@ struct CertificatesCellView: View {
                 Spacer(minLength: 4)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 if needsAttention {
                     Label(
                         cert.revoked ? "Marked revoked" :
@@ -92,10 +92,10 @@ struct CertificatesCellView: View {
                 Spacer(minLength: 4)
 
                 if let profileExpiry {
-                    Label {
-                        Text(profileExpiry.formatted(.dateTime.day().month(.abbreviated).year()))
-                    } icon: {
+                    HStack(spacing: 4) {
                         Image(systemName: "calendar")
+                            .font(.system(size: 11, weight: .medium))
+                        Text(profileExpiry.formatted(.dateTime.day().month(.abbreviated).year()))
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -103,6 +103,7 @@ struct CertificatesCellView: View {
             .font(.system(size: 12, weight: .medium))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
+            .padding(.top, 1)
 
             if cert.ppQCheck {
                 Label("PPQ Check", systemImage: "shield.lefthalf.filled")
