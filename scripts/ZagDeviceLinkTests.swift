@@ -1013,6 +1013,82 @@ import Network
 		expect(o.installed && !f.calls.contains("off") && !f.calls.contains("on"), "wifi uninstall: no Shortcut")
 	}
 
+	@MainActor static func inventoryTests() async {
+		let id = "com.example.new"
+		struct Refused: LocalizedError { var errorDescription: String? { "Connection refused (os error 61)" } }
+		final class Device {
+			var lists: [Result<Set<String>, Error>]
+			var busy = 0
+			var reads = 0
+			var clock: TimeInterval = 0
+			init(_ lists: [Result<Set<String>, Error>]) { self.lists = lists }
+		}
+		@MainActor func env(_ d: Device, _ calls: (() -> Void)? = nil) -> ZagRPPairingInventoryCheck.Environment {
+			.init(
+				transportBusy: { if d.busy > 0 { d.busy -= 1; return true }; return false },
+				installedApps: { d.reads += 1; calls?(); return d.lists.count > 1 ? d.lists.removeFirst() : d.lists[0] },
+				sleep: { d.clock += $0 },
+				now: { Date(timeIntervalSince1970: d.clock) },
+				log: { _ in }
+			)
+		}
+		let t0 = Date(timeIntervalSince1970: 0)
+
+		var d = Device([.success([id, "other"])])
+		var o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+		expect(o.confirmed && o.list == [id, "other"] && d.reads == 1, "inventory: a new install is confirmed by one fresh read")
+		d = Device([.success(["other"]), .success(["other"]), .success([id])])
+		o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+		expect(o.confirmed && d.reads == 3, "inventory: a delayed listing is re-read until the app appears")
+		d = Device([.success(["other"])])
+		o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+		expect(!o.confirmed && o.list == ["other"] && d.reads == ZagRPPairingInventoryCheck.delays.count, "inventory: never listed is not confirmed, and the latest list is kept")
+		d = Device([.failure(Refused())])
+		o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+		expect(!o.confirmed && o.list == nil, "inventory: a refused read (Mobile Data already back on) gives no list, so nothing is marked")
+		d = Device([.success([id])]); d.busy = 4
+		o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+		expect(o.confirmed && d.clock >= 2, "inventory: waits for a busy connection before reading")
+		d = Device([.success(["x"])])
+		o = await ZagRPPairingInventoryCheck(env: env(d)).run(bundleID: nil, expectInstalled: true, label: "Inventory", start: t0)
+		expect(o.confirmed && d.reads == 1, "inventory: without a bundle ID one read is enough")
+
+		// Inside the Mobile Data flow, as the coordinator runs it
+		func installRun(_ f: FakeMobileData, _ d: Device, fail: Bool = false) async -> (ZagMobileDataInstallOutcome, Set<String>?) {
+			var snapshot: Set<String>?
+			let flow = ZagMobileDataInstallFlow(environment: f.environment)
+			let outcome = await flow.run(jobID: "signed-1") {
+				f.calls.append("install")
+				if fail { throw FakeInstallError() }
+				if f.stages.contains(.disablingMobileData) {
+					let r = await ZagRPPairingInventoryCheck(env: env(d) { f.calls.append("inventory") })
+						.run(bundleID: id, expectInstalled: true, label: "Inventory", start: t0)
+					snapshot = r.list
+				}
+			}
+			return (outcome, snapshot)
+		}
+		func installedSection(_ snapshot: Set<String>?) -> Bool { snapshot?.contains(id) ?? false }
+
+		var f = FakeMobileData.mobileDataBlocked()
+		d = Device([.success(["other"]), .success([id])])
+		var (out, snap) = await installRun(f, d)
+		expect(f.calls == ["consent", "off", "install", "inventory", "inventory", "on"] && out.installed && installedSection(snap),
+			"signed → installed (Mobile Data): the device list is read before ON and confirms the install (\(f.calls))")
+		f = FakeMobileData(); d = Device([.success([id])])
+		(out, snap) = await installRun(f, d)
+		expect(f.calls == ["install"] && snap == nil && out.installed, "signed → installed (Wi-Fi): no capture; the existing query confirms as before")
+		f = FakeMobileData.mobileDataBlocked(); d = Device([.success([id])])
+		(out, snap) = await installRun(f, d, fail: true)
+		expect(!out.installed && snap == nil && !f.calls.contains("inventory") && f.calls.last == "on", "signed (failed install): no device list, stays Signed, Mobile Data restored")
+		f = FakeMobileData.mobileDataBlocked(); d = Device([.success(["other"])])
+		(out, snap) = await installRun(f, d)
+		expect(out.installed && !installedSection(snap), "signed (installer success, never listed): not marked Installed without the device confirming")
+		f = FakeMobileData.mobileDataBlocked(); d = Device([.failure(Refused())])
+		(out, snap) = await installRun(f, d)
+		expect(snap == nil && f.calls.last == "on", "signed (list unreadable): nothing marked; Mobile Data restored")
+	}
+
 	static func badgeTests() {
 		let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 		func model(_ result: ZagEndpointProbeResult?, interface: Bool = true, pairing: ZagRPPairingReadiness? = nil) -> ZagDeviceLinkModel {
@@ -1058,6 +1134,7 @@ import Network
 		await mobileDataInstallTests()
 		badgeTests()
 		await uninstallTests()
+		await inventoryTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

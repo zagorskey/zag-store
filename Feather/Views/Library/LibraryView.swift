@@ -1297,7 +1297,11 @@ extension LibraryView {
 		guard rppairingCore.pairingFileExists else { return false }
 
 		let installedBundleIDs: Set<String>
-		do {
+		if let uuid = app.uuid, let captured = ZagMobileDataInstallCoordinator.shared.takeInventory(jobID: uuid) {
+			// Mobile Data install: the device list was read before Mobile
+			// Data came back on; a new query now would be refused.
+			installedBundleIDs = captured
+		} else { do {
 			installedBundleIDs = try await withCheckedThrowingContinuation {
 				(continuation: CheckedContinuation<Set<String>, Error>) in
 				do {
@@ -1314,7 +1318,7 @@ extension LibraryView {
 				withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
 			}
 			return false
-		}
+		} }
 
 		guard installedBundleIDs.contains(identifier) else {
 			if let uuid = app.uuid {

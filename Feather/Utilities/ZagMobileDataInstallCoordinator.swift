@@ -49,8 +49,64 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 	/// Runs `install` (the existing installer call) directly, or around
 	/// Mobile Data Fix when Mobile Data is blocking it. Throws the
 	/// installer's error, or why installation was not started.
-	func install(jobID: String, _ install: () async throws -> Void) async throws {
-		try await perform(.install, jobID: jobID, install)
+	///
+	/// When Mobile Data Fix was used, the device's app list is read before
+	/// Mobile Data comes back on (it can't be read after), waiting for
+	/// `bundleID` to appear. The confirmation step then takes that list with
+	/// `takeInventory(jobID:)` instead of querying a refused endpoint.
+	func install(jobID: String, bundleID: String? = nil, _ install: () async throws -> Void) async throws {
+		inventorySnapshot = nil
+		try await perform(.install, jobID: jobID) {
+			try await install()
+			if self.usingMobileDataFix {
+				await self.captureInventory(jobID: jobID, bundleID: bundleID)
+			}
+		}
+	}
+
+	// MARK: - Device list after Mobile Data installs
+
+	private struct InventorySnapshot {
+		var jobID: String
+		var bundleIDs: Set<String>
+		var readAt: Date
+	}
+
+	/// How long a captured list stands in for a fresh query.
+	static let inventorySnapshotLifetime: TimeInterval = 120
+	private var inventorySnapshot: InventorySnapshot?
+
+	/// The device list read during this job's Mobile Data Fix, once. nil
+	/// for Wi-Fi installs and other jobs, so they query as before.
+	func takeInventory(jobID: String, now: Date = Date()) -> Set<String>? {
+		guard let snapshot = inventorySnapshot, snapshot.jobID == jobID,
+			  now.timeIntervalSince(snapshot.readAt) < Self.inventorySnapshotLifetime else { return nil }
+		inventorySnapshot = nil
+		return snapshot.bundleIDs
+	}
+
+	private func captureInventory(jobID: String, bundleID: String?) async {
+		let check = ZagRPPairingInventoryCheck(env: .init(
+			transportBusy: { ZagRPPairingCore.shared.isTransportBusy },
+			installedApps: {
+				await withCheckedContinuation { continuation in
+					do {
+						try ZagRPPairingCore.shared.refreshInstalledApps { continuation.resume(returning: $0) }
+					} catch {
+						continuation.resume(returning: .failure(error))
+					}
+				}
+			},
+			sleep: { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
+			now: { Date() },
+			log: { [unowned self] in self.record($0) }
+		))
+		let outcome = await check.run(bundleID: bundleID, expectInstalled: true, label: "Inventory", start: Date())
+		if let list = outcome.list {
+			inventorySnapshot = InventorySnapshot(jobID: jobID, bundleIDs: list, readAt: Date())
+		} else {
+			record("Inventory: device list not read before restoring Mobile Data")
+		}
 	}
 
 	/// Shared by installation and uninstallation: one flow, one Shortcut

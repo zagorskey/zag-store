@@ -633,7 +633,7 @@ extension LibraryCellView {
 				}
 
 				// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
-				try await ZagMobileDataInstallCoordinator.shared.install(jobID: app.uuid ?? UUID().uuidString) {
+				try await ZagMobileDataInstallCoordinator.shared.install(jobID: app.uuid ?? UUID().uuidString, bundleID: app.identifier) {
 					try await withCheckedThrowingContinuation {
 						(continuation: CheckedContinuation<Void, Error>) in
 

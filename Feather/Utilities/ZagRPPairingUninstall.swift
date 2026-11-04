@@ -65,7 +65,7 @@ struct ZagRPPairingUninstall {
 	static let transportWait: TimeInterval = 20
 	static let transportPoll: TimeInterval = 0.5
 	/// Waits before each verification read (about 6 s in total).
-	static let verifyDelays: [TimeInterval] = [0, 1, 2, 3]
+	static var verifyDelays: [TimeInterval] { ZagRPPairingInventoryCheck.delays }
 
 	let env: Environment
 
@@ -98,22 +98,19 @@ struct ZagRPPairingUninstall {
 			throw ZagRPPairingUninstallFailure.requestFailed(message)
 		}
 
-		var listRead = false
-		for (index, delay) in Self.verifyDelays.enumerated() {
-			if delay > 0 { await env.sleep(delay) }
-			switch await env.installedApps() {
-			case .success(let installed):
-				listRead = true
-				if !installed.contains(bundleID) {
-					env.log("Verify \(index + 1): app absent from device list (\(elapsed())); removal confirmed")
-					return .verified
-				}
-				env.log("Verify \(index + 1): app still listed (\(elapsed()))")
-			case .failure(let error):
-				env.log("Verify \(index + 1): device list unavailable (\(elapsed())): \(error.localizedDescription)")
-			}
+		let check = ZagRPPairingInventoryCheck(env: .init(
+			transportBusy: env.transportBusy,
+			installedApps: env.installedApps,
+			sleep: env.sleep,
+			now: env.now,
+			log: env.log
+		))
+		let outcome = await check.run(bundleID: bundleID, expectInstalled: false, label: "Verify", start: start)
+		if outcome.confirmed {
+			env.log("Uninstall: removal confirmed")
+			return .verified
 		}
-		if listRead {
+		if outcome.list != nil {
 			env.log("Uninstall: app still listed after verification; reporting failure")
 			throw ZagRPPairingUninstallFailure.stillInstalled
 		}
