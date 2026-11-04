@@ -2906,7 +2906,8 @@ private struct ZagPhoneSettingsIcon: View {
                         .frame(width: w * 0.49, height: h * 0.16)
                         .offset(y: h * 0.29)
                 case .splash:
-                    ZagSourcesTabIcon.label
+                    Image(uiImage: ZagSourcesTabIcon.image)
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
                         .frame(width: w * 0.34, height: h * 0.34)
