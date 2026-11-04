@@ -29,7 +29,6 @@ struct DownloadButtonView: View {
 	@State private var transactionError: String?
 	@State private var retrySignedUUID: String?
 	@State private var retryImportedUUID: String?
-	@State private var ringRotation: Double = 0
 	@State private var actionClaimed = false
 	@State private var isPALInfoPresented = false
 
@@ -122,115 +121,15 @@ struct DownloadButtonView: View {
 
 	var body: some View {
 		ZStack {
-			ZStack {
-				if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId), currentDownload.canRetry, zagPhase == .idle, !_isPALApp, !_isCurrentVariantInstalled {
-                    ZagActionPill(title: .localized("Retry")) {
-                        _performAction { _startGetAndInstall() }
-                    }
-                    .disabled(actionClaimed)
-                } else if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
-					_jobControl(download: currentDownload) {
-						_progressRing(progress: downloadProgress, glyph: _downloadGlyph(currentDownload))
-					}
-				} else if zagPhase == .downloading {
-					_jobControl { _indeterminateRing() }
-				} else if zagPhase == .signing {
-					_jobControl { _indeterminateRing() }
-				} else if zagPhase == .installing {
-					if installationProgress > 0.03 {
-						_jobControl { _progressRing(progress: installationProgress, glyph: .none) }
-					} else {
-						_jobControl { _indeterminateRing() }
-					}
-				} else if retrySignedUUID != nil, _retrySignedCopy() != nil {
-                    ZagActionPill(title: .localized("Retry")) {
-                        _performAction { _retryInstallation() }
-                    }
-                    .disabled(actionClaimed)
-                    .accessibilityLabel(Text("Retry installing \(app.currentName)"))
-                } else if retryImportedUUID != nil, _retryImportedCopy() != nil {
-                    ZagActionPill(title: .localized("Retry")) {
-                        _performAction { _retrySigning() }
-                    }
-                    .disabled(actionClaimed)
-                    .accessibilityLabel(Text("Retry signing \(app.currentName)"))
-                } else if _isPALApp {
-					ZagActionPill(title: "PAL") {
-						UIImpactFeedbackGenerator(style: .light).impactOccurred()
-						isPALInfoPresented = true
-					}
-					.accessibilityLabel(Text("About AltStore PAL distribution for \(app.currentName)"))
-				} else if let bundleID = app.id,
-						  installedBundleID == bundleID {
-					ZagActionPill(title: .localized("Open")) {
-						_performAction(claim: false) {
-							UIApplication.openApp(with: bundleID)
-						}
-					}
-					.accessibilityLabel(Text("Open \(app.currentName)"))
-				} else if let bundleID = app.id,
-						  pairingCore.isInstalled(bundleID: bundleID),
-						  _matchesTrackedVariant(bundleID: bundleID) {
-					switch _installedReleaseRelationship(bundleID: bundleID) {
-					case .newer:
-						ZagActionPill(title: .localized("Update")) {
-							_performAction { _startGetAndInstall() }
-						}
-						.disabled(actionClaimed)
-						.accessibilityLabel(Text("Update \(app.currentName)"))
-					case .same:
-						ZagActionPill(title: .localized("Open")) {
-							_performAction(claim: false) {
-								UIApplication.openApp(with: bundleID)
-							}
-						}
-						.accessibilityLabel(Text("Open \(app.currentName)"))
-					case .older:
-						ZagActionPill(title: .localized("Revert")) {
-							_performAction { _startGetAndInstall() }
-						}
-						.disabled(actionClaimed)
-						.accessibilityLabel(Text("Revert \(app.currentName)"))
-					case .unknown:
-						ZagActionPill(title: .localized("Open")) {
-							UIApplication.openApp(with: bundleID)
-						}
-					}
-				} else if let bundleID = app.id,
-						  _hasInstalledTrackedAlternative(bundleID: bundleID) {
-					ZagActionPill(title: .localized("Switch")) {
-						_performAction { _startGetAndInstall() }
-					}
-					.disabled(actionClaimed)
-					.accessibilityLabel(Text("Switch to \(app.currentName)"))
-				} else if _hasLocalSignedCopy {
-					ZagActionPill(title: .localized("Install")) {
-						_performAction { _installExistingSignedCopy() }
-					}
-					.disabled(actionClaimed)
-					.accessibilityLabel(Text("Install \(app.currentName)"))
-				} else if wasDownloadedBefore {
-					Button {
-						_performAction { _startGetAndInstall() }
-					} label: {
-						Image(systemName: "icloud.and.arrow.down")
-							.font(.system(size: 25, weight: .regular))
-							.foregroundStyle(pillForeground)
-							.frame(width: 88, height: 34)
-							.contentShape(Rectangle())
-					}
-					.buttonStyle(.plain)
-					.disabled(actionClaimed)
-					.accessibilityLabel(Text("Download again: \(app.currentName)"))
-				} else {
-					ZagActionPill(title: title) {
-						_performAction { _startGetAndInstall() }
-					}
-					.disabled(actionClaimed)
-					.accessibilityLabel(Text("\(title) \(app.currentName)"))
-				}
-			}
-			.frame(width: 88, height: 34, alignment: .center)
+			// One control in one place: Get / Install / Update contracts into
+			// the progress circle and expands into Open, Resume or back.
+			let control = _control
+			ZagInstallControl(
+				mode: control.mode,
+				tint: pillForeground,
+				action: control.action,
+				cancelAction: _canCancelFromControl ? { _cancelJob(downloadManager.getDownload(by: app.currentUniqueId)) } : nil
+			)
 
 			if let caption = _actionCaption {
 				Text(caption.text)
@@ -378,157 +277,6 @@ struct DownloadButtonView: View {
 		}
 	}
 
-	private func _indeterminateRing() -> some View {
-		ZStack {
-			Circle()
-				.stroke(pillForeground.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0.08, to: 0.72)
-				.stroke(pillForeground, style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
-				.rotationEffect(.degrees(ringRotation - 90))
-		}
-		.frame(width: 31, height: 31)
-		.onAppear {
-			ringRotation = 0
-			withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
-				ringRotation = 360
-			}
-		}
-	}
-
-	private enum ZagRingGlyph: Equatable {
-		case none, stop, pause, play
-	}
-
-	/// Pause while transferring from a server that supports genuine resume;
-	/// play while paused; the existing stop square when it can't resume.
-	private func _downloadGlyph(_ download: Download) -> ZagRingGlyph {
-		guard let job = jobs.job(_jobKey) else { return downloadProgress < 0.75 ? .stop : .none }
-		if job.cancelRequested { return .none }
-		if job.stage == .paused { return .play }
-		guard job.stage.isDownload, download.progress < 1 else { return .none }
-		return job.canPause ? .pause : .stop
-	}
-
-	/// The ring as an App Store-style control: tap pauses or resumes (or
-	/// stops a transfer that can't resume); long-press opens the menu.
-	private func _jobControl<RingLabel: View>(download: Download? = nil, @ViewBuilder label: () -> RingLabel) -> some View {
-		let job = jobs.job(_jobKey)
-		return Menu {
-			if let job {
-				if job.stage.isFinishing {
-					Button(.localized("Finishing installation…")) {}
-						.disabled(true)
-				} else if job.cancelRequested {
-					Button(.localized("Cancelling…")) {}
-						.disabled(true)
-				} else {
-					if job.stage == .paused {
-						Button { _resume(download) } label: {
-							Label(.localized("Resume Download"), systemImage: "play")
-						}
-					} else if job.stage.isDownload, job.canPause, (download?.progress ?? 1) < 1 {
-						Button { _pause(download) } label: {
-							Label(.localized("Pause Download"), systemImage: "pause")
-						}
-					}
-					if job.offersCancel, job.stage.allowsCancel {
-						Button(role: .destructive) { _cancelJob(download) } label: {
-							Label(.localized("Cancel Installation"), systemImage: "xmark")
-						}
-					}
-				}
-			}
-		} label: {
-			label()
-		} primaryAction: {
-			_primaryTap(job: job, download: download)
-		}
-		.menuStyle(.button)
-		.buttonStyle(.plain)
-		.menuIndicator(.hidden)
-		.accessibilityLabel(Text("\(app.currentName), \(_stageCaption)"))
-	}
-
-	private func _primaryTap(job: ZagInstallJob?, download: Download?) {
-		guard let job else {
-			// No job (legacy download): the original tap-to-stop.
-			if let download, downloadProgress <= 0.75 { downloadManager.cancelDownload(download) }
-			return
-		}
-		guard !job.cancelRequested else { return }
-		if job.stage == .paused { _resume(download); return }
-		guard job.stage.isDownload, let download, download.progress < 1 else { return }
-		if job.canPause { _pause(download) } else { _cancelJob(download) }
-	}
-
-	private func _pause(_ download: Download?) {
-		guard let download else { return }
-		UIImpactFeedbackGenerator(style: .light).impactOccurred()
-		let key = _jobKey
-		downloadManager.pauseDownload(download) { paused in
-			// Without resume data the download reports its own failure.
-			if paused { jobs.advance(key, to: .paused) }
-		}
-	}
-
-	private func _resume(_ download: Download?) {
-		guard let download, downloadManager.resumePausedDownload(download) else { return }
-		UIImpactFeedbackGenerator(style: .light).impactOccurred()
-		jobs.advance(_jobKey, to: .resuming)
-	}
-
-	private func _cancelJob(_ download: Download?) {
-		UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-		let response = jobs.requestCancel(_jobKey)
-		ZagLogger.shared.info("Repository Install", "Cancel requested: \(app.currentName) | \(response)")
-		guard response == .now else { return }
-		if let download, download.progress >= 1, !download.isPaused {
-			// The bytes are in; importing can't be interrupted. The request
-			// is honoured when the import finishes.
-			jobs.advance(_jobKey, to: .importing)
-			return
-		}
-		if let download {
-			// Stops the transfer, removes its partial file, and reports
-			// cancellation through the pipeline callback.
-			downloadManager.cancelDownload(download)
-		} else {
-			zagPhase = .idle
-		}
-	}
-
-	@ViewBuilder
-	private func _progressRing(progress: Double, glyph: ZagRingGlyph) -> some View {
-		ZStack {
-			Circle()
-				.stroke(pillForeground.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0, to: max(0.03, min(1, progress)))
-				.stroke(pillForeground, style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
-				.rotationEffect(.degrees(-90))
-			if glyph == .stop {
-				Image(systemName: "square.fill")
-					.foregroundStyle(pillForeground)
-					.font(.footnote)
-			} else if glyph == .pause {
-				Image(systemName: "pause.fill")
-					.foregroundStyle(pillForeground)
-					.font(.footnote)
-			} else if glyph == .play {
-				Image(systemName: "play.fill")
-					.foregroundStyle(pillForeground)
-					.font(.footnote)
-					.offset(x: 1)
-			} else if progress >= 1 {
-				Image(systemName: "checkmark")
-					.foregroundStyle(pillForeground)
-					.font(.footnote.bold())
-			}
-		}
-		.frame(width: 31, height: 31)
-		.animation(.smooth, value: progress)
-	}
 
 
 	private enum InstalledReleaseRelationship {
@@ -829,6 +577,144 @@ struct DownloadButtonView: View {
 			originIcons[bundleID] = iconURL
 			UserDefaults.standard.set(originIcons, forKey: "zagStore.repositoryOriginIcons")
 		}
+	}
+
+	private func _primaryTap(job: ZagInstallJob?, download: Download?) {
+		guard let job else {
+			// No job (legacy download): the original tap-to-stop.
+			if let download, downloadProgress <= 0.75 { downloadManager.cancelDownload(download) }
+			return
+		}
+		guard !job.cancelRequested else { return }
+		if job.stage == .paused { _resume(download); return }
+		guard job.stage.isDownload, let download, download.progress < 1 else { return }
+		if job.canPause { _pause(download) } else { _cancelJob(download) }
+	}
+
+	private func _pause(_ download: Download?) {
+		guard let download else { return }
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		let key = _jobKey
+		downloadManager.pauseDownload(download) { paused in
+			// Without resume data the download reports its own failure.
+			if paused { jobs.advance(key, to: .paused) }
+		}
+	}
+
+	private func _resume(_ download: Download?) {
+		guard let download, downloadManager.resumePausedDownload(download) else { return }
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		jobs.advance(_jobKey, to: .resuming)
+	}
+
+	private func _cancelJob(_ download: Download?) {
+		UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+		let response = jobs.requestCancel(_jobKey)
+		ZagLogger.shared.info("Repository Install", "Cancel requested: \(app.currentName) | \(response)")
+		guard response == .now else { return }
+		if let download, download.progress >= 1, !download.isPaused {
+			// The bytes are in; importing can't be interrupted. The request
+			// is honoured when the import finishes.
+			jobs.advance(_jobKey, to: .importing)
+			return
+		}
+		if let download {
+			// Stops the transfer, removes its partial file, and reports
+			// cancellation through the pipeline callback.
+			downloadManager.cancelDownload(download)
+		} else {
+			zagPhase = .idle
+		}
+	}
+
+	/// Pause only while transferring from a server that supports genuine
+	/// resume; the existing stop square when it can't resume.
+	private func _downloadGlyph(_ download: Download) -> ZagInstallGlyph {
+		guard let job = jobs.job(_jobKey) else { return downloadProgress <= 0.75 ? .stop : .none }
+		if job.cancelRequested { return .none }
+		guard job.stage.isDownload, job.stage != .paused, download.progress < 1 else { return .none }
+		return job.canPause ? .pause : .stop
+	}
+
+	/// VoiceOver can cancel wherever cancellation is genuinely possible.
+	private var _canCancelFromControl: Bool {
+		guard let job = jobs.job(_jobKey) else { return false }
+		return job.offersCancel && job.stage.allowsCancel && !job.cancelRequested
+	}
+
+	private func _pill(_ title: String?, image: String? = nil, filled: Bool = true, enabled: Bool = true, label: String) -> ZagInstallControlMode {
+		.pill(ZagInstallPill(title: title, systemImage: image, filled: filled, enabled: enabled, accessibilityLabel: label))
+	}
+
+	/// The row's action as one mode plus its tap, in the same order as the
+	/// previous branches.
+	private var _control: (mode: ZagInstallControlMode, action: () -> Void) {
+		if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId), currentDownload.canRetry, zagPhase == .idle, !_isPALApp, !_isCurrentVariantInstalled {
+			return (_pill(.localized("Retry"), enabled: !actionClaimed, label: "Retry downloading \(app.currentName)"),
+					{ _performAction { _startGetAndInstall() } })
+		}
+		if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
+			if jobs.job(_jobKey)?.stage == .paused {
+				return (_pill(.localized("Resume"), image: "icloud.and.arrow.down", label: "Resume downloading \(app.currentName)"),
+						{ _resume(currentDownload) })
+			}
+			return (.progress(downloadProgress, _downloadGlyph(currentDownload)),
+					{ _primaryTap(job: jobs.job(_jobKey), download: currentDownload) })
+		}
+		switch zagPhase {
+		case .downloading, .signing:
+			return (.spinner(.none), {})
+		case .installing:
+			return (installationProgress > 0.03 ? .progress(installationProgress, .none) : .spinner(.none), {})
+		case .idle:
+			break
+		}
+		if retrySignedUUID != nil, _retrySignedCopy() != nil {
+			return (_pill(.localized("Retry"), enabled: !actionClaimed, label: "Retry installing \(app.currentName)"),
+					{ _performAction { _retryInstallation() } })
+		}
+		if retryImportedUUID != nil, _retryImportedCopy() != nil {
+			return (_pill(.localized("Retry"), enabled: !actionClaimed, label: "Retry signing \(app.currentName)"),
+					{ _performAction { _retrySigning() } })
+		}
+		if _isPALApp {
+			return (_pill("PAL", label: "About AltStore PAL distribution for \(app.currentName)"),
+					{ UIImpactFeedbackGenerator(style: .light).impactOccurred(); isPALInfoPresented = true })
+		}
+		if let bundleID = app.id, installedBundleID == bundleID {
+			return (_pill(.localized("Open"), label: "Open \(app.currentName)"),
+					{ _performAction(claim: false) { UIApplication.openApp(with: bundleID) } })
+		}
+		if let bundleID = app.id, pairingCore.isInstalled(bundleID: bundleID), _matchesTrackedVariant(bundleID: bundleID) {
+			switch _installedReleaseRelationship(bundleID: bundleID) {
+			case .newer:
+				return (_pill(.localized("Update"), enabled: !actionClaimed, label: "Update \(app.currentName)"),
+						{ _performAction { _startGetAndInstall() } })
+			case .same:
+				return (_pill(.localized("Open"), label: "Open \(app.currentName)"),
+						{ _performAction(claim: false) { UIApplication.openApp(with: bundleID) } })
+			case .older:
+				return (_pill(.localized("Revert"), enabled: !actionClaimed, label: "Revert \(app.currentName)"),
+						{ _performAction { _startGetAndInstall() } })
+			case .unknown:
+				return (_pill(.localized("Open"), label: "Open \(app.currentName)"),
+						{ UIApplication.openApp(with: bundleID) })
+			}
+		}
+		if let bundleID = app.id, _hasInstalledTrackedAlternative(bundleID: bundleID) {
+			return (_pill(.localized("Switch"), enabled: !actionClaimed, label: "Switch to \(app.currentName)"),
+					{ _performAction { _startGetAndInstall() } })
+		}
+		if _hasLocalSignedCopy {
+			return (_pill(.localized("Install"), enabled: !actionClaimed, label: "Install \(app.currentName)"),
+					{ _performAction { _installExistingSignedCopy() } })
+		}
+		if wasDownloadedBefore {
+			return (_pill(nil, image: "icloud.and.arrow.down", filled: false, enabled: !actionClaimed, label: "Download again: \(app.currentName)"),
+					{ _performAction { _startGetAndInstall() } })
+		}
+		return (_pill(title, enabled: !actionClaimed, label: "\(title) \(app.currentName)"),
+				{ _performAction { _startGetAndInstall() } })
 	}
 
 	private func _startGetAndInstall() {

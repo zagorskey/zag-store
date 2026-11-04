@@ -56,12 +56,9 @@ struct LibraryCellView: View {
 	private var allowSigningCustomisation = false
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey)
 	private var askCertificateEveryTime = false
-	@State private var signingRingRotation: Double = 0
-	@State private var installingRingRotation: Double = 0
 	/// The authoritative per-job state; survives scrolling and Shortcuts handoffs.
 	@ObservedObject private var jobs = ZagInstallJobs.shared
 	@ObservedObject private var updateTransaction = ZagUpdateTransactionManager.shared
-	@State private var updateRingRotation: Double = 0
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
@@ -101,36 +98,6 @@ struct LibraryCellView: View {
 
 	private static func _isCancellation(_ error: Error) -> Bool {
 		error is ZagInstallCancelled || (error as? ZagMobileDataInstallError) == .cancelled
-	}
-
-	/// Long-press opens the native cancel menu; tap does nothing, as there
-	/// is no download to pause here.
-	private func _jobControl<RingLabel: View>(@ViewBuilder label: () -> RingLabel) -> some View {
-		let job = jobs.job(_jobKey)
-		return Menu {
-			if let job, job.offersCancel {
-				if job.stage.isFinishing {
-					Button(.localized("Finishing installation…")) {}
-						.disabled(true)
-				} else if job.cancelRequested {
-					Button(.localized("Cancelling…")) {}
-						.disabled(true)
-				} else if job.stage.allowsCancel {
-					Button(role: .destructive) {
-						UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-						let response = jobs.requestCancel(_jobKey)
-						ZagLogger.shared.info("Library Install", "Cancel requested: \(app.name ?? "app") | \(response)")
-					} label: {
-						Label(.localized("Cancel Installation"), systemImage: "xmark")
-					}
-				}
-			}
-		} label: {
-			label()
-		} primaryAction: {}
-		.menuStyle(.button)
-		.buttonStyle(.plain)
-		.menuIndicator(.hidden)
 	}
 
 	private var _jobCaption: String? {
@@ -478,34 +445,22 @@ extension LibraryCellView {
 			let certRevoked = certificate?.revoked == true
 			let certInfo = certificate?.expiration?.expirationInfo()
 			ZStack {
-				if isManagedInstalled, let update = availableUpdate {
-					_installedUpdateAction(update)
-				} else if isManagedInstalled, let id = app.identifier {
-					ZagActionPill(title: .localized("Open")) {
-						UIApplication.openApp(with: id)
-					}
-				} else if isInstallingImmediately {
-					VStack(spacing: 2) {
-						_jobControl { _installingIndeterminateRing() }
-							.frame(
-								width: ZagListLayout.actionWidth,
-								height: ZagListLayout.actionHeight
-							)
+				// One control: Install contracts into the progress circle and
+				// expands back into Install, Update or Open.
+				ZagInstallControl(
+					mode: _signedControlMode(update: isManagedInstalled ? availableUpdate : nil),
+					action: { _signedControlTap(update: isManagedInstalled ? availableUpdate : nil) },
+					cancelAction: _canCancelFromControl ? _requestCancel : nil
+				)
 
-						Text(_jobCaption ?? .localized("Installing..."))
-							.font(.system(size: 9, weight: .medium))
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else {
-					ZagActionPill(title: .localized("Install")) {
-						_installImmediately(app)
-					}
-				}
-
-				if !isInstallingImmediately && certRevoked {
+				if let caption = _signedCaption(update: isManagedInstalled ? availableUpdate : nil) {
+					Text(caption)
+						.font(.system(size: 9, weight: .medium))
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+						.frame(width: 88, height: 11)
+						.offset(y: 26)
+				} else if certRevoked {
 					Text(.localized("Revoked"))
 						.font(
 							.system(
@@ -516,7 +471,7 @@ extension LibraryCellView {
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
 						.offset(y: 24)
-				} else if !isInstallingImmediately, let certInfo {
+				} else if let certInfo {
 					Text(certInfo.formatted)
 						.font(
 							.system(
@@ -531,64 +486,80 @@ extension LibraryCellView {
 			}
 			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.compactRowHeight, alignment: .center)
 			} else {
-				if isSigningImmediately {
-					VStack(spacing: 2) {
-						_jobControl { _signingIndeterminateRing() }
-							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+				ZStack {
+					// One control: Sign contracts into the circle while signing
+					// and installing, and expands back.
+					ZagInstallControl(
+						mode: (isSigningImmediately || isInstallingImmediately)
+							? .spinner(.none)
+							: .pill(ZagInstallPill(title: .localized("Sign"), accessibilityLabel: "Sign \(app.name ?? "app")")),
+						action: {
+							if askCertificateEveryTime {
+								selectedSigningAppPresenting = AnyApp(base: app)
+							} else {
+								_signImmediately(app)
+							}
+						},
+						cancelAction: _canCancelFromControl ? _requestCancel : nil
+					)
 
-						Text(_jobCaption ?? .localized("Signing..."))
+					if isSigningImmediately || isInstallingImmediately {
+						Text(_jobCaption ?? (isSigningImmediately ? .localized("Signing...") : .localized("Installing...")))
 							.font(.system(size: 9, weight: .medium))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else if isInstallingImmediately {
-					VStack(spacing: 2) {
-						_jobControl { _installingIndeterminateRing() }
-							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
-
-						Text(_jobCaption ?? .localized("Installing..."))
-							.font(.system(size: 9, weight: .medium))
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else {
-					ZagActionPill(title: .localized("Sign")) {
-						if askCertificateEveryTime {
-							selectedSigningAppPresenting = AnyApp(base: app)
-						} else {
-							_signImmediately(app)
-						}
+							.offset(y: 26)
 					}
 				}
+				.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 			}
 	}
 
-	@ViewBuilder
-	private func _installedUpdateAction(_ update: UpdateManager.AvailableUpdate) -> some View {
-		let stage = updateTransaction.stage(for: update)
-		ZStack {
-			if let stage, !isFailedUpdateStage(stage) {
-				_installingIndeterminateRing()
-					.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
-			} else {
-				ZagActionPill(title: stage?.title ?? .localized("Update")) {
-					_startInstalledUpdate(update)
-				}
-			}
-			if !updateStageCaption(stage).isEmpty {
-				Text(updateStageCaption(stage))
-					.font(.system(size: 9, weight: .medium))
-					.foregroundStyle(.secondary)
-					.lineLimit(1)
-					.frame(width: 88, height: 11)
-					.offset(y: 26)
-			}
+	// MARK: - Install control
+
+	/// The Signed row's action, in the same order as the previous branches.
+	private func _signedControlMode(update: UpdateManager.AvailableUpdate?) -> ZagInstallControlMode {
+		if let update {
+			let stage = updateTransaction.stage(for: update)
+			if let stage, !isFailedUpdateStage(stage) { return .spinner(.none) }
+			return .pill(ZagInstallPill(title: stage?.title ?? .localized("Update"), accessibilityLabel: "Update \(app.name ?? "app")"))
 		}
-		.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+		if isManagedInstalled, app.identifier != nil {
+			return .pill(ZagInstallPill(title: .localized("Open"), accessibilityLabel: "Open \(app.name ?? "app")"))
+		}
+		if isInstallingImmediately { return .spinner(.none) }
+		return .pill(ZagInstallPill(title: .localized("Install"), accessibilityLabel: "Install \(app.name ?? "app")"))
+	}
+
+	private func _signedControlTap(update: UpdateManager.AvailableUpdate?) {
+		if let update {
+			_startInstalledUpdate(update)
+		} else if isManagedInstalled, let id = app.identifier {
+			UIApplication.openApp(with: id)
+		} else if !isInstallingImmediately {
+			_installImmediately(app)
+		}
+	}
+
+	private func _signedCaption(update: UpdateManager.AvailableUpdate?) -> String? {
+		if let update {
+			let caption = updateStageCaption(updateTransaction.stage(for: update))
+			return caption.isEmpty ? nil : caption
+		}
+		if isInstallingImmediately { return _jobCaption ?? .localized("Installing...") }
+		return nil
+	}
+
+	private var _canCancelFromControl: Bool {
+		guard let job = jobs.job(_jobKey) else { return false }
+		return job.offersCancel && job.stage.allowsCancel && !job.cancelRequested
+	}
+
+	private func _requestCancel() {
+		UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+		let response = jobs.requestCancel(_jobKey)
+		ZagLogger.shared.info("Library Install", "Cancel requested: \(app.name ?? "app") | \(response)")
 	}
 
 	private func isFailedUpdateStage(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
@@ -621,54 +592,6 @@ extension LibraryCellView {
 				}
 			case .failure(let error):
 				UIAlertController.showAlertWithOk(title: .localized("Update Failed"), message: error.localizedDescription)
-			}
-		}
-	}
-
-	private func _signingIndeterminateRing() -> some View {
-		ZStack {
-			Circle()
-				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0.08, to: 0.72)
-				.stroke(
-					Color.accentColor,
-					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-				)
-				.rotationEffect(.degrees(signingRingRotation - 90))
-		}
-		.frame(width: 31, height: 31)
-		.onAppear {
-			signingRingRotation = 0
-			withAnimation(
-				.linear(duration: 0.85)
-					.repeatForever(autoreverses: false)
-			) {
-				signingRingRotation = 360
-			}
-		}
-	}
-
-	private func _installingIndeterminateRing() -> some View {
-		ZStack {
-			Circle()
-				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0.08, to: 0.72)
-				.stroke(
-					Color.accentColor,
-					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-				)
-				.rotationEffect(.degrees(installingRingRotation - 90))
-		}
-		.frame(width: 31, height: 31)
-		.onAppear {
-			installingRingRotation = 0
-			withAnimation(
-				.linear(duration: 0.85)
-					.repeatForever(autoreverses: false)
-			) {
-				installingRingRotation = 360
 			}
 		}
 	}

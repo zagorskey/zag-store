@@ -15,6 +15,8 @@ check() {
 absent() { ! grep -qF -- "$1" <<< "$2"; }
 
 TABBAR="$ROOT/Feather/Views/TabView/VariedTabbarView.swift"
+JOBUI="$ROOT/Feather/Views/Sources/Apps/DownloadButtonView.swift"
+CELLUI="$ROOT/Feather/Views/Library/LibraryCellView.swift"
 CORE="$ROOT/Feather/RPPairing/ZagRPPairingCore.swift"
 LINK="$ROOT/Feather/Utilities/ZagDeviceLink.swift"
 PROBE="$ROOT/Feather/Utilities/ZagLockdownProbe.swift"
@@ -119,14 +121,21 @@ OVERLAY="$ROOT/Feather/Views/Settings/Installation/ZagMobileDataInstallOverlay.s
 check "ui: no floating installation progress capsule" bash -c "! grep -qE 'StageCapsule|stageText|in: Capsule|coordinator.stage, coordinator' '$OVERLAY'"
 check "ui: no other floating Mobile Data progress UI" bash -c "! grep -rqE 'usingMobileDataFix' '$ROOT/Feather/Views' --include=*.swift --exclude=VariedTabbarView.swift --exclude=LibraryView.swift --exclude=DownloadButtonView.swift --exclude=LibraryCellView.swift && [ \$(grep -c 'usingMobileDataFix' '$ROOT/Feather/Views/Library/LibraryView.swift') -eq 1 ] && for f in Sources/Apps/DownloadButtonView.swift Library/LibraryCellView.swift; do [ \$(grep -c 'usingMobileDataFix' \"$ROOT/Feather/Views/\$f\") -eq 1 ] && grep -q 'if coordinator.usingMobileDataFix { jobs.advance(key, to: .restoringMobileData) }' \"$ROOT/Feather/Views/\$f\" || exit 1; done"
 check "ui: consent alert and recovery banner remain" bash -c "grep -q 'Allow Automatically' '$OVERLAY' && grep -q 'Mobile Data may still be off' '$OVERLAY' && grep -q 'Turn On Mobile Data' '$OVERLAY'"
-check "ui: app-row ring keeps its 31 pt size, 2.3 pt stroke and tint" bash -c "cd '$ROOT' && for f in Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Library/LibraryCellView.swift; do for pat in 'frame(width: 31, height: 31)' 'lineWidth: 2.3'; do [ \$(git show 060ee13d:\$f | grep -c \"\$pat\") -eq \$(grep -c \"\$pat\" \$f) ] || exit 1; done; done && [ \$(grep -c 'pillForeground' Feather/Views/Sources/Apps/DownloadButtonView.swift) -ge \$(git show 060ee13d:Feather/Views/Sources/Apps/DownloadButtonView.swift | grep -c 'pillForeground') ]"
+CONTROL="$ROOT/Feather/Views/ZagInstallControl.swift"
+check "control: one shared component keeps the 31 pt ring, 2.3 pt stroke and theme tint" bash -c "grep -q 'ZagInstallControlGeometry.circle, height: ZagInstallControlGeometry.circle' '$CONTROL' && [ \$(grep -c 'lineWidth: 2.3' '$CONTROL') -ge 3 ] && grep -q 'ZagWideGamutTint.color(hex: tintHex)' '$CONTROL'"
+check "control: rows, Library and App Updates draw no rings of their own" bash -c "! grep -nE 'Circle\\(\\)' '$JOBUI' '$CELLUI' && [ \$(sed -n '/private struct ZagUpdateRow/,/struct ZagUpdatesPopup/p' '$ROOT/Feather/Views/Library/LibraryView.swift' | grep -c 'Circle()') -eq 0 ]"
+check "control: every in-scope surface uses the shared control" bash -c "grep -q 'ZagInstallControl(' '$JOBUI' && [ \$(grep -c 'ZagInstallControl(' '$CELLUI') -eq 2 ] && sed -n '/private struct ZagUpdateRow/,/struct ZagUpdatesPopup/p' '$ROOT/Feather/Views/Library/LibraryView.swift' | grep -q 'ZagInstallControl('"
+check "control: no installation context menu remains" bash -c "! grep -qE 'return Menu \\{|primaryAction:|_jobControl|Pause Download|Resume Download' '$JOBUI' '$CELLUI' '$CONTROL'"
+check "control: Resume pill uses the cloud symbol and follows the theme tint" bash -c "grep -q '_pill(.localized(\"Resume\"), image: \"icloud.and.arrow.down\"' '$JOBUI' && grep -q 'foregroundStyle(resolvedTint)' '$CONTROL'"
+check "control: Reduce Motion is respected" bash -c "grep -q 'accessibilityReduceMotion' '$CONTROL' && grep -q 'reduceMotion: reduceMotion' '$CONTROL'"
+check "control: the spinner is clock-driven and never restarts on scroll" grep -q 'TimelineView(.animation' "$CONTROL"
+check "control: Open only after confirmed success (repository row)" bash -c "grep -B1 -A1 'installedBundleID == bundleID {' '$JOBUI' | grep -q 'Open'"
 check "ui: Install Preview and Update All are not part of this phase" bash -c "cd '$ROOT' && git diff --quiet 4b2c3a21 -- Feather/Views/Library/Install/InstallPreviewView.swift && ! grep -q 'ZagInstallJobs' Feather/Views/Library/LibraryView.swift"
-JOBUI="$ROOT/Feather/Views/Sources/Apps/DownloadButtonView.swift"
-CELLUI="$ROOT/Feather/Views/Library/LibraryCellView.swift"
 check "ui: rows read one shared job state, not view-local phases" bash -c "grep -q '@ObservedObject private var jobs = ZagInstallJobs.shared' '$JOBUI' && grep -q '@ObservedObject private var jobs = ZagInstallJobs.shared' '$CELLUI' && ! grep -qE '@State private var (zagPhase|installationProgress|isSigningImmediately|isInstallingImmediately)' '$JOBUI' '$CELLUI'"
-check "ui: tap pauses/resumes, long-press opens the native menu" bash -c "grep -q 'primaryAction:' '$JOBUI' && grep -q 'pause.fill' '$JOBUI' && grep -q 'play.fill' '$JOBUI' && grep -q 'Cancel Installation' '$JOBUI' && grep -q 'Cancel Installation' '$CELLUI'"
-check "ui: no pause without genuine resume support" grep -q 'return job.canPause ? .pause : .stop' "$JOBUI"
-check "ui: cancellation is disabled once installation begins" bash -c "grep -q 'Finishing installation…' '$JOBUI' && grep -q 'Finishing installation…' '$CELLUI' && [ \$(grep -c 'try jobs.beginInstalling(key)' '$JOBUI') -eq 2 ] && [ \$(grep -c 'try jobs.beginInstalling(key)' '$CELLUI') -eq 1 ]"
+check "control: tap pauses a resumable download; Resume continues it" bash -c "grep -q 'if job.canPause { _pause(download) } else { _cancelJob(download) }' '$JOBUI' && grep -q '{ _resume(currentDownload) }' '$JOBUI'"
+check "control: no pause without genuine resume support" grep -q 'return job.canPause ? .pause : .stop' "$JOBUI"
+check "control: cancellation is unavailable once installation begins" bash -c "grep -q 'job.offersCancel && job.stage.allowsCancel && !job.cancelRequested' '$JOBUI' && grep -q 'job.offersCancel && job.stage.allowsCancel && !job.cancelRequested' '$CELLUI' && [ \$(grep -c 'try jobs.beginInstalling(key)' '$JOBUI') -eq 2 ] && [ \$(grep -c 'try jobs.beginInstalling(key)' '$CELLUI') -eq 1 ]"
+check "badge: VPN matches LOCAL width; LOCAL and status typography unchanged" bash -c "grep -q 'size: 13.34, weight: .bold, design: .rounded' '$TABBAR' && grep -q 'size: 8, weight: .semibold, design: .rounded' '$TABBAR' && grep -q 'size: 9, weight: .bold, design: .rounded' '$TABBAR'"
 check "ui: safe points keep committed Imported and Signed records" bash -c "[ \$(grep -c 'if jobs.isCancelRequested(_jobKey)' '$JOBUI') -eq 2 ] && grep -q 'Cancelled after signing' '$CELLUI' && ! grep -A12 'catch where Self._isCancellation' '$CELLUI' | grep -q 'deleteApp'"
 check "ui: install jobs are used only by the in-scope rows" bash -c "! grep -rlE 'ZagInstallJobs' '$ROOT/Feather/Views' | grep -vE 'DownloadButtonView.swift|LibraryCellView.swift'"
 
@@ -160,7 +169,7 @@ check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b
 check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
-if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/Feather/Utilities/ZagRPPairingUninstall.swift" "$ROOT/Feather/Utilities/ZagRPPairingInventoryCheck.swift" "$ROOT/Feather/Utilities/ZagInstallJob.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" "$ROOT/scripts/ZagInstallJobTests.swift" \
+if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/Feather/Utilities/ZagMobileDataToggle.swift" "$ROOT/Feather/Utilities/ZagMobileDataInstallFlow.swift" "$ROOT/Feather/Utilities/ZagRPPairingUninstall.swift" "$ROOT/Feather/Utilities/ZagRPPairingInventoryCheck.swift" "$ROOT/Feather/Utilities/ZagInstallJob.swift" "$ROOT/Feather/Utilities/ZagInstallControlModel.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" "$ROOT/scripts/ZagInstallJobTests.swift" \
 	-o "$WORK/tests" 2>"$WORK/swiftc.log"; then
 	if perl -e 'alarm 120; exec @ARGV' "$WORK/tests"; then echo "PASS  device link behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
 else

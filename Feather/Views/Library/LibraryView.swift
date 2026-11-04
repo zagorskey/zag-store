@@ -2316,7 +2316,6 @@ private struct ZagUpdateRow: View {
 	private var shouldChangeIconsBasedOffStyle: Bool = false
 
 	@State private var showsFullReleaseNotes = false
-	@State private var ringRotation: Double = 0
 	@State private var justCompleted = false
 
 	private var useDarkIconAppearance: Bool {
@@ -2508,57 +2507,26 @@ private struct ZagUpdateRow: View {
 		let stage = transactionManager.stage(for: update)
 
 		VStack(spacing: 2) {
-			ZStack {
-				if mode == .recentlyUpdated {
-					ZagActionPill(
-						title: .localized("Open"),
-						backgroundColor: zagUpdatePillBackground
-					) {
+			// One control: Update contracts into the progress circle and
+			// expands into Open when the update is confirmed.
+			let showsOpen = mode == .recentlyUpdated || justCompleted
+			ZagInstallControl(
+				mode: showsOpen
+					? .pill(ZagInstallPill(title: .localized("Open"), accessibilityLabel: "Open \(update.app.currentName)"))
+					: (stage != nil && !isFailed(stage))
+						? .spinner(.none)
+						: .pill(ZagInstallPill(title: stage?.title ?? .localized("Update"), accessibilityLabel: "Update \(update.app.currentName)")),
+				fill: zagUpdatePillBackground,
+				action: {
+					if showsOpen {
 						if let bundleID = update.app.id {
 							UIApplication.openApp(with: bundleID)
 						}
-					}
-				} else if justCompleted {
-					ZagActionPill(
-						title: .localized("Open"),
-						backgroundColor: zagUpdatePillBackground
-					) {
-						if let bundleID = update.app.id {
-							UIApplication.openApp(with: bundleID)
-						}
-					}
-				} else if stage != nil, !isFailed(stage) {
-					ZStack {
-						Circle()
-							.stroke(zagUpdatesBlue.opacity(0.22), lineWidth: 2.3)
-						Circle()
-							.trim(from: 0.08, to: 0.72)
-							.stroke(
-								zagUpdatesBlue,
-								style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-							)
-							.rotationEffect(.degrees(ringRotation - 90))
-					}
-					.frame(width: 31, height: 31)
-					.onAppear {
-						ringRotation = 0
-						withAnimation(
-							.linear(duration: 0.85)
-								.repeatForever(autoreverses: false)
-						) {
-							ringRotation = 360
-						}
-					}
-				} else {
-					ZagActionPill(
-						title: stage?.title ?? .localized("Update"),
-						backgroundColor: zagUpdatePillBackground
-					) {
+					} else if stage == nil || isFailed(stage) {
 						_startInlineUpdate()
 					}
 				}
-			}
-			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+			)
 
 			Text(_stageCaption(stage))
 				.font(.system(size: 9, weight: .medium))

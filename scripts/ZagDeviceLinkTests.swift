@@ -1139,6 +1139,7 @@ import Network
 		resumeHelperTests()
 		await pauseResumeTests()
 		await installCancelTests()
+		installControlTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

@@ -435,3 +435,61 @@ extension ZagDeviceLinkTests {
 		expect(reread?.stage == .paused && reread?.progress == 0.3, "background/foreground: stage and progress survive view recreation")
 	}
 }
+
+// MARK: - App Store-style control
+
+extension ZagDeviceLinkTests {
+	static func installControlTests() {
+		typealias G = ZagInstallControlGeometry
+		typealias M = ZagInstallControlMotion
+		let get = ZagInstallControlMode.pill(ZagInstallPill(title: "Get", accessibilityLabel: "Get"))
+		let open = ZagInstallControlMode.pill(ZagInstallPill(title: "Open", accessibilityLabel: "Open"))
+		let resume = ZagInstallControlMode.pill(ZagInstallPill(title: "Resume", systemImage: "icloud.and.arrow.down", accessibilityLabel: "Resume"))
+		let downloading = ZagInstallControlMode.progress(0.4, .pause)
+		let installing = ZagInstallControlMode.spinner(.none)
+
+		// Geometry: existing sizes only
+		let pill = G.of(get), circle = G.of(downloading)
+		expect(pill.width == 88 && pill.height == 34 && pill.cornerRadius == 17, "control: the pill keeps the 88 × 34 capsule")
+		expect(circle.width == 31 && circle.height == 31 && circle.cornerRadius == 15.5, "control: the circle keeps the 31 pt ring size")
+		expect(pill.labelOpacity == 1 && pill.ringOpacity == 0 && circle.labelOpacity == 0 && circle.ringOpacity == 1,
+			"control: label and ring are never both visible at rest")
+		expect(G.of(resume) == pill && G.of(open) == pill, "control: Resume and Open return to exactly the original pill")
+
+		// Trailing anchor and stable row
+		expect(pill.origin.x == 0 && circle.origin.x == 57 && circle.origin.x + circle.width == 88,
+			"control: the circle ends on the pill's trailing edge")
+		expect(circle.origin.y == 1.5 && pill.origin.y == 0, "control: centred vertically in the fixed action frame")
+		expect([get, downloading, installing, resume, open].allSatisfy { G.of($0).width <= G.pillWidth && G.of($0).height <= G.pillHeight },
+			"control: no state exceeds the fixed 88 × 34 frame, so the row never reflows")
+
+		// The sequence Get → circle → Resume → circle → Open
+		let sequence = [get, downloading, resume, .progress(0.6, .pause), installing, .progress(1, .none), open]
+		let compact = sequence.map(\.isCompact)
+		expect(compact == [false, true, false, true, true, true, false], "control: Get → circle → Resume → circle → installing → Open")
+		expect(M.spec(toCompact: true, reduceMotion: false).morph == M.spec(toCompact: false, reduceMotion: false).morph,
+			"control: contracting and expanding use the same morph curve (reversible)")
+		if case .spring(_, let damping) = M.spec(toCompact: true, reduceMotion: false).morph {
+			expect(damping >= 0.85, "control: no visible overshoot (damping \(damping))")
+		} else { expect(false, "control: the morph is a spring") }
+		let shrink = M.spec(toCompact: true, reduceMotion: false)
+		if case .easeOut(let out) = shrink.label, case .easeIn(_, let delay) = shrink.ring {
+			expect(out <= delay, "control: contracting, the label is gone before the ring appears (no overlap)")
+		} else { expect(false, "control: contracting fades are ordered") }
+		let grow = M.spec(toCompact: false, reduceMotion: false)
+		if case .easeOut(let out) = grow.ring, case .easeIn(_, let delay) = grow.label {
+			expect(out <= delay, "control: expanding, the ring is gone before the label appears (no overlap)")
+		} else { expect(false, "control: expanding fades are ordered") }
+
+		// Reduce Motion
+		let reduced = M.spec(toCompact: true, reduceMotion: true)
+		expect(reduced.morph == .none && reduced.label != .none && reduced.ring != .none, "control: Reduce Motion skips the morph and only cross-fades")
+
+		// No fake pause; interactivity
+		expect(installing.glyph == .none && !installing.isInteractive, "control: no pause while signing, packaging or installing; taps reach the row")
+		expect(downloading.isInteractive && ZagInstallControlMode.progress(0.4, .stop).isInteractive, "control: a download can be paused or stopped by tapping")
+		expect(!ZagInstallControlMode.progress(0.9, .none).isInteractive, "control: importing is not tappable")
+		let disabled = ZagInstallControlMode.pill(ZagInstallPill(title: "Get", enabled: false, accessibilityLabel: "Get"))
+		expect(!disabled.isInteractive, "control: a claimed action ignores repeated taps")
+	}
+}
