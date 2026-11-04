@@ -430,15 +430,17 @@ struct SettingsView: View {
 
 // Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
 private struct ZagGitHubToolbarGlyph: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         GeometryReader { geometry in
             let k = min(geometry.size.width, geometry.size.height) / 24
             Path { path in
                 func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: y * k) }
-                path.move(to: pt(12, 2))
+                path.move(to: pt(12, 1.8))
                 path.addCurve(to: pt(5, 4.5), control1: pt(9, 2), control2: pt(6.8, 3))
-                path.addLine(to: pt(3.3, 3.6))
-                path.addLine(to: pt(3.6, 7.2))
+                path.addLine(to: pt(2.9, 3.2))
+                path.addLine(to: pt(3.5, 7.4))
                 path.addCurve(to: pt(5, 18), control1: pt(1.6, 10), control2: pt(2.4, 15.5))
                 path.addCurve(to: pt(9.2, 20.3), control1: pt(6, 19.2), control2: pt(7.5, 20))
                 path.addLine(to: pt(9.2, 17.2))
@@ -450,12 +452,12 @@ private struct ZagGitHubToolbarGlyph: View {
                 path.addLine(to: pt(14.8, 20.3))
                 path.addCurve(to: pt(19, 18), control1: pt(16.5, 20), control2: pt(18, 19.2))
                 path.addCurve(to: pt(20.4, 7.2), control1: pt(21.6, 15.5), control2: pt(22.4, 10))
-                path.addLine(to: pt(20.7, 3.6))
+                path.addLine(to: pt(21.1, 3.2))
                 path.addLine(to: pt(19, 4.5))
-                path.addCurve(to: pt(12, 2), control1: pt(17.2, 3), control2: pt(15, 2))
+                path.addCurve(to: pt(12, 1.8), control1: pt(17.2, 3), control2: pt(15, 1.8))
                 path.closeSubpath()
             }
-            .fill(.primary)
+            .fill(colorScheme == .dark ? Color.white : Color.black)
         }
         .frame(width: 23, height: 23)
         .accessibilityHidden(true)
