@@ -456,6 +456,9 @@ struct RPPairingDiagnosticsView: View {
 	@State private var showInstalledAppsInventory = false
 	@State private var inventoryError: String?
 	@State private var healthMessage: String?
+	@State private var reportState: ReportState = .idle
+
+	private enum ReportState { case idle, preparing, copied }
 
 	var body: some View {
 		NBList("RPPairing Diagnostics") {
@@ -501,10 +504,29 @@ struct RPPairingDiagnosticsView: View {
 					Label(pairingCore.isGate2Running ? "Running Health Check…" : "Run Full Health Check", systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope")
 				}
 				.disabled(pairingCore.isGate2Running)
+
+				Button {
+					reportState = .preparing
+					Task { @MainActor in
+						let report = await ZagLocalVPNMonitor.shared.makeReport(
+							steps: pairingCore.gate2Steps,
+							sessionFailure: pairingCore.gate2Failure
+						)
+						UIPasteboard.general.string = report
+						reportState = .copied
+					}
+				} label: {
+					switch reportState {
+					case .idle: Label("Copy Diagnostic Report", systemImage: "doc.on.doc")
+					case .preparing: Label("Preparing Report…", systemImage: "hourglass")
+					case .copied: Label("Report Copied", systemImage: "checkmark")
+					}
+				}
+				.disabled(pairingCore.isGate2Running || reportState == .preparing)
 			} header: {
 				Text("Health Checks")
 			} footer: {
-				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup.")
+				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup. The copied report includes the network type, timings and the first failing step, without device names, identifiers or keys.")
 			}
 
 			Section {
