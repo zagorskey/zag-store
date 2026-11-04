@@ -58,6 +58,7 @@ struct AboutView: View {
                                     AngularGradient(colors: [.blue, .purple, .pink, .orange, .blue], center: .center, angle: .degrees(gradientRotation)),
                                     lineWidth: 1.5
                                 )
+                                .animation(.linear(duration: 5).repeatForever(autoreverses: false), value: gradientRotation)
                         }
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -77,9 +78,7 @@ struct AboutView: View {
                 .buttonStyle(.plain)
                 .padding(.vertical, 4)
                 .onAppear {
-                    withAnimation(.linear(duration: 5).repeatForever(autoreverses: false)) {
-                        gradientRotation = 360
-                    }
+                    gradientRotation = 360
                 }
             } header: {
                 Text("Credits")
