@@ -105,8 +105,8 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 
 private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
 	.aboutUs,
-	.display,
 	.certificates,
+	.display,
 	.features,
 	.pages,
 	.misc,
