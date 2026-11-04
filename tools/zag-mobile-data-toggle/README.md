@@ -32,3 +32,12 @@ Use it to compare generated files with shortcuts exported from Apple's editor.
   command fails with "Please choose a value for each parameter in this
   action." (iPhone, iOS 27.2, and reproduced on macOS with `shortcuts run`).
   Kept for comparison.
+- Cause of build 1's failure: it compared the untyped Shortcut Input
+  directly with the text "is" condition. Apple's editor does not offer "is"
+  for Shortcut Input; it converts it first with Get Text from Input
+  (`is.workflow.actions.detect.text`) and compares that action's Text output.
+  Build 1's condition keys (`WFCondition` 4, `WFConditionalActionString`)
+  were already identical to Apple's export.
+- `dist/Zag Mobile Data Toggle build2-candidate.shortcut`: adds Get Text from
+  Input and End If UUIDs, matching the exported "ZMDT Reference"
+  (Shortcuts 5114.0.8.3). Not yet run on a device.
