@@ -642,8 +642,8 @@ struct DownloadButtonView: View {
 		return job.offersCancel && job.stage.allowsCancel && !job.cancelRequested
 	}
 
-	private func _pill(_ title: String?, image: String? = nil, filled: Bool = true, enabled: Bool = true, label: String) -> ZagInstallControlMode {
-		.pill(ZagInstallPill(title: title, systemImage: image, filled: filled, enabled: enabled, accessibilityLabel: label))
+	private func _pill(_ title: String?, image: String? = nil, filled: Bool = true, enabled: Bool = true, compactLabel: Bool = false, label: String) -> ZagInstallControlMode {
+		.pill(ZagInstallPill(title: title, systemImage: image, filled: filled, enabled: enabled, compactLabel: compactLabel, accessibilityLabel: label))
 	}
 
 	/// The row's action as one mode plus its tap, in the same order as the
@@ -655,7 +655,7 @@ struct DownloadButtonView: View {
 		}
 		if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
 			if jobs.job(_jobKey)?.stage == .paused {
-				return (_pill(.localized("Resume"), image: "icloud.and.arrow.down", label: "Resume downloading \(app.currentName)"),
+				return (_pill(.localized("Resume"), image: "icloud.and.arrow.down", compactLabel: true, label: "Resume downloading \(app.currentName)"),
 						{ _resume(currentDownload) })
 			}
 			return (.progress(downloadProgress, _downloadGlyph(currentDownload)),

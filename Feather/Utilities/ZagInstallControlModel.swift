@@ -22,7 +22,29 @@ struct ZagInstallPill: Equatable {
 	var enabled = true
 	/// Point size for an icon-only pill.
 	var iconSize: Double = 25
+	/// App Store's smaller secondary label (Resume): 15 pt semibold text
+	/// and a matching symbol, instead of the 17 pt bold primary label.
+	var compactLabel = false
 	var accessibilityLabel: String
+
+	/// Font for the title, and for the symbol beside it. Measurement and
+	/// rendering both read this, so the pill width always fits the label.
+	var labelFont: ZagInstallLabelFont {
+		compactLabel ? .compact : .standard
+	}
+}
+
+/// Label typography; `semibold` false means bold.
+struct ZagInstallLabelFont: Equatable {
+	let size: Double
+	let semibold: Bool
+	/// Symbol to title spacing when both are shown.
+	let iconSpacing: Double
+
+	/// Get, Update, Open: unchanged from ZagActionPill.
+	static let standard = ZagInstallLabelFont(size: 17, semibold: false, iconSpacing: 5)
+	/// Resume, measured from the App Store: 15 pt semibold.
+	static let compact = ZagInstallLabelFont(size: 15, semibold: true, iconSpacing: 4.5)
 }
 
 /// What the compact circle shows.
@@ -94,9 +116,9 @@ enum ZagInstallControlLayout {
 	/// ZagActionPill's horizontal padding.
 	static let horizontalPadding = 14.0
 	/// Label typography, unchanged from ZagActionPill.
-	static let titleSize = 17.0
-	/// Symbol to title spacing for icon + title pills (Resume).
-	static let iconSpacing = 5.0
+	static let titleSize = ZagInstallLabelFont.standard.size
+	/// Symbol to title spacing for icon + title pills.
+	static let iconSpacing = ZagInstallLabelFont.standard.iconSpacing
 
 	/// Pill width from the measured label: never narrower than the existing
 	/// 88 pt pill, wider when the label needs it, so nothing truncates.
@@ -114,9 +136,9 @@ enum ZagInstallControlLayout {
 	}
 
 	/// Content width for a label: symbol, spacing, title.
-	static func contentWidth(titleWidth: Double?, symbolWidth: Double?) -> Double {
+	static func contentWidth(titleWidth: Double?, symbolWidth: Double?, spacing: Double = iconSpacing) -> Double {
 		let parts = [symbolWidth, titleWidth].compactMap { $0 }
-		return parts.reduce(0, +) + (parts.count == 2 ? iconSpacing : 0)
+		return parts.reduce(0, +) + (parts.count == 2 ? spacing : 0)
 	}
 }
 

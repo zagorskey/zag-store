@@ -446,7 +446,8 @@ extension ZagDeviceLinkTests {
 		typealias Measure = ZagInstallControlMeasure
 		func pill(_ t: String?, _ i: String? = nil) -> ZagInstallPill { ZagInstallPill(title: t, systemImage: i, accessibilityLabel: t ?? "") }
 		let get = pill("Get"), open = pill("Open"), update = pill("Update"), install = pill("Install")
-		let resume = pill("Resume", "icloud.and.arrow.down")
+		var resume = pill("Resume", "icloud.and.arrow.down")
+		resume.compactLabel = true
 		let steps = stride(from: 0.0, through: 1.0, by: 0.05).map { $0 }
 		let centre = L.slotWidth / 2
 
@@ -455,7 +456,17 @@ extension ZagDeviceLinkTests {
 			expect(Measure.pillWidth(p) == L.slotWidth, "control: \(p.title!) keeps the existing 88 pt pill")
 		}
 		let resumeContent = Measure.contentWidth(resume)
-		expect(resumeContent > Measure.titleWidth("Resume") + 10, "control: Resume content includes the symbol and spacing (\(resumeContent) pt)")
+		expect(resumeContent > Measure.titleWidth("Resume", font: .compact) + 10, "control: Resume content includes the symbol and spacing (\(resumeContent) pt)")
+		// App Store's compact Resume: 15 pt semibold label and symbol,
+		// a 113 pt pill (App Store measured 113 pt; previously 124 pt).
+		expect(resume.labelFont == .compact && ZagInstallLabelFont.compact.size == 15 && ZagInstallLabelFont.compact.semibold,
+			"control: Resume uses App Store's 15 pt semibold label")
+		expect([get, open, update, install].allSatisfy { $0.labelFont == .standard } && ZagInstallLabelFont.standard.size == 17 && !ZagInstallLabelFont.standard.semibold,
+			"control: Get, Update, Open and Install keep 17 pt bold")
+		expect(Measure.titleWidth("Resume", font: .compact) < Measure.titleWidth("Resume"), "control: compact Resume title is narrower than the 17 pt bold one")
+		expect((110...116).contains(Measure.pillWidth(resume)), "control: Resume pill is App Store's compact width (\(Measure.pillWidth(resume)) pt, App Store 113 pt)")
+		var bigResume = resume; bigResume.compactLabel = false
+		expect(Measure.pillWidth(resume) < Measure.pillWidth(bigResume), "control: compact Resume is narrower than the previous 17 pt bold Resume (\(Measure.pillWidth(bigResume)) pt)")
 		expect(Measure.pillWidth(resume) >= resumeContent + 2 * L.horizontalPadding && Measure.pillWidth(resume) > L.slotWidth,
 			"control: Resume pill is widened to its content (\(Measure.pillWidth(resume)) pt), never forced into 88 pt")
 		expect(L.titleSize == 17, "control: pill titles keep 17 pt bold")

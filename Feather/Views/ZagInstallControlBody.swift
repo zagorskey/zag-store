@@ -246,12 +246,15 @@ final class ZagInstallControlView: UIView {
 	private func _setPill(_ p: ZagInstallPill) {
 		pill = p
 		contentWidth = ZagInstallControlMeasure.contentWidth(p)
+		let font = p.labelFont
+		let weight = ZagInstallControlMeasure.weight(font)
+		titleLabel.font = .systemFont(ofSize: font.size, weight: weight)
 		titleLabel.text = p.title
 		titleLabel.isHidden = p.title == nil
 		if let name = p.systemImage {
 			let config = p.title == nil
 				? UIImage.SymbolConfiguration(pointSize: p.iconSize, weight: .regular)
-				: UIImage.SymbolConfiguration(pointSize: ZagInstallControlLayout.titleSize, weight: .bold)
+				: UIImage.SymbolConfiguration(pointSize: font.size, weight: ZagInstallControlMeasure.symbolWeight(font))
 			iconView.image = UIImage(systemName: name, withConfiguration: config)?.withRenderingMode(.alwaysTemplate)
 			iconView.isHidden = false
 		} else {
@@ -261,12 +264,26 @@ final class ZagInstallControlView: UIView {
 		// Lay the label out at its natural size, centred: never truncated.
 		let titleSize = p.title == nil ? .zero : titleLabel.sizeThatFits(CGSize(width: 1000, height: 100))
 		let iconSize = iconView.image?.size ?? .zero
-		let spacing = (p.title != nil && p.systemImage != nil) ? ZagInstallControlLayout.iconSpacing : 0
+		let spacing = (p.title != nil && p.systemImage != nil) ? font.iconSpacing : 0
 		let width = iconSize.width + spacing + titleSize.width
 		let height = max(iconSize.height, titleSize.height, ZagInstallControlLayout.pillHeight)
 		labelHost.bounds = CGRect(x: 0, y: 0, width: width, height: height)
-		iconView.frame = CGRect(x: 0, y: (height - iconSize.height) / 2, width: iconSize.width, height: iconSize.height)
-		titleLabel.frame = CGRect(x: iconSize.width + spacing, y: (height - titleSize.height) / 2, width: titleSize.width, height: titleSize.height)
+		var titleFrame = CGRect(x: iconSize.width + spacing, y: (height - titleSize.height) / 2, width: titleSize.width, height: titleSize.height)
+		var iconFrame = CGRect(x: 0, y: (height - iconSize.height) / 2, width: iconSize.width, height: iconSize.height)
+		if p.title != nil, let offset = iconView.image?.baselineOffsetFromBottom {
+			// Sit the symbol on the title's baseline, then centre the pair
+			// optically: midway between the symbol's centre and the
+			// title's cap-height centre lands on the pill's centre, as in
+			// App Store's Resume.
+			let baseline = titleFrame.minY + titleLabel.font.ascender
+			iconFrame.origin.y = baseline - (iconSize.height - offset)
+			let capCentre = baseline - titleLabel.font.capHeight / 2
+			let shift = height / 2 - (iconFrame.midY + capCentre) / 2
+			iconFrame.origin.y += shift
+			titleFrame.origin.y += shift
+		}
+		iconView.frame = iconFrame
+		titleLabel.frame = titleFrame
 		labelHost.center = CGPoint(x: bounds.midX, y: bounds.midY)
 	}
 

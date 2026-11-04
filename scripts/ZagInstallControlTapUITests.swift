@@ -54,7 +54,7 @@ final class ZagInstallControlTapUITests: XCTestCase {
 	func testResumeTapAtCentreAndEdgesResumesOnly() {
 		reset(); tapControl("resume")
 		assertEvents("action:resume=1", "Resume must resume once and never open details")
-		// The Resume pill is wider than the 88 pt slot: its edges must work too.
+		// The Resume pill (113 pt) is wider than the 88 pt slot: its edges must work too.
 		reset(); tapControl("resume", dx: 54)
 		assertEvents("action:resume=1", "Resume's right edge (outside the 88 pt slot) must still resume")
 		reset(); tapControl("resume", dx: -54)
@@ -89,10 +89,16 @@ final class ZagInstallControlTapUITests: XCTestCase {
 		Thread.sleep(forTimeInterval: 0.4)
 		let elapsed = Int(app.staticTexts["elapsed"].label) ?? -1
 		XCTAssertGreaterThanOrEqual(elapsed, 0, "the tap must reach the control or the row")
+		// `elapsed` is stamped at touch-up, but the hit test happens at
+		// touch-down (up to ~150 ms earlier), so a tap just after the hold
+		// may still land on the wide area. Either owner is right there, but
+		// only ever one of them.
 		if elapsed < holdMs {
 			XCTAssertEqual(events, "action:morphing=1", "a tap \(elapsed) ms into the morph is on the shape and must belong to the control")
-		} else {
+		} else if elapsed > holdMs + 250 {
 			XCTAssertEqual(events, "nav:morphing=1", "a tap \(elapsed) ms after the morph is outside the circle and must open details")
+		} else {
+			XCTAssertTrue(["action:morphing=1", "nav:morphing=1"].contains(events), "a tap at the hold boundary (\(elapsed) ms) must produce exactly one event, got \(events)")
 		}
 		// Settled: that point is ordinary row again.
 		Thread.sleep(forTimeInterval: 1.0)

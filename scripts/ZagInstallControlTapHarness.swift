@@ -27,6 +27,8 @@ private func pill(_ title: String, _ image: String? = nil) -> ZagInstallControlM
 	.pill(ZagInstallPill(title: title, systemImage: image, accessibilityLabel: title))
 }
 
+private let compactResume = ZagInstallControlMode.pill(ZagInstallPill(title: "Resume", systemImage: "icloud.and.arrow.down", compactLabel: true, accessibilityLabel: "Resume"))
+
 private struct Row: View {
 	let name: String
 	let mode: ZagInstallControlMode
@@ -84,9 +86,9 @@ struct ZagInstallControlTapHarness: App {
 				Row(name: "update", mode: pill("Update"), parent: "button", events: events)
 				Row(name: "ring", mode: .progress(0.4, .pause), parent: "gesture", events: events)
 				Row(name: "spinner", mode: .spinner(.none), parent: "gesture", events: events)
-				Row(name: "resume", mode: pill("Resume", "icloud.and.arrow.down"), parent: "gesture", events: events)
+				Row(name: "resume", mode: compactResume, parent: "gesture", events: events)
 				Row(name: "open", mode: pill("Open"), parent: "button", events: events)
-				Row(name: "morphing", mode: morphCompact ? .progress(0.4, .pause) : pill("Resume", "icloud.and.arrow.down"), parent: "gesture", events: events)
+				Row(name: "morphing", mode: morphCompact ? .progress(0.4, .pause) : compactResume, parent: "gesture", events: events)
 				Spacer()
 			}
 			.background(Color.white)
