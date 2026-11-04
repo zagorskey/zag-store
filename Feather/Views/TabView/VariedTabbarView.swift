@@ -622,9 +622,10 @@ struct ZagAccountPopup: View {
                 }
                 .toolbar {
                     if destination != .settings {
-                        ToolbarItem(placement: .confirmationAction) {
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button(action: onClose) {
                                 Image(systemName: "xmark")
+                                    .font(.system(size: 16, weight: .semibold))
                             }
                             .accessibilityLabel("Close")
                         }
