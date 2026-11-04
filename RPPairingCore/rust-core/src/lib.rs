@@ -342,6 +342,129 @@ fn io_error_detail(error: &std::io::Error) -> String {
     }
 }
 
+/// Diagnostic wrapper for the RemotePairing control socket. Records each
+/// completed write, flush, read and shutdown: requested size, bytes moved,
+/// end of stream, error kind and OS error, with a timestamp. It never
+/// records or inspects the bytes themselves.
+#[derive(Debug)]
+struct TracedStream<S> {
+    inner: S,
+    log: std::sync::Arc<std::sync::Mutex<WireLog>>,
+}
+
+#[derive(Debug)]
+struct WireLog {
+    started: std::time::Instant,
+    events: Vec<String>,
+}
+
+impl WireLog {
+    const LIMIT: usize = 64;
+
+    fn new() -> Self {
+        Self { started: std::time::Instant::now(), events: Vec::new() }
+    }
+
+    fn record(&mut self, event: String) {
+        if self.events.len() < Self::LIMIT {
+            let ms = self.started.elapsed().as_millis();
+            self.events.push(format!("#{} +{ms}ms {event}", self.events.len() + 1));
+        }
+    }
+
+    fn summary(&self) -> String {
+        if self.events.is_empty() { "no socket operations completed".to_string() } else { self.events.join("; ") }
+    }
+}
+
+fn io_outcome(error: &std::io::Error) -> String {
+    match error.raw_os_error() {
+        Some(code) => format!("FAILED {:?} os {code}", error.kind()),
+        None => format!("FAILED {:?}", error.kind()),
+    }
+}
+
+impl<S> TracedStream<S> {
+    fn new(inner: S, log: std::sync::Arc<std::sync::Mutex<WireLog>>) -> Self {
+        Self { inner, log }
+    }
+
+    fn note(&self, event: String) {
+        if let Ok(mut log) = self.log.lock() { log.record(event); }
+    }
+}
+
+impl<S: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for TracedStream<S> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let requested = buf.remaining();
+        let before = buf.filled().len();
+        let result = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
+        match &result {
+            std::task::Poll::Ready(Ok(())) => {
+                let got = buf.filled().len() - before;
+                if got == 0 && requested > 0 {
+                    self.note(format!("read {requested}: end of stream"));
+                } else {
+                    self.note(format!("read {requested} -> {got}"));
+                }
+            }
+            std::task::Poll::Ready(Err(error)) => self.note(format!("read {requested} {}", io_outcome(error))),
+            std::task::Poll::Pending => {}
+        }
+        result
+    }
+}
+
+impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for TracedStream<S> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        data: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let result = std::pin::Pin::new(&mut self.inner).poll_write(cx, data);
+        match &result {
+            std::task::Poll::Ready(Ok(written)) => self.note(format!("write {} -> {written}", data.len())),
+            std::task::Poll::Ready(Err(error)) => self.note(format!("write {} {}", data.len(), io_outcome(error))),
+            std::task::Poll::Pending => {}
+        }
+        result
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let result = std::pin::Pin::new(&mut self.inner).poll_flush(cx);
+        match &result {
+            std::task::Poll::Ready(Ok(())) => self.note("flush ok".to_string()),
+            std::task::Poll::Ready(Err(error)) => self.note(format!("flush {}", io_outcome(error))),
+            std::task::Poll::Pending => {}
+        }
+        result
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let result = std::pin::Pin::new(&mut self.inner).poll_shutdown(cx);
+        match &result {
+            std::task::Poll::Ready(Ok(())) => self.note("shutdown ok".to_string()),
+            std::task::Poll::Ready(Err(error)) => self.note(format!("shutdown {}", io_outcome(error))),
+            std::task::Poll::Pending => {}
+        }
+        result
+    }
+}
+
+fn wire_summary(log: &std::sync::Arc<std::sync::Mutex<WireLog>>) -> String {
+    log.lock().map(|log| log.summary()).unwrap_or_else(|_| "wire log unavailable".to_string())
+}
+
 async fn with_zag_device_session<F, Fut, T, P>(
     device_ip: &str,
     pairing_path: &PathBuf,
@@ -398,7 +521,14 @@ where
     }
     progress(2, "Verifying saved RPPairing credentials".to_string());
 
-    let conn = RpPairingSocket::new(stream);
+    // Production keeps the plain TcpStream; only diagnostic sessions wrap it.
+    let wire = std::sync::Arc::new(std::sync::Mutex::new(WireLog::new()));
+    let control: Box<dyn idevice::ReadWrite> = if diagnostic {
+        Box::new(TracedStream::new(stream, wire.clone()))
+    } else {
+        Box::new(stream)
+    };
+    let conn = RpPairingSocket::new(control);
     let mut rpc = RemotePairingClient::new(conn, "Zag Store");
 
     match mode {
@@ -415,15 +545,19 @@ where
         SessionMode::Diagnostic => {
             rpc.attempt_pair_verify()
                 .await
-                .map_err(|error| format!("RPPairing handshake failed: {}", error_detail(&error)))?;
-            progress(6, "RPPairing handshake completed".to_string());
+                .map_err(|error| {
+                    format!("RPPairing handshake failed: {} | wire: {}", error_detail(&error), wire_summary(&wire))
+                })?;
+            progress(6, format!("RPPairing handshake completed | wire: {}", wire_summary(&wire)));
 
             // validate_pairing only reads the credentials but takes them
             // mutably; it gets a copy so the stored file can never change.
             let mut verify_copy = pairing_file.clone();
             rpc.validate_pairing(&mut verify_copy)
                 .await
-                .map_err(|error| format!("RPPairing pair-verify failed: {}", error_detail(&error)))?;
+                .map_err(|error| {
+                    format!("RPPairing pair-verify failed: {} | wire: {}", error_detail(&error), wire_summary(&wire))
+                })?;
             drop(verify_copy);
         }
     }
@@ -1992,5 +2126,148 @@ mod diagnostic_error_tests {
         let text = error_detail(&idevice::IdeviceError::UnexpectedResponse("missing handshake response".into()));
         assert!(!text.contains("io kind"), "{text}");
         assert!(text.contains("idevice code"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod wire_trace_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    enum Server {
+        /// Reads the request, sends a minimal handshake reply.
+        Reply,
+        /// Closes without reading anything.
+        DropImmediately,
+        /// Reads the whole request, then closes cleanly.
+        CloseAfterRequest,
+        /// Reads the request, sends only the 9-byte magic, then closes.
+        PartialReply,
+        /// Reads the request and never answers.
+        Silent,
+    }
+
+    fn read_request(socket: &mut std::net::TcpStream) {
+        let mut header = [0u8; 11];
+        socket.read_exact(&mut header).unwrap();
+        let len = u16::from_be_bytes([header[9], header[10]]) as usize;
+        let mut body = vec![0u8; len];
+        socket.read_exact(&mut body).unwrap();
+    }
+
+    fn serve(mode: Server) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            match mode {
+                Server::Reply => {
+                    read_request(&mut socket);
+                    let json = br#"{"message":{"plain":{"_0":{"response":{"_1":{"handshake":{"_0":{"ok":true}}}}}}},"originatedBy":"device","sequenceNumber":0}"#;
+                    let mut frame = b"RPPairing".to_vec();
+                    frame.extend_from_slice(&(json.len() as u16).to_be_bytes());
+                    frame.extend_from_slice(json);
+                    socket.write_all(&frame).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+                Server::DropImmediately => drop(socket),
+                Server::CloseAfterRequest => read_request(&mut socket),
+                Server::PartialReply => {
+                    read_request(&mut socket);
+                    socket.write_all(b"RPPairing").unwrap();
+                }
+                Server::Silent => {
+                    read_request(&mut socket);
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                }
+            }
+        });
+        port
+    }
+
+    /// Runs the crate's real attempt_pair_verify through the traced stream.
+    fn handshake(mode: Server, delay_ms: u64) -> (Result<(), String>, String) {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(async move {
+            let port = serve(mode);
+            let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            if delay_ms > 0 { tokio::time::sleep(Duration::from_millis(delay_ms)).await; }
+            let wire = Arc::new(Mutex::new(WireLog::new()));
+            let control: Box<dyn idevice::ReadWrite> = Box::new(TracedStream::new(stream, wire.clone()));
+            let mut rpc = RemotePairingClient::new(RpPairingSocket::new(control), "Zag Store");
+            let result = match timeout(Duration::from_millis(800), rpc.attempt_pair_verify()).await {
+                Ok(Ok(_)) => Ok(()),
+                Ok(Err(error)) => Err(error_detail(&error)),
+                Err(_) => Err("timed out".to_string()),
+            };
+            (result, wire_summary(&wire))
+        })
+    }
+
+    fn position(log: &str, needle: &str) -> Option<usize> { log.find(needle) }
+
+    #[test]
+    fn successful_handshake_records_write_then_each_frame_part() {
+        let (result, log) = handshake(Server::Reply, 0);
+        assert!(result.is_ok(), "{result:?} {log}");
+        let write = position(&log, "write ").expect(&log);
+        let flush = position(&log, "flush ok").expect(&log);
+        let magic = position(&log, "read 9 -> 9").expect(&log);
+        let length = position(&log, "read 2 -> 2").expect(&log);
+        assert!(write < flush && flush < magic && magic < length, "stage order: {log}");
+        assert!(log.contains("#1 +"), "events are numbered and timed: {log}");
+    }
+
+    #[test]
+    fn complete_write_is_distinguished_from_the_failing_read() {
+        // The request is written in full before the server's close is seen.
+        let (result, log) = handshake(Server::CloseAfterRequest, 0);
+        let error = result.unwrap_err();
+        assert!(error.contains("io kind UnexpectedEof"), "{error}");
+        let write = log.find("write ").expect(&log);
+        let eof = log.find("read 9: end of stream").expect(&log);
+        assert!(write < eof, "{log}");
+        assert!(!log.contains("FAILED"), "the write itself succeeded: {log}");
+    }
+
+    #[test]
+    fn a_reset_or_close_before_reading_is_reported_on_the_read() {
+        let (result, log) = handshake(Server::DropImmediately, 100);
+        let error = result.unwrap_err();
+        assert!(error.contains("device socket io failed"), "{error}");
+        let failed_read = log.contains("read 9 FAILED") || log.contains("read 9: end of stream");
+        let failed_write = log.contains("write") && log.contains("FAILED BrokenPipe");
+        assert!(failed_read || failed_write, "the failing operation is identified: {log}");
+    }
+
+    #[test]
+    fn a_partial_reply_shows_which_frame_part_was_missing() {
+        let (result, log) = handshake(Server::PartialReply, 0);
+        assert!(result.unwrap_err().contains("UnexpectedEof"));
+        assert!(log.contains("read 9 -> 9") && log.contains("read 2: end of stream"), "{log}");
+    }
+
+    #[test]
+    fn a_silent_peer_times_out_after_a_complete_write() {
+        let (result, log) = handshake(Server::Silent, 0);
+        assert_eq!(result.unwrap_err(), "timed out");
+        assert!(log.contains("flush ok"), "{log}");
+        assert!(!log.contains("read 9 ->") && !log.contains("end of stream"), "no response bytes: {log}");
+    }
+
+    #[test]
+    fn the_wire_log_contains_no_payload() {
+        let (_, log) = handshake(Server::Reply, 0);
+        for secret_like in ["RPPairing", "handshake", "attemptPairVerify", "wireProtocolVersion", "{", "\""] {
+            assert!(!log.contains(secret_like), "payload text leaked ({secret_like}): {log}");
+        }
+    }
+
+    #[test]
+    fn the_wire_log_is_bounded() {
+        let wire = Arc::new(Mutex::new(WireLog::new()));
+        for _ in 0..200 { wire.lock().unwrap().record("read 1 -> 1".into()); }
+        assert_eq!(wire.lock().unwrap().events.len(), WireLog::LIMIT);
     }
 }
