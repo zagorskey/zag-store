@@ -749,6 +749,9 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .lockdown(message)
 		case 103:
 			gate2State = .pairing(message)
+		case 114:
+			// Diagnostic sessions only: the unauthenticated handshake finished.
+			gate2State = .pairing(message)
 		case 104:
 			gate2State = .pairRecord(message)
 			// The iPhone accepted the saved credentials over the real transport.
@@ -823,8 +826,9 @@ final class ZagRPPairingCore: ObservableObject {
 			let tunnels = ZagLocalVPNMonitor.tunnelInterfaceNames()
 			detail = "endpoint \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort) (\(gate2Endpoint.label)); network \(networks.isEmpty ? "none" : networks.joined(separator: ", ")); LocalDevVPN interface \(tunnels.isEmpty ? "not present" : tunnels.joined(separator: ", "))"
 		case 102: stage = "TCP connection to \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort)"
-		case 103: stage = "Pair-Verify started"
-		case 104: stage = "Pairing credentials accepted"
+		case 103: stage = "Handshake started"
+		case 114: stage = "Handshake completed; Pair-Verify started"
+		case 104: stage = "Pair-Verify succeeded (credentials accepted)"
 		case 105: stage = "TLS-PSK device tunnel"
 		case 106: stage = "RSD"
 		case 107:

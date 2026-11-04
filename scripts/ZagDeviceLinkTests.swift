@@ -364,7 +364,7 @@ import Network
 			sessionFailure: "RPPairing pair-verify failed: socket io failed"
 		))
 		expect(report.contains("Physical network: Cellular") && report.contains("10.7.0.1:49152"), "report: includes network type and target endpoint")
-		expect(report.contains("First failing operation: After RemotePairing endpoint") && report.contains("Failure category: connectionInterrupted"),
+		expect(report.contains("First failing operation: Pair-Verify (verifyManualPairing)") && report.contains("Failure category: connectionInterrupted"),
 			"report: names the first failing operation and its category")
 		expect(report.contains("informational, not used by RPPairing"), "report: legacy lockdown is labelled as informational")
 		expect(!report.contains("00008130-0001A2B3C4D5E6F7") && !report.contains("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b") && !report.contains("someone@example.com"),
@@ -511,12 +511,50 @@ import Network
 		expect(report.contains("Error code: OS error 61") && report.contains("Total duration: 812 ms"), "report: includes error code and total duration")
 	}
 
+	static func protocolStageTests() {
+		let eof = "RPPairing handshake failed: device socket io failed [idevice code 1; io kind UnexpectedEof; no os error] <- early eof"
+		let reset = "RPPairing pair-verify failed: device socket io failed [idevice code 1; io kind ConnectionReset; os error 54] <- Connection reset by peer (os error 54)"
+		let rejected = "RPPairing pair-verify failed: pair verify failed [idevice code 72]"
+		expect(ZagDiagnosticReport.failingOperation(eof) == "Handshake (attemptPairVerify)", "stage: handshake failure is named")
+		expect(ZagDiagnosticReport.failingOperation(reset) == "Pair-Verify (verifyManualPairing)", "stage: pair-verify failure is named")
+		expect(ZagDiagnosticReport.failingOperation("Unable to reach RPPairing tunnel at 127.0.0.1:50211: Connection refused (os error 61) [io kind ConnectionRefused; os error 61]") == "TCP connect to tunnel port",
+			"stage: tunnel-port failure is named")
+		expect(ZagDiagnosticReport.failingOperation("Unable to reach RPPairing at 10.7.0.1:49152: Connection refused (os error 61)") == "TCP connect to 49152",
+			"stage: initial connect failure is named")
+		expect(ZagDiagnosticReport.ioKind(eof) == "UnexpectedEof" && ZagDiagnosticReport.ioKind(reset) == "ConnectionReset",
+			"error: I/O kind is extracted")
+		expect(ZagDiagnosticReport.ioKind(rejected) == nil, "error: a protocol rejection has no I/O kind")
+		expect(ZagDiagnosticReport.osErrorCode(reset) == 54 && ZagDiagnosticReport.osErrorCode(eof) == nil, "error: OS error is kept only when present")
+		expect(ZagRPPairingFailure.classify(eof, installationStarted: false) == .connectionInterrupted, "classify: a handshake EOF is a connection loss")
+		expect(ZagRPPairingFailure.classify("RPPairing handshake failed: unexpected response [idevice code 2]", installationStarted: false) == .sessionSetup,
+			"classify: a malformed handshake reply is session setup, not rejection")
+		expect(ZagRPPairingFailure.classify(rejected, installationStarted: false) == .pairingRejected, "classify: an explicit pair-verify rejection stays a rejection")
+
+		let report = ZagDiagnosticReport.make(.init(
+			generatedAt: Date(timeIntervalSince1970: 0), iOSVersion: "27.2", deviceModel: "iPhone",
+			physicalNetworks: ["Wi-Fi"], tunnelInterfaces: ["utun5"], model: ZagDeviceLinkModel(),
+			endpointProbe: nil, legacyLockdownProbe: nil,
+			steps: [
+				ZagDiagnosticStep(stage: "Start", detail: "endpoint 127.0.0.1:49152", elapsedMilliseconds: 0, failed: false),
+				ZagDiagnosticStep(stage: "TCP connection to 127.0.0.1:49152", detail: "local 127.0.0.1:51234, peer 127.0.0.1:49152", elapsedMilliseconds: 3, failed: false),
+				ZagDiagnosticStep(stage: "Handshake started", detail: "", elapsedMilliseconds: 3, failed: false),
+				ZagDiagnosticStep(stage: "After Handshake started", detail: eof, elapsedMilliseconds: 86, failed: true),
+			],
+			sessionFailure: eof, endpoint: .loopbackExperimental
+		))
+		expect(report.contains("Last successful stage: Handshake started"), "report: last successful stage")
+		expect(report.contains("First failing operation: Handshake (attemptPairVerify)"), "report: first failing operation")
+		expect(report.contains("I/O error kind: UnexpectedEof") && report.contains("Peer closed the connection: yes"), "report: EOF is reported as the peer closing")
+		expect(report.contains("Total duration: 86 ms"), "report: total duration")
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
 		modelTests()
 		reportTests()
 		endpointTests()
+		protocolStageTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

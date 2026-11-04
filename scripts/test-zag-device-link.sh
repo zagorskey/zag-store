@@ -65,6 +65,25 @@ check "trace sends no data on any connection" absent '.send(' "$(cat "$TRACE")"
 check "trace uses no private socket options" bash -c "! grep -qE 'SO_RESTRICT|IP_BOUND_IF|setsockopt' '$TRACE'"
 check "trace never reads pairing credentials" absent 'pairingFile' "$(cat "$TRACE")"
 check "trace never starts an RPPairing session" absent 'zag_' "$(cat "$TRACE")"
+RUST="$ROOT/RPPairingCore/rust-core/src/lib.rs"
+session=$(sed -n '/^async fn with_zag_device_session_mode/,/^}/p' "$RUST")
+production=$(awk '/SessionMode::Production => \{/{f=1} /SessionMode::Diagnostic => \{/{f=0} f' <<< "$session")
+diagnostic=$(awk '/SessionMode::Diagnostic => \{/{f=1} f&&/^    }$/{f=0} f' <<< "$session")
+check "rust: production sessions still use rpc.connect" grep -q 'rpc.connect(&mut pairing_file' <<< "$production"
+check "rust: production sessions still persist verified credentials" grep -q 'write_to_file(pairing_path)' <<< "$production"
+check "rust: credentials are written in exactly one place in the session" test "$(grep -c 'write_to_file' <<< "$session")" = 1
+check "rust: diagnostic sessions never write credentials" absent 'write_to_file' "$diagnostic"
+check "rust: diagnostic sessions have no pair-setup fallback" bash -c "! grep -qE '\.pair\(|rpc\.connect' <<< \"\$1\"" _ "$diagnostic"
+check "rust: diagnostic handshake and pair-verify are separate steps" bash -c "grep -q 'attempt_pair_verify()' <<< \"\$1\" && grep -q 'validate_pairing(&mut verify_copy)' <<< \"\$1\"" _ "$diagnostic"
+check "rust: pair-verify uses a copy of the credentials" grep -q 'let mut verify_copy = pairing_file.clone();' <<< "$diagnostic"
+check "rust: the default session wrapper is production" grep -q 'SessionMode::Production, progress, operation' "$RUST"
+check "rust: only the health check uses diagnostic mode" test "$(grep -c 'SessionMode::Diagnostic,' "$RUST")" = 1
+check "rust: the health check is the diagnostic caller" bash -c "sed -n '/^async fn run_gate2_probe/,/^}/p' '$RUST' | grep -q 'SessionMode::Diagnostic,'"
+check "rust: handshake completion maps to callback 114" bash -c "sed -n '/^async fn run_gate2_probe/,/^}/p' '$RUST' | grep -q '6 => 114'"
+check "swift: callback 114 is recorded as a stage" grep -q 'case 114: stage = "Handshake completed; Pair-Verify started"' "$CORE"
+check "rust: error detail never prints debug payloads" absent '{error:?}' "$(sed -n '/^fn error_detail/,/^}/p' "$RUST")"
+check "rust: IDeviceKit stays pinned at 191f36ca" grep -q 'rev = "191f36cae9b08b21b6610452fb1771880b4eae45"' "$ROOT/RPPairingCore/rust-core/Cargo.toml"
+check "rust: Cargo.lock is unchanged" git -C "$ROOT" diff --quiet HEAD -- RPPairingCore/rust-core/Cargo.lock RPPairingCore/rust-core/Cargo.toml
 check "user-facing text makes no unproven cellular claim" absent 'WiFi or Airplane' "$(cat "$ROOT/Feather/Views/Settings/Installation/Tunnel & Pairing/TunnelView.swift")"
 
 if xcrun swiftc -parse-as-library -O "$LINK" "$PROBE" "$ROOT/Feather/Utilities/ZagTransportTrace.swift" "$ROOT/scripts/ZagDeviceLinkTests.swift" \

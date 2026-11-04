@@ -441,6 +441,10 @@ enum ZagRPPairingFailure {
 		if text.contains("pair-verify failed") {
 			return isConnectionLoss(text) ? .connectionInterrupted : .pairingRejected
 		}
+		// Diagnostic sessions report the unauthenticated handshake separately.
+		if text.contains("rppairing handshake failed") {
+			return isConnectionLoss(text) ? .connectionInterrupted : .sessionSetup
+		}
 		if text.contains("createlistener failed") || text.contains("rppairing tunnel at")
 			|| text.contains("tls-psk cdtunnel failed") || text.contains("rsd handshake failed")
 			|| text.contains("installation_proxy over rsd failed") || text.contains("user-app lookup failed") {
@@ -550,6 +554,31 @@ enum ZagDiagnosticReport {
 
 	/// The OS error number in a Rust I/O error message, e.g. 61 for
 	/// "Connection refused (os error 61)".
+	/// The session operation a Rust error message belongs to.
+	static func failingOperation(_ message: String) -> String {
+		let text = message.lowercased()
+		let table: [(String, String)] = [
+			("timed out reaching rppairing at", "TCP connect to 49152 (timed out)"),
+			("unable to reach rppairing at", "TCP connect to 49152"),
+			("rppairing handshake failed", "Handshake (attemptPairVerify)"),
+			("pair-verify failed", "Pair-Verify (verifyManualPairing)"),
+			("createlistener failed", "createListener"),
+			("rppairing tunnel at", "TCP connect to tunnel port"),
+			("tls-psk cdtunnel failed", "TLS-PSK"),
+			("unable to reach rsd through tunnel", "RSD connect"),
+			("rsd handshake failed", "RSD handshake"),
+			("saved rppairing credentials", "Reading pairing credentials"),
+		]
+		return table.first { text.contains($0.0) }?.1 ?? "Other"
+	}
+
+	/// The Rust I/O error kind, e.g. "UnexpectedEof" or "ConnectionReset".
+	static func ioKind(_ message: String) -> String? {
+		guard let range = message.range(of: "io kind ") else { return nil }
+		let kind = message[range.upperBound...].prefix { $0.isLetter }
+		return kind.isEmpty ? nil : String(kind)
+	}
+
 	static func osErrorCode(_ message: String) -> Int? {
 		guard let range = message.range(of: "os error ", options: .caseInsensitive) else { return nil }
 		let digits = message[range.upperBound...].prefix { $0.isNumber }
@@ -587,8 +616,14 @@ enum ZagDiagnosticReport {
 			if let last = input.steps.last { lines.append("Total duration: \(last.elapsedMilliseconds) ms") }
 			if let failure = input.sessionFailure {
 				let kind = ZagRPPairingFailure.classify(failure, installationStarted: false)
-				lines.append("First failing operation: \(input.steps.last { $0.failed }?.stage ?? "unknown")")
+				lines.append("Last successful stage: \(input.steps.last { !$0.failed }?.stage ?? "none")")
+				lines.append("First failing operation: \(failingOperation(failure))")
 				lines.append("Failure category: \(kind)")
+				if let io = ioKind(failure) {
+					lines.append("I/O error kind: \(io)")
+					if io == "UnexpectedEof" { lines.append("Peer closed the connection: yes (end of stream before a complete message)") }
+					if io == "ConnectionReset" { lines.append("Peer closed the connection: yes (reset)") }
+				}
 				if let code = osErrorCode(failure) { lines.append("Error code: OS error \(code)") }
 			}
 		}
