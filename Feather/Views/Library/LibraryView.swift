@@ -1456,22 +1456,38 @@ extension LibraryView {
 			}
 		}
 
-		do {
-			try ZagRPPairingCore.shared.uninstallGate4App(
-				bundleID: identifier,
-				deviceIP: "10.7.0.1"
-			) { result in
-				switch result {
-				case .success:
-					finishDirectRemoval()
-				case .failure:
-					// Fully Local Server and other non-RPPairing setups retain the
-					// existing LaunchServices uninstall path as a fallback.
-					tryLaunchServicesFallback()
+		// Mobile Data Fix wraps the unchanged RPPairing uninstall when Mobile
+		// Data blocks it; on Wi-Fi it runs directly as before.
+		Task { @MainActor in
+			do {
+				try await ZagMobileDataInstallCoordinator.shared.perform(.uninstall, jobID: "uninstall-\(identifier)") {
+					try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+						do {
+							try ZagRPPairingCore.shared.uninstallGate4App(
+								bundleID: identifier,
+								deviceIP: "10.7.0.1"
+							) { result in
+								continuation.resume(with: result)
+							}
+						} catch {
+							continuation.resume(throwing: error)
+						}
+					}
 				}
+				finishDirectRemoval()
+			} catch let reason as ZagMobileDataInstallError {
+				// The RPPairing uninstall never started; say why rather than
+				// trying a fallback that cannot help on Mobile Data.
+				_removingBundleIDs.remove(identifier)
+				UIAlertController.showAlertWithOk(
+					title: .localized("Remove App"),
+					message: reason.localizedDescription
+				)
+			} catch {
+				// Fully Local Server and other non-RPPairing setups retain the
+				// existing LaunchServices uninstall path as a fallback.
+				tryLaunchServicesFallback()
 			}
-		} catch {
-			tryLaunchServicesFallback()
 		}
 	}
 
