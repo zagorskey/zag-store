@@ -41,6 +41,9 @@ final class ZagMobileDataToggleController: ObservableObject {
 	private var timeoutTask: Task<Void, Never>?
 	private var followUpTask: Task<Void, Never>?
 	private var healthWatch: AnyCancellable?
+	/// Set by perform(_:): receives the completion, and the diagnostic
+	/// readiness follow-ups are skipped because the caller checks itself.
+	private var waiter: CheckedContinuation<Toggle.Completion, Never>?
 
 	private init() {
 		let data = UserDefaults.standard.data(forKey: Self.recordKey)
@@ -58,6 +61,22 @@ final class ZagMobileDataToggleController: ObservableObject {
 	}
 
 	func verify() { run(.status) }
+
+	/// Runs one command and returns its validated completion. Used by
+	/// installations. Returns `.handOffRejected` without opening Shortcuts
+	/// if another run is in progress; it never queues or repeats a command.
+	func perform(_ command: Toggle.Command) async -> Toggle.Completion {
+		guard !isBusy, waiter == nil else { return .handOffRejected }
+		return await withCheckedContinuation { continuation in
+			waiter = continuation
+			run(command)
+			if pending == nil, let waiter {
+				// run(_:) could not start.
+				self.waiter = nil
+				waiter.resume(returning: .handOffRejected)
+			}
+		}
+	}
 
 	func run(_ command: Toggle.Command) {
 		guard !isBusy else { return }
@@ -88,6 +107,7 @@ final class ZagMobileDataToggleController: ObservableObject {
 		pending = nil
 		lastMessage = "Cancelled."
 		endActivity()
+		resumeWaiter(.cancelled)
 	}
 
 	/// Consumes every zagstore://shortcut-callback/… URL and nothing else.
@@ -131,6 +151,11 @@ final class ZagMobileDataToggleController: ObservableObject {
 		log("\(operation.command.rawValue): \(message)")
 		lastMessage = message
 
+		if waiter != nil {
+			endActivity()
+			resumeWaiter(completion)
+			return
+		}
 		guard completion == .confirmed else {
 			endActivity()
 			return
@@ -239,6 +264,12 @@ final class ZagMobileDataToggleController: ObservableObject {
 			guard let self, !Task.isCancelled, self.pending == operation else { return }
 			self.complete(operation, .timedOut)
 		}
+	}
+
+	private func resumeWaiter(_ completion: Toggle.Completion) {
+		guard let waiter else { return }
+		self.waiter = nil
+		waiter.resume(returning: completion)
 	}
 
 	private func endActivity() {
