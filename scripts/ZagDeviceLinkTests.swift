@@ -466,11 +466,57 @@ import Network
 		expect(report.contains("Findings:") && report.contains("cellular=yes"), "trace: report includes path flags and findings")
 	}
 
+	static func endpointTests() {
+		// 1, 3. Default and explicit endpoints.
+		expect(ZagRPPairingEndpoint.localDevVPN.address == "10.7.0.1", "endpoint: LocalDevVPN uses 10.7.0.1")
+		expect(ZagRPPairingEndpoint.loopbackExperimental.address == "127.0.0.1", "endpoint: loopback uses 127.0.0.1")
+		// 4. Validation accepts only the two known addresses.
+		expect(ZagRPPairingEndpoint.validated("10.7.0.1") == .localDevVPN && ZagRPPairingEndpoint.validated("127.0.0.1") == .loopbackExperimental,
+			"endpoint: the two known addresses validate")
+		for bad in ["", "localhost", "10.7.1.1", "8.8.8.8", "::1", "127.0.0.1 ", "10.7.0.1:49152"] {
+			expect(ZagRPPairingEndpoint.validated(bad) == nil, "endpoint: \"\(bad)\" is rejected")
+		}
+		// 2, 14. Only the production endpoint can change the toolbar.
+		expect(ZagRPPairingEndpoint.localDevVPN.publishesReadiness && !ZagRPPairingEndpoint.loopbackExperimental.publishesReadiness,
+			"endpoint: loopback results never publish readiness")
+
+		// 6-10. Loopback failures at each stage keep their classification.
+		let cases: [(String, ZagRPPairingFailureKind)] = [
+			("Unable to reach RPPairing at 127.0.0.1:49152: Connection refused (os error 61)", .deviceUnreachable),
+			("Timed out reaching RPPairing at 127.0.0.1:49152", .deviceUnreachable),
+			("RPPairing pair-verify failed: invalid signature", .pairingRejected),
+			("RPPairing createListener failed: unexpected response", .sessionSetup),
+			("Unable to reach RPPairing tunnel at 127.0.0.1:50211: Connection refused (os error 61)", .sessionSetup),
+			("TLS-PSK CDTunnel failed: handshake error", .sessionSetup),
+		]
+		for (message, kind) in cases {
+			let got = ZagRPPairingFailure.classify(message, installationStarted: false)
+			expect(got == kind, "endpoint: \"\(message.prefix(48))…\" is \(kind) (got \(got))")
+		}
+		expect(ZagDiagnosticReport.osErrorCode("Connection refused (os error 61)") == 61, "report: OS error code is extracted")
+		expect(ZagDiagnosticReport.osErrorCode("RSD handshake failed: unexpected eof") == nil, "report: no code when none is present")
+
+		let report = ZagDiagnosticReport.make(.init(
+			generatedAt: Date(timeIntervalSince1970: 0), iOSVersion: "27.2", deviceModel: "iPhone",
+			physicalNetworks: ["Cellular"], tunnelInterfaces: [], model: ZagDeviceLinkModel(),
+			endpointProbe: nil, legacyLockdownProbe: nil,
+			steps: [
+				ZagDiagnosticStep(stage: "Start", detail: "endpoint 127.0.0.1:49152", elapsedMilliseconds: 0, failed: false),
+				ZagDiagnosticStep(stage: "After Start", detail: "Unable to reach RPPairing tunnel at 127.0.0.1:50211: Connection refused (os error 61)", elapsedMilliseconds: 812, failed: true),
+			],
+			sessionFailure: "Unable to reach RPPairing tunnel at 127.0.0.1:50211: Connection refused (os error 61)",
+			endpoint: .loopbackExperimental
+		))
+		expect(report.contains("Target endpoint: 127.0.0.1:49152 (RemotePairing, Loopback (experimental))"), "report: names the loopback target")
+		expect(report.contains("Error code: OS error 61") && report.contains("Total duration: 812 ms"), "report: includes error code and total duration")
+	}
+
 	static func main() async {
 		parserTests()
 		schedulerTests()
 		modelTests()
 		reportTests()
+		endpointTests()
 		classificationTests()
 		retryTests()
 		do { try await probeTests() } catch { expect(false, "probe tests threw \(error)") }

@@ -96,11 +96,11 @@ final class ZagLocalVPNMonitor: ObservableObject {
 
 	/// A redacted report for physical-device testing. Runs one endpoint check
 	/// and one legacy lockdown check, unless a real session is active.
-	func makeReport(steps: [ZagDiagnosticStep], sessionFailure: String?) async -> String {
-		var endpoint: ZagEndpointProbeResult?
+	func makeReport(steps: [ZagDiagnosticStep], sessionFailure: String?, endpoint: ZagRPPairingEndpoint = .localDevVPN) async -> String {
+		var endpointProbe: ZagEndpointProbeResult?
 		var legacy: ZagDeviceProbeResult?
 		if !ZagRPPairingCore.shared.isTransportBusy {
-			endpoint = await ZagEndpointProbe.connect()
+			endpointProbe = await ZagEndpointProbe.connect()
 			legacy = await ZagLockdownProbe.query()
 		}
 		return ZagDiagnosticReport.make(.init(
@@ -110,10 +110,11 @@ final class ZagLocalVPNMonitor: ObservableObject {
 			physicalNetworks: physicalNetworks,
 			tunnelInterfaces: Self.tunnelInterfaceNames(),
 			model: model,
-			endpointProbe: endpoint,
+			endpointProbe: endpointProbe,
 			legacyLockdownProbe: legacy,
 			steps: steps,
-			sessionFailure: sessionFailure
+			sessionFailure: sessionFailure,
+			endpoint: endpoint
 		))
 	}
 

@@ -461,7 +461,6 @@ struct RPPairingDiagnosticsView: View {
 	private enum ReportState { case idle, preparing, copied }
 	@State private var traceState: ReportState = .idle
 	@State private var traceSummary: [String] = []
-	@State private var directAddress: String?
 
 	var body: some View {
 		NBList("RPPairing Diagnostics") {
@@ -509,11 +508,33 @@ struct RPPairingDiagnosticsView: View {
 				.disabled(pairingCore.isGate2Running)
 
 				Button {
+					guard pairingCore.pairingFileExists else {
+						healthMessage = "Pair this iPhone first."
+						return
+					}
+					pairingCore.startGate2Probe(endpoint: .loopbackExperimental)
+				} label: {
+					Label("Run Loopback Health Check (Experimental)", systemImage: "flask")
+				}
+				.disabled(pairingCore.isGate2Running)
+
+				if pairingCore.gate2Endpoint != .localDevVPN {
+					LabeledContent("Target") {
+						Text("\(pairingCore.gate2Endpoint.address):\(ZagDeviceLink.rsdPort)")
+							.font(.footnote.monospaced())
+					}
+				}
+				if let last = pairingCore.gate2Steps.last, !pairingCore.isGate2Running {
+					LabeledContent("Duration") { Text("\(last.elapsedMilliseconds) ms") }
+				}
+
+				Button {
 					reportState = .preparing
 					Task { @MainActor in
 						let report = await ZagLocalVPNMonitor.shared.makeReport(
 							steps: pairingCore.gate2Steps,
-							sessionFailure: pairingCore.gate2Failure
+							sessionFailure: pairingCore.gate2Failure,
+							endpoint: pairingCore.gate2Endpoint
 						)
 						UIPasteboard.general.string = report
 						reportState = .copied
@@ -542,7 +563,6 @@ struct RPPairingDiagnosticsView: View {
 							return
 						}
 						let result = await ZagTransportTrace.run()
-						directAddress = result.tunnelAddress
 						traceSummary = ZagTransportTrace.findings(result)
 						UIPasteboard.general.string = ZagTransportTrace.report(
 							result,
@@ -561,15 +581,6 @@ struct RPPairingDiagnosticsView: View {
 
 				ForEach(traceSummary, id: \.self) { finding in
 					Text(finding).font(.footnote).textSelection(.enabled)
-				}
-
-				if let directAddress, pairingCore.pairingFileExists {
-					Button {
-						pairingCore.startGate2Probe(deviceIP: directAddress)
-					} label: {
-						Label("Health Check via \(directAddress) (Experimental)", systemImage: "flask")
-					}
-					.disabled(pairingCore.isGate2Running)
 				}
 			} header: {
 				Text("Connection Trace")

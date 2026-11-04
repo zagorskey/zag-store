@@ -121,7 +121,10 @@ final class ZagRPPairingCore: ObservableObject {
 	private(set) var gate2Steps: [ZagDiagnosticStep] = []
 	private(set) var gate2Failure: String?
 	private var gate2StartedAt = Date()
-	private var pendingGate2IP: String?
+	private var pendingGate2Endpoint: ZagRPPairingEndpoint?
+	/// The endpoint of the current or most recent health check. Fixed when a
+	/// check starts; every check without an explicit endpoint uses LocalDevVPN.
+	@Published private(set) var gate2Endpoint: ZagRPPairingEndpoint = .localDevVPN
 	private func acquireTransport(_ operation: String) -> Bool {
 		guard transportOwner == nil else {
 			ZagLogger.shared.warning("RPPairing", "Transport busy | requested=\(operation) owner=\(transportOwner ?? "unknown")")
@@ -135,10 +138,10 @@ final class ZagRPPairingCore: ObservableObject {
 		guard transportOwner == operation else { return }
 		transportOwner = nil
 		ZagLogger.shared.info("RPPairing", "Transport released | owner=\(operation)")
-		if let ip = pendingGate2IP {
-			pendingGate2IP = nil
+		if let endpoint = pendingGate2Endpoint {
+			pendingGate2Endpoint = nil
 			gate2State = .idle
-			startGate2Probe(deviceIP: ip)
+			startGate2Probe(endpoint: endpoint)
 		}
 	}
 
@@ -338,6 +341,12 @@ final class ZagRPPairingCore: ObservableObject {
 
 	private func publishReadiness(_ readiness: ZagRPPairingReadiness) {
 		NotificationCenter.default.post(name: .zagRPPairingReadinessDidChange, object: readiness)
+	}
+
+	/// Health checks on an experimental endpoint never change the toolbar.
+	private func publishGate2Readiness(_ readiness: ZagRPPairingReadiness) {
+		guard gate2Endpoint.publishesReadiness else { return }
+		publishReadiness(readiness)
 	}
 
 	fileprivate func receiveGate4(code: Int32, message: String) {
@@ -704,16 +713,18 @@ final class ZagRPPairingCore: ObservableObject {
 		installedApps[bundleID]
 	}
 
-	func startGate2Probe(deviceIP: String = "10.7.0.1") {
+	func startGate2Probe(endpoint: ZagRPPairingEndpoint = .localDevVPN) {
 		guard !isGate2Running else { return }
+		let deviceIP = endpoint.address
 		guard acquireTransport("Gate2 health probe") else {
 			// Manual diagnostics should run after background inventory finishes.
-			pendingGate2IP = deviceIP
+			pendingGate2Endpoint = endpoint
 			gate2State = .starting
 			ZagLogger.shared.info("RPPairing", "Gate2 health probe queued behind active transport")
 			return
 		}
 		ZagLogger.shared.info("RPPairing", "Gate2 health probe starting | deviceIP=\(deviceIP)")
+		gate2Endpoint = endpoint
 		gate2Steps = []
 		gate2Failure = nil
 		gate2StartedAt = Date()
@@ -741,7 +752,7 @@ final class ZagRPPairingCore: ObservableObject {
 		case 104:
 			gate2State = .pairRecord(message)
 			// The iPhone accepted the saved credentials over the real transport.
-			publishReadiness(.verified(Date()))
+			publishGate2Readiness(.verified(Date()))
 		case 105:
 			gate2State = .coreDevice(message)
 		case 106:
@@ -781,7 +792,7 @@ final class ZagRPPairingCore: ObservableObject {
 			case .some(let result): appResult = result
 			case .none: appResult = (0, false)
 			}
-			publishReadiness(.verified(Date()))
+			publishGate2Readiness(.verified(Date()))
 			gate2State = .complete(
 				name: previous.name,
 				model: previous.model,
@@ -795,7 +806,7 @@ final class ZagRPPairingCore: ObservableObject {
 			ZagLogger.shared.error("RPPairing", "Gate2 health probe failed: \(message)")
 			gate2Failure = message
 			let kind = ZagRPPairingFailure.classify(message, installationStarted: false)
-			if kind != .other { publishReadiness(.failed(kind, Date())) }
+			if kind != .other { publishGate2Readiness(.failed(kind, Date())) }
 			gate2State = .failed(message)
 		default:
 			break
@@ -806,8 +817,12 @@ final class ZagRPPairingCore: ObservableObject {
 		let stage: String
 		var detail = message
 		switch code {
-		case 101: stage = "Start"
-		case 102: stage = "RemotePairing endpoint (\(ZagDeviceLink.peerAddress):\(ZagDeviceLink.rsdPort))"
+		case 101:
+			stage = "Start"
+			let networks = ZagLocalVPNMonitor.shared.physicalNetworks
+			let tunnels = ZagLocalVPNMonitor.tunnelInterfaceNames()
+			detail = "endpoint \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort) (\(gate2Endpoint.label)); network \(networks.isEmpty ? "none" : networks.joined(separator: ", ")); LocalDevVPN interface \(tunnels.isEmpty ? "not present" : tunnels.joined(separator: ", "))"
+		case 102: stage = "TCP connection to \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort)"
 		case 103: stage = "Pair-Verify started"
 		case 104: stage = "Pairing credentials accepted"
 		case 105: stage = "TLS-PSK device tunnel"

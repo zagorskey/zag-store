@@ -8,6 +8,9 @@ import Foundation
 /// Pure Foundation so host-side tests can compile it directly.
 enum ZagDeviceLink {
 	static let peerAddress = "10.7.0.1"
+	/// Experimental: this iPhone's own loopback address, used only by the
+	/// loopback health check in RPPairing Diagnostics.
+	static let loopbackAddress = "127.0.0.1"
 	static let lockdownPort: UInt16 = 62078
 	static let rsdPort: UInt16 = 49152
 }
@@ -107,6 +110,45 @@ enum ZagEndpointProbeResult: Equatable {
 		switch self {
 		case .accepted: return true
 		case .failed(let failure): return failure == .refused || failure == .reset
+		}
+	}
+}
+
+/// Where an RPPairing session makes its two outer TCP connections (49152,
+/// then the TLS-PSK tunnel port). Everything after that, RSD and the
+/// installation services, runs inside the encrypted tunnel on addresses the
+/// iPhone assigns, so this is the only transport choice.
+///
+/// Production paths always use `.localDevVPN`. `.loopbackExperimental` is
+/// only offered by the diagnostics screen, for one health check at a time.
+enum ZagRPPairingEndpoint: Equatable {
+	case localDevVPN
+	case loopbackExperimental
+
+	var address: String {
+		switch self {
+		case .localDevVPN: return ZagDeviceLink.peerAddress
+		case .loopbackExperimental: return ZagDeviceLink.loopbackAddress
+		}
+	}
+
+	var label: String {
+		switch self {
+		case .localDevVPN: return "LocalDevVPN"
+		case .loopbackExperimental: return "Loopback (experimental)"
+		}
+	}
+
+	/// Only the production transport may update the toolbar's RPPairing
+	/// state. A loopback success says nothing about the tunnel.
+	var publishesReadiness: Bool { self == .localDevVPN }
+
+	/// Accepts only the two known addresses.
+	static func validated(_ address: String) -> ZagRPPairingEndpoint? {
+		switch address {
+		case ZagDeviceLink.peerAddress: return .localDevVPN
+		case ZagDeviceLink.loopbackAddress: return .loopbackExperimental
+		default: return nil
 		}
 	}
 }
@@ -503,6 +545,15 @@ enum ZagDiagnosticReport {
 		var legacyLockdownProbe: ZagDeviceProbeResult?
 		var steps: [ZagDiagnosticStep]
 		var sessionFailure: String?
+		var endpoint: ZagRPPairingEndpoint = .localDevVPN
+	}
+
+	/// The OS error number in a Rust I/O error message, e.g. 61 for
+	/// "Connection refused (os error 61)".
+	static func osErrorCode(_ message: String) -> Int? {
+		guard let range = message.range(of: "os error ", options: .caseInsensitive) else { return nil }
+		let digits = message[range.upperBound...].prefix { $0.isNumber }
+		return Int(digits)
 	}
 
 	static func make(_ input: Input) -> String {
@@ -513,7 +564,7 @@ enum ZagDiagnosticReport {
 		lines.append("Device: \(input.deviceModel), iOS \(input.iOSVersion)")
 		lines.append("Physical network: \(input.physicalNetworks.isEmpty ? "none" : input.physicalNetworks.joined(separator: ", "))")
 		lines.append("Tunnel interfaces (10.7.x.x): \(input.tunnelInterfaces.isEmpty ? "none" : input.tunnelInterfaces.joined(separator: ", "))")
-		lines.append("Target endpoint: \(ZagDeviceLink.peerAddress):\(ZagDeviceLink.rsdPort) (RemotePairing)")
+		lines.append("Target endpoint: \(input.endpoint.address):\(ZagDeviceLink.rsdPort) (RemotePairing, \(input.endpoint.label))")
 		lines.append("")
 		lines.append("Toolbar: \(describe(input.model.indicator))")
 		lines.append("Tunnel: \(describe(input.model.tunnel))")
@@ -533,10 +584,12 @@ enum ZagDiagnosticReport {
 			for step in input.steps {
 				lines.append("  [\(step.elapsedMilliseconds) ms] \(step.failed ? "FAILED " : "")\(step.stage): \(step.detail)")
 			}
+			if let last = input.steps.last { lines.append("Total duration: \(last.elapsedMilliseconds) ms") }
 			if let failure = input.sessionFailure {
 				let kind = ZagRPPairingFailure.classify(failure, installationStarted: false)
 				lines.append("First failing operation: \(input.steps.last { $0.failed }?.stage ?? "unknown")")
 				lines.append("Failure category: \(kind)")
+				if let code = osErrorCode(failure) { lines.append("Error code: OS error \(code)") }
 			}
 		}
 		return redact(lines.joined(separator: "\n"))

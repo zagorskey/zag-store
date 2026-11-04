@@ -32,7 +32,16 @@ check "indicator has no fixed repeating timer" absent 'Timer.scheduledTimer' "$m
 check "indicator stops probing when inactive" grep -q 'scheduler.cancel()' <<< "$monitor"
 check "indicator skips probes while a real session owns the transport" grep -q 'isTransportBusy' <<< "$monitor"
 check "indicator never runs an RPPairing handshake" absent 'zag_' "$monitor"
-check "real sessions publish readiness (health check and install)" test "$(grep -c 'publishReadiness(.verified(Date()))' "$CORE")" = 3
+check "installs publish readiness" test "$(grep -c 'publishReadiness(.verified(Date()))' "$CORE")" = 1
+check "health checks publish readiness only through the endpoint guard" test "$(grep -c 'publishGate2Readiness(.verified(Date()))' "$CORE")" = 2
+check "the readiness guard checks the endpoint" grep -q 'guard gate2Endpoint.publishesReadiness else { return }' "$CORE"
+check "loopback is requested only from the diagnostics screen" test "$(grep -rl 'loopbackExperimental' "$ROOT/Feather" | grep -v ZagDeviceLink.swift)" = "$ROOT/Feather/Views/Settings/Installation/InstallationView.swift"
+check "no production call site uses the loopback address" bash -c "! grep -rn '127\.0\.0\.1' '$ROOT/Feather' | grep -v 'ZagDeviceLink.swift\|ZagTransportTrace.swift'"
+check "installs, inventory and self-update keep the LocalDevVPN address" bash -c "! grep -rnE 'installGate4IPA|refreshInstalledApps|uninstall' '$ROOT/Feather' | grep -q 'loopback'"
+check "health checks default to LocalDevVPN" grep -q 'func startGate2Probe(endpoint: ZagRPPairingEndpoint = .localDevVPN)' "$CORE"
+check "the endpoint is fixed only after the running-check guard" bash -c "sed -n '/func startGate2Probe(endpoint/,/^	}/p' '$CORE' | awk '/guard !isGate2Running/{g=NR} /gate2Endpoint = endpoint/{e=NR} END{exit !(g && e && g<e)}'"
+check "a queued check keeps its own endpoint" grep -q 'startGate2Probe(endpoint: endpoint)' "$CORE"
+check "no global mutable endpoint override" absent 'static var' "$(sed -n '/enum ZagRPPairingEndpoint/,/^}/p' "$LINK")"
 check "toolbar has no private probe of its own" absent 'NWConnection' "$(cat "$TABBAR")"
 for file in "$TABBAR" "$LINK" "$PROBE" "$CORE" "$MONITOR"; do
 	name=$(basename "$file")
