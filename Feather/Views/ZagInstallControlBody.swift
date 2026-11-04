@@ -22,17 +22,63 @@ struct ZagInstallControlBody: View {
 	let fill: Color
 	let action: () -> Void
 
+	/// Hit area width: the widest the visible shape is during the current
+	/// morph, settling on the target once the morph is over.
+	@State private var hitWidth: Double
+	@State private var pressed = false
+
 	init(mode: ZagInstallControlMode, tint: Color, fill: Color, action: @escaping () -> Void) {
 		self.mode = mode
 		self.tint = tint
 		self.fill = fill
 		self.action = action
+		_hitWidth = State(initialValue: Self.targetHitWidth(mode))
+	}
+
+	private static func targetHitWidth(_ mode: ZagInstallControlMode) -> Double {
+		ZagInstallControlLayout.hitWidth(
+			compact: mode.isCompact,
+			pillWidth: mode.pill.map(ZagInstallControlMeasure.pillWidth) ?? ZagInstallControlLayout.slotWidth
+		)
 	}
 
 	var body: some View {
-		ZagInstallControlRepresentable(mode: mode, tint: tint, fill: fill, action: action)
+		let target = Self.targetHitWidth(mode)
+		// The Core Animation view only draws. Taps are claimed by a SwiftUI
+		// Button, so SwiftUI's own arbitration gives them to the control
+		// exclusively; a row's tap gesture or Button never sees them.
+		ZagInstallControlRepresentable(mode: mode, tint: tint, fill: fill)
 			.frame(width: ZagInstallControlLayout.slotWidth, height: ZagInstallControlLayout.pillHeight)
-			.allowsHitTesting(mode.isInteractive)
+			.opacity(pressed && mode.isInteractive ? 0.45 : 1)
+			.overlay {
+				Button {
+					if mode.isInteractive { action() }
+				} label: {
+					// Centred on the slot; a wider pill (Resume) extends
+					// equally on both sides, like the visible shape.
+					Color.clear
+						.frame(width: hitWidth, height: ZagInstallControlLayout.pillHeight)
+						.contentShape(Capsule(style: .continuous))
+				}
+				.buttonStyle(ZagInstallControlPressStyle(pressed: $pressed))
+				.accessibilityHidden(true)
+			}
+			.task(id: target) {
+				// Cover both the old and the new shape while the morph runs.
+				hitWidth = max(hitWidth, target)
+				try? await Task.sleep(nanoseconds: UInt64((ZagInstallControlMotion.springDuration + 0.05) * 1_000_000_000))
+				if !Task.isCancelled { hitWidth = target }
+			}
+	}
+}
+
+/// Reports the pressed state so the drawn control can dim, like a button.
+private struct ZagInstallControlPressStyle: ButtonStyle {
+	@Binding var pressed: Bool
+
+	func makeBody(configuration: Configuration) -> some View {
+		configuration.label
+			.onChange(of: configuration.isPressed) { pressed = $0 }
 	}
 }
 
@@ -40,16 +86,12 @@ private struct ZagInstallControlRepresentable: UIViewRepresentable {
 	let mode: ZagInstallControlMode
 	let tint: Color
 	let fill: Color
-	let action: () -> Void
 
 	func makeUIView(context: Context) -> ZagInstallControlView {
 		ZagInstallControlView()
 	}
 
 	func updateUIView(_ view: ZagInstallControlView, context: Context) {
-		let mode = self.mode
-		let action = self.action
-		view.onTap = { if mode.isInteractive { action() } }
 		view.update(
 			mode: mode,
 			tint: UIColor(tint),
@@ -59,9 +101,8 @@ private struct ZagInstallControlRepresentable: UIViewRepresentable {
 	}
 }
 
-final class ZagInstallControlView: UIControl {
-	var onTap: (() -> Void)?
-
+/// Draws the control. It never handles touches.
+final class ZagInstallControlView: UIView {
 	private let capsule = CALayer()
 	private let labelHost = UIView()
 	private let iconView = UIImageView()
@@ -128,7 +169,7 @@ final class ZagInstallControlView: UIControl {
 		ringView.addSubview(glyphView)
 		addSubview(ringView)
 
-		addTarget(self, action: #selector(_tapped), for: .touchUpInside)
+		isUserInteractionEnabled = false
 		NotificationCenter.default.addObserver(
 			self, selector: #selector(_restoreSpin),
 			name: UIApplication.willEnterForegroundNotification, object: nil
@@ -140,17 +181,6 @@ final class ZagInstallControlView: UIControl {
 	override var intrinsicContentSize: CGSize {
 		CGSize(width: ZagInstallControlLayout.slotWidth, height: ZagInstallControlLayout.pillHeight)
 	}
-
-	override var isHighlighted: Bool {
-		didSet {
-			guard isHighlighted != oldValue else { return }
-			UIView.animate(withDuration: isHighlighted ? 0.08 : 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-				self.alpha = self.isHighlighted ? 0.45 : 1
-			}
-		}
-	}
-
-	@objc private func _tapped() { onTap?() }
 
 	// MARK: Layout
 

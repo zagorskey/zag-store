@@ -104,6 +104,15 @@ enum ZagInstallControlLayout {
 		max(slotWidth, (contentWidth + 2 * horizontalPadding).rounded(.up))
 	}
 
+	/// Minimum tap target around the 31 pt circle.
+	static let compactHitWidth = 44.0
+
+	/// Width of the tappable area: the pill itself, or a 44 pt target
+	/// around the circle. Always centred on the slot.
+	static func hitWidth(compact: Bool, pillWidth: Double) -> Double {
+		compact ? max(circle, compactHitWidth) : pillWidth
+	}
+
 	/// Content width for a label: symbol, spacing, title.
 	static func contentWidth(titleWidth: Double?, symbolWidth: Double?) -> Double {
 		let parts = [symbolWidth, titleWidth].compactMap { $0 }

@@ -502,6 +502,18 @@ extension ZagDeviceLinkTests {
 			let r = M.keyframes(fromCompactness: toCompact ? 0 : 1, toCompactness: toCompact ? 1 : 0, fromWidth: w, toWidth: w, contentWidth: c, filled: true, reduceMotion: true)
 			expect(Set(r.frames.map(\.width)).count == 2 && r.duration == M.reduceMotionDuration, "keyframes: \(name) under Reduce Motion only cross-fades")
 		}
+		// Hit area: while a morph runs it is max(old, new) target, which
+		// must cover the visible shape at every keyframe; afterwards the
+		// target alone covers the resting shape.
+		for (p, toCompact) in [(resume, true), (resume, false), (get, true), (open, false)] {
+			let w = Measure.pillWidth(p), c = Measure.contentWidth(p)
+			let old = L.hitWidth(compact: !toCompact, pillWidth: w), new = L.hitWidth(compact: toCompact, pillWidth: w)
+			let k = M.keyframes(fromCompactness: toCompact ? 0 : 1, toCompactness: toCompact ? 1 : 0, fromWidth: w, toWidth: w, contentWidth: c, filled: true, reduceMotion: false)
+			expect(k.frames.allSatisfy { $0.width <= max(old, new) } && k.frames.last!.width <= new,
+				"hit area: \(p.title!) \(toCompact ? "→ circle" : "← circle") stays tappable across the whole visible shape")
+		}
+		expect(L.hitWidth(compact: true, pillWidth: 124) == 44 && L.hitWidth(compact: false, pillWidth: 124) == 124, "hit area: 44 pt around the circle, the full pill otherwise")
+
 		// Interruption picks up where the morph is
 		let half = M.progress(elapsed: 0.15, reduceMotion: false)
 		expect(half > 0.3 && half < 0.9 && M.progress(elapsed: 5, reduceMotion: false) == 1, "keyframes: an interrupted morph continues from its current progress")
