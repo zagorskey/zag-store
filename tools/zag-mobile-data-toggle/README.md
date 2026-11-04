@@ -40,4 +40,16 @@ Use it to compare generated files with shortcuts exported from Apple's editor.
   were already identical to Apple's export.
 - `dist/Zag Mobile Data Toggle build2-candidate.shortcut`: adds Get Text from
   Input and End If UUIDs, matching the exported "ZMDT Reference"
-  (Shortcuts 5114.0.8.3). Not yet run on a device.
+  (Shortcuts 5114.0.8.3). Passed status, off and on on iPhone 15 Pro Max, iOS 27.2. Released as v1.
+
+## Release v1
+
+- Signed file: `site/shortcuts/mobile-data-fix/Zag Mobile Data Toggle.shortcut`
+  (identical to `dist/Zag Mobile Data Toggle build2-candidate.shortcut`)
+- SHA-256: `3f976b56313871fdb2f662593c62a749d54927d23ca14410467005f0a71f81d3`
+- Page: https://zagstore.app/shortcuts/mobile-data-fix/
+- `site/` mirrors the static landing root (`/var/www/zagstore-landing`).
+  Copy `site/` to the server and run `sudo sh install-on-server.sh`; it
+  checks the checksum and adds only `shortcuts/mobile-data-fix/`.
+- The file name sets the imported Shortcut's name, so it must stay
+  `Zag Mobile Data Toggle.shortcut`.
