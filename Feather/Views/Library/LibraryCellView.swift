@@ -56,10 +56,10 @@ struct LibraryCellView: View {
 	private var allowSigningCustomisation = false
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey)
 	private var askCertificateEveryTime = false
-	@State private var isSigningImmediately = false
 	@State private var signingRingRotation: Double = 0
-	@State private var isInstallingImmediately = false
 	@State private var installingRingRotation: Double = 0
+	/// The authoritative per-job state; survives scrolling and Shortcuts handoffs.
+	@ObservedObject private var jobs = ZagInstallJobs.shared
 	@ObservedObject private var updateTransaction = ZagUpdateTransactionManager.shared
 	@State private var updateRingRotation: Double = 0
 
@@ -67,6 +67,75 @@ struct LibraryCellView: View {
 	@Binding var selectedSigningAppPresenting: AnyApp?
 	@Binding var selectedInstallAppPresenting: AnyApp?
 	@Binding var selectedAppUUIDs: Set<String>
+
+	// MARK: - Install job
+
+	private var _jobKey: String { "library:\(app.uuid ?? "")" }
+
+	private var isSigningImmediately: Bool {
+		get { jobs.job(_jobKey)?.stage == .signing }
+		nonmutating set {
+			if newValue {
+				// Sign-only jobs end without installing, so they offer no cancel.
+				let installs = OptionsManager.shared.options.post_installAppAfterSigned
+				if !jobs.begin(_jobKey, stage: .signing, offersCancel: installs) { jobs.advance(_jobKey, to: .signing) }
+			} else if jobs.job(_jobKey)?.stage == .signing {
+				jobs.finish(_jobKey)
+			}
+		}
+	}
+
+	private var isInstallingImmediately: Bool {
+		get {
+			guard let stage = jobs.job(_jobKey)?.stage else { return false }
+			return stage != .signing
+		}
+		nonmutating set {
+			if newValue {
+				if !jobs.begin(_jobKey, stage: .packaging) { jobs.advance(_jobKey, to: .packaging) }
+			} else if let stage = jobs.job(_jobKey)?.stage, stage != .signing {
+				jobs.finish(_jobKey)
+			}
+		}
+	}
+
+	private static func _isCancellation(_ error: Error) -> Bool {
+		error is ZagInstallCancelled || (error as? ZagMobileDataInstallError) == .cancelled
+	}
+
+	/// Long-press opens the native cancel menu; tap does nothing, as there
+	/// is no download to pause here.
+	private func _jobControl<RingLabel: View>(@ViewBuilder label: () -> RingLabel) -> some View {
+		let job = jobs.job(_jobKey)
+		return Menu {
+			if let job, job.offersCancel {
+				if job.stage.isFinishing {
+					Button(.localized("Finishing installation…")) {}
+						.disabled(true)
+				} else if job.cancelRequested {
+					Button(.localized("Cancelling…")) {}
+						.disabled(true)
+				} else if job.stage.allowsCancel {
+					Button(role: .destructive) {
+						UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+						let response = jobs.requestCancel(_jobKey)
+						ZagLogger.shared.info("Library Install", "Cancel requested: \(app.name ?? "app") | \(response)")
+					} label: {
+						Label(.localized("Cancel Installation"), systemImage: "xmark")
+					}
+				}
+			}
+		} label: {
+			label()
+		} primaryAction: {}
+		.menuStyle(.button)
+		.buttonStyle(.plain)
+		.menuIndicator(.hidden)
+	}
+
+	private var _jobCaption: String? {
+		jobs.job(_jobKey)?.cancelRequested == true ? .localized("Cancelling…") : nil
+	}
 
 	// MARK: - Selections
 
@@ -417,13 +486,13 @@ extension LibraryCellView {
 					}
 				} else if isInstallingImmediately {
 					VStack(spacing: 2) {
-						_installingIndeterminateRing()
+						_jobControl { _installingIndeterminateRing() }
 							.frame(
 								width: ZagListLayout.actionWidth,
 								height: ZagListLayout.actionHeight
 							)
 
-						Text(.localized("Installing..."))
+						Text(_jobCaption ?? .localized("Installing..."))
 							.font(.system(size: 9, weight: .medium))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
@@ -464,10 +533,10 @@ extension LibraryCellView {
 			} else {
 				if isSigningImmediately {
 					VStack(spacing: 2) {
-						_signingIndeterminateRing()
+						_jobControl { _signingIndeterminateRing() }
 							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 
-						Text(.localized("Signing..."))
+						Text(_jobCaption ?? .localized("Signing..."))
 							.font(.system(size: 9, weight: .medium))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
@@ -476,10 +545,10 @@ extension LibraryCellView {
 					.transition(.opacity)
 				} else if isInstallingImmediately {
 					VStack(spacing: 2) {
-						_installingIndeterminateRing()
+						_jobControl { _installingIndeterminateRing() }
 							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 
-						Text(.localized("Installing..."))
+						Text(_jobCaption ?? .localized("Installing..."))
 							.font(.system(size: 9, weight: .medium))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
@@ -620,6 +689,7 @@ extension LibraryCellView {
 
 		UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
+		let key = _jobKey
 		Task { @MainActor in
 			do {
 				let archiveHandler = ArchiveHandler(app: app)
@@ -631,9 +701,16 @@ extension LibraryCellView {
 						at: packageURL.deletingLastPathComponent()
 					)
 				}
+				// Safe point: packaging finished.
+				try jobs.checkpoint(key)
+				jobs.advance(key, to: .preparingMobileDataFix)
 
 				// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
-				try await ZagMobileDataInstallCoordinator.shared.install(jobID: app.uuid ?? UUID().uuidString, bundleID: app.identifier) {
+				let coordinator = ZagMobileDataInstallCoordinator.shared
+				try await coordinator.install(jobID: app.uuid ?? UUID().uuidString, bundleID: app.identifier, cancelRequested: { jobs.isCancelRequested(key) }) {
+					// Last safe point; after this the installer must finish.
+					try jobs.beginInstalling(key)
+					defer { if coordinator.usingMobileDataFix { jobs.advance(key, to: .restoringMobileData) } }
 					try await withCheckedThrowingContinuation {
 						(continuation: CheckedContinuation<Void, Error>) in
 
@@ -673,6 +750,16 @@ extension LibraryCellView {
 						Storage.shared.deleteApp(for: importedAfterSigning)
 					}
 				}
+			} catch where Self._isCancellation(error) {
+				// Cancelled before installation: keep the Signed record and,
+				// in a Sign -> Install transaction, the Imported record too.
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isInstallingImmediately = false
+				}
+				if importedAfterSigning != nil, let signedUUID = app.uuid {
+					onInstallFailedAfterSigning?(signedUUID)
+				}
+				ZagLogger.shared.info("Library Install", "Cancelled before installation: \(app.name ?? "app")")
 			} catch {
 				withAnimation(.easeInOut(duration: 0.25)) {
 					isInstallingImmediately = false
@@ -786,6 +873,16 @@ extension LibraryCellView {
 							message: .localized("Signing completed, but Zag Store could not locate the signed app."),
 							isCancel: true
 						)
+						return
+					}
+
+					// Safe point: signing committed the Signed record. A cancel
+					// keeps it and the Imported record, and installs nothing.
+					if jobs.isCancelRequested(_jobKey) {
+						withAnimation(.easeInOut(duration: 0.25)) {
+							isSigningImmediately = false
+						}
+						ZagLogger.shared.info("Library Install", "Cancelled after signing: \(app.name ?? "app")")
 						return
 					}
 

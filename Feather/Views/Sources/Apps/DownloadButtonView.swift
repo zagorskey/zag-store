@@ -19,13 +19,13 @@ struct DownloadButtonView: View {
 
 	@ObservedObject private var downloadManager = DownloadManager.shared
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
+	/// The authoritative per-job state; survives scrolling and Shortcuts handoffs.
+	@ObservedObject private var jobs = ZagInstallJobs.shared
 	@Environment(\.colorScheme) private var colorScheme
 
 	@State private var downloadProgress: Double = 0
 	@State private var cancellable: AnyCancellable?
-	@State private var zagPhase: ZagGetPhase = .idle
 	@State private var installedBundleID: String?
-	@State private var installationProgress: Double = 0
 	@State private var transactionError: String?
 	@State private var retrySignedUUID: String?
 	@State private var retryImportedUUID: String?
@@ -55,6 +55,58 @@ struct DownloadButtonView: View {
 		wasDownloadedBefore = true
 	}
 
+	// MARK: Install job
+
+	private var _jobKey: String { "repository:\(app.currentUniqueId)" }
+
+	/// The row's coarse phase, read from and written to the shared job.
+	private var zagPhase: ZagGetPhase {
+		get {
+			guard let stage = jobs.job(_jobKey)?.stage else { return .idle }
+			switch stage {
+			case .downloading, .paused, .resuming, .importing: return .downloading
+			case .signing: return .signing
+			default: return .installing
+			}
+		}
+		nonmutating set {
+			switch newValue {
+			case .idle:
+				jobs.finish(_jobKey)
+			case .downloading:
+				if !jobs.begin(_jobKey, stage: .downloading) { jobs.advance(_jobKey, to: .downloading) }
+			case .signing:
+				if !jobs.begin(_jobKey, stage: .signing) { jobs.advance(_jobKey, to: .signing) }
+			case .installing:
+				if !jobs.begin(_jobKey, stage: .packaging) { jobs.advance(_jobKey, to: .packaging) }
+			}
+		}
+	}
+
+	private var installationProgress: Double {
+		get {
+			guard let job = jobs.job(_jobKey), job.stage.isFinishing else { return 0 }
+			return job.progress
+		}
+		nonmutating set { jobs.setProgress(_jobKey, newValue) }
+	}
+
+	private static func _isCancellation(_ error: Error) -> Bool {
+		error is ZagInstallCancelled || (error as? ZagMobileDataInstallError) == .cancelled
+	}
+
+	/// Committed Imported and Signed records are kept; the row returns to
+	/// its normal state.
+	private func _finishCancelled() {
+		ZagLogger.shared.info("Repository Install", "Cancelled: \(app.currentName) | id=\(app.id ?? "unknown")")
+		retrySignedUUID = nil
+		retryImportedUUID = nil
+		UserDefaults.standard.removeObject(forKey: _retryStorageKey)
+		UserDefaults.standard.removeObject(forKey: _signingRetryStorageKey)
+		zagPhase = .idle
+		actionClaimed = false
+	}
+
 	private var pillBackground: Color {
 		colorScheme == .dark
 			? Color(hex: "#1C1C1E")
@@ -77,21 +129,18 @@ struct DownloadButtonView: View {
                     }
                     .disabled(actionClaimed)
                 } else if let currentDownload = downloadManager.getDownload(by: app.currentUniqueId) {
-					_progressRing(progress: downloadProgress, showsStop: downloadProgress < 0.75)
-						.onTapGesture {
-							if downloadProgress <= 0.75 {
-								downloadManager.cancelDownload(currentDownload)
-							}
-						}
+					_jobControl(download: currentDownload) {
+						_progressRing(progress: downloadProgress, glyph: _downloadGlyph(currentDownload))
+					}
 				} else if zagPhase == .downloading {
-					_indeterminateRing()
+					_jobControl { _indeterminateRing() }
 				} else if zagPhase == .signing {
-					_indeterminateRing()
+					_jobControl { _indeterminateRing() }
 				} else if zagPhase == .installing {
 					if installationProgress > 0.03 {
-						_progressRing(progress: installationProgress, showsStop: false)
+						_jobControl { _progressRing(progress: installationProgress, glyph: .none) }
 					} else {
-						_indeterminateRing()
+						_jobControl { _indeterminateRing() }
 					}
 				} else if retrySignedUUID != nil, _retrySignedCopy() != nil {
                     ZagActionPill(title: .localized("Retry")) {
@@ -317,6 +366,10 @@ struct DownloadButtonView: View {
 	}
 
 	private var _stageCaption: String {
+		if let job = jobs.job(_jobKey) {
+			if job.cancelRequested { return .localized("Cancelling…") }
+			if job.stage == .paused { return .localized("Paused") }
+		}
 		switch zagPhase {
 		case .downloading: return .localized("Downloading…")
 		case .signing: return .localized("Preparing…")
@@ -343,8 +396,110 @@ struct DownloadButtonView: View {
 		}
 	}
 
+	private enum ZagRingGlyph: Equatable {
+		case none, stop, pause, play
+	}
+
+	/// Pause while transferring from a server that supports genuine resume;
+	/// play while paused; the existing stop square when it can't resume.
+	private func _downloadGlyph(_ download: Download) -> ZagRingGlyph {
+		guard let job = jobs.job(_jobKey) else { return downloadProgress < 0.75 ? .stop : .none }
+		if job.cancelRequested { return .none }
+		if job.stage == .paused { return .play }
+		guard job.stage.isDownload, download.progress < 1 else { return .none }
+		return job.canPause ? .pause : .stop
+	}
+
+	/// The ring as an App Store-style control: tap pauses or resumes (or
+	/// stops a transfer that can't resume); long-press opens the menu.
+	private func _jobControl<RingLabel: View>(download: Download? = nil, @ViewBuilder label: () -> RingLabel) -> some View {
+		let job = jobs.job(_jobKey)
+		return Menu {
+			if let job {
+				if job.stage.isFinishing {
+					Button(.localized("Finishing installation…")) {}
+						.disabled(true)
+				} else if job.cancelRequested {
+					Button(.localized("Cancelling…")) {}
+						.disabled(true)
+				} else {
+					if job.stage == .paused {
+						Button { _resume(download) } label: {
+							Label(.localized("Resume Download"), systemImage: "play")
+						}
+					} else if job.stage.isDownload, job.canPause, (download?.progress ?? 1) < 1 {
+						Button { _pause(download) } label: {
+							Label(.localized("Pause Download"), systemImage: "pause")
+						}
+					}
+					if job.offersCancel, job.stage.allowsCancel {
+						Button(role: .destructive) { _cancelJob(download) } label: {
+							Label(.localized("Cancel Installation"), systemImage: "xmark")
+						}
+					}
+				}
+			}
+		} label: {
+			label()
+		} primaryAction: {
+			_primaryTap(job: job, download: download)
+		}
+		.menuStyle(.button)
+		.buttonStyle(.plain)
+		.menuIndicator(.hidden)
+		.accessibilityLabel(Text("\(app.currentName), \(_stageCaption)"))
+	}
+
+	private func _primaryTap(job: ZagInstallJob?, download: Download?) {
+		guard let job else {
+			// No job (legacy download): the original tap-to-stop.
+			if let download, downloadProgress <= 0.75 { downloadManager.cancelDownload(download) }
+			return
+		}
+		guard !job.cancelRequested else { return }
+		if job.stage == .paused { _resume(download); return }
+		guard job.stage.isDownload, let download, download.progress < 1 else { return }
+		if job.canPause { _pause(download) } else { _cancelJob(download) }
+	}
+
+	private func _pause(_ download: Download?) {
+		guard let download else { return }
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		let key = _jobKey
+		downloadManager.pauseDownload(download) { paused in
+			// Without resume data the download reports its own failure.
+			if paused { jobs.advance(key, to: .paused) }
+		}
+	}
+
+	private func _resume(_ download: Download?) {
+		guard let download, downloadManager.resumePausedDownload(download) else { return }
+		UIImpactFeedbackGenerator(style: .light).impactOccurred()
+		jobs.advance(_jobKey, to: .resuming)
+	}
+
+	private func _cancelJob(_ download: Download?) {
+		UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+		let response = jobs.requestCancel(_jobKey)
+		ZagLogger.shared.info("Repository Install", "Cancel requested: \(app.currentName) | \(response)")
+		guard response == .now else { return }
+		if let download, download.progress >= 1, !download.isPaused {
+			// The bytes are in; importing can't be interrupted. The request
+			// is honoured when the import finishes.
+			jobs.advance(_jobKey, to: .importing)
+			return
+		}
+		if let download {
+			// Stops the transfer, removes its partial file, and reports
+			// cancellation through the pipeline callback.
+			downloadManager.cancelDownload(download)
+		} else {
+			zagPhase = .idle
+		}
+	}
+
 	@ViewBuilder
-	private func _progressRing(progress: Double, showsStop: Bool) -> some View {
+	private func _progressRing(progress: Double, glyph: ZagRingGlyph) -> some View {
 		ZStack {
 			Circle()
 				.stroke(pillForeground.opacity(0.22), lineWidth: 2.3)
@@ -352,10 +507,19 @@ struct DownloadButtonView: View {
 				.trim(from: 0, to: max(0.03, min(1, progress)))
 				.stroke(pillForeground, style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
 				.rotationEffect(.degrees(-90))
-			if showsStop {
+			if glyph == .stop {
 				Image(systemName: "square.fill")
 					.foregroundStyle(pillForeground)
 					.font(.footnote)
+			} else if glyph == .pause {
+				Image(systemName: "pause.fill")
+					.foregroundStyle(pillForeground)
+					.font(.footnote)
+			} else if glyph == .play {
+				Image(systemName: "play.fill")
+					.foregroundStyle(pillForeground)
+					.font(.footnote)
+					.offset(x: 1)
 			} else if progress >= 1 {
 				Image(systemName: "checkmark")
 					.foregroundStyle(pillForeground)
@@ -712,6 +876,11 @@ struct DownloadButtonView: View {
 							return
 						}
 						_rememberSuccessfulDownload()
+						// Safe point: the import committed; keep it and stop.
+						if jobs.isCancelRequested(_jobKey) {
+							_finishCancelled()
+							return
+						}
 						retryImportedUUID = uuid
 						UserDefaults.standard.set(uuid, forKey: _signingRetryStorageKey)
 						_signAndInstall(imported, certificate: certificate)
@@ -782,6 +951,11 @@ struct DownloadButtonView: View {
 				_failTransaction(.localized("Signing completed, but Zag Store could not locate the signed app."))
 				return
 			}
+			// Safe point: signing committed the Signed record; keep it and stop.
+			if jobs.isCancelRequested(_jobKey) {
+				_finishCancelled()
+				return
+			}
 			retryImportedUUID = nil
 			UserDefaults.standard.removeObject(forKey: _signingRetryStorageKey)
 			retrySignedUUID = signedUUID
@@ -801,20 +975,31 @@ struct DownloadButtonView: View {
 		}
 		ZagLogger.shared.info("Installation", "Install started: \(signed.name ?? app.currentName) | id=\(signed.identifier ?? "unknown") | method=\(method)")
 
+		let key = _jobKey
 		Task {
 			do {
 				let status = InstallerStatusViewModel(isIdevice: method == 1)
 				let archive = ArchiveHandler(app: signed, viewModel: status)
 				try await archive.move()
 				let packageURL = try await archive.archive()
+				// The package is this job's own temporary file.
+				defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
+				// Safe point: packaging finished.
+				try jobs.checkpoint(key)
 
 				if method == 1 {
+					try jobs.beginInstalling(key)
 					let proxy = InstallationProxy(viewModel: status)
 					try await proxy.install(at: packageURL, suspend: false)
 					installationProgress = 1
 				} else {
 					// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
-					try await ZagMobileDataInstallCoordinator.shared.install(jobID: signed.uuid ?? UUID().uuidString) {
+					jobs.advance(key, to: .preparingMobileDataFix)
+					let coordinator = ZagMobileDataInstallCoordinator.shared
+					try await coordinator.install(jobID: signed.uuid ?? UUID().uuidString, cancelRequested: { jobs.isCancelRequested(key) }) {
+						// Last safe point; after this the installer must finish.
+						try jobs.beginInstalling(key)
+						defer { if coordinator.usingMobileDataFix { jobs.advance(key, to: .restoringMobileData) } }
 						try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
 							do {
 								try ZagRPPairingCore.shared.installGate4IPA(
@@ -850,6 +1035,8 @@ struct DownloadButtonView: View {
 				try? pairingCore.refreshInstalledApps()
 				ZagLogger.shared.info("Installation", "Install completed: \(signed.name ?? app.currentName) | id=\(signed.identifier ?? "unknown") | temporaryImportRemoved=\(imported != nil)")
 				zagPhase = .idle
+			} catch where Self._isCancellation(error) {
+				_finishCancelled()
 			} catch {
 				_failTransaction(error.localizedDescription)
 			}
@@ -940,14 +1127,24 @@ struct DownloadButtonView: View {
 
 		downloadProgress = download.overallProgress
 
-		let publisher = Publishers.CombineLatest(
+		let publisher = Publishers.CombineLatest3(
 			download.$progress,
-			download.$unpackageProgress
+			download.$unpackageProgress,
+			download.$canPause
 		)
 
-		cancellable = publisher.sink { _, _ in
-			downloadProgress =
-				download.overallProgress
+		let key = _jobKey
+		let jobs = self.jobs
+		cancellable = publisher.sink { progress, unpackage, canPause in
+			// @Published delivers new values before they are stored.
+			let overall = download.onlyArchiving ? unpackage : (0.3 * unpackage) + (0.7 * progress)
+			downloadProgress = overall
+			jobs.setCanPause(key, canPause)
+			jobs.setProgress(key, overall)
+			if let stage = jobs.job(key)?.stage {
+				if stage == .resuming, !download.isPaused { jobs.advance(key, to: .downloading) }
+				if stage == .downloading, progress >= 1 { jobs.advance(key, to: .importing) }
+			}
 		}
 	}
 	private enum ZagGetPhase: Equatable {
