@@ -10,6 +10,8 @@ import NimbleViews
 
 // MARK: - View
 struct CertificatesView: View {
+    @Environment(\.zagAccountClose) private var closeAccount
+    @Environment(\.zagInsideAccountPopup) private var insideAccountPopup
 	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
     @AppStorage("Feather.userTintColor") private var _themeColorHex = "#0090FF"
     private var _themeTint: Color { Color(hex: _themeColorHex) }
@@ -188,15 +190,23 @@ struct CertificatesView: View {
 			}
 		}
 		.toolbar {
-			if _bindingSelectedCert == nil {
-				NBToolbarButton(
-					systemImage: "plus",
-					style: .icon,
-					placement: .topBarTrailing
-				) {
-					_isAddingPresenting = true
-				}
-			}
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if insideAccountPopup, let closeAccount {
+                    Button(action: closeAccount) {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(.primary)
+                    .accessibilityLabel("Close")
+                }
+                if _bindingSelectedCert == nil {
+                    Button {
+                        _isAddingPresenting = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Import Certificate")
+                }
+            }
 		}
         .task {
             _probeSystemDictation()
