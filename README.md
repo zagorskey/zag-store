@@ -2,125 +2,122 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/zag-store-icon-dark.png">
-  <img src="docs/assets/zag-store-icon.png" width="128" height="128" alt="Zag Store app icon">
+  <img src="docs/assets/zag-store-icon.png" width="144" alt="Zag Store icon">
 </picture>
 
 # Zag Store
 
-**Your apps. Your certificate. Your way.**
+### A different kind of app store for iOS.
 
-Discover, sign, install and manage apps on iPhone and iPad, all in one app.
+**Discover beautifully. Sign independently. Make it yours.**
 
-[Website](https://zagstore.app) · [Releases](https://github.com/zagorskey/zag-store/releases) · [Report an issue](https://github.com/zagorskey/zag-store/issues/new/choose) · [Security](SECURITY.md)
+A native SwiftUI experience for exploring apps, games and emulators, managing sources, and signing apps with your own certificate.
+
+[**Explore the website**](https://zagstore.app) · [**Releases**](https://github.com/zagorskey/zag-store/releases) · [**Contribute**](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-> [!NOTE]
-> Zag Store is in **public beta**. Features, compatibility and installation requirements may change between builds. Back up important data before testing pre-release software.
+## Designed to feel at home on iOS
 
-## Features
+Zag Store isn't just a list of IPA files. It's a complete app experience, shaped around discovery, control and the details that make everyday use feel effortless.
 
-**Discover**
-Browse apps, games and emulators from AltStore-format repositories, with genre shelves, artwork and search.
+| **Explore** | **Personalise** | **Stay in control** |
+| :--- | :--- | :--- |
+| Discover apps, games and emulators with artwork, search and dedicated browsing experiences. | Choose your navigation tabs, switch colour themes and enjoy a Liquid Glass-inspired interface on supported iOS versions. | Bring your own signing identity, organise sources, follow installation activity and manage compatible apps. |
 
-**Bring your own certificate**
-Sign compatible IPAs on the device with your own certificate and provisioning profile. Zag Store never provides or shares a signing certificate.
+### A closer look
 
-**Install and manage**
-Install, update and remove apps, and follow their progress in Activity. Installs work over Wi-Fi or Mobile Data with a local VPN utility.
+> **Real screenshots are being prepared from the current beta.** We won't substitute mockups or outdated Feather captures for the actual Zag Store interface.
 
-**Make it yours**
-Choose the tab layout, theme and app icon. On iOS 26 the interface uses the system's Liquid Glass design.
+**01 — Discover what’s next**
 
-<!--
-Screenshots: add real device captures only (no mock-ups or frames with fake content).
-Suggested set, PNG, iPhone portrait, light mode, saved under docs/screenshots/:
-  apps.png · games.png · sources.png · library.png · settings.png
-Then replace this comment with:
+Browse beyond a plain repository list. Explore featured content, dedicated Apps and Games experiences, and compatible AltStore-format sources.
 
-<p align="center">
-  <img src="docs/screenshots/apps.png" width="200" alt="Apps">
-  <img src="docs/screenshots/games.png" width="200" alt="Games">
-  <img src="docs/screenshots/sources.png" width="200" alt="Sources">
-  <img src="docs/screenshots/library.png" width="200" alt="Library">
-</p>
--->
+**02 — Your certificate. Your choice.**
 
-## Requirements
+Use your own compatible certificate and provisioning profile to sign IPAs. Zag Store does not supply a shared signing identity.
 
-- iPhone or iPad running **iOS 16.4 or later**. Some interface features need iOS 26.
-- Your own **signing certificate (`.p12`)** and a matching **provisioning profile (`.mobileprovision`)**.
-- To install apps on the device: a pairing file and a local VPN utility. Each release's notes explain the current setup.
+**03 — A dock that adapts to you.**
 
-## Install
+Keep your preferred destinations close with configurable navigation. The interface offers multiple colour themes and system-inspired visual treatments.
 
-**Release verification is in progress.** Use only a release explicitly marked as a verified Zag Store distribution build. The intended release package is an IPA without a personal developer signing identity, accompanied by its SHA-256 checksum. Older beta assets may not meet this requirement.
+**04 — Everything in one place.**
 
-1. Once a verified distribution release is available, download its IPA and compare its checksum with the value in the release notes:
-   ```bash
-   shasum -a 256 ZagStore.ipa
-   ```
-2. Sign it with your own certificate and provisioning profile, using a signing tool you trust.
-3. Install the signed IPA on your device.
+Manage sources and certificates, follow activity, and use supported update and installation workflows without jumping between unrelated interfaces.
 
-> [!IMPORTANT]
-> Never upload your private key, `.p12` file or certificate password to a service you do not trust. Zag Store's maintainers will never ask for them.
+---
+
+## Get Zag Store
+
+**Public beta preparation is underway.** The release package and its SHA-256 checksum are being verified before a distribution build is recommended. Older beta release assets may not meet the intended distribution requirements.
+
+Zag Store is intended for users who provide their **own compatible signing certificate and provisioning profile**. An IPA that lacks a usable developer signature must be signed appropriately before installation on a stock iPhone or iPad.
+
+[**View GitHub releases**](https://github.com/zagorskey/zag-store/releases) · [**Report a bug**](https://github.com/zagorskey/zag-store/issues/new/choose)
+
+**Before installing**
+
+- Check the release notes for the supported iOS versions and installation prerequisites. The project currently targets iOS 16.4 or later; some interface features require iOS 26.
+- Use a verified distribution artifact and compare its SHA-256 checksum against the published release value.
+- Sign with your own certificate and matching provisioning profile using a signing tool you trust.
+- Some device installation and pairing operations require a pairing file and a local VPN utility, depending on the workflow.
+
+Never publish or share your private key, certificate password or provisioning profile in a GitHub issue.
 
 ## Build from source
 
-You need macOS with **Xcode 26** and [Rust](https://rustup.rs) (installed with `rustup`).
+Building requires macOS, a compatible Xcode toolchain (currently Xcode 26), Rust and the project's submodules.
 
 ```bash
 git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
 cd zag-store
 
-# 1. Build the Rust device-communication core (needed once, and again when it changes)
 bash RPPairingCore/build-rust.sh
-
-# 2. Build the app and package it
 make iphoneos
 ```
 
-Check the build output and signing metadata before distribution. A development or ad-hoc-signed artifact still requires appropriate signing with your own certificate before installation on a stock device.
+> **Source-build availability:** The Zsign submodule currently requires an access change before an unauthenticated public clone can resolve every dependency. Do not treat the above as a verified public build until that is resolved.
 
-## Project layout
+Inspect the resulting IPA and its signing metadata before distributing it. A locally built or ad-hoc-signed IPA is not automatically installable on a stock device.
 
-| Path | Contents |
+<details>
+<summary><strong>Repository structure</strong></summary>
+
+| Path | Purpose |
 | --- | --- |
-| `Feather/` | The iOS app (SwiftUI). The folder keeps its upstream name. |
-| `RPPairingCore/` | Rust core for pairing and on-device installation, built on `idevice` |
-| `Zsign/` | IPA signing (submodule) |
-| `IDeviceKitten/` | Device-communication library (submodule) |
-| `AltSourceKit/`, `NimbleKit/` | Repository parsing and shared SwiftUI components from upstream |
-| `scripts/` | Tests and release tooling |
+| `Feather/` | SwiftUI application; upstream folder name retained |
+| `RPPairingCore/` | Rust device communication and pairing core |
+| `Zsign/` | IPA signing submodule |
+| `IDeviceKitten/` | Device communication submodule |
+| `AltSourceKit/`, `NimbleKit/` | Repository models and interface components |
+| `scripts/` | Build, verification and release tooling |
 
-## Credits
+</details>
 
-Zag Store is a fork of **[Feather](https://github.com/claration/Feather)** by [claration](https://github.com/claration) and its contributors, and keeps Feather's GPL-3.0 licence and copyright notices. Thank you to everyone who built it.
+---
 
-It also builds on these projects:
+## Built on open source
 
-| Project | Used for | Licence |
-| --- | --- | --- |
-| [Feather](https://github.com/claration/Feather) | Original app, signing and repository experience | GPL-3.0 |
-| [AltSourceKit](AltSourceKit) and [NimbleKit](NimbleKit) | Repository models and SwiftUI helpers (from Feather) | MIT |
-| [idevice](https://github.com/jkcoxson/idevice) | Device communication | MIT |
-| [Zsign](https://github.com/zhlynn/zsign) | IPA signing | MIT |
-| [ElleKit](https://github.com/evelyneee/ellekit) | Tweak injection support | [BSD-style](LICENSE_ELLEKIT) |
-| [Nuke](https://github.com/kean/Nuke) | Image loading and caching | MIT |
-| [OpenSSL](https://github.com/krzyzanowskim/OpenSSL) | Cryptography | Apache-2.0 |
-| [Zip](https://github.com/marmelroy/Zip), [SWCompression](https://github.com/tsolomko/SWCompression) | Archive handling | MIT |
+Zag Store is an independent fork of [Feather](https://github.com/claration/Feather). The original authors and contributors made this project possible, and their copyright notices and applicable licences remain in place.
 
-Each component's own licence file applies to that component. Zag Store is independent and is not affiliated with Apple or with the Feather project.
+The project also uses [idevice](https://github.com/jkcoxson/idevice), [Zsign](https://github.com/zhlynn/zsign), [Nuke](https://github.com/kean/Nuke), [ElleKit](https://github.com/evelyneee/ellekit), OpenSSL and other third-party components. Individual components retain their respective licences and notices. Zag Store is not affiliated with Apple or the Feather maintainers.
 
-## Contributing
+**Licence:** [GNU GPL v3.0](LICENSE) for Zag Store, subject to applicable third-party licences.
 
-Bug reports, ideas and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first.
+## Help shape what's next
 
-Report security problems privately as described in [SECURITY.md](SECURITY.md), not in public issues.
+Thoughtful bug reports, design feedback and contributions are welcome.
 
-## Licence
+[**Contributing guide**](CONTRIBUTING.md) · [**Code of Conduct**](CODE_OF_CONDUCT.md) · [**Security policy**](SECURITY.md) · [**Changelog**](CHANGELOG.md)
 
-Zag Store is licensed under the [GNU General Public License v3.0](LICENSE). Third-party components keep their own licences, as listed above.
+<div align="center">
+
+---
+
+**Zag Store** · Crafted for a more personal iOS app experience.
+
+[zagstore.app](https://zagstore.app)
+
+</div>
