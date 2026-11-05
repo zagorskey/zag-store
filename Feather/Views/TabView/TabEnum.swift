@@ -14,6 +14,8 @@ import UIKit
 
 enum ZagDockConfiguration {
     static let storageKey = "ZagStore.navigation.dockTabs"
+    /// iOS 26: the dock shrinks to the current page's icon while scrolling down.
+    static let shrinkOnScrollKey = "ZagStore.navigation.dockShrinksOnScroll"
     static let defaults: [TabEnum] = [.discover, .sources, .library, .games, .activity]
     static let choices: [TabEnum] = [.discover, .sources, .library, .games, .activity, .devices, .settings]
 
@@ -2445,6 +2447,7 @@ private struct ZagGamesScrollClipModifier: ViewModifier {
 // Native dock editor; its persisted order is shared by both tab-bar implementations.
 struct ZagDockCustomizationView: View {
     @AppStorage(ZagDockConfiguration.storageKey) private var storedTabs = ""
+    @AppStorage(ZagDockConfiguration.shrinkOnScrollKey) private var shrinkOnScroll = true
     @State private var showLimitAlert = false
     @State private var showLastTabAlert = false
     @AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
@@ -2478,8 +2481,23 @@ struct ZagDockCustomizationView: View {
 
     private var active: [TabEnum] { ZagDockConfiguration.tabs }
 
+    private var shrinkSupported: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
     var body: some View {
         List {
+            Section {
+                Toggle("Shrink on Scroll", isOn: $shrinkOnScroll)
+                    .disabled(!shrinkSupported)
+            } header: {
+                Text("Behaviour")
+            } footer: {
+                Text(shrinkSupported
+                    ? "The dock shrinks to the current page's icon as you scroll down. Tap it to expand the dock again."
+                    : "Shrink on Scroll requires iOS 26.")
+            }
             Section {
                 ForEach(ZagDockConfiguration.choices, id: \.rawValue) { tab in
                     Toggle(isOn: Binding(
@@ -2543,7 +2561,7 @@ struct ZagDockCustomizationView: View {
             }
         }
         .environment(\.editMode, .constant(.active))
-        .navigationTitle("Customise Dock")
+        .navigationTitle("Bottom Dock")
         .alert("Dock Limit Reached", isPresented: $showLimitAlert) {
             Button("OK", role: .cancel) {}
         } message: {

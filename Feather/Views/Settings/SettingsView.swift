@@ -546,7 +546,7 @@ extension SettingsView {
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
-                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page Sliding Pages")
+                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Shrink on Scroll Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page Sliding Pages")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:

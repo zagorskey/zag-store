@@ -163,6 +163,7 @@ struct ExtendedTabbarView: View {
 		}
 		.tabViewStyle(.sidebarAdaptable)
 		.tabViewCustomization($customization)
+		.modifier(ZagDockShrinkOnScroll())
 		.onAppear { ZagPageSlide.attachToDock() }
 		.onChange(of: dockTabs) { _ in
             if !ZagDockConfiguration.tabs.contains(TabEnum(rawValue: selectedTabRawValue) ?? .discover) {
@@ -210,3 +211,18 @@ struct ExtendedTabbarView: View {
 	}
 }
 
+
+/// Settings → Zag Store → Bottom Dock → Shrink on Scroll: iOS 26's own
+/// tab bar minimisation, on scroll down.
+@available(iOS 18, *)
+private struct ZagDockShrinkOnScroll: ViewModifier {
+	@AppStorage(ZagDockConfiguration.shrinkOnScrollKey) private var enabled = true
+
+	func body(content: Content) -> some View {
+		if #available(iOS 26.0, *) {
+			content.tabBarMinimizeBehavior(enabled ? .onScrollDown : .never)
+		} else {
+			content
+		}
+	}
+}
