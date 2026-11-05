@@ -264,11 +264,7 @@ struct SettingsView: View {
                     dictationAvailable: _settingsDictationAvailable,
                     startDictation: _startSettingsDictation
                 )
-                .frame(height: 50)
-                .zagSearchGlass()
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .zagBottomSearchPlacement()
             }
 
 			.tint(Color(hex: userTintColor))
@@ -429,6 +425,33 @@ struct SettingsView: View {
 // Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
 // Exact Octicons GitHub mark supplied as the shape reference.
 // The 16×16 vector is scaled to the same 23-point height as neighbouring toolbar icons.
+/// Rounds a row's height up to whole screen pixels. A fractional height
+/// leaves a hairline seam where the row meets the next one, showing the
+/// darker background through the card (seen under the GitHub row).
+private struct ZagPixelSnappedRow: ViewModifier {
+    @Environment(\.displayScale) private var displayScale
+
+    func body(content: Content) -> some View {
+        ZagPixelSnappedLayout(scale: displayScale) { content }
+    }
+}
+
+private struct ZagPixelSnappedLayout: Layout {
+    var scale: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let row = subviews.first else { return .zero }
+        let size = row.sizeThatFits(proposal)
+        let pixels = max(scale, 1)
+        return CGSize(width: size.width, height: (size.height * pixels).rounded(.up) / pixels)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
+                              proposal: ProposedViewSize(width: bounds.width, height: nil))
+    }
+}
+
 private struct ZagGitHubMark: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -885,10 +908,13 @@ extension SettingsView {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .trailing) {
+                    // Sized and coloured like the chevron on the row above.
                     Image(systemName: "arrow.up.right")
-                        .foregroundStyle(.secondary.opacity(0.65))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
                         .accessibilityHidden(true)
                 }
+                .modifier(ZagPixelSnappedRow())
             }
 
             Button {
@@ -915,6 +941,7 @@ extension SettingsView {
                         .scaledToFit()
                         .frame(width: 25, height: 25)
                 }
+                .modifier(ZagPixelSnappedRow())
             }
         } header: {
             Text("About")

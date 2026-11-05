@@ -165,11 +165,7 @@ struct CertificatesView: View {
                 dictationAvailable: _dictationAvailable,
                 startDictation: _startDictationFromSearchMic
             )
-            .frame(height: 50)
-            .zagSearchGlass()
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            .zagBottomSearchPlacement()
         }
 		.navigationTitle(.localized("Certificates"))
 		.overlay {
@@ -691,5 +687,47 @@ private struct ZagCertificateSectionTitleRow: ViewModifier {
             .listRowInsets(EdgeInsets(top: 22, leading: 20, bottom: 10, trailing: 20))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
+    }
+}
+
+
+// MARK: - Bottom search bar placement
+
+/// Places a bottom search bar like iOS Settings: 48 points tall, 32 points
+/// from each side and 28 points above the bottom of the screen (measured on
+/// iOS 26 Settings). Shared by Settings and Certificates.
+extension View {
+    func zagBottomSearchPlacement() -> some View {
+        modifier(ZagBottomSearchPlacement())
+    }
+}
+
+private struct ZagBottomSearchPlacement: ViewModifier {
+    static let height: CGFloat = 48
+    static let sideInset: CGFloat = 32
+    static let bottomGap: CGFloat = 28
+    static let gapAboveKeyboard: CGFloat = 12
+
+    // The bottom safe area below this bar: the home indicator area, or the
+    // keyboard while it is up.
+    @State private var safeBottom: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        // Taller than any home indicator area: the keyboard is up, so keep
+        // the bar above it rather than lowering it into it.
+        let keyboardUp = safeBottom > 60
+        return content
+            .frame(height: Self.height)
+            .zagSearchGlass()
+            .padding(.horizontal, Self.sideInset)
+            .padding(.top, 8)
+            .padding(.bottom, keyboardUp ? Self.gapAboveKeyboard : max(0, Self.bottomGap - safeBottom))
+            // The bar sits partly in the home indicator area, as in Settings.
+            .offset(y: keyboardUp ? 0 : max(0, safeBottom - Self.bottomGap))
+            .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { safeBottom = proxy.safeAreaInsets.bottom }
+                    .onChange(of: proxy.safeAreaInsets.bottom) { safeBottom = $0 }
+            })
     }
 }
