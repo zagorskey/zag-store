@@ -1,4 +1,6 @@
 import SwiftUI
+import NukeUI
+import NimbleViews
 
 // Games → genre links: a row of pills under the title, like the App Store's
 // game categories, each opening a page of the repository games in that
@@ -63,34 +65,69 @@ struct ZagGameGenre: Hashable, Identifiable {
 	]
 }
 
-/// The row of genre pills, scrolling sideways under the page title.
+/// The row of genre pills, scrolling sideways under the page title. Only
+/// genres with games are shown, each with its count; while the catalogue
+/// loads, placeholder pills hold the row's place.
 struct ZagGameGenrePills: View {
 	/// The page's side margin, so the first pill lines up with the content
 	/// while the row itself scrolls to the screen edges.
 	let margin: CGFloat
+	/// Games per genre name.
+	let counts: [String: Int]
+	let loading: Bool
 	let open: (ZagGameGenre) -> Void
 
 	var body: some View {
-		ScrollView(.horizontal, showsIndicators: false) {
-			HStack(spacing: 8) {
-				ForEach(ZagGameGenre.all) { genre in
-					Button { open(genre) } label: {
-						ZagGameGenrePill(genre: genre)
+		let genres = ZagGameGenre.all.filter { (counts[$0.name] ?? 0) > 0 }
+		if !genres.isEmpty {
+			ScrollView(.horizontal, showsIndicators: false) {
+				HStack(spacing: 8) {
+					ForEach(genres) { genre in
+						let count = counts[genre.name] ?? 0
+						Button { open(genre) } label: {
+							ZagGameGenrePill(genre: genre, count: count)
+						}
+						.buttonStyle(.plain)
+						.accessibilityLabel("\(genre.name), \(count) \(count == 1 ? "game" : "games")")
+						.accessibilityHint("Opens \(genre.name) games")
 					}
-					.buttonStyle(.plain)
-					.accessibilityLabel(genre.name)
-					.accessibilityHint("Opens \(genre.name) games")
+				}
+				.padding(.horizontal, margin)
+			}
+			.accessibilityElement(children: .contain)
+			.accessibilityLabel("Game Genres")
+		} else if loading {
+			HStack(spacing: 8) {
+				ForEach([108, 116, 124, 104], id: \.self) { width in
+					Capsule()
+						.fill(ZagSkeletonFill.element)
+						.frame(width: CGFloat(width), height: 38)
+						.zagShimmer()
+						.clipShape(Capsule())
 				}
 			}
 			.padding(.horizontal, margin)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.clipped()
+			.accessibilityHidden(true)
 		}
-		.accessibilityElement(children: .contain)
-		.accessibilityLabel("Game Genres")
+	}
+
+	/// Genre names for each game, from its description.
+	static func tags(for games: [SourceAppsView.SourceAppRoute]) -> [String: [String]] {
+		var tags: [String: [String]] = [:]
+		for entry in games {
+			let text = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
+			let names = ZagGameGenre.all.filter { genre in genre.keywords.contains { text.contains($0) } }.map(\.name)
+			if !names.isEmpty { tags[entry.id] = names }
+		}
+		return tags
 	}
 }
 
 private struct ZagGameGenrePill: View {
 	let genre: ZagGameGenre
+	let count: Int
 
 	var body: some View {
 		HStack(spacing: 7) {
@@ -101,6 +138,9 @@ private struct ZagGameGenrePill: View {
 				.font(.system(size: 16, weight: .semibold))
 				.foregroundStyle(.primary)
 				.lineLimit(1)
+			Text("\(count)")
+				.font(.system(size: 14, weight: .medium).monospacedDigit())
+				.foregroundStyle(.secondary)
 		}
 		.padding(.horizontal, 14)
 		.frame(height: 38)
@@ -117,7 +157,7 @@ private struct ZagGameGenrePill: View {
 }
 
 /// A genre's symbol in its colour, or its two colours.
-private struct ZagGameGenreSymbol: View {
+struct ZagGameGenreSymbol: View {
 	let genre: ZagGameGenre
 
 	var body: some View {
@@ -132,21 +172,36 @@ private struct ZagGameGenreSymbol: View {
 	}
 }
 
-/// One genre's games from the loaded repositories.
-struct ZagGameGenrePage: View {
-	let genre: ZagGameGenre
+/// A list of games opened from the Games page: a genre, or a section's
+/// See All.
+struct ZagGameList: Identifiable {
+	let title: String
+	var genre: ZagGameGenre? = nil
 	let games: [SourceAppsView.SourceAppRoute]
+	/// What each row shows under the game's name.
+	var subtitle: ZagGameRow.Subtitle = .genre
+
+	var id: String { title }
+}
+
+/// A full page of games, in rows like the Apps page.
+struct ZagGameListPage: View {
+	let list: ZagGameList
+	/// Genre names per game id, for the rows' subtitles.
+	let genreTags: [String: [String]]
 
 	@State private var selectedApp: SourceAppsView.SourceAppRoute?
 
 	var body: some View {
 		ScrollView {
-			if games.isEmpty {
+			if list.games.isEmpty {
 				VStack(spacing: 12) {
-					ZagGameGenreSymbol(genre: genre)
-						.font(.system(size: 32, weight: .light))
-					Text("No \(genre.name) Games").font(.headline)
-					Text("\(genre.name) games from your repositories will appear here.")
+					if let genre = list.genre {
+						ZagGameGenreSymbol(genre: genre)
+							.font(.system(size: 32, weight: .light))
+					}
+					Text("No \(list.title) Games").font(.headline)
+					Text("\(list.title) games from your repositories will appear here.")
 						.font(.subheadline)
 						.foregroundStyle(.secondary)
 						.multilineTextAlignment(.center)
@@ -156,25 +211,22 @@ struct ZagGameGenrePage: View {
 				.padding(.top, 140)
 			} else {
 				LazyVStack(spacing: 0) {
-					ForEach(games, id: \.id) { entry in
-						row(entry)
-						if entry.id != games.last?.id {
-							Divider().padding(.leading, 86)
-						}
+					ForEach(list.games, id: \.id) { entry in
+						ZagGameRow(
+							entry: entry,
+							subtitle: list.subtitle,
+							genres: genreTags[entry.id] ?? [],
+							showsSeparator: entry.id != list.games.last?.id
+						) { selectedApp = entry }
 					}
 				}
-				.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-				.overlay {
-					RoundedRectangle(cornerRadius: 22, style: .continuous)
-						.strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
-				}
-				.padding(.horizontal, 18)
-				.padding(.top, 12)
+				.padding(.horizontal, ZagListLayout.horizontalInset)
+				.padding(.top, 4)
 				.padding(.bottom, 90)
 			}
 		}
 		.zagWallpaperSurface()
-		.navigationTitle(genre.name)
+		.navigationTitle(list.title)
 		.navigationDestination(
 			isPresented: Binding(
 				get: { selectedApp != nil },
@@ -186,31 +238,226 @@ struct ZagGameGenrePage: View {
 			}
 		}
 	}
+}
 
-	private func row(_ entry: SourceAppsView.SourceAppRoute) -> some View {
-		Button { selectedApp = entry } label: {
-			HStack(spacing: 13) {
-				ZagRepositoryAppIconView(app: entry.app, size: 62)
-				VStack(alignment: .leading, spacing: 4) {
+/// A game in the layout of an Apps page row: the icon with its repository's
+/// badge, name and one line of detail, and the Get / Open button.
+struct ZagGameRow: View {
+	enum Subtitle {
+		/// Genre and version.
+		case genre
+		/// When it was last updated, and version.
+		case updated
+		/// Fixed text (for example an emulator's platform).
+		case text(String)
+	}
+
+	let entry: SourceAppsView.SourceAppRoute
+	var subtitle: Subtitle = .genre
+	var genres: [String] = []
+	var showsSeparator = true
+	let open: () -> Void
+
+	var body: some View {
+		HStack(spacing: 18) {
+			HStack(spacing: 10) {
+				icon
+				VStack(alignment: .leading, spacing: 3) {
 					Text(entry.app.currentName)
-						.font(.system(size: 16, weight: .semibold))
+						.zagContentTitleStyle()
 						.lineLimit(1)
-						.foregroundStyle(.primary)
-					Text(entry.source.name ?? "Repository")
-						.font(.caption)
+					Text(detail)
+						.font(.system(size: 15, weight: .regular))
 						.foregroundStyle(.secondary)
 						.lineLimit(1)
 				}
-				Spacer()
-				Image(systemName: "chevron.right")
-					.font(.system(size: 12, weight: .semibold))
-					.foregroundStyle(.tertiary)
-					.padding(.trailing, 3)
+				.frame(maxWidth: .infinity, alignment: .leading)
 			}
-			.padding(.horizontal, 14)
-			.padding(.vertical, 13)
-			.contentShape(Rectangle())
+			DownloadButtonView(app: entry.app, source: entry.source)
 		}
-		.buttonStyle(.plain)
+		.frame(height: ZagListLayout.compactRowHeight)
+		.overlay(alignment: .bottom) {
+			if showsSeparator {
+				Rectangle()
+					.fill(Color(uiColor: .separator))
+					.frame(height: ZagListLayout.separatorHeight)
+					.padding(.leading, ZagListLayout.separatorLeadingInset)
+			}
+		}
+		.contentShape(Rectangle())
+		// A tap gesture rather than a Button, so the Get button keeps its
+		// own taps, as on the Apps page.
+		.onTapGesture(perform: open)
+		.accessibilityElement(children: .combine)
+		.accessibilityAddTraits(.isButton)
+		.accessibilityAction(named: Text("Show Details"), open)
+	}
+
+	private var icon: some View {
+		ZStack(alignment: .bottomLeading) {
+			ZagRepositoryAppIconView(app: entry.app, size: 62)
+			if let url = entry.source.currentIconURL {
+				LazyImage(url: url) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 20,
+								isCircle: true,
+								background: Color(uiColor: .secondarySystemBackground)
+							)
+							.offset(x: 46, y: 4)
+					}
+				}
+				.accessibilityHidden(true)
+			}
+		}
+	}
+
+	private var detail: String {
+		let version = entry.app.currentVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+		let first: String?
+		switch subtitle {
+		case .genre: first = genres.first
+		case .updated: first = ZagGameRow.dayText(Self.updatedDate(entry))
+		case .text(let text): first = text
+		}
+		let parts = [first, version].compactMap { $0 }.filter { !$0.isEmpty }
+		return parts.isEmpty ? (entry.source.name ?? "Game") : parts.joined(separator: " • ")
+	}
+
+	/// The date of the game's latest version, if the repository gives one.
+	static func updatedDate(_ entry: SourceAppsView.SourceAppRoute) -> Date? {
+		entry.app.currentAppVersion?.date?.date ?? entry.app.currentDate?.date
+	}
+
+	private static let dateFormatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.setLocalizedDateFormatFromTemplate("d MMM yyyy")
+		return formatter
+	}()
+
+	/// "Today", "Yesterday", "3 Days Ago" or a date, as on the Apps page.
+	static func dayText(_ date: Date?) -> String? {
+		guard let date else { return nil }
+		let calendar = Calendar.current
+		let days = calendar.dateComponents(
+			[.day],
+			from: calendar.startOfDay(for: date),
+			to: calendar.startOfDay(for: Date())
+		).day ?? 0
+		switch days {
+		case ...0: return "Today"
+		case 1: return "Yesterday"
+		case 2...6: return "\(days) Days Ago"
+		default: return dateFormatter.string(from: date)
+		}
+	}
+}
+
+/// A section of games scrolling sideways in columns of three rows, like the
+/// App Store's game shelves, with a See All link.
+struct ZagGameShelf: View {
+	let title: String
+	var genre: ZagGameGenre? = nil
+	let games: [SourceAppsView.SourceAppRoute]
+	var subtitle: ZagGameRow.Subtitle = .genre
+	let genreTags: [String: [String]]
+	/// The page's side margin, for the columns.
+	let margin: CGFloat
+	let open: (SourceAppsView.SourceAppRoute) -> Void
+	let seeAll: () -> Void
+
+	/// How many games a shelf shows before See All.
+	static let limit = 12
+
+	/// The shelf's own width (the page's), measured.
+	@State private var width: CGFloat = 0
+
+	var body: some View {
+		let shown = Array(games.prefix(Self.limit))
+		let columns = stride(from: 0, to: shown.count, by: 3).map { Array(shown[$0..<min($0 + 3, shown.count)]) }
+		// One column fills the width less a glimpse of the next.
+		let columnWidth = min(max(width - margin * 2 - 28, 260), 420)
+
+		VStack(alignment: .leading, spacing: 4) {
+			Button(action: seeAll) {
+				HStack(spacing: 8) {
+					if let genre {
+						ZagGameGenreSymbol(genre: genre)
+							.font(.system(size: 17, weight: .semibold))
+					}
+					Text(title)
+						.font(.system(size: 20, weight: .semibold))
+						.foregroundStyle(.primary)
+					Spacer(minLength: 8)
+					Text("See All")
+						.font(.system(size: 17, weight: .regular))
+						.foregroundStyle(.tint)
+				}
+				.contentShape(Rectangle())
+			}
+			.buttonStyle(.plain)
+			.padding(.horizontal, margin)
+			.accessibilityLabel("\(title), See All")
+
+			ScrollView(.horizontal, showsIndicators: false) {
+				LazyHStack(alignment: .top, spacing: 14) {
+					ForEach(columns.indices, id: \.self) { index in
+						let column = columns[index]
+						VStack(spacing: 0) {
+							ForEach(column, id: \.id) { entry in
+								ZagGameRow(
+									entry: entry,
+									subtitle: subtitle,
+									genres: zagShelfGenres(entry),
+									showsSeparator: entry.id != column.last?.id
+								) { open(entry) }
+							}
+						}
+						.frame(width: columnWidth, alignment: .top)
+					}
+				}
+				.zagScrollTargetLayout()
+				.padding(.horizontal, margin)
+			}
+			.zagViewAlignedScrolling()
+		}
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background {
+			GeometryReader { proxy in
+				Color.clear
+					.onAppear { width = proxy.size.width }
+					.onChange(of: proxy.size.width) { width = $0 }
+			}
+		}
+	}
+
+	/// On a genre's shelf, name the game's other genre if it has one.
+	private func zagShelfGenres(_ entry: SourceAppsView.SourceAppRoute) -> [String] {
+		let tags = genreTags[entry.id] ?? []
+		guard let genre else { return tags }
+		let others = tags.filter { $0 != genre.name }
+		return others.isEmpty ? tags : others
+	}
+}
+
+private extension View {
+	/// Columns settle at the leading margin after a swipe (iOS 17 and later).
+	@ViewBuilder
+	func zagViewAlignedScrolling() -> some View {
+		if #available(iOS 17.0, *) {
+			scrollTargetBehavior(.viewAligned)
+		} else {
+			self
+		}
+	}
+
+	@ViewBuilder
+	func zagScrollTargetLayout() -> some View {
+		if #available(iOS 17.0, *) {
+			scrollTargetLayout()
+		} else {
+			self
+		}
 	}
 }

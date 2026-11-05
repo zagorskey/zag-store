@@ -943,8 +943,10 @@ private struct ZagGamesPage: View {
     @State private var showGameFilters = false
     @State private var selectedGameRepository = "All"
     @State private var selectedGameGenre = "All"
-    /// The genre page opened from the pills under the title.
-    @State private var selectedGenre: ZagGameGenre?
+    /// A genre or See All page opened from the pills or a shelf.
+    @State private var gameList: ZagGameList?
+    /// Genre names per game id, from the descriptions (built with the index).
+    @State private var gameGenreTags: [String: [String]] = [:]
     @State private var searchScope = "All"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
@@ -1089,6 +1091,100 @@ private struct ZagGamesPage: View {
 
     private var gameRepositories: [String] {
         Array(Set(indexedGames.compactMap { $0.source.name })).sorted()
+    }
+
+    // MARK: Shelves
+
+    /// Games per genre, for the pills.
+    private var gameGenreCounts: [String: Int] {
+        var counts: [String: Int] = [:]
+        for names in gameGenreTags.values {
+            for name in names { counts[name, default: 0] += 1 }
+        }
+        return counts
+    }
+
+    /// Every loaded game in a genre, for its page.
+    private func gamesTagged(_ genre: String) -> [SourceAppsView.SourceAppRoute] {
+        indexedGames.filter { gameGenreTags[$0.id]?.contains(genre) == true }
+    }
+
+    /// Recently Updated, the biggest genres, then every game, each section
+    /// short with a See All page.
+    @ViewBuilder
+    private var gameShelves: some View {
+        let list = games
+        if list.isEmpty {
+            Text(catalogueLoading ? "Loading games from your repositories…"
+                 : selectedGameRepository != "All" || selectedGameGenre != "All" ? "No games match these filters."
+                 : "No games identified in loaded repositories yet.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+                .padding(.horizontal, 18)
+        } else {
+            let recent = list
+                .filter { ZagGameRow.updatedDate($0) != nil }
+                .sorted { (ZagGameRow.updatedDate($0) ?? .distantPast) > (ZagGameRow.updatedDate($1) ?? .distantPast) }
+            VStack(alignment: .leading, spacing: 28) {
+                if recent.count >= 3 {
+                    shelf(ZagGameList(title: "Recently Updated", games: recent, subtitle: .updated))
+                }
+                ForEach(topGenres(in: list), id: \.genre.id) { item in
+                    shelf(ZagGameList(title: item.genre.name, genre: item.genre, games: item.games))
+                }
+                allGamesSection(list)
+            }
+        }
+    }
+
+    private func shelf(_ list: ZagGameList) -> some View {
+        ZagGameShelf(
+            title: list.title,
+            genre: list.genre,
+            games: list.games,
+            subtitle: list.subtitle,
+            genreTags: gameGenreTags,
+            margin: 18,
+            open: { selectedApp = $0 },
+            seeAll: { gameList = list }
+        )
+    }
+
+    /// The three genres with the most games (at least three each).
+    private func topGenres(in list: [SourceAppsView.SourceAppRoute]) -> [(genre: ZagGameGenre, games: [SourceAppsView.SourceAppRoute])] {
+        ZagGameGenre.all
+            .map { genre in (genre: genre, games: list.filter { gameGenreTags[$0.id]?.contains(genre.name) == true }) }
+            .filter { $0.games.count >= 3 }
+            .sorted { $0.games.count > $1.games.count }
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private func allGamesSection(_ list: [SourceAppsView.SourceAppRoute]) -> some View {
+        let shown = Array(list.prefix(8))
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                ZagSectionHeader(title: "All Games", count: list.count)
+                if list.count > shown.count {
+                    Button("See All") { gameList = ZagGameList(title: "All Games", games: list) }
+                        .font(.system(size: 17, weight: .regular))
+                        .buttonStyle(.borderless)
+                }
+            }
+            LazyVStack(spacing: 0) {
+                ForEach(shown, id: \.id) { entry in
+                    ZagGameRow(
+                        entry: entry,
+                        genres: gameGenreTags[entry.id] ?? [],
+                        showsSeparator: entry.id != shown.last?.id
+                    ) { selectedApp = entry }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
     }
 
     private let gameGenres = ["Puzzle", "Racing", "Strategy", "RPG", "Arcade", "Adventure", "Simulation", "Sports"]
@@ -1392,6 +1488,12 @@ private struct ZagGamesPage: View {
             indexedFeaturedGames = snapshot.featuredCandidates
             indexedEmulators = snapshot.emulators
             indexedGames = snapshot.games
+            let games = snapshot.games
+            let tags = await Task.detached(priority: .userInitiated) {
+                ZagGameGenrePills.tags(for: games)
+            }.value
+            // A newer index may have started meanwhile; it brings its own.
+            if indexState.accepts(generation: generation) { gameGenreTags = tags }
             indexedEmulatorCount = snapshot.emulators.count
             indexedGameCount = snapshot.games.count
             indexedArtworkRevision += 1
@@ -1419,8 +1521,10 @@ private struct ZagGamesPage: View {
         NBNavigationView("Games") {
             ScrollView {
                 // Genre links in place of a search bar, edge to edge.
-                ZagGameGenrePills(margin: 18) { genre in selectedGenre = genre }
-                    .padding(.top, 6)
+                ZagGameGenrePills(margin: 18, counts: gameGenreCounts, loading: catalogueLoading) { genre in
+                    gameList = ZagGameList(title: genre.name, genre: genre, games: gamesTagged(genre.name))
+                }
+                .padding(.top, 6)
                 LazyVStack(alignment: .leading, spacing: 22) {
                     if !searchFieldFocused {
                         gamesCategorySwitcher
@@ -1464,118 +1568,28 @@ private struct ZagGamesPage: View {
                         } else {
                             LazyVStack(spacing: 0) {
                                 ForEach(emulators, id: \.id) { entry in
-                                    Button { selectedApp = entry } label: {
-                                        HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 62)
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(entry.app.currentName)
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .lineLimit(1)
-                                                    .foregroundStyle(.primary)
-                                                Text(emulatorPlatform(entry.app.currentName))
-                                                    .font(.system(size: 11, weight: .semibold))
-                                                    .foregroundStyle(.tint)
-                                                    .padding(.horizontal, 9)
-                                                    .padding(.vertical, 4)
-                                                    .background(Color.accentColor.opacity(0.10), in: Capsule())
-                                                Text(entry.source.name ?? "Repository")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundStyle(.tertiary)
-                                                .padding(.trailing, 3)
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 13)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    Divider().padding(.leading, 86)
+                                    ZagGameRow(
+                                        entry: entry,
+                                        subtitle: .text(emulatorPlatform(entry.app.currentName)),
+                                        showsSeparator: entry.id != emulators.last?.id
+                                    ) { selectedApp = entry }
                                 }
-                            }
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
                             }
                         }
                     }
                     .zagTabSlideIn(categorySlide)
 
                     }
-                    if searchFieldFocused ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ZagSectionHeader(title: "Games", count: games.count)
-                        Text("Discover titles from your repositories")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        if games.isEmpty {
-                            Text(!searchText.isEmpty ? "No matching games."
-                                 : catalogueLoading ? "Loading games from your repositories…"
-                                 : "No games identified in loaded repositories yet.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(20)
-                                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
-                        } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(games, id: \.id) { entry in
-                                    Button { selectedApp = entry } label: {
-                                        HStack(spacing: 13) {
-                                            ZagRepositoryAppIconView(app: entry.app, size: 62)
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(entry.app.currentName)
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .lineLimit(1)
-                                                    .foregroundStyle(.primary)
-                                                HStack(spacing: 7) {
-                                                    if let genre = gameGenre(entry.app.currentDescription ?? entry.app.localizedDescription ?? "") {
-                                                        Text(genre)
-                                                            .font(.system(size: 11, weight: .semibold))
-                                                            .foregroundStyle(.tint)
-                                                            .padding(.horizontal, 9)
-                                                            .padding(.vertical, 4)
-                                                            .background(Color.accentColor.opacity(0.10), in: Capsule())
-                                                    }
-                                                    Text(entry.source.name ?? "Repository")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                        .lineLimit(1)
-                                                }
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundStyle(.tertiary)
-                                                .padding(.trailing, 3)
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 13)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    if entry.id != games.last?.id {
-                                        Divider().padding(.leading, 86)
-                                    }
-                                }
-                            }
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .strokeBorder(Color.secondary.opacity(0.09), lineWidth: 0.5)
-                            }
-                        }
-                    }
-                    .zagTabSlideIn(categorySlide)
-                    }
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
-                .padding(.bottom, 90)
+                .padding(.bottom, selectedCategory == "Games" ? 26 : 90)
+
+                if selectedCategory == "Games" {
+                    gameShelves
+                        .padding(.bottom, 90)
+                        .zagTabSlideIn(categorySlide)
+                }
             }
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -1656,17 +1670,12 @@ private struct ZagGamesPage: View {
             }
             .navigationDestination(
                 isPresented: Binding(
-                    get: { selectedGenre != nil },
-                    set: { if !$0 { selectedGenre = nil } }
+                    get: { gameList != nil },
+                    set: { if !$0 { gameList = nil } }
                 )
             ) {
-                if let selectedGenre {
-                    ZagGameGenrePage(
-                        genre: selectedGenre,
-                        games: indexedGames.filter {
-                            selectedGenre.matches($0.app.currentDescription ?? $0.app.localizedDescription ?? "")
-                        }
-                    )
+                if let gameList {
+                    ZagGameListPage(list: gameList, genreTags: gameGenreTags)
                 }
             }
             .toolbar {
