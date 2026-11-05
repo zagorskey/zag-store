@@ -1,67 +1,26 @@
 import SwiftUI
+import UIKit
 
-/// A scope switcher drawn in SwiftUI, matching the scope bar iOS 26 shows
-/// under a focused search field (measured on a native searchable list): a
-/// 32-point glass capsule, a 24-point selected capsule inset 4 points that
-/// slides between segments, and 15-point labels.
+/// The system segmented control on a Liquid Glass capsule, styled like the
+/// scope bar iOS 26 shows under a focused search field: 32 points tall,
+/// 15-point labels and the same selected fill in light and dark.
 ///
-/// Unlike ZagScopeBar it hosts no hidden search bar, so nothing UIKit does
-/// while a page scrolls can move it.
+/// Being the real UISegmentedControl, it keeps the native behaviour of
+/// holding a finger on the selection and sliding it to another segment. It
+/// hosts no hidden search bar, so nothing UIKit does while a page scrolls
+/// can move it.
 struct ZagGlassScopeBar: View {
 	@Binding var selection: String
 	let titles: [String]
 
 	@Environment(\.colorScheme) private var colorScheme
-	@Namespace private var namespace
 
 	static let height: CGFloat = 32
-	private static let inset: CGFloat = 4
-	/// Between the selected capsule and the neighbouring segment's edge.
-	private static let segmentGap: CGFloat = 6
 
 	var body: some View {
-		HStack(spacing: Self.segmentGap) {
-			ForEach(titles, id: \.self) { title in
-				segment(title)
-			}
-		}
-		.padding(Self.inset)
-		.frame(height: Self.height)
-		.background { track }
-		.accessibilityElement(children: .contain)
-	}
-
-	private func segment(_ title: String) -> some View {
-		let isSelected = selection == title
-		return Button {
-			guard !isSelected else { return }
-			withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-				selection = title
-			}
-		} label: {
-			Text(title)
-				.font(.system(size: 15, weight: .medium))
-				.foregroundStyle(.primary)
-				.lineLimit(1)
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
-				.background {
-					if isSelected {
-						Capsule(style: .continuous)
-							.fill(selectedFill)
-							.matchedGeometryEffect(id: "selection", in: namespace)
-					}
-				}
-				.contentShape(Capsule(style: .continuous))
-		}
-		.buttonStyle(.plain)
-		.accessibilityAddTraits(isSelected ? [.isSelected] : [])
-	}
-
-	/// The selected capsule: (54, 54, 54) in dark, (229, 229, 233) in light.
-	private var selectedFill: Color {
-		colorScheme == .dark
-			? Color(red: 54 / 255, green: 54 / 255, blue: 54 / 255)
-			: Color(red: 229 / 255, green: 229 / 255, blue: 233 / 255)
+		ZagSegmentedControl(selection: $selection, titles: titles)
+			.frame(height: Self.height)
+			.background { track }
 	}
 
 	@ViewBuilder
@@ -75,6 +34,58 @@ struct ZagGlassScopeBar: View {
 					Capsule(style: .continuous)
 						.strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.06), lineWidth: 1)
 				}
+		}
+	}
+}
+
+private struct ZagSegmentedControl: UIViewRepresentable {
+	@Binding var selection: String
+	let titles: [String]
+
+	func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+	func makeUIView(context: Context) -> UISegmentedControl {
+		let control = UISegmentedControl(items: titles)
+		// The glass capsule behind is the track; a near-clear colour hides
+		// the control's own grey track but keeps the whole width touchable.
+		control.backgroundColor = UIColor(white: 0, alpha: 0.001)
+		// Measured on the native scope bar: (54, 54, 54) dark, (229, 229, 233) light.
+		control.selectedSegmentTintColor = UIColor { traits in
+			traits.userInterfaceStyle == .dark
+				? UIColor(white: 54 / 255, alpha: 1)
+				: UIColor(red: 229 / 255, green: 229 / 255, blue: 233 / 255, alpha: 1)
+		}
+		let font = UIFont.systemFont(ofSize: 15, weight: .medium)
+		control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor.label], for: .normal)
+		control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor.label], for: .selected)
+		control.selectedSegmentIndex = titles.firstIndex(of: selection) ?? 0
+		control.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+		control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		return control
+	}
+
+	func updateUIView(_ control: UISegmentedControl, context: Context) {
+		context.coordinator.parent = self
+		let index = titles.firstIndex(of: selection) ?? 0
+		if control.selectedSegmentIndex != index {
+			control.selectedSegmentIndex = index
+		}
+	}
+
+	final class Coordinator: NSObject {
+		var parent: ZagSegmentedControl
+
+		init(_ parent: ZagSegmentedControl) {
+			self.parent = parent
+		}
+
+		@objc func changed(_ control: UISegmentedControl) {
+			let index = control.selectedSegmentIndex
+			guard parent.titles.indices.contains(index) else { return }
+			withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+				parent.selection = parent.titles[index]
+			}
 		}
 	}
 }

@@ -1672,9 +1672,9 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // The Liquid Glass scope bar iOS shows under a focused search field,
-    // drawn in SwiftUI: no hidden search bar for UIKit to move while the
-    // page scrolls.
+    // The system segmented control on a Liquid Glass capsule, styled like
+    // the scope bar under a focused search field: hold and slide to switch,
+    // and no hidden search bar for UIKit to move while the page scrolls.
     private var gamesCategorySwitcher: some View {
         ZagGlassScopeBar(
             selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
@@ -1767,6 +1767,7 @@ private struct ZagGamesPage: View {
                         .zagTabSlideIn(categorySlide)
                 }
             }
+            .modifier(ZagSoftTopEdge())
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
             .onAppear {
@@ -2798,6 +2799,19 @@ private struct ZagEmptyDestination: View {
     }
 }
 
+
+/// The frosted fade under the header that Apps and Sources show while
+/// scrolling, rather than a solid band with a hard lower edge.
+private struct ZagSoftTopEdge: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
+        }
+    }
+}
 
 private struct ZagGamesScrollClipModifier: ViewModifier {
     @ViewBuilder
