@@ -15,6 +15,10 @@ struct ZagScopeBar: UIViewRepresentable {
 	var titles: [String]
 	/// Selection values, one per title (defaults to the titles).
 	var values: [String]? = nil
+	/// Moves the control back whenever the hidden search bar re-lays itself
+	/// out on its own (it does while a scroll view scrolls under a navigation
+	/// bar), so it never leaves this view's bounds.
+	var keepsScopeAligned = false
 
 	/// Height of the visible scope control; frame the bar with it.
 	static var controlHeight: CGFloat {
@@ -29,6 +33,7 @@ struct ZagScopeBar: UIViewRepresentable {
 
 	func makeUIView(context: Context) -> ScopeHost {
 		let host = ScopeHost(titles: titles)
+		host.keepsScopeAligned = keepsScopeAligned
 		host.searchBar.delegate = context.coordinator
 		host.searchBar.selectedScopeButtonIndex = resolvedValues.firstIndex(of: selection) ?? 0
 		return host
@@ -62,8 +67,28 @@ struct ZagScopeBar: UIViewRepresentable {
 		}
 	}
 
+	/// Reports each of its own layout passes to the host.
+	final class HostedSearchBar: UISearchBar {
+		var onLayout: (() -> Void)?
+
+		override func layoutSubviews() {
+			super.layoutSubviews()
+			onLayout?()
+		}
+	}
+
 	final class ScopeHost: UIView {
-		let searchBar = UISearchBar(frame: .zero)
+		let searchBar = HostedSearchBar(frame: .zero)
+		var keepsScopeAligned = false {
+			didSet {
+				searchBar.onLayout = keepsScopeAligned ? { [weak self] in self?.realignScope() } : nil
+			}
+		}
+		private var isLayingOut = false
+		/// Where the control sat after this view's last layout.
+		private var settledScopeFrame: CGRect?
+		/// The control size that last asked for a new layout (asked once).
+		private var relayoutRequestedFor: CGSize?
 
 		init(titles: [String]) {
 			super.init(frame: .zero)
@@ -85,6 +110,8 @@ struct ZagScopeBar: UIViewRepresentable {
 
 		override func layoutSubviews() {
 			super.layoutSubviews()
+			isLayingOut = true
+			defer { isLayingOut = false }
 			guard bounds.width > 0, bounds.height > 0 else { return }
 
 			// UISearchBar lays the scope out in a 76-point canvas.
@@ -114,6 +141,31 @@ struct ZagScopeBar: UIViewRepresentable {
 				height: canvasHeight
 			)
 			searchBar.layoutIfNeeded()
+			if let scope = findScope(in: searchBar) {
+				settledScopeFrame = scope.convert(scope.bounds, to: self)
+			}
+		}
+
+		/// After the search bar laid itself out on its own: if the control
+		/// moved, shift the search bar so it is back where this view put it
+		/// (moving its origin does not lay it out again). If its size
+		/// changed, lay out afresh, once per size.
+		private func realignScope() {
+			guard !isLayingOut, let settled = settledScopeFrame,
+				  let scope = findScope(in: searchBar), scope.bounds.width > 0 else { return }
+			let frame = scope.convert(scope.bounds, to: self)
+			guard frame.minX.isFinite, frame.minY.isFinite else { return }
+			if abs(frame.width - settled.width) > 0.5 || abs(frame.height - settled.height) > 0.5 {
+				guard relayoutRequestedFor != frame.size else { return }
+				relayoutRequestedFor = frame.size
+				setNeedsLayout()
+				return
+			}
+			let dx = settled.minX - frame.minX
+			let dy = settled.minY - frame.minY
+			guard abs(dx) > 0.5 || abs(dy) > 0.5 else { return }
+			searchBar.frame.origin.x += dx
+			searchBar.frame.origin.y += dy
 		}
 
 		private func findScope(in view: UIView) -> UISegmentedControl? {

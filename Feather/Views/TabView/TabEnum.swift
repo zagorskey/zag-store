@@ -1672,18 +1672,18 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // A native segmented control across the content width. (Not the App
-    // Icon page's ZagScopeBar: its hidden search bar re-lays itself out while
-    // this page scrolls, lifting the control over the genre pills.)
+    // The App Icon page's full-width native scope bar, spanning the page's
+    // content width. It keeps its control aligned: on this scrolling page
+    // the hidden search bar re-lays itself out and would lift it away.
     private var gamesCategorySwitcher: some View {
-        Picker("Gaming Category", selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"])) {
-            Text("Games").tag("Games")
-            Text("Emulators").tag("Emulators")
-        }
-        .pickerStyle(.segmented)
-        .controlSize(.large)
-        .frame(maxWidth: .infinity)
-        .accessibilityLabel("Gaming Category")
+        ZagScopeBar(
+            selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
+            titles: ["Games", "Emulators"],
+            keepsScopeAligned: true
+        )
+            .frame(maxWidth: .infinity)
+            .frame(height: ZagScopeBar.controlHeight)
+            .accessibilityLabel("Gaming Category")
     }
 
     var body: some View {

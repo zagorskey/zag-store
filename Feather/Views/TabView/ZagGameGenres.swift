@@ -65,9 +65,10 @@ struct ZagGameGenre: Hashable, Identifiable {
 	]
 }
 
-/// The row of genre pills, scrolling sideways under the page title. Only
-/// genres with games are shown, each with its count; while the catalogue
-/// loads, placeholder pills hold the row's place.
+/// The row of genre pills, scrolling sideways under the page title. Every
+/// genre is there from the start; while the catalogue loads, only the count
+/// badges show it (shimmering, without a number). Genres without games stay,
+/// dimmed, so the row never shifts.
 struct ZagGameGenrePills: View {
 	/// The page's side margin, so the first pill lines up with the content
 	/// while the row itself scrolls to the screen edges.
@@ -78,39 +79,23 @@ struct ZagGameGenrePills: View {
 	let open: (ZagGameGenre) -> Void
 
 	var body: some View {
-		let genres = ZagGameGenre.all.filter { (counts[$0.name] ?? 0) > 0 }
-		if !genres.isEmpty {
-			ScrollView(.horizontal, showsIndicators: false) {
-				HStack(spacing: 8) {
-					ForEach(genres) { genre in
-						let count = counts[genre.name] ?? 0
-						Button { open(genre) } label: {
-							ZagGameGenrePill(genre: genre, count: count)
-						}
-						.buttonStyle(.plain)
-						.accessibilityLabel("\(genre.name), \(count) \(count == 1 ? "game" : "games")")
-						.accessibilityHint("Opens \(genre.name) games")
-					}
-				}
-				.padding(.horizontal, margin)
-			}
-			.accessibilityElement(children: .contain)
-			.accessibilityLabel("Game Genres")
-		} else if loading {
+		ScrollView(.horizontal, showsIndicators: false) {
 			HStack(spacing: 8) {
-				ForEach([108, 116, 124, 104], id: \.self) { width in
-					Capsule()
-						.fill(ZagSkeletonFill.element)
-						.frame(width: CGFloat(width), height: 38)
-						.zagShimmer()
-						.clipShape(Capsule())
+				ForEach(ZagGameGenre.all) { genre in
+					let count = counts[genre.name] ?? 0
+					Button { open(genre) } label: {
+						ZagGameGenrePill(genre: genre, count: loading ? nil : count)
+							.opacity(!loading && count == 0 ? 0.5 : 1)
+					}
+					.buttonStyle(.plain)
+					.accessibilityLabel(loading ? genre.name : "\(genre.name), \(count) \(count == 1 ? "game" : "games")")
+					.accessibilityHint("Opens \(genre.name) games")
 				}
 			}
 			.padding(.horizontal, margin)
-			.frame(maxWidth: .infinity, alignment: .leading)
-			.clipped()
-			.accessibilityHidden(true)
 		}
+		.accessibilityElement(children: .contain)
+		.accessibilityLabel("Game Genres")
 	}
 
 	/// Genre names for each game: Apple's sub-genres when its catalogue
@@ -145,7 +130,8 @@ struct ZagGameGenrePills: View {
 
 private struct ZagGameGenrePill: View {
 	let genre: ZagGameGenre
-	let count: Int
+	/// Nil while the catalogue loads.
+	let count: Int?
 
 	var body: some View {
 		HStack(spacing: 7) {
@@ -156,7 +142,11 @@ private struct ZagGameGenrePill: View {
 				.font(.system(size: 16, weight: .semibold))
 				.foregroundStyle(.primary)
 				.lineLimit(1)
-			ZagCountBadge(count: count)
+			if let count {
+				ZagCountBadge(count: count)
+			} else {
+				ZagLoadingCountBadge()
+			}
 		}
 		.padding(.horizontal, 14)
 		.frame(height: 38)
@@ -170,6 +160,30 @@ private struct ZagGameGenrePill: View {
 			? UIColor.systemFill
 			: UIColor.secondarySystemFill
 	})
+}
+
+/// A count badge still waiting for its number: the badge's capsule, empty,
+/// with the loading shimmer.
+struct ZagLoadingCountBadge: View {
+	@AppStorage("zagStore.designer.standardBadge.size")
+	private var badgeSize: Double = 22
+	@AppStorage("Feather.userTintColor")
+	private var themeColorHex: String = "#3F8EF7"
+	@Environment(\.colorScheme) private var colorScheme
+
+	var body: some View {
+		let tint = Color(hex: themeColorHex)
+		Capsule(style: .continuous)
+			.fill(tint.opacity(colorScheme == .dark ? 0.16 : 0.12))
+			.frame(width: badgeSize * 1.45, height: badgeSize)
+			.zagShimmer()
+			.clipShape(Capsule(style: .continuous))
+			.overlay {
+				Capsule(style: .continuous)
+					.strokeBorder(tint.opacity(0.32), lineWidth: 0.75)
+			}
+			.accessibilityLabel("Loading")
+	}
 }
 
 /// A genre's symbol in its colour, or its two colours.
