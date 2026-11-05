@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible problem with Zag Store
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Never post certificates, provisioning profiles, private keys, passwords, device identifiers, or unsanitized logs."
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Explain the issue and expected behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: ios
+    attributes:
+      label: iOS version and device
+  - type: input
+    id: version
+    attributes:
+      label: Zag Store version/build
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
