@@ -56,12 +56,9 @@ Then replace this comment with:
 
 ## Install
 
-Each release on the [Releases](https://github.com/zagorskey/zag-store/releases) page includes:
+**Release verification is in progress.** Use only a release explicitly marked as a verified Zag Store distribution build. The intended release package is an IPA without a personal developer signing identity, accompanied by its SHA-256 checksum. Older beta assets may not meet this requirement.
 
-- `ZagStore.ipa`, which is **not signed with a developer identity** (it is ad-hoc signed only);
-- its SHA-256 checksum.
-
-1. Download `ZagStore.ipa` and compare its checksum with the one in the release notes:
+1. Once a verified distribution release is available, download its IPA and compare its checksum with the value in the release notes:
    ```bash
    shasum -a 256 ZagStore.ipa
    ```
@@ -86,7 +83,7 @@ bash RPPairingCore/build-rust.sh
 make iphoneos
 ```
 
-The package is written to `packages/ZagStore.ipa`. Like the release, it is ad-hoc signed, so you must sign it with your own certificate before a stock device will install it.
+Check the build output and signing metadata before distribution. A development or ad-hoc-signed artifact still requires appropriate signing with your own certificate before installation on a stock device.
 
 ## Project layout
 
