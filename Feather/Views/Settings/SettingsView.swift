@@ -546,7 +546,7 @@ extension SettingsView {
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
-                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page Sliding Pages")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -2862,9 +2862,15 @@ private struct ZagPagesSettingsView: View {
     @AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
     @AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var defaultStartPage = TabEnum.sources.rawValue
     @AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
+    @AppStorage(ZagPageSlide.enabledKey) private var slidingPages = true
 
     var body: some View {
         Form {
+            Section {
+                Toggle("Sliding Pages", isOn: $slidingPages)
+            } footer: {
+                Text("Main pages slide in quickly when you choose them from the dock.")
+            }
             Section {
                 Toggle("Remember Last Page", isOn: $rememberLastPage)
                 Picker("Default Start Page", selection: $defaultStartPage) {

@@ -30,8 +30,23 @@ struct TabbarView: View {
 		)
 	}
 
+	/// The selection as the dock sets it: the only path that slides pages.
+	private var dockSelection: Binding<TabEnum> {
+		Binding(
+			get: { selectedTabValue },
+			set: { tab in
+				ZagPageSlide.dockSelectionWillChange(
+					from: selectedTabValue.rawValue,
+					to: tab.rawValue,
+					order: ZagDockConfiguration.tabs.map(\.rawValue)
+				)
+				selectedTab.wrappedValue = tab
+			}
+		)
+	}
+
 	var body: some View {
-		TabView(selection: selectedTab) {
+		TabView(selection: dockSelection) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				TabEnum.view(for: tab)
 					.tabItem {
@@ -76,6 +91,7 @@ struct TabbarView: View {
 					.tag(tab)
 			}
 		}
+		.onAppear { ZagPageSlide.attachToDock() }
 		.onChange(of: dockTabs) { _ in
             if !ZagDockConfiguration.tabs.contains(selectedTabValue) {
                 selectedTabValue = ZagDockConfiguration.tabs.first ?? .discover

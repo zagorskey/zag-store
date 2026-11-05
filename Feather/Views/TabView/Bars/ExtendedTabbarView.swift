@@ -40,6 +40,21 @@ struct ExtendedTabbarView: View {
 		)
 	}
 
+	/// The selection as the dock sets it: the only path that slides pages.
+	private var dockSelection: Binding<String> {
+		Binding(
+			get: { selectedTabRawValue },
+			set: { newValue in
+				ZagPageSlide.dockSelectionWillChange(
+					from: selectedTabRawValue,
+					to: newValue,
+					order: ZagDockConfiguration.tabs.map(\.rawValue)
+				)
+				selectedTab.wrappedValue = newValue
+			}
+		)
+	}
+
 	@FetchRequest(
 		entity: AltSource.entity(),
 		sortDescriptors: [NSSortDescriptor(keyPath: \AltSource.name, ascending: true)],
@@ -47,7 +62,7 @@ struct ExtendedTabbarView: View {
 	) private var _sources: FetchedResults<AltSource>
 		
 	var body: some View {
-		TabView(selection: selectedTab) {
+		TabView(selection: dockSelection) {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				if tab == .sources {
                     Tab(value: tab.rawValue) {
@@ -148,6 +163,7 @@ struct ExtendedTabbarView: View {
 		}
 		.tabViewStyle(.sidebarAdaptable)
 		.tabViewCustomization($customization)
+		.onAppear { ZagPageSlide.attachToDock() }
 		.onChange(of: dockTabs) { _ in
             if !ZagDockConfiguration.tabs.contains(TabEnum(rawValue: selectedTabRawValue) ?? .discover) {
                 selectedTabRawValue = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
