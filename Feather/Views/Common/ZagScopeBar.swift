@@ -15,6 +15,10 @@ struct ZagScopeBar: UIViewRepresentable {
 	var titles: [String]
 	/// Selection values, one per title (defaults to the titles).
 	var values: [String]? = nil
+	/// For a bar inside a scrolling page (Games): keeps the scope centred
+	/// in its row whenever UIKit re-lays the search bar out, and clips it
+	/// to the row so it can never draw over neighbouring content.
+	var pinnedToRow = false
 
 	/// Height of the visible scope control; frame the bar with it.
 	static var controlHeight: CGFloat {
@@ -28,7 +32,7 @@ struct ZagScopeBar: UIViewRepresentable {
 	}
 
 	func makeUIView(context: Context) -> ScopeHost {
-		let host = ScopeHost(titles: titles)
+		let host = ScopeHost(titles: titles, pinnedToRow: pinnedToRow)
 		host.searchBar.delegate = context.coordinator
 		host.searchBar.selectedScopeButtonIndex = resolvedValues.firstIndex(of: selection) ?? 0
 		return host
@@ -56,27 +60,65 @@ struct ZagScopeBar: UIViewRepresentable {
 			self.values = values
 		}
 
+		/// The search field is hidden and never used: tapping the bar must
+		/// never start editing or bring up the keyboard.
+		func searchBarShouldBeginEditing(_ searchBar: UISearchBar) -> Bool {
+			false
+		}
+
 		func searchBar(_ searchBar: UISearchBar, selectedScopeButtonIndexDidChange index: Int) {
 			guard values.indices.contains(index) else { return }
 			selection.wrappedValue = values[index]
 		}
 	}
 
-	final class ScopeHost: UIView {
-		let searchBar = UISearchBar(frame: .zero)
+	/// Reports its own layout passes, so the host can re-centre the scope
+	/// when UIKit moves it.
+	final class HostedSearchBar: UISearchBar {
+		var onLayout: (() -> Void)?
 
-		init(titles: [String]) {
+		override func layoutSubviews() {
+			super.layoutSubviews()
+			onLayout?()
+		}
+	}
+
+	final class ScopeHost: UIView {
+		let searchBar = HostedSearchBar(frame: .zero)
+		private let pinnedToRow: Bool
+		/// The host's own pass moves the search bar, which lays it out:
+		/// those passes are not UIKit moving the scope.
+		private var isLayingOut = false
+
+		init(titles: [String], pinnedToRow: Bool = false) {
+			self.pinnedToRow = pinnedToRow
 			super.init(frame: .zero)
 			backgroundColor = .clear
 			isOpaque = false
+			clipsToBounds = pinnedToRow
 
 			searchBar.searchBarStyle = .minimal
 			searchBar.showsScopeBar = true
 			searchBar.scopeButtonTitles = titles
 			searchBar.searchTextField.isHidden = true
+			searchBar.searchTextField.isUserInteractionEnabled = false
 			searchBar.backgroundImage = UIImage()
 			searchBar.scopeBarBackgroundImage = UIImage()
 			addSubview(searchBar)
+			if pinnedToRow {
+				searchBar.onLayout = { [weak self] in self?.scopeMayHaveMoved() }
+			}
+		}
+
+		/// After UIKit re-lays the search bar out, lay the host out again if
+		/// the scope is no longer centred in it. Settles in one pass: once
+		/// centred, nothing more is requested.
+		private func scopeMayHaveMoved() {
+			guard !isLayingOut, bounds.height > 0, let scope = findScope(in: searchBar) else { return }
+			let frame = scope.convert(scope.bounds, to: self)
+			let centred = abs(frame.midY - bounds.midY) < 0.5 &&
+				frame.minX > -0.5 && frame.maxX < bounds.width + 0.5
+			if !centred { setNeedsLayout() }
 		}
 
 		required init?(coder: NSCoder) {
@@ -86,6 +128,8 @@ struct ZagScopeBar: UIViewRepresentable {
 		override func layoutSubviews() {
 			super.layoutSubviews()
 			guard bounds.width > 0, bounds.height > 0 else { return }
+			isLayingOut = true
+			defer { isLayingOut = false }
 
 			// UISearchBar lays the scope out in a 76-point canvas.
 			let canvasHeight = max(76, searchBar.sizeThatFits(

@@ -1672,15 +1672,18 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // The system segmented control on a Liquid Glass capsule, styled like
-    // the scope bar under a focused search field: hold and slide to switch,
-    // and no hidden search bar for UIKit to move while the page scrolls.
+    // Settings → App Icon's native scope bar (a hidden search bar's scope,
+    // which never brings up the keyboard). Pinned to its row, so it stays
+    // centred and can never draw over the genre links.
     private var gamesCategorySwitcher: some View {
-        ZagGlassScopeBar(
+        ZagScopeBar(
             selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
-            titles: ["Games", "Emulators"]
+            titles: ["Games", "Emulators"],
+            pinnedToRow: true
         )
         .frame(maxWidth: .infinity)
+        // A little taller than the control, so clipping never trims it.
+        .frame(height: ZagScopeBar.controlHeight + 4)
         .accessibilityLabel("Gaming Category")
     }
 
@@ -1692,19 +1695,25 @@ private struct ZagGamesPage: View {
                     gameList = ZagGameList(title: genre.name, genre: genre, games: gamesTagged(genre.name))
                 }
                 .padding(.top, 6)
-                LazyVStack(alignment: .leading, spacing: 22) {
-                    if !searchFieldFocused {
-                        // A caps line over the switcher, like the App Store's
-                        // PRE-ORDER label over a featured title.
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Fixed at 13-point semibold like PRE-ORDER, which
-                            // does not grow with the reader's text size.
-                            Text("PLAY NATIVE OR EMULATE")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
-                            gamesCategorySwitcher
-                        }
+                VStack(alignment: .leading, spacing: 0) {
+                // Outside the lazy stack below, so scrolling never discards
+                // and rebuilds the switcher.
+                if !searchFieldFocused {
+                    // A caps line over the switcher, like the App Store's
+                    // PRE-ORDER label over a featured title.
+                    VStack(alignment: .leading, spacing: 6) {
+                        // Fixed at 13-point semibold like PRE-ORDER, which
+                        // does not grow with the reader's text size.
+                        Text("PLAY NATIVE OR EMULATE")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
+                        gamesCategorySwitcher
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Self.pageMargin)
+                    .padding(.top, 18)
+                }
+                LazyVStack(alignment: .leading, spacing: 22) {
 
                     if !searchFieldFocused && selectedCategory == "Games" &&
                         (!indexedGames.isEmpty || featuredLoading(.games)) {
@@ -1758,8 +1767,11 @@ private struct ZagGamesPage: View {
                     }
                 }
                 .padding(.horizontal, Self.pageMargin)
-                .padding(.top, 18)
+                // 22 points below the switcher (its row has 2 points of
+                // slack), or 18 below the genre links without it.
+                .padding(.top, searchFieldFocused ? 18 : 20)
                 .padding(.bottom, selectedCategory == "Games" ? 40 : 90)
+                }
 
                 if selectedCategory == "Games" {
                     gameShelves
