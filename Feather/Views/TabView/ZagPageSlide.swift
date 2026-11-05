@@ -43,8 +43,7 @@ enum ZagPageSlide {
 		}
 	}
 
-	/// Also called by the Six-Icon Dock before it changes page.
-	static func dockTouched() {
+	fileprivate static func dockTouched() {
 		pending = nil
 		guard isEnabled, !UIAccessibility.isReduceMotionEnabled,
 			  let tabs = tabBarController(),
@@ -140,7 +139,7 @@ enum ZagPageSlide {
 		return (nav, content)
 	}
 
-	static func tabBarController() -> UITabBarController? {
+	private static func tabBarController() -> UITabBarController? {
 		let windows = UIApplication.shared.connectedScenes
 			.compactMap { $0 as? UIWindowScene }
 			.flatMap(\.windows)

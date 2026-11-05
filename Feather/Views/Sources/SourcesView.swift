@@ -253,14 +253,25 @@ struct SourcesView: View {
 			}
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
-			.zagMainPageSearch(
+			.searchable(
 				text: $_searchText,
-				isFocused: $_searchFieldFocused,
-				prompt: "Repos, Apps, Games and More",
-				activePrompt: "Repos, Apps and More",
-				dictationAvailable: _dictationAvailable,
-				startDictation: _startDictationFromSearchMic
+				placement: .platform(),
+				prompt: Text("Repos, Apps, Games and More")
 			)
+			.modifier(
+				ZagRepositorySearchFocusModifier(
+					isFocused: $_searchFieldFocused
+				)
+			)
+			.background {
+				ZagNativeSearchMicInstaller(
+					isAvailable: _dictationAvailable,
+					action: _startDictationFromSearchMic,
+					prompt: "Repos, Apps, Games and More",
+					activePrompt: "Repos, Apps and More"
+				)
+				.frame(width: 0, height: 0)
+			}
 			.overlay {
 				emptyState
 			}

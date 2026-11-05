@@ -22,18 +22,6 @@ struct ExtendedTabbarView: View {
 	@AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
 	@AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
 	@State private var selectedTabRawValue = ZagPageStartupPolicy.initialTab.rawValue
-	@AppStorage(ZagGlassDockSettings.enabledKey) private var glassDockEnabled = false
-	@StateObject private var dockSearch = ZagDockSearch()
-	@StateObject private var glassDockState = ZagGlassDockState()
-
-	/// Settings → Bottom Dock → Six-Icon Dock, on iPhone with iOS 26.
-	private var usesGlassDock: Bool {
-		ZagGlassDockSettings.isSupported && glassDockEnabled && horizontalSizeClass == .compact
-	}
-
-	private func dockPage(_ tab: TabEnum) -> some View {
-		TabEnum.view(for: tab).zagGlassDockPage(tab, search: usesGlassDock ? dockSearch : nil)
-	}
 	
 	@State private var _isAddingPresenting = false
 
@@ -78,7 +66,7 @@ struct ExtendedTabbarView: View {
 			ForEach(TabEnum.defaultTabs, id: \.hashValue) { tab in
 				if tab == .sources {
                     Tab(value: tab.rawValue) {
-                        dockPage(tab)
+                        TabEnum.view(for: tab)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -88,7 +76,7 @@ struct ExtendedTabbarView: View {
                     }
                 } else if tab == .library {
                     Tab(value: tab.rawValue) {
-                        dockPage(tab)
+                        TabEnum.view(for: tab)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -103,7 +91,7 @@ struct ExtendedTabbarView: View {
                     }
                 } else if tab == .discover || tab == .games || tab == .activity {
                     Tab(value: tab.rawValue) {
-                        dockPage(tab)
+                        TabEnum.view(for: tab)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -118,7 +106,7 @@ struct ExtendedTabbarView: View {
                     }
                 } else if tab == .settings {
                     Tab(value: tab.rawValue) {
-                        dockPage(tab)
+                        TabEnum.view(for: tab)
                     } label: {
                         Label {
                             Text(tab.title)
@@ -128,7 +116,7 @@ struct ExtendedTabbarView: View {
                     }
                 } else {
                     Tab(tab.title, systemImage: tab.icon, value: tab.rawValue) {
-                        dockPage(tab)
+                        TabEnum.view(for: tab)
                     }
                 }
 			}
@@ -176,19 +164,6 @@ struct ExtendedTabbarView: View {
 		.tabViewStyle(.sidebarAdaptable)
 		.tabViewCustomization($customization)
 		.modifier(ZagDockShrinkOnScroll())
-		.overlay(alignment: .bottom) {
-			if #available(iOS 26.0, *), usesGlassDock {
-				glassDock
-			}
-		}
-		.onChange(of: selectedTabRawValue) { _ in
-			dockSearch.pageChanged()
-			glassDockState.pageChanged()
-			if usesGlassDock { dockSearch.applyDockInsets() }
-		}
-		.onChange(of: usesGlassDock) { uses in
-			if uses { dockSearch.startReservingDock() } else { dockSearch.stopReservingDock() }
-		}
 		.onAppear { ZagPageSlide.attachToDock() }
 		.onChange(of: dockTabs) { _ in
             if !ZagDockConfiguration.tabs.contains(TabEnum(rawValue: selectedTabRawValue) ?? .discover) {
@@ -210,36 +185,6 @@ struct ExtendedTabbarView: View {
 		}
 	}
 	
-	@available(iOS 26.0, *)
-	private var glassDock: some View {
-		GeometryReader { proxy in
-			let safeBottom = proxy.safeAreaInsets.bottom
-			ZagGlassDock(
-				tabs: ZagDockConfiguration.tabs,
-				selection: selectedTabRawValue,
-				hasUpdates: updateManager.hasVisibleUpdates,
-				hasStoreUpdate: selfUpdateCoordinator.availableRelease != nil,
-				tintHex: themeTintHex,
-				safeBottom: safeBottom,
-				select: { tab in dockSelection.wrappedValue = tab.rawValue },
-				search: dockSearch,
-				state: glassDockState
-			)
-			.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-			.ignoresSafeArea(.container, edges: .bottom)
-			.onAppear {
-				dockSearch.dockReserve = ZagGlassDockMetrics.reserve(safeBottom: safeBottom)
-				dockSearch.startReservingDock()
-				glassDockState.attach()
-			}
-			.onChange(of: safeBottom) { value in
-				dockSearch.dockReserve = ZagGlassDockMetrics.reserve(safeBottom: value)
-			}
-		}
-		// The keyboard covers the dock rather than lifting it.
-		.ignoresSafeArea(.keyboard)
-	}
-
 	@ViewBuilder
 	private func _icon(_ title: String, iconUrl: URL?) -> some View {
 		Label {

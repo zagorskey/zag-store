@@ -545,14 +545,17 @@ private struct ZagDiscoverPage: View {
             }
             .onChange(of: viewModel.sources.count) { _ in indexRevision += 1 }
             .onChange(of: sources.count) { _ in indexRevision += 1 }
-            .zagMainPageSearch(
-                text: $searchText,
-                isFocused: $searchFieldFocused,
-                prompt: "Apps, Games and More",
-                activePrompt: "Apps, Games and More",
-                dictationAvailable: dictationAvailable,
-                startDictation: startDictationFromSearchMic
-            )
+            .searchable(text: $searchText, placement: .platform(), prompt: Text("Apps, Games and More"))
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Apps, Games and More",
+                    activePrompt: "Apps, Games and More"
+                )
+                .frame(width: 0, height: 0)
+            }
             .onAppear(perform: probeSystemDictation)
             .zagWallpaperSurface()
             .toolbar {
@@ -932,11 +935,6 @@ private struct ZagGamesPage: View {
     @State private var selectedApp: SourceAppsView.SourceAppRoute?
     @State private var searchText = ""
     @FocusState private var searchFieldFocused: Bool
-    /// With the Six-Icon Dock: the search bar is showing above the dock.
-    @State private var searchShownAboveDock = false
-    /// Search results replace the category layout: while the native search
-    /// field is focused, or while the bar above the dock is showing.
-    private var searchMode: Bool { searchFieldFocused || searchShownAboveDock }
     @State private var dictationAvailable = false
     @State private var selectedCategory = "Games"
     @State private var categorySlide = ZagTabSlideState()
@@ -1419,23 +1417,23 @@ private struct ZagGamesPage: View {
         NBNavigationView("Games") {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    if !searchMode {
+                    if !searchFieldFocused {
                         gamesCategorySwitcher
                     }
 
-                    if !searchMode && selectedCategory == "Games" &&
+                    if !searchFieldFocused && selectedCategory == "Games" &&
                         (!indexedGames.isEmpty || featuredLoading(.games)) {
                         featuredSection(.games)
                             .zagTabSlideIn(categorySlide)
                     }
 
-                    if !searchMode && selectedCategory == "Emulators" &&
+                    if !searchFieldFocused && selectedCategory == "Emulators" &&
                         (!indexedEmulators.isEmpty || featuredLoading(.emulators)) {
                         featuredSection(.emulators)
                             .zagTabSlideIn(categorySlide)
                     }
 
-                    if searchMode ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
+                    if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Emulators", count: emulators.count)
                         Text("Explore platforms from your repositories")
@@ -1503,7 +1501,7 @@ private struct ZagGamesPage: View {
                     .zagTabSlideIn(categorySlide)
 
                     }
-                    if searchMode ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
+                    if searchFieldFocused ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
                     VStack(alignment: .leading, spacing: 10) {
                         ZagSectionHeader(title: "Games", count: games.count)
                         Text("Discover titles from your repositories")
@@ -1576,16 +1574,21 @@ private struct ZagGamesPage: View {
             }
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
-            .zagMainPageSearch(
+            .searchable(
                 text: $searchText,
-                isFocused: $searchFieldFocused,
-                prompt: "Games, Emulators and More",
-                activePrompt: "Games, Emulators and More",
-                dictationAvailable: dictationAvailable,
-                startDictation: startDictationFromSearchMic,
-                scopes: ZagSearchScopeOptions(titles: ["All", "Games", "Emulators"], selection: $searchScope),
-                isShownAboveDock: $searchShownAboveDock
+                placement: .platform(),
+                prompt: Text("Games, Emulators and More")
             )
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Games, Emulators and More",
+                    activePrompt: "Games, Emulators and More"
+                )
+                .frame(width: 0, height: 0)
+            }
             .onAppear(perform: probeSystemDictation)
             .compatSearchScopes($searchScope) {
                 Text("All").tag("All")
@@ -2258,14 +2261,17 @@ private struct ZagActivityPage: View {
                     }
                 }
             }
-            .zagMainPageSearch(
-                text: $historySearchText,
-                isFocused: $searchFieldFocused,
-                prompt: "Search Activity",
-                activePrompt: "Search Activity",
-                dictationAvailable: dictationAvailable,
-                startDictation: startDictationFromSearchMic
-            )
+            .searchable(text: $historySearchText, placement: .platform(), prompt: Text("Search Activity"))
+            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
+            .background {
+                ZagNativeSearchMicInstaller(
+                    isAvailable: dictationAvailable,
+                    action: startDictationFromSearchMic,
+                    prompt: "Search Activity",
+                    activePrompt: "Search Activity"
+                )
+                .frame(width: 0, height: 0)
+            }
             .onAppear(perform: probeSystemDictation)
             .sheet(isPresented: $showStatistics) {
                 NavigationStack {
@@ -2626,7 +2632,6 @@ private struct ZagGamesScrollClipModifier: ViewModifier {
 struct ZagDockCustomizationView: View {
     @AppStorage(ZagDockConfiguration.storageKey) private var storedTabs = ""
     @AppStorage(ZagDockConfiguration.shrinkOnScrollKey) private var shrinkOnScroll = false
-    @AppStorage(ZagGlassDockSettings.enabledKey) private var glassDock = false
     @State private var showLimitAlert = false
     @State private var showLastTabAlert = false
     @AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
@@ -2665,27 +2670,17 @@ struct ZagDockCustomizationView: View {
         return false
     }
 
-    private var showsSearchSlot: Bool { glassDock && shrinkSupported }
-
-    private var behaviourFooter: String {
-        guard shrinkSupported else { return "Six-Icon Dock and Shrink on Scroll require iOS 26." }
-        if glassDock {
-            return "Six-Icon Dock shows your five pages without labels, plus Search on the right, which shows the current page's search bar just above the dock. With Shrink on Scroll, the dock becomes smaller as you scroll down and returns to full size when you scroll up or tap it."
-        }
-        return "Six-Icon Dock shows your five pages without labels, plus Search on the right. With Shrink on Scroll, the dock shrinks to the current page's icon as you scroll down. Tap it to expand the dock again."
-    }
-
     var body: some View {
         List {
             Section {
-                Toggle("Six-Icon Dock", isOn: $glassDock)
-                    .disabled(!shrinkSupported)
                 Toggle("Shrink on Scroll", isOn: $shrinkOnScroll)
                     .disabled(!shrinkSupported)
             } header: {
                 Text("Behaviour")
             } footer: {
-                Text(behaviourFooter)
+                Text(shrinkSupported
+                    ? "The dock shrinks to the current page's icon as you scroll down. Tap it to expand the dock again."
+                    : "Shrink on Scroll requires iOS 26.")
             }
             Section {
                 ForEach(ZagDockConfiguration.choices, id: \.rawValue) { tab in
@@ -2735,28 +2730,10 @@ struct ZagDockCustomizationView: View {
                     ZagDockConfiguration.save(tabs)
                     storedTabs = tabs.map(\.rawValue).joined(separator: ",")
                 }
-                if showsSearchSlot {
-                    // Permanent: not a page, not movable, not counted.
-                    HStack {
-                        Label { Text("Search") } icon: {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(themeTint)
-                        }
-                        Spacer()
-                        Image(systemName: "lock.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .moveDisabled(true)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Search, always last in the dock")
-                }
             } header: {
                 Text("Dock Order")
             } footer: {
-                Text(showsSearchSlot
-                    ? "Drag the handles to rearrange the dock. Search always stays on the right."
-                    : "Drag the handles to rearrange the dock.")
+                Text("Drag the handles to rearrange the dock.")
             }
             Section {
                 Button {
