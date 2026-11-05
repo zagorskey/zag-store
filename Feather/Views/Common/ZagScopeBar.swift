@@ -139,12 +139,13 @@ extension View {
 
 	/// Apply to the Section holding a ZagScopeBar row. Together with
 	/// `.environment(\.defaultMinListRowHeight, 0)` on the Form (as on
-	/// Settings → App Icon), the gaps above and below the bar match the
-	/// native gap between a section title and its content.
+	/// Settings → App Icon), the bar sits the native title → content gap
+	/// below its section title, and the standard section spacing comes
+	/// after it.
 	@ViewBuilder
 	func zagScopeBarSection() -> some View {
 		if #available(iOS 26.0, *) {
-			self.listSectionMargins(.vertical, 0)
+			self.listSectionMargins(.top, 0)
 		} else {
 			self
 		}

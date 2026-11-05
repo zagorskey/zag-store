@@ -2653,8 +2653,6 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                } header: {
-                    Text("Direct contributions")
                 }
             } else {
                 Section {
@@ -2719,8 +2717,6 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                } header: {
-                    Text("Community support")
                 } footer: {
                     Text("Community contributions are securely handled by each provider. Patreon will be available later.")
                 }
