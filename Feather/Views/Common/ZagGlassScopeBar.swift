@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// The system segmented control on a Liquid Glass capsule, styled like the
-/// scope bar iOS 26 shows under a focused search field: 32 points tall,
-/// 15-point labels and the same selected fill in light and dark.
+/// The system segmented control styled like the Apps page's search scope
+/// bar on device: 32 points tall, 15-point white labels, a dark grey track
+/// and a near-black selected segment.
 ///
 /// Being the real UISegmentedControl, it keeps the native behaviour of
 /// holding a finger on the selection and sliding it to another segment. It
@@ -23,18 +23,40 @@ struct ZagGlassScopeBar: View {
 			.background { track }
 	}
 
-	@ViewBuilder
+	/// Measured on the Apps page's scope bar on device: a (32, 32, 32)
+	/// track in dark, with a faint glass rim.
 	private var track: some View {
-		if #available(iOS 26.0, *) {
-			Color.clear.glassEffect(.regular, in: Capsule(style: .continuous))
-		} else {
-			Capsule(style: .continuous)
-				.fill(.ultraThinMaterial)
-				.overlay {
-					Capsule(style: .continuous)
-						.strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.06), lineWidth: 1)
-				}
-		}
+		Capsule(style: .continuous)
+			.fill(Color(uiColor: ZagScopeColors.track))
+			.overlay {
+				Capsule(style: .continuous)
+					.strokeBorder(
+						LinearGradient(
+							colors: [
+								Color.white.opacity(colorScheme == .dark ? 0.14 : 0.7),
+								Color.white.opacity(colorScheme == .dark ? 0.04 : 0.2)
+							],
+							startPoint: .top,
+							endPoint: .bottom
+						),
+						lineWidth: 1
+					)
+			}
+	}
+}
+
+/// The scope bar's colours, from the native one on device.
+enum ZagScopeColors {
+	static let track = UIColor { traits in
+		traits.userInterfaceStyle == .dark
+			? UIColor(white: 32 / 255, alpha: 1)
+			: UIColor(red: 229 / 255, green: 229 / 255, blue: 234 / 255, alpha: 1)
+	}
+	/// The selected segment: darker than the track in dark, white in light.
+	static let selected = UIColor { traits in
+		traits.userInterfaceStyle == .dark
+			? UIColor(white: 12 / 255, alpha: 1)
+			: UIColor.white
 	}
 }
 
@@ -49,12 +71,7 @@ private struct ZagSegmentedControl: UIViewRepresentable {
 		// The glass capsule behind is the track; a near-clear colour hides
 		// the control's own grey track but keeps the whole width touchable.
 		control.backgroundColor = UIColor(white: 0, alpha: 0.001)
-		// Measured on the native scope bar: (54, 54, 54) dark, (229, 229, 233) light.
-		control.selectedSegmentTintColor = UIColor { traits in
-			traits.userInterfaceStyle == .dark
-				? UIColor(white: 54 / 255, alpha: 1)
-				: UIColor(red: 229 / 255, green: 229 / 255, blue: 233 / 255, alpha: 1)
-		}
+		control.selectedSegmentTintColor = ZagScopeColors.selected
 		let font = UIFont.systemFont(ofSize: 15, weight: .medium)
 		control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor.label], for: .normal)
 		control.setTitleTextAttributes([.font: font, .foregroundColor: UIColor.label], for: .selected)
