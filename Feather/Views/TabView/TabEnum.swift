@@ -1194,21 +1194,12 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // Search scopes are presented by UISearchController's native scope bar.
-    // Use that same UIKit component for the inline Games categories instead
-    // of SwiftUI's differently styled segmented Picker.
+    // The App Icon page's full-width native scope bar, spanning the page's
+    // content width.
     private var gamesCategorySwitcher: some View {
-        ZagGamesSearchScopeBar(selection: $selectedCategory)
+        ZagScopeBar(selection: $selectedCategory, titles: ["Games", "Emulators"])
             .frame(maxWidth: .infinity)
-            // UISearchBar's native scope buttons occupy the bottom of its
-            // 76-point bounds; the hidden search row consumes the top.
-            // Shift the whole bar up by that unused row while reserving only
-            // the visible scope control's height in the Games stack.
-            .frame(height: 76)
-            // Equalize the visible gap above and below the native scope tabs.
-            // Shift the control itself without changing the Featured layout.
-            .offset(y: -65)
-            .frame(height: 21, alignment: .top)
+            .frame(height: ZagScopeBar.controlHeight)
             .accessibilityLabel("Gaming Category")
     }
 
@@ -1601,51 +1592,6 @@ private struct ZagGamesPage: View {
     }
 }
 
-// Native UISearchBar scope buttons, matching the search UI's own control.
-struct ZagGamesSearchScopeBar: UIViewRepresentable {
-    @Binding var selection: String
-    var titles: [String] = ["Games", "Emulators"]
-    var values: [String] = ["Games", "Emulators"]
-
-    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection, values: values) }
-
-    func makeUIView(context: Context) -> UISearchBar {
-        let bar = UISearchBar(frame: .zero)
-        bar.searchBarStyle = .minimal
-        bar.showsScopeBar = true
-        bar.scopeButtonTitles = titles
-        bar.selectedScopeButtonIndex = values.firstIndex(of: selection) ?? 0
-        bar.delegate = context.coordinator
-        // The search field is not part of this inline scope control.
-        bar.searchTextField.isHidden = true
-        // The UIKit search bar normally reserves an invisible search-field
-        // row above the scope buttons. Translate the scope buttons into the
-        // compact representable bounds without shifting subsequent content.
-        bar.clipsToBounds = true
-        bar.backgroundImage = UIImage()
-        return bar
-    }
-
-    func updateUIView(_ bar: UISearchBar, context: Context) {
-        context.coordinator.selection = $selection
-        context.coordinator.values = values
-        bar.selectedScopeButtonIndex = values.firstIndex(of: selection) ?? 0
-    }
-
-    final class Coordinator: NSObject, UISearchBarDelegate {
-        var selection: Binding<String>
-        var values: [String]
-        init(selection: Binding<String>, values: [String]) {
-            self.selection = selection
-            self.values = values
-        }
-        func searchBar(_ searchBar: UISearchBar, selectedScopeButtonIndexDidChange selectedScope: Int) {
-            guard values.indices.contains(selectedScope) else { return }
-            selection.wrappedValue = values[selectedScope]
-        }
-    }
-}
-
 /// The Featured collection receives only artwork downloaded and validated by
 /// ZagFeaturedArtworkResolver. It never draws empty geometric hero cards.
 private enum ZagFeaturedHero {
@@ -1908,20 +1854,13 @@ private struct ZagActivityPage: View {
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                             }
-                            ZagGamesSearchScopeBar(
+                            ZagScopeBar(
                                 selection: $historyFilter,
                                 titles: ["All", "Installed", "Signed", "Prepared", "Failed"],
                                 values: ["All", "Installed", "Signed", "Ready to Install", "Failed"]
                             )
                             .frame(maxWidth: .infinity)
-                            .frame(height: 76)
-                            .offset(y: -65)
-                            .frame(height: 21, alignment: .top)
-                            // The embedded UISearchBar's visible capsule is
-                            // asymmetrical within its layout bounds. Compensate
-                            // locally while retaining Featured's 12-pt spacing.
-                            .padding(.top, 12)
-                            .padding(.bottom, 4)
+                            .frame(height: ZagScopeBar.controlHeight)
                             .accessibilityLabel("History Filter")
                             LazyVStack(spacing: 0) {
                                 ForEach(filteredHistory) { record in

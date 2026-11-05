@@ -92,19 +92,19 @@ struct AppearanceView: View {
 	var body: some View {
 		NBList(.localized("Appearance"), transparentBackground: true) {
 			Section {
-				Picker(
-					.localized("Appearance"),
-					selection: $_userIntefacerStyle
-				) {
-					ForEach(
-						_appearanceChoices,
-						id: \.value
-					) { choice in
-						Text(.localized(choice.label))
-							.tag(choice.value)
-					}
-				}
-				.pickerStyle(.segmented)
+				// Settings → App Icon's full-width native scope bar.
+				ZagScopeBar(
+					selection: Binding(
+						get: { String(_userIntefacerStyle) },
+						set: { _userIntefacerStyle = Int($0) ?? _userIntefacerStyle }
+					),
+					titles: _appearanceChoices.map { .localized($0.label) },
+					values: _appearanceChoices.map { String($0.value) }
+				)
+				.accessibilityLabel(.localized("Appearance"))
+				.zagScopeBarFormRow()
+			} header: {
+				Text("Mode")
 			}
 
 			Section {

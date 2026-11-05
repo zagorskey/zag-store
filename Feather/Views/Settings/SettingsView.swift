@@ -873,17 +873,21 @@ extension SettingsView {
             Button {
                 UIApplication.open("https://github.com/zagorskey/zag-store")
             } label: {
-                HStack {
-                    Label {
-                                        Text("GitHub")
-                                    } icon: {
-                                        ZagGitHubMark()
-                                            .fill(ZagWideGamutTint.color(hex: userTintColor))
-                                            .frame(width: 25, height: 25)
-                                    }
-                    Spacer(minLength: 8)
+                // A plain Label like Zag Store and Feedback, so the row
+                // measures the same and keeps only the native separator.
+                // The arrow is an overlay: it never changes the row height.
+                Label {
+                    Text("GitHub")
+                } icon: {
+                    ZagGitHubMark()
+                        .fill(ZagWideGamutTint.color(hex: userTintColor))
+                        .frame(width: 25, height: 25)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .trailing) {
                     Image(systemName: "arrow.up.right")
                         .foregroundStyle(.secondary.opacity(0.65))
+                        .accessibilityHidden(true)
                 }
             }
 
@@ -2592,14 +2596,18 @@ private struct ZagSupportContributionsView: View {
             }
 
             Section {
-                Picker("Contribution methods", selection: $group) {
-                    ForEach(SupportGroup.allCases) { item in
-                        Text(item.rawValue).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                // Settings → App Icon's full-width native scope bar.
+                ZagScopeBar(
+                    selection: Binding(
+                        get: { group.rawValue },
+                        set: { group = SupportGroup(rawValue: $0) ?? group }
+                    ),
+                    titles: SupportGroup.allCases.map(\.rawValue)
+                )
                 .accessibilityLabel("Contribution methods")
+                .zagScopeBarFormRow()
+            } header: {
+                Text("Method")
             }
 
             if group == .direct {
