@@ -2609,6 +2609,7 @@ private struct ZagSupportContributionsView: View {
             } header: {
                 Text("Method")
             }
+            .zagScopeBarSection()
 
             if group == .direct {
                 Section {
@@ -2731,6 +2732,10 @@ private struct ZagSupportContributionsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Lets the Method tab bar row be exactly the bar's height, as on
+        // Settings → App Icon. Every other row here is taller than the
+        // minimum, so none of them change.
+        .environment(\.defaultMinListRowHeight, 0)
         .navigationTitle("Support Zag Store")
         .navigationBarTitleDisplayMode(.inline)
         .tint(ZagWideGamutTint.color(hex: themeColorHex))

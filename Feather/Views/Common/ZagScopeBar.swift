@@ -136,4 +136,17 @@ extension View {
 			.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
 			.listRowBackground(Color.clear)
 	}
+
+	/// Apply to the Section holding a ZagScopeBar row. Together with
+	/// `.environment(\.defaultMinListRowHeight, 0)` on the Form (as on
+	/// Settings → App Icon), the gaps above and below the bar match the
+	/// native gap between a section title and its content.
+	@ViewBuilder
+	func zagScopeBarSection() -> some View {
+		if #available(iOS 26.0, *) {
+			self.listSectionMargins(.vertical, 0)
+		} else {
+			self
+		}
+	}
 }

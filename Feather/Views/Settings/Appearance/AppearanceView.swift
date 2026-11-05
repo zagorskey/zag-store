@@ -106,6 +106,7 @@ struct AppearanceView: View {
 			} header: {
 				Text("Mode")
 			}
+			.zagScopeBarSection()
 
 			Section {
 				AppearanceTintColorView()
@@ -239,6 +240,9 @@ struct AppearanceView: View {
 				Text(.localized("Sources"))
 			}
 		}
+		// Lets the Mode tab bar row be exactly the bar's height, as on
+		// Settings → App Icon.
+		.environment(\.defaultMinListRowHeight, 0)
 		.background {
 			ZagWallpaperBackground()
 		}
