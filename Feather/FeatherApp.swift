@@ -42,6 +42,7 @@ struct FeatherApp: App {
 				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
+			.onAppear { ZagInventorySnapshotRecorder.shared.start() }
             .onAppear {
                 NotificationCenter.default.post(
                     name: Notification.Name("ZagStore.importBannerVisibilityDidChange"),
@@ -577,6 +578,7 @@ final class ZagBackgroundUpdateRefresh {
 	}
 
 	private func refreshRepositoriesAndUpdates() async -> Bool {
+		let snapshotStartedAt = Date()
 		let sources = Storage.shared.getSources()
 		guard !sources.isEmpty else {
 			await MainActor.run {
@@ -628,8 +630,11 @@ final class ZagBackgroundUpdateRefresh {
 		let completedRepositories = repositories
 
 		await MainActor.run {
+			// Dropped if a foreground refresh started later and already
+			// published: an older snapshot never replaces a newer one.
 			UpdateManager.shared.refresh(
-				repositories: completedRepositories
+				repositories: completedRepositories,
+				snapshotStartedAt: snapshotStartedAt
 			)
 		}
 
