@@ -156,9 +156,7 @@ private struct ZagGameGenrePill: View {
 				.font(.system(size: 16, weight: .semibold))
 				.foregroundStyle(.primary)
 				.lineLimit(1)
-			Text("\(count)")
-				.font(.system(size: 14, weight: .medium).monospacedDigit())
-				.foregroundStyle(.secondary)
+			ZagCountBadge(count: count)
 		}
 		.padding(.horizontal, 14)
 		.frame(height: 38)
@@ -380,6 +378,8 @@ struct ZagGameRow: View {
 /// Title 2 with a chevron, the whole title opening the section's page.
 struct ZagGamesSectionTitle: View {
 	let title: String
+	/// Shown in the count badge between the title and the chevron.
+	var count: Int? = nil
 	/// Opens the section's page; without one the title has no chevron.
 	var action: (() -> Void)? = nil
 
@@ -405,6 +405,9 @@ struct ZagGamesSectionTitle: View {
 				.font(.title2.weight(.bold))
 				.foregroundStyle(.primary)
 				.lineLimit(1)
+			if let count {
+				ZagCountBadge(count: count)
+			}
 			if chevron {
 				Image(systemName: "chevron.forward")
 					.font(.title2.weight(.bold))

@@ -1040,6 +1040,7 @@ private struct ZagFeaturedCardSkeleton: View {
         }
         .zagShimmer()
         .frame(width: width, height: metrics.height)
+        .compositingGroup()
         .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
         .accessibilityElement()
         .accessibilityLabel("Loading")
@@ -1054,6 +1055,7 @@ private struct ZagGamesPage: View {
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
     @State private var selectedCategory = "Games"
+    @AppStorage("Feather.userTintColor") private var userTintColor = "#0090FF"
     @State private var categorySlide = ZagTabSlideState()
     @State private var showGameLibrary = false
     @State private var showCollections = false
@@ -1283,7 +1285,7 @@ private struct ZagGamesPage: View {
     private func allGamesSection(_ list: [SourceAppsView.SourceAppRoute]) -> some View {
         let shown = Array(list.prefix(8))
         return VStack(alignment: .leading, spacing: 2) {
-            ZagGamesSectionTitle(title: "All Games") {
+            ZagGamesSectionTitle(title: "All Games", count: list.count) {
                 gameList = ZagGameList(title: "All Games", games: list)
             }
             LazyVStack(spacing: 0) {
@@ -1424,6 +1426,8 @@ private struct ZagGamesPage: View {
                 .padding(metrics.padding)
             }
             .frame(width: width, height: metrics.height)
+            // Flatten first, so the corners clip every layer of the card.
+            .compositingGroup()
             .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
         }
@@ -1668,16 +1672,18 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // The App Icon page's full-width native scope bar, spanning the page's
-    // content width.
+    // A native segmented control across the content width. (Not the App
+    // Icon page's ZagScopeBar: its hidden search bar re-lays itself out while
+    // this page scrolls, lifting the control over the genre pills.)
     private var gamesCategorySwitcher: some View {
-        ZagScopeBar(
-            selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
-            titles: ["Games", "Emulators"]
-        )
-            .frame(maxWidth: .infinity)
-            .frame(height: ZagScopeBar.controlHeight)
-            .accessibilityLabel("Gaming Category")
+        Picker("Gaming Category", selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"])) {
+            Text("Games").tag("Games")
+            Text("Emulators").tag("Emulators")
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("Gaming Category")
     }
 
     var body: some View {
@@ -1693,9 +1699,11 @@ private struct ZagGamesPage: View {
                         // A caps line over the switcher, like the App Store's
                         // PRE-ORDER label over a featured title.
                         VStack(alignment: .leading, spacing: 8) {
+                            // Fixed at 13-point semibold like PRE-ORDER, which
+                            // does not grow with the reader's text size.
                             Text("PLAY NATIVE OR EMULATE")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tint)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                             gamesCategorySwitcher
                         }
                     }
@@ -1714,7 +1722,7 @@ private struct ZagGamesPage: View {
 
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
                     VStack(alignment: .leading, spacing: 10) {
-                        ZagGamesSectionTitle(title: "Emulators")
+                        ZagGamesSectionTitle(title: "Emulators", count: emulators.count)
                         Text("Explore platforms from your sources")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -1761,6 +1769,7 @@ private struct ZagGamesPage: View {
                         .zagTabSlideIn(categorySlide)
                 }
             }
+            .modifier(ZagTransparentTopEdge())
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
             .onAppear {
@@ -2792,6 +2801,19 @@ private struct ZagEmptyDestination: View {
     }
 }
 
+
+/// No blurred band under the header when the page scrolls (iOS 26 draws one
+/// by default): the header stays transparent, as it was with the search bar.
+private struct ZagTransparentTopEdge: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            content
+        }
+    }
+}
 
 private struct ZagGamesScrollClipModifier: ViewModifier {
     @ViewBuilder
