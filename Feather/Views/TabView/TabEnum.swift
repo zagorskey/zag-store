@@ -943,6 +943,8 @@ private struct ZagGamesPage: View {
     @State private var showGameFilters = false
     @State private var selectedGameRepository = "All"
     @State private var selectedGameGenre = "All"
+    /// The genre page opened from the pills under the title.
+    @State private var selectedGenre: ZagGameGenre?
     @State private var searchScope = "All"
     @State private var indexedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
@@ -1416,6 +1418,9 @@ private struct ZagGamesPage: View {
     var body: some View {
         NBNavigationView("Games") {
             ScrollView {
+                // Genre links in place of a search bar, edge to edge.
+                ZagGameGenrePills(margin: 18) { genre in selectedGenre = genre }
+                    .padding(.top, 6)
                 LazyVStack(alignment: .leading, spacing: 22) {
                     if !searchFieldFocused {
                         gamesCategorySwitcher
@@ -1574,27 +1579,6 @@ private struct ZagGamesPage: View {
             }
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
-            .searchable(
-                text: $searchText,
-                placement: .platform(),
-                prompt: Text("Games, Emulators and More")
-            )
-            .modifier(ZagRepositorySearchFocusModifier(isFocused: $searchFieldFocused))
-            .background {
-                ZagNativeSearchMicInstaller(
-                    isAvailable: dictationAvailable,
-                    action: startDictationFromSearchMic,
-                    prompt: "Games, Emulators and More",
-                    activePrompt: "Games, Emulators and More"
-                )
-                .frame(width: 0, height: 0)
-            }
-            .onAppear(perform: probeSystemDictation)
-            .compatSearchScopes($searchScope) {
-                Text("All").tag("All")
-                Text("Games").tag("Games")
-                Text("Emulators").tag("Emulators")
-            }
             .onAppear {
                 let loaded = sourcesModel.sources
                 buildIndex(
@@ -1667,6 +1651,21 @@ private struct ZagGamesPage: View {
                         source: selectedApp.source,
                         app: selectedApp.app,
                         prefetchedFeaturedHero: verifiedArtwork[selectedApp.id]?.detailHero
+                    )
+                }
+            }
+            .navigationDestination(
+                isPresented: Binding(
+                    get: { selectedGenre != nil },
+                    set: { if !$0 { selectedGenre = nil } }
+                )
+            ) {
+                if let selectedGenre {
+                    ZagGameGenrePage(
+                        genre: selectedGenre,
+                        games: indexedGames.filter {
+                            selectedGenre.matches($0.app.currentDescription ?? $0.app.localizedDescription ?? "")
+                        }
                     )
                 }
             }
