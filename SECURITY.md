@@ -6,7 +6,7 @@ Zag Store handles signing certificates, private keys and app installation on you
 
 **Please do not report security problems in public issues, discussions or pull requests.**
 
-Report them privately through GitHub: go to the repository's **Security** tab and choose **[Report a vulnerability](https://github.com/zagorskey/zag-store/security/advisories/new)**.
+A private reporting channel must be enabled before the public launch. Once GitHub private vulnerability reporting is enabled, use the repository's **Security → Report a vulnerability** option. Until then, do not submit vulnerability details to public issues or discussions. The maintainers are preparing a verified private contact method.
 
 Please include:
 
