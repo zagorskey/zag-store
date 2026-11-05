@@ -208,12 +208,97 @@ private struct ZagTabSlideIn: ViewModifier {
 
 	func body(content: Content) -> some View {
 		content
+			// One geometry for the whole content, so images that finish
+			// loading mid-slide (app icons) move with it.
+			.modifier(ZagGeometryGroup())
 			.offset(x: progress * (state.forward ? 1 : -1) * 90)
 			.opacity(1 - Double(progress))
 			.onAppear {
 				guard !reduceMotion, Date().timeIntervalSince(state.changedAt) < 0.5 else { return }
 				progress = 1
-				withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) { progress = 0 }
+				withAnimation(ZagTabSlideMotion.animation) { progress = 0 }
 			}
+	}
+}
+
+enum ZagTabSlideMotion {
+	static let distance: CGFloat = 90
+	static let animation = Animation.spring(response: 0.38, dampingFraction: 0.9)
+}
+
+private struct ZagGeometryGroup: ViewModifier {
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if #available(iOS 17.0, *) {
+			content.geometryGroup()
+		} else {
+			content
+		}
+	}
+}
+
+extension View {
+	/// The same slide for a native Form row. A Form draws a new row a
+	/// moment after SwiftUI creates it and does not play SwiftUI
+	/// animations inside rows, so the row's own layer is animated with
+	/// Core Animation once the row is on screen.
+	func zagTabSlideInRow(_ state: ZagTabSlideState) -> some View {
+		background(ZagRowSlideProbe(state: state).allowsHitTesting(false))
+	}
+}
+
+private struct ZagRowSlideProbe: UIViewRepresentable {
+	let state: ZagTabSlideState
+
+	func makeUIView(context: Context) -> Probe {
+		let probe = Probe()
+		probe.state = state
+		return probe
+	}
+
+	func updateUIView(_ probe: Probe, context: Context) {}
+
+	final class Probe: UIView {
+		var state = ZagTabSlideState()
+		private var played = false
+
+		override func didMoveToWindow() {
+			super.didMoveToWindow()
+			guard window != nil, !played else { return }
+			played = true
+			guard !UIAccessibility.isReduceMotionEnabled,
+				  Date().timeIntervalSince(state.changedAt) < 0.5,
+				  let row = rowContentView() else { return }
+
+			let spring = CASpringAnimation(keyPath: "transform.translation.x")
+			spring.fromValue = (state.forward ? 1 : -1) * ZagTabSlideMotion.distance
+			spring.toValue = 0
+			spring.mass = 1
+			spring.stiffness = 273   // response ≈ 0.38 s
+			spring.damping = 29.8    // damping fraction ≈ 0.9
+			spring.duration = spring.settlingDuration
+			let fade = CABasicAnimation(keyPath: "opacity")
+			fade.fromValue = 0
+			fade.toValue = 1
+			fade.duration = 0.3
+			fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+			for animation in [spring, fade] as [CAAnimation] {
+				animation.fillMode = .backwards
+				animation.isRemovedOnCompletion = true
+			}
+			row.layer.add(spring, forKey: "zagTabSlide")
+			row.layer.add(fade, forKey: "zagTabFade")
+		}
+
+		/// The content view of the list cell this probe sits in.
+		private func rowContentView() -> UIView? {
+			var view = superview
+			while let current = view {
+				if let cell = current as? UICollectionViewCell { return cell.contentView }
+				if let cell = current as? UITableViewCell { return cell.contentView }
+				view = current.superview
+			}
+			return nil
+		}
 	}
 }

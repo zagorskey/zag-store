@@ -2634,7 +2634,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                    .zagTabSlideIn(groupSlide)
+                    .zagTabSlideInRow(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .stripe)
@@ -2655,13 +2655,13 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                    .zagTabSlideIn(groupSlide)
+                    .zagTabSlideInRow(groupSlide)
                 }
                 .zagScopeBarContentSection()
             } else {
                 Section {
                     comingSoonRow("Patreon", provider: .patreon)
-                        .zagTabSlideIn(groupSlide)
+                        .zagTabSlideInRow(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .kofi)
@@ -2682,7 +2682,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                    .zagTabSlideIn(groupSlide)
+                    .zagTabSlideInRow(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .buyMeACoffee)
@@ -2703,7 +2703,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                    .zagTabSlideIn(groupSlide)
+                    .zagTabSlideInRow(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .githubSponsors)
@@ -2724,7 +2724,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
-                    .zagTabSlideIn(groupSlide)
+                    .zagTabSlideInRow(groupSlide)
                 } footer: {
                     Text("Community contributions are securely handled by each provider. Patreon will be available later.")
                 }
