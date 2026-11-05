@@ -256,20 +256,34 @@ private struct ZagRowSlideProbe: UIViewRepresentable {
 		return probe
 	}
 
-	func updateUIView(_ probe: Probe, context: Context) {}
+	func updateUIView(_ probe: Probe, context: Context) {
+		probe.state = state
+		probe.playIfNeeded()
+	}
 
 	final class Probe: UIView {
 		var state = ZagTabSlideState()
-		private var played = false
+		// The tab change already played. A Form keeps and reuses row views
+		// when content returns to an earlier tab, so this is keyed on the
+		// change, not on the view being new.
+		private var playedChange: Date?
 
 		override func didMoveToWindow() {
 			super.didMoveToWindow()
-			guard window != nil, !played else { return }
-			played = true
-			guard !UIAccessibility.isReduceMotionEnabled,
-				  Date().timeIntervalSince(state.changedAt) < 0.5,
-				  let row = rowContentView() else { return }
+			playIfNeeded()
+		}
 
+		func playIfNeeded() {
+			guard window != nil, playedChange != state.changedAt,
+				  Date().timeIntervalSince(state.changedAt) < 0.5 else { return }
+			playedChange = state.changedAt
+			guard !UIAccessibility.isReduceMotionEnabled else { return }
+			// After this update is committed, so the row shows its new content.
+			DispatchQueue.main.async { [weak self] in self?.play() }
+		}
+
+		private func play() {
+			guard let row = rowContentView() else { return }
 			let spring = CASpringAnimation(keyPath: "transform.translation.x")
 			spring.fromValue = (state.forward ? 1 : -1) * ZagTabSlideMotion.distance
 			spring.toValue = 0
