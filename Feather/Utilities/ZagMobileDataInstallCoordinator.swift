@@ -125,6 +125,7 @@ final class ZagMobileDataInstallCoordinator: ObservableObject {
 		}
 		record("Result: \(outcome.installed ? "succeeded" : "failed") (\(outcome.notAttempted.map { "not attempted: \($0)" } ?? (outcome.installError == nil ? "operation succeeded" : "operation failed"))); Mobile Data \(outcome.restoration)")
 		usingMobileDataFix = false
+		ZagLocalVPNMonitor.shared.logBadgeState(after: "\(operation.rawValue) finished", force: true)
 		if outcome.restoration == .unconfirmed {
 			let done = operation == .install ? "The app was installed" : "The app was removed"
 			recoveryMessage = outcome.installed

@@ -194,6 +194,43 @@ final class ZagLocalVPNMonitor: ObservableObject {
 	/// toolbar for identical states.
 	private func apply(_ next: ZagDeviceLinkModel) {
 		if next != model { model = next }
+		logBadgeState(after: "check")
+	}
+
+	private var lastBadgeLine: String?
+
+	/// One app-log line whenever the toolbar badge, or anything it is
+	/// decided from, changes, so a badge stuck on amber can be explained
+	/// from an exported log. `force` logs even when nothing changed (after
+	/// a Mobile Data Fix install or removal). Categories only: no
+	/// addresses, credentials or times.
+	func logBadgeState(after trigger: String, force: Bool = false) {
+		let wifi = physicalNetworks.contains("Wi-Fi")
+		let shortcutReady = ZagMobileDataToggle.canRunAutomatically(ZagMobileDataToggleController.shared.record)
+		let coordinator = ZagMobileDataInstallCoordinator.shared
+		let automatic = coordinator.automaticHandling == true
+		let running = coordinator.usingMobileDataFix
+		let badge = ZagLocalVPNBadge.make(
+			model: model,
+			wifiConnected: wifi,
+			mobileDataFixReady: shortcutReady && automatic,
+			mobileDataFixRunning: running
+		)
+		let pairing: String
+		switch model.pairing {
+		case .notChecked: pairing = "not checked"
+		case .verified: pairing = "verified"
+		case .failed(let kind, _): pairing = "failed (\(kind))"
+		case .awaitingRevalidation: pairing = "awaiting revalidation"
+		}
+		let line = "Badge \(badge): indicator \(model.indicator); tunnel \(model.tunnel); "
+			+ "service \(ZagDiagnosticReport.describe(model.service)); RPPairing \(pairing); "
+			+ "networks [\(physicalNetworks.joined(separator: ", "))]; "
+			+ "LocalDevVPN interface \(ZagTunnelInterface.containsLocalDevTunnel(ZagTunnelInterface.current()) ? "present" : "absent"); "
+			+ "Shortcut \(shortcutReady ? "ready" : "not ready"); automatic \(automatic ? "on" : "off"); fix running \(running ? "yes" : "no")"
+		guard force || line != lastBadgeLine else { return }
+		lastBadgeLine = line
+		ZagLogger.shared.info("LocalVPN", "\(line) (after \(trigger))")
 	}
 
 	nonisolated static func physicalNetworks(in path: NWPath) -> [String] {
