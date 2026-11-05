@@ -254,13 +254,20 @@ struct AppearanceView: View {
 		}
 		.onChange(of: _userIntefacerStyle) { value in
 			if let style =
-				UIUserInterfaceStyle(rawValue: value) {
-				UIApplication
+				UIUserInterfaceStyle(rawValue: value),
+			   let window = UIApplication
 					.topViewController()?
 					.view
-					.window?
-					.overrideUserInterfaceStyle =
-						style
+					.window {
+				// Cross-fade the whole window into the new appearance, as
+				// iOS Settings does when switching Light and Dark.
+				UIView.transition(
+					with: window,
+					duration: 0.4,
+					options: [.transitionCrossDissolve, .allowUserInteraction]
+				) {
+					window.overrideUserInterfaceStyle = style
+				}
 			}
 		}
 	}

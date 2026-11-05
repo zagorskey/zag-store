@@ -140,14 +140,80 @@ extension View {
 	/// Apply to the Section holding a ZagScopeBar row. Together with
 	/// `.environment(\.defaultMinListRowHeight, 0)` on the Form (as on
 	/// Settings → App Icon), the bar sits the native title → content gap
-	/// below its section title, and the standard section spacing comes
-	/// after it.
+	/// below its section title. Below it comes the standard section
+	/// spacing, or, with `tightBelow`, nothing: then mark the next
+	/// section with `zagScopeBarContentSection()`.
 	@ViewBuilder
-	func zagScopeBarSection() -> some View {
+	func zagScopeBarSection(tightBelow: Bool = false) -> some View {
 		if #available(iOS 26.0, *) {
-			self.listSectionMargins(.top, 0)
+			self.listSectionMargins(tightBelow ? .vertical : .top, 0)
 		} else {
 			self
 		}
+	}
+
+	/// The section right after a `tightBelow` scope bar: it sits the same
+	/// gap below the bar as the bar sits below its section title.
+	@ViewBuilder
+	func zagScopeBarContentSection() -> some View {
+		if #available(iOS 26.0, *) {
+			self.listSectionMargins(.top, ZagScopeBar.titleToContentGap)
+		} else {
+			self
+		}
+	}
+
+	/// Slides content in from the side of the newly selected tab. It runs
+	/// only right after a tab change, never when content scrolls into view,
+	/// and not with Reduce Motion.
+	func zagTabSlideIn(_ state: ZagTabSlideState) -> some View {
+		modifier(ZagTabSlideIn(state: state))
+	}
+}
+
+extension ZagScopeBar {
+	/// iOS 26's gap between a section title and its content (measured on
+	/// a native Form: 13.7 pt).
+	static let titleToContentGap: CGFloat = 13.7
+}
+
+/// Which way tab content slides, and when the tab last changed.
+struct ZagTabSlideState: Equatable {
+	var forward = true
+	var changedAt: Date = .distantPast
+}
+
+extension Binding where Value == String {
+	/// A selection binding that records the slide direction (by position
+	/// in `order`) before the new tab's content appears.
+	func zagTabSlide(_ state: Binding<ZagTabSlideState>, order: [String]) -> Binding<String> {
+		Binding(
+			get: { wrappedValue },
+			set: { newValue in
+				let oldValue = wrappedValue
+				guard newValue != oldValue else { return }
+				let from = order.firstIndex(of: oldValue) ?? 0
+				let to = order.firstIndex(of: newValue) ?? 0
+				state.wrappedValue = ZagTabSlideState(forward: to >= from, changedAt: Date())
+				wrappedValue = newValue
+			}
+		)
+	}
+}
+
+private struct ZagTabSlideIn: ViewModifier {
+	let state: ZagTabSlideState
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	@State private var progress: CGFloat = 0
+
+	func body(content: Content) -> some View {
+		content
+			.offset(x: progress * (state.forward ? 1 : -1) * 90)
+			.opacity(1 - Double(progress))
+			.onAppear {
+				guard !reduceMotion, Date().timeIntervalSince(state.changedAt) < 0.5 else { return }
+				progress = 1
+				withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) { progress = 0 }
+			}
 	}
 }

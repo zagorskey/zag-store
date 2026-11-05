@@ -874,6 +874,7 @@ private struct ZagGamesPage: View {
     @FocusState private var searchFieldFocused: Bool
     @State private var dictationAvailable = false
     @State private var selectedCategory = "Games"
+    @State private var categorySlide = ZagTabSlideState()
     @State private var showGameLibrary = false
     @State private var showCollections = false
     @State private var showGameFilters = false
@@ -1197,7 +1198,10 @@ private struct ZagGamesPage: View {
     // The App Icon page's full-width native scope bar, spanning the page's
     // content width.
     private var gamesCategorySwitcher: some View {
-        ZagScopeBar(selection: $selectedCategory, titles: ["Games", "Emulators"])
+        ZagScopeBar(
+            selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
+            titles: ["Games", "Emulators"]
+        )
             .frame(maxWidth: .infinity)
             .frame(height: ZagScopeBar.controlHeight)
             .accessibilityLabel("Gaming Category")
@@ -1265,6 +1269,7 @@ private struct ZagGamesPage: View {
                             .frame(height: 254)
                             }
                         }
+                        .zagTabSlideIn(categorySlide)
                     }
 
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
@@ -1331,6 +1336,7 @@ private struct ZagGamesPage: View {
                             }
                         }
                     }
+                    .zagTabSlideIn(categorySlide)
 
                     }
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Games") : selectedCategory == "Games" {
@@ -1395,6 +1401,7 @@ private struct ZagGamesPage: View {
                             }
                         }
                     }
+                    .zagTabSlideIn(categorySlide)
                     }
                 }
                 .padding(.horizontal, 18)
@@ -1686,6 +1693,7 @@ private struct ZagActivityPage: View {
     @StateObject private var sourcesModel = SourcesViewModel.shared
     @StateObject private var updateTransactions = ZagUpdateTransactionManager.shared
     @State private var historyFilter = "All"
+    @State private var historySlide = ZagTabSlideState()
     @AppStorage("ZagStore.activity.sortOrder") private var sortOrder = "Newest First"
     @State private var showStatistics = false
     @State private var selectedHistoryRecord: ZagUpdateTransactionManager.ActivityRecord?
@@ -1855,7 +1863,10 @@ private struct ZagActivityPage: View {
                                     .foregroundStyle(.secondary)
                             }
                             ZagScopeBar(
-                                selection: $historyFilter,
+                                selection: $historyFilter.zagTabSlide(
+                                    $historySlide,
+                                    order: ["All", "Installed", "Signed", "Ready to Install", "Failed"]
+                                ),
                                 titles: ["All", "Installed", "Signed", "Prepared", "Failed"],
                                 values: ["All", "Installed", "Signed", "Ready to Install", "Failed"]
                             )
@@ -1934,6 +1945,8 @@ private struct ZagActivityPage: View {
                                 }
                             }
                             .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 22))
+                            .zagTabSlideIn(historySlide)
+                            .id(historyFilter)
                         }
                     }
 

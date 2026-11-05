@@ -2562,6 +2562,7 @@ private struct ZagSupportContributionsView: View {
     }
 
     @State private var group: SupportGroup = .direct
+    @State private var groupSlide = ZagTabSlideState()
     @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
     @Environment(\.openURL) private var openURL
 
@@ -2601,7 +2602,7 @@ private struct ZagSupportContributionsView: View {
                     selection: Binding(
                         get: { group.rawValue },
                         set: { group = SupportGroup(rawValue: $0) ?? group }
-                    ),
+                    ).zagTabSlide($groupSlide, order: SupportGroup.allCases.map(\.rawValue)),
                     titles: SupportGroup.allCases.map(\.rawValue)
                 )
                 .accessibilityLabel("Contribution methods")
@@ -2609,7 +2610,7 @@ private struct ZagSupportContributionsView: View {
             } header: {
                 Text("Method")
             }
-            .zagScopeBarSection()
+            .zagScopeBarSection(tightBelow: true)
 
             if group == .direct {
                 Section {
@@ -2633,6 +2634,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
+                    .zagTabSlideIn(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .stripe)
@@ -2653,10 +2655,13 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
+                    .zagTabSlideIn(groupSlide)
                 }
+                .zagScopeBarContentSection()
             } else {
                 Section {
                     comingSoonRow("Patreon", provider: .patreon)
+                        .zagTabSlideIn(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .kofi)
@@ -2677,6 +2682,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
+                    .zagTabSlideIn(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .buyMeACoffee)
@@ -2697,6 +2703,7 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
+                    .zagTabSlideIn(groupSlide)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
                             ZagContributionProviderIcon(provider: .githubSponsors)
@@ -2717,16 +2724,13 @@ private struct ZagSupportContributionsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                     .padding(.vertical, 6)
+                    .zagTabSlideIn(groupSlide)
                 } footer: {
                     Text("Community contributions are securely handled by each provider. Patreon will be available later.")
                 }
+                .zagScopeBarContentSection()
             }
 
-            Section {
-                Text("Contributions are voluntary and do not unlock features or special access. Zag Store is not a registered charity; contributions are not charitable or tax-deductible gifts.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
         // Lets the Method tab bar row be exactly the bar's height, as on
         // Settings → App Icon. Every other row here is taller than the
