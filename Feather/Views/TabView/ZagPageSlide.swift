@@ -16,9 +16,12 @@ enum ZagPageSlide {
 
 	/// The page as it looked when a finger touched the dock: by the time
 	/// the selection reaches SwiftUI, UIKit has already swapped the page.
+	/// `contentFrame` is set when only the content under the top bar was
+	/// captured (its frame in the navigation view).
 	private struct Pending {
 		let snapshot: UIView
 		let oldView: UIView
+		let contentFrame: CGRect?
 		let takenAt: Date
 	}
 	private static var pending: Pending?
@@ -44,9 +47,17 @@ enum ZagPageSlide {
 		pending = nil
 		guard isEnabled, !UIAccessibility.isReduceMotionEnabled,
 			  let tabs = tabBarController(),
-			  let oldView = tabs.selectedViewController?.view, oldView.window != nil,
-			  let snapshot = oldView.snapshotView(afterScreenUpdates: false) else { return }
-		pending = Pending(snapshot: snapshot, oldView: oldView, takenAt: Date())
+			  let page = tabs.selectedViewController, page.view.window != nil else { return }
+		// The content under the top bar, so the bar, its buttons and the
+		// Local VPN badge stay put and only change.
+		if let parts = parts(of: page),
+		   let snapshot = parts.content.snapshotView(afterScreenUpdates: false) {
+			pending = Pending(snapshot: snapshot, oldView: page.view,
+							  contentFrame: parts.content.convert(parts.content.bounds, to: parts.navigation.view),
+							  takenAt: Date())
+		} else if let snapshot = page.view.snapshotView(afterScreenUpdates: false) {
+			pending = Pending(snapshot: snapshot, oldView: page.view, contentFrame: nil, takenAt: Date())
+		}
 	}
 
 	/// Call from the dock's selection setter. `order` is the dock's page
@@ -57,53 +68,75 @@ enum ZagPageSlide {
 		guard old != new, isEnabled, !UIAccessibility.isReduceMotionEnabled,
 			  Date().timeIntervalSince(taken.takenAt) < 1.5,
 			  let from = order.firstIndex(of: old), let to = order.firstIndex(of: new),
-			  let tabs = tabBarController(),
-			  let container = taken.oldView.superview ?? tabs.selectedViewController?.view.superview else { return }
+			  let tabs = tabBarController() else { return }
+		taken.snapshot.isUserInteractionEnabled = false
+		play(tabs: tabs, taken: taken, direction: to > from ? 1 : -1, attempts: 5)
+	}
+
+	/// Animates as soon as the tab bar shows the new page (now, or within a
+	/// run-loop turn or two).
+	private static func play(tabs: UITabBarController, taken: Pending, direction: CGFloat, attempts: Int) {
+		guard let page = tabs.selectedViewController, page.view !== taken.oldView, page.view.window != nil else {
+			if attempts > 0 {
+				DispatchQueue.main.async { play(tabs: tabs, taken: taken, direction: direction, attempts: attempts - 1) }
+			}
+			return
+		}
 		let snapshot = taken.snapshot
-		snapshot.frame = taken.oldView.frame
-		snapshot.isUserInteractionEnabled = false
-		if taken.oldView.superview === container {
-			container.insertSubview(snapshot, aboveSubview: taken.oldView)
-		} else if let newView = tabs.selectedViewController?.view, newView.superview === container {
-			container.insertSubview(snapshot, aboveSubview: newView)
+		let moving: UIView
+		if let frame = taken.contentFrame, let parts = parts(of: page) {
+			// Old content goes under the new page's top bar.
+			let bar = parts.navigation.navigationBar
+			snapshot.frame = frame
+			if bar.superview === parts.navigation.view {
+				parts.navigation.view.insertSubview(snapshot, belowSubview: bar)
+			} else if let host = parts.content.superview {
+				snapshot.frame = parts.navigation.view.convert(frame, to: host)
+				host.insertSubview(snapshot, aboveSubview: parts.content)
+			} else {
+				return
+			}
+			moving = parts.content
+		} else if taken.contentFrame == nil, let container = page.view.superview {
+			snapshot.frame = taken.oldView.frame
+			container.insertSubview(snapshot, aboveSubview: page.view)
+			moving = page.view
 		} else {
 			return
 		}
-		play(tabs: tabs, oldView: taken.oldView, snapshot: snapshot, direction: to > from ? 1 : -1, attempts: 4)
+		let slide = CABasicAnimation(keyPath: "transform.translation.x")
+		slide.fromValue = direction * distance
+		slide.toValue = 0
+		let fade = CABasicAnimation(keyPath: "opacity")
+		fade.fromValue = 0
+		fade.toValue = 1
+		for animation in [slide, fade] {
+			animation.duration = duration
+			animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+			animation.fillMode = .backwards
+		}
+		moving.layer.add(slide, forKey: "zagPageSlide")
+		moving.layer.add(fade, forKey: "zagPageFade")
+		UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+			snapshot.transform = CGAffineTransform(translationX: -direction * distance, y: 0)
+			snapshot.alpha = 0
+		} completion: { _ in
+			snapshot.removeFromSuperview()
+		}
 	}
 
-	/// Waits for the tab bar to show the new page (a run-loop turn or two),
-	/// then animates both.
-	private static func play(tabs: UITabBarController, oldView: UIView, snapshot: UIView, direction: CGFloat, attempts: Int) {
-		DispatchQueue.main.async {
-			guard let newView = tabs.selectedViewController?.view, newView !== oldView, newView.window != nil else {
-				if attempts > 0 {
-					play(tabs: tabs, oldView: oldView, snapshot: snapshot, direction: direction, attempts: attempts - 1)
-				} else {
-					snapshot.removeFromSuperview()
-				}
-				return
+	/// A page's navigation stack and the content shown under its top bar.
+	private static func parts(of page: UIViewController) -> (navigation: UINavigationController, content: UIView)? {
+		func navigation(in controller: UIViewController) -> UINavigationController? {
+			if let nav = controller as? UINavigationController, nav.view.window != nil { return nav }
+			for child in controller.children {
+				if let found = navigation(in: child) { return found }
 			}
-			let slide = CABasicAnimation(keyPath: "transform.translation.x")
-			slide.fromValue = direction * distance
-			slide.toValue = 0
-			let fade = CABasicAnimation(keyPath: "opacity")
-			fade.fromValue = 0
-			fade.toValue = 1
-			for animation in [slide, fade] {
-				animation.duration = duration
-				animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-				animation.fillMode = .backwards
-			}
-			newView.layer.add(slide, forKey: "zagPageSlide")
-			newView.layer.add(fade, forKey: "zagPageFade")
-			UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
-				snapshot.transform = CGAffineTransform(translationX: -direction * distance, y: 0)
-				snapshot.alpha = 0
-			} completion: { _ in
-				snapshot.removeFromSuperview()
-			}
+			return nil
 		}
+		guard let nav = navigation(in: page), let content = nav.topViewController?.view,
+			  content.window != nil, !nav.isNavigationBarHidden else { return nil }
+		return (nav, content)
 	}
 
 	private static func tabBarController() -> UITabBarController? {
