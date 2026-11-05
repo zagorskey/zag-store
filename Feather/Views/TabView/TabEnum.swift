@@ -2447,7 +2447,7 @@ private struct ZagGamesScrollClipModifier: ViewModifier {
 // Native dock editor; its persisted order is shared by both tab-bar implementations.
 struct ZagDockCustomizationView: View {
     @AppStorage(ZagDockConfiguration.storageKey) private var storedTabs = ""
-    @AppStorage(ZagDockConfiguration.shrinkOnScrollKey) private var shrinkOnScroll = true
+    @AppStorage(ZagDockConfiguration.shrinkOnScrollKey) private var shrinkOnScroll = false
     @State private var showLimitAlert = false
     @State private var showLastTabAlert = false
     @AppStorage("Feather.userTintColor") private var themeTintHex = "#0090FF"
