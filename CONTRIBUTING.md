@@ -28,7 +28,12 @@ git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
 cd zag-store
 ```
 
-Review the current Xcode project and Makefile for build requirements. Building an unsigned IPA does not automatically make it installable on a stock device.
+Then follow the steps in [README.md](README.md#build-from-source): build the Rust core with `bash RPPairingCore/build-rust.sh`, then run `make iphoneos`. The resulting `packages/ZagStore.ipa` is ad-hoc signed and must be signed with your own certificate before a stock device will install it.
+
+## Pull requests
+
+- Open pull requests against `main`. Changes reach `main` only through reviewed pull requests.
+- Describe what you tested, on which device and iOS version.
 
 ## Licensing
 
