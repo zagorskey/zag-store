@@ -1672,18 +1672,16 @@ private struct ZagGamesPage: View {
         }
     }
 
-    // The App Icon page's full-width native scope bar, spanning the page's
-    // content width. It keeps its control aligned: on this scrolling page
-    // the hidden search bar re-lays itself out and would lift it away.
+    // The Liquid Glass scope bar iOS shows under a focused search field,
+    // drawn in SwiftUI: no hidden search bar for UIKit to move while the
+    // page scrolls.
     private var gamesCategorySwitcher: some View {
-        ZagScopeBar(
+        ZagGlassScopeBar(
             selection: $selectedCategory.zagTabSlide($categorySlide, order: ["Games", "Emulators"]),
-            titles: ["Games", "Emulators"],
-            keepsScopeAligned: true
+            titles: ["Games", "Emulators"]
         )
-            .frame(maxWidth: .infinity)
-            .frame(height: ZagScopeBar.controlHeight)
-            .accessibilityLabel("Gaming Category")
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("Gaming Category")
     }
 
     var body: some View {
@@ -1769,7 +1767,6 @@ private struct ZagGamesPage: View {
                         .zagTabSlideIn(categorySlide)
                 }
             }
-            .modifier(ZagTransparentTopEdge())
             .zagWallpaperSurface()
             .toolbarBackground(.hidden, for: .navigationBar)
             .onAppear {
@@ -2801,19 +2798,6 @@ private struct ZagEmptyDestination: View {
     }
 }
 
-
-/// No blurred band under the header when the page scrolls (iOS 26 draws one
-/// by default): the header stays transparent, as it was with the search bar.
-private struct ZagTransparentTopEdge: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.scrollEdgeEffectHidden(true, for: .top)
-        } else {
-            content
-        }
-    }
-}
 
 private struct ZagGamesScrollClipModifier: ViewModifier {
     @ViewBuilder
