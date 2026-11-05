@@ -113,16 +113,34 @@ struct ZagGameGenrePills: View {
 		}
 	}
 
-	/// Genre names for each game, from its description.
-	static func tags(for games: [SourceAppsView.SourceAppRoute]) -> [String: [String]] {
+	/// Genre names for each game: Apple's sub-genres when its catalogue
+	/// knows the game, and keywords in the description.
+	static func tags(
+		for games: [SourceAppsView.SourceAppRoute],
+		appleGenres: [String: [String]] = [:]
+	) -> [String: [String]] {
 		var tags: [String: [String]] = [:]
 		for entry in games {
+			var names = (entry.app.id.flatMap { appleGenres[$0.lowercased()] } ?? [])
+				.compactMap { appleGenreNames[$0] }
 			let text = (entry.app.currentDescription ?? entry.app.localizedDescription ?? "").lowercased()
-			let names = ZagGameGenre.all.filter { genre in genre.keywords.contains { text.contains($0) } }.map(\.name)
+			for genre in ZagGameGenre.all where !names.contains(genre.name) &&
+				genre.keywords.contains(where: { text.contains($0) }) {
+				names.append(genre.name)
+			}
 			if !names.isEmpty { tags[entry.id] = names }
 		}
 		return tags
 	}
+
+	/// Apple's game sub-genres, by the pill they belong to.
+	private static let appleGenreNames: [String: String] = [
+		"Action": "Action", "Adventure": "Adventure", "Board": "Board", "Card": "Card",
+		"Casino": "Casino", "Casual": "Casual", "Family": "Family", "Music": "Music",
+		"Puzzle": "Puzzle", "Racing": "Racing", "Role Playing": "Role-Playing",
+		"Simulation": "Simulation", "Sports": "Sports", "Strategy": "Strategy",
+		"Trivia": "Trivia", "Word": "Word", "Kids": "Kids"
+	]
 }
 
 private struct ZagGameGenrePill: View {
@@ -201,7 +219,7 @@ struct ZagGameListPage: View {
 							.font(.system(size: 32, weight: .light))
 					}
 					Text("No \(list.title) Games").font(.headline)
-					Text("\(list.title) games from your repositories will appear here.")
+					Text("\(list.title) games from your sources will appear here.")
 						.font(.subheadline)
 						.foregroundStyle(.secondary)
 						.multilineTextAlignment(.center)
@@ -259,13 +277,17 @@ struct ZagGameRow: View {
 	let open: () -> Void
 
 	var body: some View {
-		HStack(spacing: 18) {
+		// Icon, 10 points, the text, then the 88-point button: in a 390-point
+		// column this leaves the text 230 points, as on the App Store.
+		HStack(spacing: 0) {
 			HStack(spacing: 10) {
 				icon
 				VStack(alignment: .leading, spacing: 3) {
+					// Long names wrap to a second line instead of truncating.
 					Text(entry.app.currentName)
 						.zagContentTitleStyle()
-						.lineLimit(1)
+						.lineLimit(2)
+						.fixedSize(horizontal: false, vertical: true)
 					Text(detail)
 						.font(.system(size: 15, weight: .regular))
 						.foregroundStyle(.secondary)
@@ -275,7 +297,7 @@ struct ZagGameRow: View {
 			}
 			DownloadButtonView(app: entry.app, source: entry.source)
 		}
-		.frame(height: ZagListLayout.compactRowHeight)
+		.frame(minHeight: ZagListLayout.compactRowHeight)
 		.overlay(alignment: .bottom) {
 			if showsSeparator {
 				Rectangle()
@@ -354,6 +376,46 @@ struct ZagGameRow: View {
 	}
 }
 
+/// A Games section title as on the App Store ("Must-Play Games >"): bold
+/// Title 2 with a chevron, the whole title opening the section's page.
+struct ZagGamesSectionTitle: View {
+	let title: String
+	/// Opens the section's page; without one the title has no chevron.
+	var action: (() -> Void)? = nil
+
+	/// Between a Featured card or shelf column and the next.
+	static let columnGap: CGFloat = 10
+
+	var body: some View {
+		if let action {
+			Button(action: action) { label(chevron: true) }
+				.buttonStyle(.plain)
+				.accessibilityLabel(title)
+				.accessibilityHint("Shows all")
+		} else {
+			label(chevron: false)
+				.accessibilityAddTraits(.isHeader)
+		}
+	}
+
+	private func label(chevron: Bool) -> some View {
+		// Title 2, so it follows the reader's text size like the App Store.
+		HStack(spacing: 5) {
+			Text(title)
+				.font(.title2.weight(.bold))
+				.foregroundStyle(.primary)
+				.lineLimit(1)
+			if chevron {
+				Image(systemName: "chevron.forward")
+					.font(.title2.weight(.bold))
+					.imageScale(.small)
+					.foregroundStyle(.secondary)
+			}
+		}
+		.contentShape(Rectangle())
+	}
+}
+
 /// A section of games scrolling sideways in columns of three rows, like the
 /// App Store's game shelves, with a See All link.
 struct ZagGameShelf: View {
@@ -376,32 +438,17 @@ struct ZagGameShelf: View {
 	var body: some View {
 		let shown = Array(games.prefix(Self.limit))
 		let columns = stride(from: 0, to: shown.count, by: 3).map { Array(shown[$0..<min($0 + 3, shown.count)]) }
-		// One column fills the width less a glimpse of the next.
-		let columnWidth = min(max(width - margin * 2 - 28, 260), 420)
+		// As on the App Store: a column is as wide as a Featured card (the
+		// page less its margins), and 10 points of the next one show after
+		// a 10-point gap.
+		let columnWidth = max(width - margin * 2, 260)
 
-		VStack(alignment: .leading, spacing: 4) {
-			Button(action: seeAll) {
-				HStack(spacing: 8) {
-					if let genre {
-						ZagGameGenreSymbol(genre: genre)
-							.font(.system(size: 17, weight: .semibold))
-					}
-					Text(title)
-						.font(.system(size: 20, weight: .semibold))
-						.foregroundStyle(.primary)
-					Spacer(minLength: 8)
-					Text("See All")
-						.font(.system(size: 17, weight: .regular))
-						.foregroundStyle(.tint)
-				}
-				.contentShape(Rectangle())
-			}
-			.buttonStyle(.plain)
-			.padding(.horizontal, margin)
-			.accessibilityLabel("\(title), See All")
+		VStack(alignment: .leading, spacing: 2) {
+			ZagGamesSectionTitle(title: title, action: seeAll)
+				.padding(.horizontal, margin)
 
 			ScrollView(.horizontal, showsIndicators: false) {
-				LazyHStack(alignment: .top, spacing: 14) {
+				LazyHStack(alignment: .top, spacing: ZagGamesSectionTitle.columnGap) {
 					ForEach(columns.indices, id: \.self) { index in
 						let column = columns[index]
 						VStack(spacing: 0) {

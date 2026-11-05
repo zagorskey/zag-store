@@ -46,6 +46,11 @@ struct ZagRepositoryIndexState: Equatable {
 		begin(signature: signature, loadedRepositoryCount: loadedRepositoryCount, force: true)
 	}
 
+	/// Apple's catalogue identified more games. Always rebuilds.
+	mutating func catalogueClassified(signature: String, loadedRepositoryCount: Int) -> Int? {
+		begin(signature: signature, loadedRepositoryCount: loadedRepositoryCount, force: true)
+	}
+
 	/// The page appeared. Rebuilds only if the catalogue changed meanwhile.
 	mutating func appeared(signature: String, loadedRepositoryCount: Int) -> Int? {
 		begin(signature: signature, loadedRepositoryCount: loadedRepositoryCount, force: false)

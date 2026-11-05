@@ -11,6 +11,9 @@ struct ZagGameArtworkResponse: Decodable, Sendable {
     let appleID: Int?
     let screenshotsAvailable: Int
     let artworkURLs: [URL]
+    /// The app's icon from Apple's catalogue, when the lookup found it
+    /// (not part of the bridge contract).
+    var iconURL: URL? = nil
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -57,6 +60,7 @@ actor ZagGameArtworkClient {
         let artistName: String?
         let screenshotUrls: [String]?
         let ipadScreenshotUrls: [String]?
+        let artworkUrl512: String?
     }
 
     private var cache: [String: CacheEntry] = [:]
@@ -68,6 +72,12 @@ actor ZagGameArtworkClient {
     init(endpoint: URL? = nil, session: URLSession = .shared) {
         self.endpoint = endpoint
         self.session = session
+    }
+
+    /// The app's icon from Apple's catalogue (same lookup and cache as the
+    /// artwork), for apps whose repository icon is missing or broken.
+    func iconURL(bundleID: String?, name: String) async -> URL? {
+        (try? await lookup(bundleID: bundleID ?? "", name: name))?.iconURL
     }
 
     func lookup(bundleID: String, name: String, country: String = "gb") async throws -> ZagGameArtworkResponse {
@@ -282,7 +292,8 @@ actor ZagGameArtworkClient {
             bundleID: requestedBundle,
             appleID: nil,
             screenshotsAvailable: images.count,
-            artworkURLs: Array(ordered.prefix(12))
+            artworkURLs: Array(ordered.prefix(12)),
+            iconURL: app.artworkUrl512.flatMap(URL.init(string:)).flatMap { isTrustedImageURL($0) ? $0 : nil }
         )
     }
 
