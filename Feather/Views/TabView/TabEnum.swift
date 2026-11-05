@@ -868,6 +868,67 @@ private enum ZagGamesIndexBuilder {
     }
 }
 
+/// The Featured card's geometry, shared by the card and its loading skeleton.
+private enum ZagFeaturedCardMetrics {
+    static let height: CGFloat = 250
+    static let cornerRadius: CGFloat = 20
+    static let padding: CGFloat = 14
+    static let iconSize: CGFloat = 36
+    static let iconSpacing: CGFloat = 9
+    static let textSpacing: CGFloat = 4
+    static let buttonHeight: CGFloat = 32
+    static let cardSpacing: CGFloat = 10.5
+    static let maximumCards = 8
+}
+
+/// The two Featured carousels: Games and Emulators.
+private enum ZagFeaturedShelf: Hashable {
+    case games
+    case emulators
+}
+
+/// A Featured card whose artwork is still loading: the finished card's
+/// size and corners, with its bottom row (icon, title, subtitle, Get).
+private struct ZagFeaturedCardSkeleton: View {
+    let width: CGFloat
+
+    private var iconRadius: CGFloat {
+        // The app icon's own corner ratio (Image.appIconStyle).
+        if #available(iOS 26.0, *) { return ZagFeaturedCardMetrics.iconSize * 0.2677 }
+        return ZagFeaturedCardMetrics.iconSize * 0.2337
+    }
+
+    var body: some View {
+        let metrics = ZagFeaturedCardMetrics.self
+        ZStack(alignment: .bottomLeading) {
+            ZagSkeletonFill.base
+            HStack(alignment: .center, spacing: metrics.iconSpacing) {
+                RoundedRectangle(cornerRadius: iconRadius, style: .continuous)
+                    .fill(ZagSkeletonFill.element)
+                    .frame(width: metrics.iconSize, height: metrics.iconSize)
+                // The title and subtitle lines' heights, with a bar in each.
+                VStack(alignment: .leading, spacing: metrics.textSpacing) {
+                    Capsule().fill(ZagSkeletonFill.element)
+                        .frame(width: 132, height: 12)
+                        .frame(height: 19)
+                    Capsule().fill(ZagSkeletonFill.element)
+                        .frame(width: 88, height: 9)
+                        .frame(height: 16)
+                }
+                Spacer(minLength: 4)
+                Capsule().fill(ZagSkeletonFill.element)
+                    .frame(width: 64, height: metrics.buttonHeight)
+            }
+            .padding(metrics.padding)
+        }
+        .zagShimmer()
+        .frame(width: width, height: metrics.height)
+        .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
+        .accessibilityElement()
+        .accessibilityLabel("Loading")
+    }
+}
+
 private struct ZagGamesPage: View {
     // Body never reads repository state; indexing is driven by onReceive.
     private let sourcesModel = SourcesViewModel.shared
@@ -887,8 +948,18 @@ private struct ZagGamesPage: View {
     @State private var indexedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var indexedFeaturedGames: [SourceAppsView.SourceAppRoute] = []
     @State private var verifiedFeaturedGames: [SourceAppsView.SourceAppRoute] = []
+    @State private var verifiedFeaturedEmulators: [SourceAppsView.SourceAppRoute] = []
     @State private var verifiedArtwork: [String: ZagFeaturedHero] = [:]
-    @State private var isCheckingFeatured = false
+    /// The index revision each carousel last finished checking.
+    @State private var featuredResolvedRevision: [ZagFeaturedShelf: Int] = [:]
+    /// Carousels filling in card by card (their first check).
+    @State private var featuredFillingIn: Set<ZagFeaturedShelf> = []
+    /// Emulator artwork is checked only once Emulators is first opened.
+    @State private var emulatorsFeaturedRequested = false
+    /// Set when a repository refresh has finished (or after a time limit),
+    /// so a catalogue that never indexes never shows skeletons forever.
+    @State private var catalogueSettled = false
+    @State private var sawRepositoryRefresh = false
     @State private var indexState = ZagRepositoryIndexState()
     @State private var indexWorker: Task<ZagGamesIndexSnapshot?, Never>?
     @State private var indexedArtworkRevision = 0
@@ -1042,17 +1113,44 @@ private struct ZagGamesPage: View {
 
     // A card is eligible only after an actual screenshot passes download
     // and decoding checks. Never fill Featured with unverified placeholders.
-    private var featuredGames: [SourceAppsView.SourceAppRoute] {
-        verifiedFeaturedGames
+    private func featured(_ shelf: ZagFeaturedShelf) -> [SourceAppsView.SourceAppRoute] {
+        shelf == .games ? verifiedFeaturedGames : verifiedFeaturedEmulators
+    }
+
+    private func featuredCandidates(_ shelf: ZagFeaturedShelf) -> [SourceAppsView.SourceAppRoute] {
+        shelf == .games ? indexedFeaturedGames : indexedEmulators
+    }
+
+    /// Repositories are still loading and nothing is indexed yet.
+    private var catalogueLoading: Bool {
+        indexedArtworkRevision == 0 && !sources.isEmpty && !catalogueSettled
+    }
+
+    /// The carousel's artwork is still being checked for this index.
+    private func featuredLoading(_ shelf: ZagFeaturedShelf) -> Bool {
+        if catalogueLoading { return true }
+        guard !featuredCandidates(shelf).isEmpty else { return false }
+        return featuredResolvedRevision[shelf] != indexedArtworkRevision
+    }
+
+    /// Placeholders after the finished cards: two (one full, one peeking)
+    /// before any card is ready, then one while more cards fill in.
+    private func featuredSkeletonCount(_ shelf: ZagFeaturedShelf) -> Int {
+        let cards = featured(shelf).count
+        guard cards < ZagFeaturedCardMetrics.maximumCards else { return 0 }
+        if cards == 0 { return featuredLoading(shelf) ? 2 : 0 }
+        return featuredFillingIn.contains(shelf) ? 1 : 0
     }
 
     // Match the App Store's landscape editorial format, with one compact app icon.
     private func featuredCard(
         for entry: SourceAppsView.SourceAppRoute,
         artwork: ZagFeaturedHero,
-        width: CGFloat
+        width: CGFloat,
+        shelf: ZagFeaturedShelf
     ) -> some View {
-        Button { selectedApp = entry } label: {
+        let metrics = ZagFeaturedCardMetrics.self
+        return Button { selectedApp = entry } label: {
             ZStack(alignment: .bottomLeading) {
                 ZagFeaturedGameArtwork(hero: artwork, width: width)
                 LinearGradient(
@@ -1060,14 +1158,17 @@ private struct ZagGamesPage: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                HStack(alignment: .center, spacing: 9) {
-                    ZagRepositoryAppIconView(app: entry.app, size: 36)
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: metrics.iconSpacing) {
+                    ZagRepositoryAppIconView(app: entry.app, size: metrics.iconSize)
+                    VStack(alignment: .leading, spacing: metrics.textSpacing) {
                         Text(entry.app.currentName)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                        Text(entry.source.name ?? "Repository")
+                        // Emulators name their platform, as in the list.
+                        Text(shelf == .emulators
+                             ? emulatorPlatform(entry.app.currentName)
+                             : (entry.source.name ?? "Repository"))
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.82))
                             .lineLimit(1)
@@ -1077,34 +1178,39 @@ private struct ZagGamesPage: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 19)
-                        .frame(height: 32)
+                        .frame(height: metrics.buttonHeight)
                         .background(.white.opacity(0.36), in: Capsule())
                         .environment(\.colorScheme, .dark)
                 }
-                .padding(14)
+                .padding(metrics.padding)
             }
-            .frame(width: width, height: 250)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .frame(width: width, height: metrics.height)
+            .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Opens game details and installation options")
+        .accessibilityHint(shelf == .emulators
+            ? "Opens emulator details and installation options"
+            : "Opens game details and installation options")
     }
 
     // Process only a few candidates concurrently so giant repositories never
     // trigger an unbounded burst of App Store and screenshot requests.
+    //
+    // A carousel's first check reveals each card as soon as its artwork is
+    // verified. Later checks (a refresh) keep the current cards until the
+    // new set is complete, then swap it in at once, so nothing flickers.
     @MainActor
-    private func refreshVerifiedFeatured() async {
-        let candidates = indexedFeaturedGames
-        verifiedFeaturedGames = []
-        verifiedArtwork = [:]
-        guard !candidates.isEmpty else {
-            isCheckingFeatured = false
-            return
-        }
+    private func refreshVerifiedFeatured(_ shelf: ZagFeaturedShelf) async {
+        let revision = indexedArtworkRevision
+        let candidates = featuredCandidates(shelf)
+        let fillingIn = featured(shelf).isEmpty
+        let startedAt = Date()
+        var cards: [SourceAppsView.SourceAppRoute] = []
+        var artwork: [String: ZagFeaturedHero] = [:]
 
-        isCheckingFeatured = true
-        defer { isCheckingFeatured = false }
+        if fillingIn { featuredFillingIn.insert(shelf) }
+        defer { featuredFillingIn.remove(shelf) }
 
         for start in stride(from: 0, to: candidates.count, by: 4) {
             guard !Task.isCancelled else { return }
@@ -1135,18 +1241,116 @@ private struct ZagGamesPage: View {
             }
 
             guard !Task.isCancelled else { return }
+            var added = false
             for (index, payload) in successes.sorted(by: { $0.0 < $1.0 }) {
-                guard verifiedFeaturedGames.count < 8,
+                guard cards.count < ZagFeaturedCardMetrics.maximumCards,
                       let hero = ZagFeaturedHero.make(from: payload) else { continue }
                 let entry = candidates[index]
                 let nameKey = normalizedName(entry.app.currentName)
-                guard !verifiedFeaturedGames.contains(where: {
+                guard !cards.contains(where: {
                     normalizedName($0.app.currentName) == nameKey
                 }) else { continue }
-                verifiedArtwork[entry.id] = hero
-                verifiedFeaturedGames.append(entry)
+                artwork[entry.id] = hero
+                cards.append(entry)
+                added = true
             }
-            if verifiedFeaturedGames.count >= 8 { break }
+            if fillingIn && added {
+                // Cached artwork resolves at once: show it without a fade.
+                publishFeatured(shelf, cards: cards, artwork: artwork,
+                                animated: Date().timeIntervalSince(startedAt) > 0.15)
+            }
+            if cards.count >= ZagFeaturedCardMetrics.maximumCards { break }
+        }
+
+        guard !Task.isCancelled else { return }
+        if !fillingIn || cards.isEmpty {
+            publishFeatured(shelf, cards: cards, artwork: artwork, animated: false)
+        }
+        featuredResolvedRevision[shelf] = revision
+    }
+
+    /// Shows a carousel's cards, keeping artwork the other carousel uses.
+    @MainActor
+    private func publishFeatured(
+        _ shelf: ZagFeaturedShelf,
+        cards: [SourceAppsView.SourceAppRoute],
+        artwork: [String: ZagFeaturedHero],
+        animated: Bool
+    ) {
+        let other = Set(featured(shelf == .games ? .emulators : .games).map(\.id))
+        var nextArtwork = verifiedArtwork.filter { other.contains($0.key) }
+        nextArtwork.merge(artwork) { _, new in new }
+        let apply = {
+            verifiedArtwork = nextArtwork
+            if shelf == .games { verifiedFeaturedGames = cards } else { verifiedFeaturedEmulators = cards }
+        }
+        if animated {
+            withAnimation(.easeOut(duration: 0.25), apply)
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction, apply)
+        }
+    }
+
+    /// The Featured carousel for Games or Emulators. Each position shows a
+    /// skeleton until its card's artwork is verified, then the card fades
+    /// in over it, so the carousel never changes size or jumps.
+    @ViewBuilder
+    private func featuredSection(_ shelf: ZagFeaturedShelf) -> some View {
+        let cards = featured(shelf)
+        let skeletons = featuredSkeletonCount(shelf)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Featured")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Text("From your repositories")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if cards.isEmpty && skeletons == 0 {
+                Text(shelf == .games
+                     ? "No verified game screenshots are available from the current repositories or Apple catalogue."
+                     : "No verified emulator screenshots are available from the current repositories or Apple catalogue.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 18)
+            } else {
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                ScrollView(.horizontal, showsIndicators: false) {
+                    // Eight featured entries at most: eager layout
+                    // avoids late-appearing cards while scrolling.
+                    HStack(spacing: ZagFeaturedCardMetrics.cardSpacing) {
+                        ForEach(0..<(cards.count + skeletons), id: \.self) { slot in
+                            ZStack {
+                                if slot >= cards.count {
+                                    ZagFeaturedCardSkeleton(width: width)
+                                        // Leaves only once the card has faded in.
+                                        .transition(.asymmetric(
+                                            insertion: .opacity,
+                                            removal: .opacity.animation(.easeOut(duration: 0.12).delay(0.25))
+                                        ))
+                                }
+                                if slot < cards.count, let artwork = verifiedArtwork[cards[slot].id] {
+                                    featuredCard(for: cards[slot], artwork: artwork, width: width, shelf: shelf)
+                                        .transition(.opacity)
+                                }
+                            }
+                            .frame(width: width, height: ZagFeaturedCardMetrics.height)
+                        }
+                    }
+                    .padding(.trailing, 18)
+                    .padding(.vertical, 2)
+                }
+                .frame(width: width + 18, alignment: .leading)
+                .modifier(ZagGamesScrollClipModifier())
+            }
+            .frame(height: ZagFeaturedCardMetrics.height + 4)
+            }
         }
     }
 
@@ -1218,60 +1422,15 @@ private struct ZagGamesPage: View {
                     }
 
                     if !searchFieldFocused && selectedCategory == "Games" &&
-                        !indexedGames.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Featured")
-                                    .font(.title3.weight(.bold))
-                                Spacer()
-                                Text("From your repositories")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                        (!indexedGames.isEmpty || featuredLoading(.games)) {
+                        featuredSection(.games)
+                            .zagTabSlideIn(categorySlide)
+                    }
 
-                            if featuredGames.isEmpty {
-                                if isCheckingFeatured {
-                                    ProgressView("Checking game screenshots…")
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 120)
-                                } else {
-                                    Text("No verified game screenshots are available from the current repositories or Apple catalogue.")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.vertical, 18)
-                                }
-                            } else {
-                            GeometryReader { geometry in
-                                // Match the native search field's inset. Extend the
-                                // viewport to the screen edge so the next card
-                                // is visible without scrolling.
-                                let cardInset: CGFloat = 0
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    // Eight featured entries at most: eager layout
-                                    // avoids late-appearing cards while scrolling.
-                                    HStack(spacing: 10.5) {
-                                        ForEach(featuredGames, id: \.id) { entry in
-                                            if let artwork = verifiedArtwork[entry.id] {
-                                                featuredCard(
-                                                    for: entry,
-                                                    artwork: artwork,
-                                                    width: geometry.size.width - cardInset * 2
-                                                )
-                                            }
-                                        }
-                                    }
-                                    .padding(.leading, cardInset)
-                                    .padding(.trailing, 18)
-                                    .padding(.vertical, 2)
-                                }
-                                .frame(width: geometry.size.width + 18, alignment: .leading)
-                                .modifier(ZagGamesScrollClipModifier())
-                            }
-                            .frame(height: 254)
-                            }
-                        }
-                        .zagTabSlideIn(categorySlide)
+                    if !searchFieldFocused && selectedCategory == "Emulators" &&
+                        (!indexedEmulators.isEmpty || featuredLoading(.emulators)) {
+                        featuredSection(.emulators)
+                            .zagTabSlideIn(categorySlide)
                     }
 
                     if searchFieldFocused ? (searchScope == "All" || searchScope == "Emulators") : selectedCategory == "Emulators" {
@@ -1286,7 +1445,8 @@ private struct ZagGamesPage: View {
                                 Image(systemName: "gamecontroller")
                                     .font(.system(size: 35, weight: .light))
                                     .foregroundStyle(.secondary)
-                                Text(searchText.isEmpty ? "No emulators indexed yet" : "No matching emulators")
+                                Text(!searchText.isEmpty ? "No matching emulators"
+                                     : catalogueLoading ? "Loading your repositories…" : "No emulators indexed yet")
                                     .font(.headline)
                                 Text("Add or refresh a repository containing emulators to see them here.")
                                     .font(.subheadline)
@@ -1348,7 +1508,9 @@ private struct ZagGamesPage: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         if games.isEmpty {
-                            Text(searchText.isEmpty ? "No games identified in loaded repositories yet." : "No matching games.")
+                            Text(!searchText.isEmpty ? "No matching games."
+                                 : catalogueLoading ? "Loading games from your repositories…"
+                                 : "No games identified in loaded repositories yet.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1445,7 +1607,29 @@ private struct ZagGamesPage: View {
             }
             // Resolve artwork only once the background index has been published.
             .task(id: indexedArtworkRevision) {
-                await refreshVerifiedFeatured()
+                await refreshVerifiedFeatured(.games)
+            }
+            // Emulator artwork is requested the first time Emulators opens,
+            // then kept (switching tabs never restarts it).
+            .task(id: emulatorsFeaturedRequested ? indexedArtworkRevision : -1) {
+                guard emulatorsFeaturedRequested else { return }
+                await refreshVerifiedFeatured(.emulators)
+            }
+            .onChange(of: selectedCategory) { category in
+                if category == "Emulators" { emulatorsFeaturedRequested = true }
+            }
+            .onReceive(sourcesModel.$isRefreshing) { refreshing in
+                if refreshing {
+                    sawRepositoryRefresh = true
+                } else if sawRepositoryRefresh {
+                    catalogueSettled = true
+                }
+            }
+            .task {
+                // Never show loading cards indefinitely if repositories
+                // never finish loading.
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                catalogueSettled = true
             }
             // Index from the values Combine publishes, not from the model read
             // later: @Published emits before it stores the new value.
