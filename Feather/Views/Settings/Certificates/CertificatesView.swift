@@ -590,11 +590,15 @@ private struct ZagCertificatesTopInset: ViewModifier {
 struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
     @Binding var text: String
     var prompt: String = "Search Certificates"
+    /// Placeholder while the field is being edited (defaults to `prompt`).
+    var activePrompt: String? = nil
+    /// The keyboard's Search key closes the keyboard, as in the native bar.
+    var closesKeyboardOnSearch = false
     let dictationAvailable: Bool
     let startDictation: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, startDictation: startDictation)
+        Coordinator(text: $text, startDictation: startDictation, prompt: prompt, activePrompt: activePrompt)
     }
 
     func makeUIView(context: Context) -> UISearchTextField {
@@ -610,13 +614,7 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.returnKeyType = .search
         field.clearButtonMode = .whileEditing
         // Match the native Apps/Sources search placeholder styling.
-        field.attributedPlaceholder = NSAttributedString(
-            string: prompt,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 19, weight: .semibold),
-                .foregroundColor: UIColor.placeholderText
-            ]
-        )
+        field.attributedPlaceholder = Self.placeholder(prompt)
         // Override only the pinned field's leading search icon.
         // Apps and Sources continue to use their system-provided icons.
         let searchIcon = UIImageView(image: UIImage(
@@ -634,6 +632,16 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.leftViewMode = .always
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
                         for: .editingChanged)
+        if closesKeyboardOnSearch {
+            field.addTarget(context.coordinator, action: #selector(Coordinator.searchPressed(_:)),
+                            for: .editingDidEndOnExit)
+        }
+        if activePrompt != nil {
+            field.addTarget(context.coordinator, action: #selector(Coordinator.editingBegan(_:)),
+                            for: .editingDidBegin)
+            field.addTarget(context.coordinator, action: #selector(Coordinator.editingEnded(_:)),
+                            for: .editingDidEnd)
+        }
 
         let mic = ZagNativeSearchMicInstaller.makeMicrophoneButton(
             target: context.coordinator,
@@ -656,15 +664,42 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         context.coordinator.mic?.alpha = dictationAvailable ? 1 : 0.45
     }
 
+    static func placeholder(_ prompt: String) -> NSAttributedString {
+        NSAttributedString(
+            string: prompt,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 19, weight: .semibold),
+                .foregroundColor: UIColor.placeholderText
+            ]
+        )
+    }
+
     final class Coordinator: NSObject {
         @Binding var text: String
         var startDictation: () -> Void
+        let prompt: String
+        let activePrompt: String?
         weak var field: UISearchTextField?
         weak var mic: UIButton?
 
-        init(text: Binding<String>, startDictation: @escaping () -> Void) {
+        init(text: Binding<String>, startDictation: @escaping () -> Void,
+             prompt: String, activePrompt: String?) {
             _text = text
             self.startDictation = startDictation
+            self.prompt = prompt
+            self.activePrompt = activePrompt
+        }
+
+        @objc func searchPressed(_ field: UISearchTextField) {
+            field.resignFirstResponder()
+        }
+
+        @objc func editingBegan(_ field: UISearchTextField) {
+            field.attributedPlaceholder = ZagCertificatesNativeBottomSearch.placeholder(activePrompt ?? prompt)
+        }
+
+        @objc func editingEnded(_ field: UISearchTextField) {
+            field.attributedPlaceholder = ZagCertificatesNativeBottomSearch.placeholder(prompt)
         }
 
         @objc func textChanged(_ field: UISearchTextField) {

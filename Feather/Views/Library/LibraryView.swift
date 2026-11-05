@@ -850,25 +850,23 @@ struct LibraryView: View {
 			.modifier(ZagLibrarySectionSpacingModifier())
 			.zagWallpaperSurface()
 			.toolbarBackground(.hidden, for: .navigationBar)
-			.searchable(
+			.zagMainPageSearch(
 				text: $_searchText,
-				placement: .platform(),
-				prompt: Text("Apps, Games and More")
-			)
-			.modifier(
-				ZagRepositorySearchFocusModifier(
-					isFocused: $_searchFieldFocused
+				isFocused: $_searchFieldFocused,
+				prompt: "Apps, Games and More",
+				activePrompt: "Apps, Games and More",
+				dictationAvailable: _dictationAvailable,
+				startDictation: _startDictationFromSearchMic,
+				scopes: ZagSearchScopeOptions(
+					titles: Scope.allCases.map(\.displayName),
+					selection: Binding(
+						get: { _selectedScope.displayName },
+						set: { name in
+							_selectedScope = Scope.allCases.first { $0.displayName == name } ?? .all
+						}
+					)
 				)
 			)
-			.background {
-				ZagNativeSearchMicInstaller(
-					isAvailable: _dictationAvailable,
-					action: _startDictationFromSearchMic,
-					prompt: "Apps, Games and More",
-					activePrompt: "Apps, Games and More"
-				)
-				.frame(width: 0, height: 0)
-			}
 
 
 
