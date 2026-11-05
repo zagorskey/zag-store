@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 /// The system segmented control styled like the Apps page's search scope
-/// bar on device: 32 points tall, 15-point white labels, a dark grey track
-/// and a near-black selected segment.
+/// bar on device: a 35-point Liquid Glass track, 15-point white labels and a
+/// near-black selected segment inset about 4 points.
 ///
 /// Being the real UISegmentedControl, it keeps the native behaviour of
 /// holding a finger on the selection and sliding it to another segment. It
@@ -15,17 +15,35 @@ struct ZagGlassScopeBar: View {
 
 	@Environment(\.colorScheme) private var colorScheme
 
-	static let height: CGFloat = 32
+	/// The control's own height; its selected segment is 28 points.
+	private static let controlHeight: CGFloat = 32
+	/// Around the control, so the selected segment sits about 4 points
+	/// inside a 35-point track, as on the Apps page's scope bar.
+	private static let trackPadding: CGFloat = 1.5
+	static let height: CGFloat = controlHeight + trackPadding * 2
 
 	var body: some View {
 		ZagSegmentedControl(selection: $selection, titles: titles)
-			.frame(height: Self.height)
+			.frame(height: Self.controlHeight)
+			.padding(Self.trackPadding)
 			.background { track }
 	}
 
-	/// Measured on the Apps page's scope bar on device: a (32, 32, 32)
-	/// track in dark, with a faint glass rim.
+	/// Liquid Glass tinted with the track colour, which renders as the
+	/// (32, 32, 32) measured on the Apps page's scope bar in dark mode.
+	@ViewBuilder
 	private var track: some View {
+		if #available(iOS 26.0, *) {
+			Color.clear.glassEffect(
+				.regular.tint(Color(uiColor: ZagScopeColors.track)),
+				in: Capsule(style: .continuous)
+			)
+		} else {
+			solidTrack
+		}
+	}
+
+	private var solidTrack: some View {
 		Capsule(style: .continuous)
 			.fill(Color(uiColor: ZagScopeColors.track))
 			.overlay {

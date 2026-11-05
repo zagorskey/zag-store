@@ -592,6 +592,9 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
     var prompt: String = "Search Certificates"
     let dictationAvailable: Bool
     let startDictation: () -> Void
+    /// Tracks whether the field is being edited; setting it to false ends
+    /// editing (used by Settings' close button).
+    var isEditing: Binding<Bool>? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, startDictation: startDictation)
@@ -634,6 +637,10 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
         field.leftViewMode = .always
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)),
                         for: .editingChanged)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.beganEditing),
+                        for: .editingDidBegin)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.endedEditing),
+                        for: [.editingDidEnd, .editingDidEndOnExit])
 
         let mic = ZagNativeSearchMicInstaller.makeMicrophoneButton(
             target: context.coordinator,
@@ -652,6 +659,10 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
     func updateUIView(_ field: UISearchTextField, context: Context) {
         if field.text != text { field.text = text }
         context.coordinator.startDictation = startDictation
+        context.coordinator.isEditing = isEditing
+        if let isEditing, !isEditing.wrappedValue, field.isFirstResponder {
+            field.resignFirstResponder()
+        }
         context.coordinator.mic?.isEnabled = dictationAvailable
         context.coordinator.mic?.alpha = dictationAvailable ? 1 : 0.45
     }
@@ -659,6 +670,7 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
     final class Coordinator: NSObject {
         @Binding var text: String
         var startDictation: () -> Void
+        var isEditing: Binding<Bool>?
         weak var field: UISearchTextField?
         weak var mic: UIButton?
 
@@ -669,6 +681,14 @@ struct ZagCertificatesNativeBottomSearch: UIViewRepresentable {
 
         @objc func textChanged(_ field: UISearchTextField) {
             text = field.text ?? ""
+        }
+
+        @objc func beganEditing() {
+            if isEditing?.wrappedValue == false { isEditing?.wrappedValue = true }
+        }
+
+        @objc func endedEditing() {
+            if isEditing?.wrappedValue == true { isEditing?.wrappedValue = false }
         }
 
         @objc func dictate() {
@@ -697,13 +717,20 @@ private struct ZagCertificateSectionTitleRow: ViewModifier {
 /// the list's cards and 28 points above the bottom of the screen (measured
 /// on iOS 26 Settings). Shared by Settings and Certificates.
 extension View {
-    func zagBottomSearchPlacement() -> some View {
-        modifier(ZagBottomSearchPlacement())
+    /// With `close`, a round glass close button appears beside the bar while
+    /// `showsClose` is true, as next to the Apps page's search field.
+    func zagBottomSearchPlacement(showsClose: Bool = false, close: (() -> Void)? = nil) -> some View {
+        modifier(ZagBottomSearchPlacement(showsClose: showsClose, close: close))
     }
 }
 
 private struct ZagBottomSearchPlacement: ViewModifier {
     static let height: CGFloat = 48
+    /// Between the bar and its close button, as on the Apps page.
+    static let closeGap: CGFloat = 12
+
+    var showsClose = false
+    var close: (() -> Void)? = nil
 
     /// The inset-grouped list's side margin: 20 points on wide iPhones
     /// (Plus and Pro Max), 16 on the others.
@@ -722,9 +749,25 @@ private struct ZagBottomSearchPlacement: ViewModifier {
         // Taller than any home indicator area: the keyboard is up, so keep
         // the bar above it rather than lowering it into it.
         let keyboardUp = safeBottom > 60
-        return content
-            .frame(height: Self.height)
-            .zagSearchGlass()
+        return HStack(spacing: Self.closeGap) {
+            content
+                .frame(height: Self.height)
+                .zagSearchGlass()
+            if showsClose, let close {
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: Self.height, height: Self.height)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .zagCircleSearchGlass()
+                .accessibilityLabel("Close Search")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: showsClose)
             .padding(.horizontal, Self.sideInset(width: width))
             .padding(.top, 8)
             .padding(.bottom, keyboardUp ? Self.gapAboveKeyboard : max(0, Self.bottomGap - safeBottom))
@@ -739,5 +782,17 @@ private struct ZagBottomSearchPlacement: ViewModifier {
                     .onChange(of: proxy.safeAreaInsets.bottom) { safeBottom = $0 }
                     .onChange(of: proxy.size.width) { width = $0 }
             })
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func zagCircleSearchGlass() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            background(.ultraThinMaterial, in: Circle())
+                .overlay { Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5) }
+        }
     }
 }

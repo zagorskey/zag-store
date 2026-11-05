@@ -158,6 +158,7 @@ struct SettingsView: View {
 	@State private var _routeRPPairingDiagnostics = false
 	@State private var _routeUpdateDiagnostics = false
     @State private var _settingsSearchText = ""
+    @State private var _settingsSearchEditing = false
     @State private var _settingsDictationAvailable = false
 
     private var _settingsSearchQuery: String {
@@ -262,9 +263,14 @@ struct SettingsView: View {
                     text: $_settingsSearchText,
                     prompt: "Search Settings",
                     dictationAvailable: _settingsDictationAvailable,
-                    startDictation: _startSettingsDictation
+                    startDictation: _startSettingsDictation,
+                    isEditing: $_settingsSearchEditing
                 )
-                .zagBottomSearchPlacement()
+                // Close clears the search and puts the keyboard away, as on Apps.
+                .zagBottomSearchPlacement(showsClose: _settingsSearchEditing) {
+                    _settingsSearchText = ""
+                    _settingsSearchEditing = false
+                }
             }
 
 			.tint(Color(hex: userTintColor))
