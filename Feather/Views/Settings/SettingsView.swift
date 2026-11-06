@@ -428,6 +428,85 @@ struct SettingsView: View {
 	}
 }
 
+// About uses one continuous native row background on iOS 26. Native Form
+// cells can otherwise leave a one-pixel gap at a fractional row boundary.
+@available(iOS 26.0, *)
+private struct ZagAboutSettingsCard<Rows: View>: View {
+    @Environment(\.defaultMinListRowHeight) private var rowHeight
+    @ViewBuilder var rows: Rows
+
+    var body: some View {
+        ZagAboutCardLayout {
+            Group(subviews: rows) { children in
+                ForEach(children.indices, id: \.self) { index in
+                    children[index]
+                        .padding(.vertical, 15)
+                        .frame(minHeight: rowHeight)
+                        .contentShape(Rectangle())
+                    if index < children.count - 1 {
+                        // Reuse the native Label's icon slot to align the
+                        // separator with the titles at every text size.
+                        Label {
+                            ZagAboutDivider().frame(height: 1)
+                        } icon: {
+                            Color.clear.frame(width: 25, height: 25)
+                        }
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+        // Each action must handle its own taps inside the shared Form cell.
+        .buttonStyle(.borderless)
+    }
+}
+
+private struct ZagAboutCardLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.first?.sizeThatFits(.unspecified).width ?? 0
+        let height = stride(from: 0, to: subviews.count, by: 2).reduce(CGFloat.zero) {
+            $0 + subviews[$1].sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for index in stride(from: 0, to: subviews.count, by: 2) {
+            let height = subviews[index].sizeThatFits(
+                ProposedViewSize(width: bounds.width, height: nil)
+            ).height
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width, height: height)
+            )
+            y += height
+            // Native list separators occupy the bottom point of a row;
+            // they do not add height or spacing between the actions.
+            if index + 1 < subviews.count {
+                subviews[index + 1].place(
+                    at: CGPoint(x: bounds.minX, y: y - 1), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: bounds.width, height: 1)
+                )
+            }
+        }
+    }
+}
+
+// Match the native list's one-point separator and adaptive UIKit colour.
+private struct ZagAboutDivider: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .separator
+        view.isOpaque = false
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {}
+}
+
 // Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
 // Exact Octicons GitHub mark supplied as the shape reference.
 // The 16×16 vector is scaled to the same 23-point height as neighbouring toolbar icons.
@@ -868,7 +947,23 @@ extension SettingsView {
 
 	@ViewBuilder
 	private func _feedback() -> some View {
-		Section {
+        Section {
+            if #available(iOS 26.0, *) {
+                // One native cell avoids Form's fractional gap between the
+                // GitHub and Feedback cells. The actions stay independent.
+                ZagAboutSettingsCard { _aboutRows }
+                    .listRowInsets(.vertical, 0)
+                    .listRowSeparator(.hidden)
+            } else {
+                _aboutRows
+            }
+        } header: {
+            Text("About")
+        }
+    }
+
+    @ViewBuilder
+    private var _aboutRows: some View {
 			NavigationLink(destination: AboutView().zagSettingsDestinationAvatar()) {
 				Label {
 					Text("Zag Store")
@@ -880,8 +975,6 @@ extension SettingsView {
             Button {
                 UIApplication.open("https://github.com/zagorskey/zag-store")
             } label: {
-                // Keep Label at the row root, like the adjacent rows, so
-                // Form derives its separator alignment from the native label.
                 Label {
                     HStack {
                         Text("GitHub")
@@ -924,10 +1017,7 @@ extension SettingsView {
                         .frame(width: 25, height: 25)
                 }
             }
-        } header: {
-            Text("About")
-		}
-	}
+    }
     
 	@ViewBuilder
 	private func _directories() -> some View {
