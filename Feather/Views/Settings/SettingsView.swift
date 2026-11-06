@@ -875,22 +875,22 @@ extension SettingsView {
             Button {
                 UIApplication.open("https://github.com/zagorskey/zag-store")
             } label: {
-                // Built like the Zag Store and Feedback rows: a plain Label,
-                // so the list draws only its own separator.
-                HStack {
-                    Label {
+                // Keep Label at the row root, like the adjacent rows, so
+                // Form derives its separator alignment from the native label.
+                Label {
+                    HStack {
                         Text("GitHub")
-                    } icon: {
-                        ZagGitHubMark()
-                            .fill(ZagWideGamutTint.color(hex: userTintColor))
-                            .frame(width: 25, height: 25)
+                        Spacer(minLength: 8)
+                        // Sized and coloured like the chevron on the row above.
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                            .accessibilityHidden(true)
                     }
-                    Spacer(minLength: 8)
-                    // Sized and coloured like the chevron on the row above.
-                    Image(systemName: "arrow.up.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                        .accessibilityHidden(true)
+                } icon: {
+                    ZagGitHubMark()
+                        .fill(ZagWideGamutTint.color(hex: userTintColor))
+                        .frame(width: 25, height: 25)
                 }
             }
 
