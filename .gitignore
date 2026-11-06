@@ -16,3 +16,6 @@ RPPairingCore/rust-core/target/
 
 # Local pairing experiments
 LocusPairingExperiment/
+
+# Local Zag Store artwork backups
+.zag-*backup*/
