@@ -30,6 +30,10 @@ final class SourcesViewModel: ObservableObject {
 	// publication so reading them never triggers an extra SwiftUI update.
 	private var rowMetadataByURL: [String: ZagSourceRowMetadata] = [:]
 
+	/// Per-repository outcome of the last foreground refresh (cold start
+	/// or manual), for Update Diagnostics.
+	private(set) var lastRefreshSummary: ZagRepositoryRefreshSummary?
+
 	@MainActor
 	func rowMetadata(for source: AltSource) -> ZagSourceRowMetadata? {
 		guard let url = source.sourceURL?.absoluteString else { return nil }
@@ -44,6 +48,7 @@ final class SourcesViewModel: ObservableObject {
 		diagnosticSkipReconciliation: Bool = false
 	) async {
 		guard isFinished else { return }
+		let snapshotStartedAt = Date()
 		let diagnosticStart = CFAbsoluteTimeGetCurrent()
 		let metricStart = ZagPerformanceMonitor.now()
 		print("[Zag Refresh Diagnostic] Begin — skip reconciliation: \(diagnosticSkipReconciliation)")
@@ -106,6 +111,12 @@ final class SourcesViewModel: ObservableObject {
 		// Keep the last known-good snapshot visible while refreshing. Each
 		// repository replaces its own snapshot as soon as it finishes.
 		var refreshedSources: [AltSource: ASRepository] = self.sources
+		let refreshPath = ZagNetworkPath.shared.summary
+		var appsBefore: [String: Int] = [:]
+		for (source, repository) in self.sources {
+			if let url = source.sourceURL?.absoluteString { appsBefore[url] = repository.apps.count }
+		}
+		var records: [ZagRepositoryRefreshRecord] = []
 
 		for startIndex in stride(
 			from: 0,
@@ -120,14 +131,16 @@ final class SourcesViewModel: ObservableObject {
 			let batch = sourceURLs[startIndex..<endIndex]
 			let batchURLs = batch.map { $0.1 }
 
-			await withTaskGroup(of: (URL, ASRepository?, ZagSourceRowMetadata?).self) { group in
+			await withTaskGroup(of: (URL, ASRepository?, ZagSourceRowMetadata?, ZagRepositoryRefreshRecord).self) { group in
 				for url in batchURLs {
+					let before = appsBefore[url.absoluteString]
 					group.addTask {
+						let startedAtDate = Date()
 						let startedAt = CFAbsoluteTimeGetCurrent()
 						let host = url.host ?? url.absoluteString
 						print("[Zag Store Sources] Fetch started: \(host)")
 
-						let fetched: (URL, ASRepository?) = await withCheckedContinuation { continuation in
+						let fetched: (URL, ASRepository?, String?) = await withCheckedContinuation { continuation in
 							self._dataService.fetch(from: url) {
 								(result: RepositoryDataHandler) in
 								let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
@@ -138,7 +151,7 @@ final class SourcesViewModel: ObservableObject {
 										"\(host) — \(repo.apps.count) apps — " +
 										String(format: "%.3fs", elapsed)
 									)
-									continuation.resume(returning: (url, repo))
+									continuation.resume(returning: (url, repo, nil))
 								case .failure(let error):
 									print(
 										"[Zag Store Sources] Fetch failed: " +
@@ -146,7 +159,7 @@ final class SourcesViewModel: ObservableObject {
 										String(format: "%.3fs", elapsed) +
 										" — \(error.localizedDescription)"
 									)
-									continuation.resume(returning: (url, nil))
+									continuation.resume(returning: (url, nil, error.localizedDescription))
 								}
 							}
 						}
@@ -155,12 +168,47 @@ final class SourcesViewModel: ObservableObject {
 						let rowMetadata = fetched.1.map {
 							ZagSourceRowMetadata(repository: $0)
 						}
-						return (fetched.0, fetched.1, rowMetadata)
+						// This attempt's metric, if the fetch service recorded one.
+						let metric = NBRepositoryFetchDiagnostics.metric(for: url.absoluteString)
+							.flatMap { ($0.startedAt ?? $0.recordedAt) >= startedAtDate.addingTimeInterval(-1) ? $0 : nil }
+						let record = ZagRepositoryRefreshRecord(
+							identifier: ZagRepositoryRefreshRecord.safeIdentifier(url),
+							networkPath: refreshPath,
+							startedAt: startedAtDate,
+							finishedAt: Date(),
+							httpStatus: metric?.httpStatus,
+							bytes: metric?.byteCount,
+							expectedBytes: metric?.expectedBytes,
+							downloadSeconds: metric?.networkSeconds,
+							parseSeconds: metric?.decodeSeconds,
+							appsBefore: before,
+							appsAfter: fetched.1?.apps.count,
+							outcome: ZagRepositoryRefreshRecord.outcome(
+								fetchSucceeded: fetched.1 != nil,
+								metricStatus: metric?.status,
+								error: fetched.2 ?? metric?.error
+							)
+						)
+						return (fetched.0, fetched.1, rowMetadata, record)
 					}
 				}
 
-				for await (url, repo, rowMetadata) in group {
+				for await (url, repo, rowMetadata, fetchedRecord) in group {
 					refreshingSourceURLs.remove(url.absoluteString)
+					var record = fetchedRecord
+					if repo == nil, case .missing(let reason) = record.outcome,
+					   refreshedSources.keys.contains(where: { $0.sourceURL?.absoluteString == url.absoluteString }) {
+						// The snapshot from earlier in this session stays in use.
+						record = ZagRepositoryRefreshRecord(
+							identifier: record.identifier, networkPath: record.networkPath,
+							startedAt: record.startedAt, finishedAt: record.finishedAt,
+							httpStatus: record.httpStatus, bytes: record.bytes, expectedBytes: record.expectedBytes,
+							downloadSeconds: record.downloadSeconds, parseSeconds: record.parseSeconds,
+							appsBefore: record.appsBefore, appsAfter: record.appsBefore,
+							outcome: .retainedLastGood(reason: reason)
+						)
+					}
+					records.append(record)
 
 					guard
 						let repo,
@@ -216,6 +264,19 @@ final class SourcesViewModel: ObservableObject {
 			completedSources.keys.compactMap { $0.sourceURL?.absoluteString }
 		)
 		let missingSourceURLs = configuredSourceURLs.subtracting(loadedSourceURLs)
+		let summary = ZagRepositoryRefreshSummary(
+			startedAt: snapshotStartedAt,
+			finishedAt: Date(),
+			networkPath: refreshPath,
+			configuredCount: configuredSourceURLs.count,
+			records: records.filter { record in
+				configuredSourceURLs.contains { ZagRepositoryRefreshRecord.safeIdentifier(URL(string: $0) ?? URL(fileURLWithPath: "/")) == record.identifier }
+			}
+		)
+		lastRefreshSummary = summary
+		for line in summary.lines() {
+			ZagLogger.shared.info("Repositories", line)
+		}
 		guard !Task.isCancelled else {
 			print("[Zag Store Updates] Foreground refresh cancelled; retaining last update snapshot")
 			ZagLogger.shared.warning("Updates", "Foreground refresh cancelled; retaining last update snapshot")
@@ -254,7 +315,8 @@ final class SourcesViewModel: ObservableObject {
 		let updatesStartedAt = CFAbsoluteTimeGetCurrent()
 		let inventoryMetricStartedAt = ZagPerformanceMonitor.now()
 		await _refreshUpdatesUsingInstalledInventory(
-			repositories: completedRepositories
+			repositories: completedRepositories,
+			snapshotStartedAt: snapshotStartedAt
 		)
 		ZagPerformanceMonitor.shared.record(.repositoryInventory, since: inventoryMetricStartedAt)
 		let updatesElapsed = CFAbsoluteTimeGetCurrent() - updatesStartedAt
@@ -273,7 +335,8 @@ final class SourcesViewModel: ObservableObject {
 
 	@MainActor
 	private func _refreshUpdatesUsingInstalledInventory(
-		repositories: [ASRepository]
+		repositories: [ASRepository],
+		snapshotStartedAt: Date? = nil
 	) async {
 		let pairingCore = ZagRPPairingCore.shared
 
@@ -283,12 +346,12 @@ final class SourcesViewModel: ObservableObject {
 		// Keep the previous snapshot until the native inventory is loaded.
 		// The successful inventory callback below publishes the final result.
 		// Without pairing, Signed fallback remains the available source.
-		let hasAuthoritativeInventory: Bool = {
-			if case .loaded = pairingCore.installedAppsState { return true }
-			return false
-		}()
+		// The last list read from the iPhone counts as device inventory too:
+		// it is what keeps Mobile Data and cold-start refreshes from
+		// dropping to the Signed fallback.
+		let hasAuthoritativeInventory = UpdateManager.shared.currentInventory().isDeviceInventory
 		if hasAuthoritativeInventory || !pairingCore.pairingFileExists {
-			UpdateManager.shared.refresh(repositories: repositories)
+			UpdateManager.shared.refresh(repositories: repositories, snapshotStartedAt: snapshotStartedAt)
 		} else {
 			ZagLogger.shared.info(
 				"Updates",
@@ -576,6 +639,10 @@ final class UpdateManager: ObservableObject {
 	@Published private(set) var updates: [AvailableUpdate] = []
 	@Published private(set) var persistedUpdateCount: Int
 	@Published private(set) var diagnosticsReport = "Run a repository refresh to capture update diagnostics."
+	/// Incremented as the last state change of every completed reconciliation.
+	/// When it publishes, updates, counts and completion state are already
+	/// final, so observers can persist them without deferring.
+	@Published private(set) var reconciliationGeneration = 0
 
 	private static let persistedUpdateCountKey =
 		"ZagStore.persistedUpdateCount"
@@ -589,7 +656,7 @@ final class UpdateManager: ObservableObject {
 		let cutoff = Calendar.current.date(
 			byAdding: .day, value: -30, to: Date()
 		) ?? .distantPast
-		let recent = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		let recent = _recentUpdateRows()
 			.filter { ($0.completedAt ?? .distantPast) >= cutoff }
 		return updates.filter { update in
 			let bundleID = update.app.id ?? update.id
@@ -626,6 +693,31 @@ final class UpdateManager: ObservableObject {
 	}
 
 	private var repositoryRefreshDepth = 0
+
+	// visibleUpdates is read by every badge and several times per Updates
+	// popup render. Decode the stored Updated Recently rows only when their
+	// bytes change, instead of JSON-decoding them on every read.
+	private var recentRowsCache: (data: Data, rows: [ZagUpdateRowSnapshot])?
+
+	private func _recentUpdateRows() -> [ZagUpdateRowSnapshot] {
+		guard let data = UserDefaults.standard.data(
+			forKey: ZagUpdateRowSnapshot.recentKey
+		) else {
+			recentRowsCache = nil
+			return []
+		}
+		if let cache = recentRowsCache, cache.data == data {
+			return cache.rows
+		}
+		let rows = ZagUpdateRowSnapshot.load(ZagUpdateRowSnapshot.recentKey)
+		recentRowsCache = (data, rows)
+		return rows
+	}
+
+	// One reconciliation asks for the same Signed app's build several times
+	// (matching, then diagnostics). Each lookup lists its directory and reads
+	// its Info.plist, so remember results for the duration of one pass only.
+	private var buildVersionMemo: [NSManagedObjectID: String?]?
 
 	private init() {
 		persistedUpdateCount = UserDefaults.standard.integer(
@@ -743,7 +835,32 @@ final class UpdateManager: ObservableObject {
 
 	// MARK: - Global Update Check
 
-	func refresh(repositories: [ASRepository]) {
+	/// The installed-app state reconciliation uses now: live, the last
+	/// list read from the iPhone, or the Signed fallback.
+	func currentInventory() -> ZagInventoryResolution {
+		let pairingCore = ZagRPPairingCore.shared
+		let liveLoaded: Bool = {
+			if case .loaded = pairingCore.installedAppsState { return true }
+			return false
+		}()
+		return ZagInventoryResolver.resolve(
+			liveLoaded: liveLoaded,
+			live: liveLoaded ? pairingCore.inventoryEntries : [:],
+			cached: ZagInventorySnapshotStore.shared.load(),
+			pairingFilePresent: pairingCore.pairingFileExists
+		)
+	}
+
+	private var refreshOrdering = ZagRefreshOrdering()
+
+	/// `snapshotStartedAt` is when the repositories were requested. A full
+	/// refresh that started before the last published one is dropped, so
+	/// overlapping refreshes never publish an older result over a newer one.
+	func refresh(repositories: [ASRepository], snapshotStartedAt: Date? = nil) {
+		if let snapshotStartedAt, !refreshOrdering.admit(snapshotStartedAt: snapshotStartedAt) {
+			ZagLogger.shared.warning("Updates", "Dropped a repository snapshot that started before the last published one")
+			return
+		}
 		let reconciliationStartedAt = ZagPerformanceMonitor.now()
 		defer {
 			ZagPerformanceMonitor.shared.record(
@@ -792,6 +909,8 @@ final class UpdateManager: ObservableObject {
 		signedApps: [Signed],
 		importedApps: [Imported]
 	) {
+		buildVersionMemo = [:]
+		defer { buildVersionMemo = nil }
 		var localApps: [LocalApp] = []
 		let persistedAppOrigins = UserDefaults.standard.dictionary(
 			forKey: "zagStore.repositoryAppOrigins"
@@ -800,7 +919,9 @@ final class UpdateManager: ObservableObject {
 			forKey: "zagStore.repositoryOrigins"
 		) as? [String: String] ?? [:]
 		let pairingCore = ZagRPPairingCore.shared
-		let deviceInventory = pairingCore.installedApps
+		let countBefore = updateCount
+		let inventory = currentInventory()
+		let deviceInventory = inventory.apps
 		let inventoryStatus: String = {
 			switch pairingCore.installedAppsState {
 			case .idle: return "idle"
@@ -830,7 +951,7 @@ final class UpdateManager: ObservableObject {
 			}
 		}
 
-		if case .loaded = pairingCore.installedAppsState {
+		if inventory.isDeviceInventory {
 			// Device inventory is authoritative for both installed state and
 			// the version/build actually present on the iPhone. A Signed record
 			// may represent a different IPA version and must not override it.
@@ -898,7 +1019,7 @@ final class UpdateManager: ObservableObject {
 			}
 
 			print(
-				"[Zag Store Updates] Using authoritative device inventory: " +
+				"[Zag Store Updates] Using device inventory (\(inventory.source.label())): " +
 					"\(localApps.count) versioned app(s)"
 			)
 		} else {
@@ -1187,6 +1308,15 @@ final class UpdateManager: ObservableObject {
 		}
 		var diagnosticLines: [String] = []
 		diagnosticLines.append("=== Zag Store Update Diagnostics ===")
+		diagnosticLines.append("Generated: \(Date().formatted(date: .abbreviated, time: .standard)) | network path now: \(ZagNetworkPath.shared.summary)")
+		if let summary = SourcesViewModel.shared.lastRefreshSummary {
+			diagnosticLines.append("Last foreground refresh: \(summary.startedAt.formatted(date: .omitted, time: .standard)) → \(summary.finishedAt.formatted(date: .omitted, time: .standard))")
+			diagnosticLines.append(contentsOf: summary.lines())
+		} else {
+			diagnosticLines.append("Repository refresh: no foreground refresh recorded in this session")
+		}
+		diagnosticLines.append("Installed apps used: \(inventory.source.label()) | \(inventory.apps.count) device app(s)")
+		diagnosticLines.append("")
 		diagnosticLines.append("Tracked Variant Lineage:")
 		let trackedLineageIDs = Set(recordedOrigins.keys)
 			.union(recordedAppOrigins.keys)
@@ -1206,7 +1336,7 @@ final class UpdateManager: ObservableObject {
 		diagnosticLines.append(
 			"Inventory status: \(inventoryStatus) | pairingFilePresent=\(pairingCore.pairingFileExists) | " +
 			"entries=\(deviceInventory.count) | localState=\(localApps.count) | " +
-			"source=\(inventoryStatus.hasPrefix("loaded") ? "RPPairing" : "Signed fallback")"
+			"source=\(inventory.source.label())"
 		)
 		diagnosticLines.append("Raw device inventory:")
 		for installed in deviceInventory.values.sorted(by: { $0.bundleID < $1.bundleID }) {
@@ -1325,6 +1455,11 @@ final class UpdateManager: ObservableObject {
 		}
 		diagnosticLines.append("")
 		diagnosticLines.append(
+			"Update count: \(countBefore) before → \(visibleCount) after | data: " +
+			(SourcesViewModel.shared.lastRefreshSummary?.freshness ?? "repositories from this session's last snapshot") +
+			" | installed apps: \(inventory.source.label())"
+		)
+		diagnosticLines.append(
 			"Reconciliation: repository candidates for \(repositoryAppsByIdentifier.count) IDs; " +
 			"installed inventory \(deviceInventory.count); " +
 			"matched \(updates.count); visible \(visibleCount); " +
@@ -1361,6 +1496,7 @@ final class UpdateManager: ObservableObject {
 			persistedUpdateCount,
 			forKey: Self.persistedUpdateCountKey
 		)
+		reconciliationGeneration &+= 1
 
 		notifyAboutNewUpdatesIfNeeded(updates)
 
@@ -1646,16 +1782,25 @@ final class UpdateManager: ObservableObject {
 
 
 	private func _buildVersion(for app: Signed) -> String? {
-		guard
-			let appURL = Storage.shared.getAppDirectory(for: app),
-			let bundle = Bundle(url: appURL)
-		else {
-			return nil
+		if let cached = buildVersionMemo?[app.objectID] {
+			return cached
 		}
+		let build: String? = {
+			guard
+				let appURL = Storage.shared.getAppDirectory(for: app),
+				let bundle = Bundle(url: appURL)
+			else {
+				return nil
+			}
 
-		return bundle.object(
-			forInfoDictionaryKey: "CFBundleVersion"
-		) as? String
+			return bundle.object(
+				forInfoDictionaryKey: "CFBundleVersion"
+			) as? String
+		}()
+		if buildVersionMemo != nil {
+			buildVersionMemo?[app.objectID] = .some(build)
+		}
+		return build
 	}
 
 	private func _isRepositoryReleaseNewer(

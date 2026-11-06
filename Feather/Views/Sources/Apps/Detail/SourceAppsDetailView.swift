@@ -520,6 +520,8 @@ private extension SourceAppsDetailView {
 
 	func _refreshInstalledState() {
 		guard
+			// Not while Mobile Data Fix holds the RPPairing connection.
+			!ZagMobileDataInstallCoordinator.shared.isBusy,
 			pairingCore.pairingFileExists,
 			pairingCore.installedAppsState != .refreshing
 		else {

@@ -136,30 +136,47 @@ struct InstallPreviewView: View {
 							viewModel.status = .installing
 						}
 
-						try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-							Task { @MainActor in
-								do {
-									try ZagRPPairingCore.shared.installGate4IPA(
-									at: packageUrl,
-									deviceIP: "10.7.0.1",
-									progress: { percent in
-										viewModel.installProgress = Double(percent) / 100.0
-									}
-								) { result in
-									switch result {
-									case .success:
-										viewModel.installProgress = 1.0
-										viewModel.status = .completed(.success(()))
-										continuation.resume()
-									case .failure(let error):
+						// Mobile Data Fix wraps the existing installer; installing Zag Store
+						// itself (self-update) keeps the direct path.
+						let installWithInstaller: () async throws -> Void = {
+							try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+								Task { @MainActor in
+									do {
+										try ZagRPPairingCore.shared.installGate4IPA(
+										at: packageUrl,
+										deviceIP: ZagDeviceLink.peerAddress,
+										retryTransientFailures: true,
+										progress: { percent in
+											viewModel.installProgress = Double(percent) / 100.0
+										}
+									) { result in
+										switch result {
+										case .success:
+											viewModel.installProgress = 1.0
+											viewModel.status = .completed(.success(()))
+											continuation.resume()
+										case .failure(let error):
+											viewModel.status = .broken(error)
+											continuation.resume(throwing: error)
+										}
+										}
+									} catch {
 										viewModel.status = .broken(error)
 										continuation.resume(throwing: error)
 									}
-									}
-								} catch {
-									viewModel.status = .broken(error)
-									continuation.resume(throwing: error)
 								}
+							}
+						}
+						let (isSelfInstall, jobID) = await MainActor.run { (app.identifier == Bundle.main.bundleIdentifier, app.uuid ?? UUID().uuidString) }
+						if isSelfInstall {
+							try await installWithInstaller()
+						} else {
+							do {
+								try await ZagMobileDataInstallCoordinator.shared.install(jobID: jobID) { try await installWithInstaller() }
+							} catch let reason as ZagMobileDataInstallError {
+								// The installer never started, so show why here.
+								await MainActor.run { viewModel.status = .broken(reason) }
+								throw reason
 							}
 						}
 					}

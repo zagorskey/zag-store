@@ -533,6 +533,9 @@ struct ZagNativeSearchMicInstaller: UIViewRepresentable {
 		}
 
 		private static func findSearchField(in view: UIView) -> UISearchTextField? {
+			// Skip hidden views: ZagScopeBar keeps a hidden search field
+			// inside its UISearchBar, and it is never the page's search.
+			if view.isHidden { return nil }
 			if let field = view as? UISearchTextField {
 				return field
 			}

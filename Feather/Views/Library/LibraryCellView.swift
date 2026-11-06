@@ -22,7 +22,8 @@ struct LibraryCellView: View {
 	}()
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 	@Environment(\.editMode) private var editMode
-	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+	// Repository state is observed only by the badge and menu label below,
+	// so a refreshed repository no longer re-renders every Apps row.
 
 	private var displayCertificate: CertificatePair? {
 		if let certificate = Storage.shared.getCertificate(from: app) {
@@ -55,17 +56,53 @@ struct LibraryCellView: View {
 	private var allowSigningCustomisation = false
 	@AppStorage(ZagCertificateSelection.askEveryTimeKey)
 	private var askCertificateEveryTime = false
-	@State private var isSigningImmediately = false
-	@State private var signingRingRotation: Double = 0
-	@State private var isInstallingImmediately = false
-	@State private var installingRingRotation: Double = 0
+	/// The authoritative per-job state; survives scrolling and Shortcuts handoffs.
+	@ObservedObject private var jobs = ZagInstallJobs.shared
 	@ObservedObject private var updateTransaction = ZagUpdateTransactionManager.shared
-	@State private var updateRingRotation: Double = 0
 
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedSigningAppPresenting: AnyApp?
 	@Binding var selectedInstallAppPresenting: AnyApp?
 	@Binding var selectedAppUUIDs: Set<String>
+
+	// MARK: - Install job
+
+	private var _jobKey: String { "library:\(app.uuid ?? "")" }
+
+	private var isSigningImmediately: Bool {
+		get { jobs.job(_jobKey)?.stage == .signing }
+		nonmutating set {
+			if newValue {
+				// Sign-only jobs end without installing, so they offer no cancel.
+				let installs = OptionsManager.shared.options.post_installAppAfterSigned
+				if !jobs.begin(_jobKey, stage: .signing, offersCancel: installs) { jobs.advance(_jobKey, to: .signing) }
+			} else if jobs.job(_jobKey)?.stage == .signing {
+				jobs.finish(_jobKey)
+			}
+		}
+	}
+
+	private var isInstallingImmediately: Bool {
+		get {
+			guard let stage = jobs.job(_jobKey)?.stage else { return false }
+			return stage != .signing
+		}
+		nonmutating set {
+			if newValue {
+				if !jobs.begin(_jobKey, stage: .packaging) { jobs.advance(_jobKey, to: .packaging) }
+			} else if let stage = jobs.job(_jobKey)?.stage, stage != .signing {
+				jobs.finish(_jobKey)
+			}
+		}
+	}
+
+	private static func _isCancellation(_ error: Error) -> Bool {
+		error is ZagInstallCancelled || (error as? ZagMobileDataInstallError) == .cancelled
+	}
+
+	private var _jobCaption: String? {
+		jobs.job(_jobKey)?.cancelRequested == true ? .localized("Cancelling…") : nil
+	}
 
 	// MARK: - Selections
 
@@ -122,35 +159,10 @@ struct LibraryCellView: View {
 						size: 62
 					)
 
-					if let repositoryIconURL {
-						Button {
-							guard let source = repositoryOrigin?.0 else { return }
-							UIImpactFeedbackGenerator(style: .light).impactOccurred()
-							onRepositoryBadgeTap?(source)
-						} label: {
-							LazyImage(url: repositoryIconURL) { state in
-								if let image = state.image {
-									image
-										.appIconStyle(
-											size: 20,
-											isCircle: true,
-											background: Color(
-												uiColor: .secondarySystemBackground
-											)
-										)
-										.offset(x: 46, y: 4)
-								}
-							}
-						}
-						.buttonStyle(.plain)
-						.accessibilityLabel(
-							Text("\(repositoryOrigin?.1.name ?? "Repository") repository")
-						)
-						.accessibilityHint(
-							Text("Opens this app's source repository")
-						)
-						.accessibilityAddTraits(.isButton)
-					}
+					ZagLibraryRepositoryBadge(
+						bundleID: app.identifier,
+						onTap: onRepositoryBadgeTap
+					)
 				}
 
 				NBTitleWithSubtitleView(
@@ -218,15 +230,7 @@ struct LibraryCellView: View {
 			if !isEditing {
 				_contextActions(for: app)
 
-				if let repositoryName = repositoryOrigin?.1.name {
-					Label(
-						"Source: \(repositoryName)",
-						systemImage: "shippingbox"
-					)
-					.disabled(true)
-
-					Divider()
-				}
+				ZagLibraryRepositorySourceLabel(bundleID: app.identifier)
 
 				Divider()
 
@@ -251,55 +255,6 @@ struct LibraryCellView: View {
 			)
 		}
 
-	}
-
-	// MARK: - Repository Origin
-
-	private var repositoryOrigin: (AltSource, ASRepository)? {
-		guard let bundleID = app.identifier, !bundleID.isEmpty else {
-			return nil
-		}
-
-		let origins = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOrigins"
-		) as? [String: String]
-		let origin = origins?[bundleID]
-
-		if let origin {
-			if let match = sourcesViewModel.sources.first(where: { storedSource, repository in
-				storedSource.sourceURL?.absoluteString == origin ||
-				repository.id == origin ||
-				repository.website?.absoluteString == origin ||
-				repository.name == origin
-			}) {
-				return match
-			}
-		}
-
-		// Repository reconciliation records a unique legacy origin when it is
-		// safe to do so. Do not rescan every app in every repository from each
-		// visible row; that made scrolling cost grow with the entire catalog.
-		return nil
-	}
-
-	private var repositoryIconURL: URL? {
-		if let iconURL = repositoryOrigin?.1.currentIconURL {
-			return iconURL
-		}
-
-		guard let bundleID = app.identifier, !bundleID.isEmpty else {
-			return nil
-		}
-		let icons = UserDefaults.standard.dictionary(
-			forKey: "zagStore.repositoryOriginIcons"
-		) as? [String: String]
-		guard
-			let value = icons?[bundleID],
-			let url = URL(string: value)
-		else {
-			return nil
-		}
-		return url
 	}
 
 	// MARK: - Description
@@ -490,34 +445,22 @@ extension LibraryCellView {
 			let certRevoked = certificate?.revoked == true
 			let certInfo = certificate?.expiration?.expirationInfo()
 			ZStack {
-				if isManagedInstalled, let update = availableUpdate {
-					_installedUpdateAction(update)
-				} else if isManagedInstalled, let id = app.identifier {
-					ZagActionPill(title: .localized("Open")) {
-						UIApplication.openApp(with: id)
-					}
-				} else if isInstallingImmediately {
-					VStack(spacing: 2) {
-						_installingIndeterminateRing()
-							.frame(
-								width: ZagListLayout.actionWidth,
-								height: ZagListLayout.actionHeight
-							)
+				// One control: Install contracts into the progress circle and
+				// expands back into Install, Update or Open.
+				ZagInstallControl(
+					mode: _signedControlMode(update: isManagedInstalled ? availableUpdate : nil),
+					action: { _signedControlTap(update: isManagedInstalled ? availableUpdate : nil) },
+					cancelAction: _canCancelFromControl ? _requestCancel : nil
+				)
 
-						Text(.localized("Installing..."))
-							.font(.system(size: 9, weight: .medium))
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else {
-					ZagActionPill(title: .localized("Install")) {
-						_installImmediately(app)
-					}
-				}
-
-				if !isInstallingImmediately && certRevoked {
+				if let caption = _signedCaption(update: isManagedInstalled ? availableUpdate : nil) {
+					Text(caption)
+						.font(.system(size: 9, weight: .medium))
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+						.frame(width: 88, height: 11)
+						.offset(y: 26)
+				} else if certRevoked {
 					Text(.localized("Revoked"))
 						.font(
 							.system(
@@ -528,7 +471,7 @@ extension LibraryCellView {
 						.foregroundStyle(Color.red)
 						.lineLimit(1)
 						.offset(y: 24)
-				} else if !isInstallingImmediately, let certInfo {
+				} else if let certInfo {
 					Text(certInfo.formatted)
 						.font(
 							.system(
@@ -543,64 +486,80 @@ extension LibraryCellView {
 			}
 			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.compactRowHeight, alignment: .center)
 			} else {
-				if isSigningImmediately {
-					VStack(spacing: 2) {
-						_signingIndeterminateRing()
-							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+				ZStack {
+					// One control: Sign contracts into the circle while signing
+					// and installing, and expands back.
+					ZagInstallControl(
+						mode: (isSigningImmediately || isInstallingImmediately)
+							? .spinner(.none)
+							: .pill(ZagInstallPill(title: .localized("Sign"), accessibilityLabel: "Sign \(app.name ?? "app")")),
+						action: {
+							if askCertificateEveryTime {
+								selectedSigningAppPresenting = AnyApp(base: app)
+							} else {
+								_signImmediately(app)
+							}
+						},
+						cancelAction: _canCancelFromControl ? _requestCancel : nil
+					)
 
-						Text(.localized("Signing..."))
+					if isSigningImmediately || isInstallingImmediately {
+						Text(_jobCaption ?? (isSigningImmediately ? .localized("Signing...") : .localized("Installing...")))
 							.font(.system(size: 9, weight: .medium))
 							.foregroundStyle(.secondary)
 							.lineLimit(1)
 							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else if isInstallingImmediately {
-					VStack(spacing: 2) {
-						_installingIndeterminateRing()
-							.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
-
-						Text(.localized("Installing..."))
-							.font(.system(size: 9, weight: .medium))
-							.foregroundStyle(.secondary)
-							.lineLimit(1)
-							.frame(width: 88, height: 11)
-					}
-					.transition(.opacity)
-				} else {
-					ZagActionPill(title: .localized("Sign")) {
-						if askCertificateEveryTime {
-							selectedSigningAppPresenting = AnyApp(base: app)
-						} else {
-							_signImmediately(app)
-						}
+							.offset(y: 26)
 					}
 				}
+				.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
 			}
 	}
 
-	@ViewBuilder
-	private func _installedUpdateAction(_ update: UpdateManager.AvailableUpdate) -> some View {
-		let stage = updateTransaction.stage(for: update)
-		ZStack {
-			if let stage, !isFailedUpdateStage(stage) {
-				_installingIndeterminateRing()
-					.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
-			} else {
-				ZagActionPill(title: stage?.title ?? .localized("Update")) {
-					_startInstalledUpdate(update)
-				}
-			}
-			if !updateStageCaption(stage).isEmpty {
-				Text(updateStageCaption(stage))
-					.font(.system(size: 9, weight: .medium))
-					.foregroundStyle(.secondary)
-					.lineLimit(1)
-					.frame(width: 88, height: 11)
-					.offset(y: 26)
-			}
+	// MARK: - Install control
+
+	/// The Signed row's action, in the same order as the previous branches.
+	private func _signedControlMode(update: UpdateManager.AvailableUpdate?) -> ZagInstallControlMode {
+		if let update {
+			let stage = updateTransaction.stage(for: update)
+			if let stage, !isFailedUpdateStage(stage) { return .spinner(.none) }
+			return .pill(ZagInstallPill(title: stage?.title ?? .localized("Update"), accessibilityLabel: "Update \(app.name ?? "app")"))
 		}
-		.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+		if isManagedInstalled, app.identifier != nil {
+			return .pill(ZagInstallPill(title: .localized("Open"), accessibilityLabel: "Open \(app.name ?? "app")"))
+		}
+		if isInstallingImmediately { return .spinner(.none) }
+		return .pill(ZagInstallPill(title: .localized("Install"), accessibilityLabel: "Install \(app.name ?? "app")"))
+	}
+
+	private func _signedControlTap(update: UpdateManager.AvailableUpdate?) {
+		if let update {
+			_startInstalledUpdate(update)
+		} else if isManagedInstalled, let id = app.identifier {
+			UIApplication.openApp(with: id)
+		} else if !isInstallingImmediately {
+			_installImmediately(app)
+		}
+	}
+
+	private func _signedCaption(update: UpdateManager.AvailableUpdate?) -> String? {
+		if let update {
+			let caption = updateStageCaption(updateTransaction.stage(for: update))
+			return caption.isEmpty ? nil : caption
+		}
+		if isInstallingImmediately { return _jobCaption ?? .localized("Installing...") }
+		return nil
+	}
+
+	private var _canCancelFromControl: Bool {
+		guard let job = jobs.job(_jobKey) else { return false }
+		return job.offersCancel && job.stage.allowsCancel && !job.cancelRequested
+	}
+
+	private func _requestCancel() {
+		UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+		let response = jobs.requestCancel(_jobKey)
+		ZagLogger.shared.info("Library Install", "Cancel requested: \(app.name ?? "app") | \(response)")
 	}
 
 	private func isFailedUpdateStage(_ stage: ZagUpdateTransactionManager.Stage) -> Bool {
@@ -637,54 +596,6 @@ extension LibraryCellView {
 		}
 	}
 
-	private func _signingIndeterminateRing() -> some View {
-		ZStack {
-			Circle()
-				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0.08, to: 0.72)
-				.stroke(
-					Color.accentColor,
-					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-				)
-				.rotationEffect(.degrees(signingRingRotation - 90))
-		}
-		.frame(width: 31, height: 31)
-		.onAppear {
-			signingRingRotation = 0
-			withAnimation(
-				.linear(duration: 0.85)
-					.repeatForever(autoreverses: false)
-			) {
-				signingRingRotation = 360
-			}
-		}
-	}
-
-	private func _installingIndeterminateRing() -> some View {
-		ZStack {
-			Circle()
-				.stroke(Color.accentColor.opacity(0.22), lineWidth: 2.3)
-			Circle()
-				.trim(from: 0.08, to: 0.72)
-				.stroke(
-					Color.accentColor,
-					style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-				)
-				.rotationEffect(.degrees(installingRingRotation - 90))
-		}
-		.frame(width: 31, height: 31)
-		.onAppear {
-			installingRingRotation = 0
-			withAnimation(
-				.linear(duration: 0.85)
-					.repeatForever(autoreverses: false)
-			) {
-				installingRingRotation = 360
-			}
-		}
-	}
-
 	private func _installImmediately(
 		_ app: AppInfoPresentable,
 		importedAfterSigning: AppInfoPresentable? = nil
@@ -701,6 +612,7 @@ extension LibraryCellView {
 
 		UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
+		let key = _jobKey
 		Task { @MainActor in
 			do {
 				let archiveHandler = ArchiveHandler(app: app)
@@ -712,20 +624,31 @@ extension LibraryCellView {
 						at: packageURL.deletingLastPathComponent()
 					)
 				}
+				// Safe point: packaging finished.
+				try jobs.checkpoint(key)
+				jobs.advance(key, to: .preparingMobileDataFix)
 
-				try await withCheckedThrowingContinuation {
-					(continuation: CheckedContinuation<Void, Error>) in
+				// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
+				let coordinator = ZagMobileDataInstallCoordinator.shared
+				try await coordinator.install(jobID: app.uuid ?? UUID().uuidString, bundleID: app.identifier, cancelRequested: { jobs.isCancelRequested(key) }) {
+					// Last safe point; after this the installer must finish.
+					try jobs.beginInstalling(key)
+					defer { if coordinator.usingMobileDataFix { jobs.advance(key, to: .restoringMobileData) } }
+					try await withCheckedThrowingContinuation {
+						(continuation: CheckedContinuation<Void, Error>) in
 
-					do {
-						try ZagRPPairingCore.shared.installGate4IPA(
-							at: packageURL,
-							deviceIP: "10.7.0.1",
-							completion: { result in
-								continuation.resume(with: result)
-							}
-						)
-					} catch {
-						continuation.resume(throwing: error)
+						do {
+							try ZagRPPairingCore.shared.installGate4IPA(
+								at: packageURL,
+								deviceIP: ZagDeviceLink.peerAddress,
+								retryTransientFailures: true,
+								completion: { result in
+									continuation.resume(with: result)
+								}
+							)
+						} catch {
+							continuation.resume(throwing: error)
+						}
 					}
 				}
 
@@ -750,6 +673,16 @@ extension LibraryCellView {
 						Storage.shared.deleteApp(for: importedAfterSigning)
 					}
 				}
+			} catch where Self._isCancellation(error) {
+				// Cancelled before installation: keep the Signed record and,
+				// in a Sign -> Install transaction, the Imported record too.
+				withAnimation(.easeInOut(duration: 0.25)) {
+					isInstallingImmediately = false
+				}
+				if importedAfterSigning != nil, let signedUUID = app.uuid {
+					onInstallFailedAfterSigning?(signedUUID)
+				}
+				ZagLogger.shared.info("Library Install", "Cancelled before installation: \(app.name ?? "app")")
 			} catch {
 				withAnimation(.easeInOut(duration: 0.25)) {
 					isInstallingImmediately = false
@@ -866,6 +799,16 @@ extension LibraryCellView {
 						return
 					}
 
+					// Safe point: signing committed the Signed record. A cancel
+					// keeps it and the Imported record, and installs nothing.
+					if jobs.isCancelRequested(_jobKey) {
+						withAnimation(.easeInOut(duration: 0.25)) {
+							isSigningImmediately = false
+						}
+						ZagLogger.shared.info("Library Install", "Cancelled after signing: \(app.name ?? "app")")
+						return
+					}
+
 					onSignedForInstall?(signedUUID)
 
 					// Keep the Imported row in place. Only its operational
@@ -901,3 +844,109 @@ extension LibraryCellView {
 
 }
 
+// MARK: - Repository Origin
+
+/// Resolves the repository an installed app came from, using provenance
+/// recorded by repository reconciliation. It never rescans every app in every
+/// repository, so its cost does not grow with the catalogue.
+enum ZagLibraryRepositoryOrigin {
+	static func resolve(
+		bundleID: String?,
+		in sources: [AltSource: ASRepository]
+	) -> (AltSource, ASRepository)? {
+		guard let bundleID, !bundleID.isEmpty else { return nil }
+		let origins = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOrigins"
+		) as? [String: String]
+		guard let origin = origins?[bundleID] else { return nil }
+		return sources.first(where: { storedSource, repository in
+			storedSource.sourceURL?.absoluteString == origin ||
+			repository.id == origin ||
+			repository.website?.absoluteString == origin ||
+			repository.name == origin
+		})
+	}
+
+	static func iconURL(
+		bundleID: String?,
+		origin: (AltSource, ASRepository)?
+	) -> URL? {
+		if let iconURL = origin?.1.currentIconURL {
+			return iconURL
+		}
+		guard let bundleID, !bundleID.isEmpty else { return nil }
+		let icons = UserDefaults.standard.dictionary(
+			forKey: "zagStore.repositoryOriginIcons"
+		) as? [String: String]
+		guard let value = icons?[bundleID] else { return nil }
+		return URL(string: value)
+	}
+}
+
+/// The small repository badge on an Apps row. It observes repository state
+/// itself, so a repository refresh re-renders only this badge.
+private struct ZagLibraryRepositoryBadge: View {
+	let bundleID: String?
+	let onTap: ((AltSource) -> Void)?
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+
+	var body: some View {
+		let origin = ZagLibraryRepositoryOrigin.resolve(
+			bundleID: bundleID,
+			in: sourcesViewModel.sources
+		)
+		if let repositoryIconURL = ZagLibraryRepositoryOrigin.iconURL(
+			bundleID: bundleID,
+			origin: origin
+		) {
+			Button {
+				guard let source = origin?.0 else { return }
+				UIImpactFeedbackGenerator(style: .light).impactOccurred()
+				onTap?(source)
+			} label: {
+				LazyImage(url: repositoryIconURL) { state in
+					if let image = state.image {
+						image
+							.appIconStyle(
+								size: 20,
+								isCircle: true,
+								background: Color(
+									uiColor: .secondarySystemBackground
+								)
+							)
+							.offset(x: 46, y: 4)
+					}
+				}
+			}
+			.buttonStyle(.plain)
+			.accessibilityLabel(
+				Text("\(origin?.1.name ?? "Repository") repository")
+			)
+			.accessibilityHint(
+				Text("Opens this app's source repository")
+			)
+			.accessibilityAddTraits(.isButton)
+		}
+	}
+}
+
+/// The "Source:" item in an Apps row's context menu.
+private struct ZagLibraryRepositorySourceLabel: View {
+	let bundleID: String?
+	@ObservedObject private var sourcesViewModel = SourcesViewModel.shared
+
+	var body: some View {
+		if let repositoryName = ZagLibraryRepositoryOrigin.resolve(
+			bundleID: bundleID,
+			in: sourcesViewModel.sources
+		)?.1.name {
+			Label(
+				"Source: \(repositoryName)",
+				systemImage: "shippingbox"
+			)
+			.disabled(true)
+
+			Divider()
+		}
+	}
+}

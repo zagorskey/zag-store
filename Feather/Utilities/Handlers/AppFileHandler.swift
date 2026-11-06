@@ -60,6 +60,9 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		
 		try await withCheckedThrowingContinuation { continuation in
 			DispatchQueue.global(qos: .utility).async {
+				// Zip reports progress per file; thousands of main-thread hops
+				// stall the UI. Report in 1 % steps (and the final value).
+				var lastReported = -1.0
 				do {
 					try Zip.unzipFile(
 						self._ipa,
@@ -67,6 +70,8 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 						overwrite: true,
 						password: nil,
 						progress: { progress in
+							guard progress >= 1 || progress - lastReported >= 0.01 else { return }
+							lastReported = progress
 							if let download = download {
 								DispatchQueue.main.async {
 									download.unpackageProgress = progress

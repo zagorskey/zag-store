@@ -41,6 +41,7 @@ extension EnvironmentValues {
 // Shared avatar for pushed Settings destinations. Keep it on the destination
 // (not the parent) so the native back button and existing actions remain intact.
 private struct ZagSettingsDestinationAvatar: ViewModifier {
+    var showClose = true
     @Environment(\.zagInsideAccountPopup) private var insideAccountPopup
     @Environment(\.zagAccountClose) private var closeAccount
     func body(content: Content) -> some View {
@@ -54,7 +55,7 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
                         .tint(.primary)
                         .padding(.trailing, -2)
                 }
-            } else if let closeAccount {
+            } else if showClose, let closeAccount {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: closeAccount) {
                         Image(systemName: "xmark")
@@ -68,14 +69,13 @@ private struct ZagSettingsDestinationAvatar: ViewModifier {
 }
 
 extension View {
-    func zagSettingsDestinationAvatar() -> some View {
-        modifier(ZagSettingsDestinationAvatar())
+    func zagSettingsDestinationAvatar(showClose: Bool = true) -> some View {
+        modifier(ZagSettingsDestinationAvatar(showClose: showClose))
     }
 }
 
 private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 	case display
-	case pages
 	case certificates
 	case features
 	case diagnostics
@@ -89,14 +89,13 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .display: return "Display"
-		case .pages: return "Pages"
+		case .display: return "Zag Store"
 		case .certificates: return "Certificates"
 		case .features: return "Features"
 		case .diagnostics: return "Diagnostics"
 		case .health: return "Health"
 		case .refreshingApps: return "Refreshing Apps"
-		case .aboutUs: return "About Us"
+		case .aboutUs: return "About"
 		case .misc: return "Browse"
 		case .reset: return "Reset"
 		}
@@ -104,15 +103,14 @@ private enum ZagSettingsSection: String, CaseIterable, Identifiable {
 }
 
 private let zagDefaultSettingsSectionOrder: [ZagSettingsSection] = [
-	.display,
+	.aboutUs,
 	.certificates,
+	.display,
 	.features,
-	.pages,
 	.misc,
 	.refreshingApps,
 	.health,
-	.diagnostics,
-	.aboutUs
+	.diagnostics
 ]
 
 // Theme the switch track without recoloring navigation buttons or links.
@@ -160,6 +158,7 @@ struct SettingsView: View {
 	@State private var _routeRPPairingDiagnostics = false
 	@State private var _routeUpdateDiagnostics = false
     @State private var _settingsSearchText = ""
+    @State private var _settingsSearchEditing = false
     @State private var _settingsDictationAvailable = false
 
     private var _settingsSearchQuery: String {
@@ -231,6 +230,7 @@ struct SettingsView: View {
                     if !_settingsSearchQuery.isEmpty {
                         _settingsSearchResults
                     } else {
+					_supportSection
 					ForEach(_settingsSectionOrder) { section in
 						_settingsSection(section)
 					}
@@ -263,13 +263,14 @@ struct SettingsView: View {
                     text: $_settingsSearchText,
                     prompt: "Search Settings",
                     dictationAvailable: _settingsDictationAvailable,
-                    startDictation: _startSettingsDictation
+                    startDictation: _startSettingsDictation,
+                    isEditing: $_settingsSearchEditing
                 )
-                .frame(height: 50)
-                .zagSearchGlass()
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                // Close clears the search and puts the keyboard away, as on Apps.
+                .zagBottomSearchPlacement(showsClose: _settingsSearchEditing) {
+                    _settingsSearchText = ""
+                    _settingsSearchEditing = false
+                }
             }
 
 			.tint(Color(hex: userTintColor))
@@ -313,6 +314,14 @@ struct SettingsView: View {
 						}
 						.accessibilityLabel("Back")
 					}
+					if !embeddedInAccountNavigation {
+						Button {
+							UIApplication.open("https://github.com/zagorskey/zag-store")
+						} label: {
+							ZagGitHubToolbarGlyph()
+						}
+						.accessibilityLabel("GitHub Repository")
+					}
 					if _isReorderingSettings {
 						Button {
 							withAnimation(.snappy) {
@@ -339,21 +348,6 @@ struct SettingsView: View {
 						}
 						.accessibilityLabel("Settings Options")
 
-						if !embeddedInAccountNavigation {
-						Button {
-							if _advancedSettingsUnlocked {
-								withAnimation(.snappy) {
-									_advancedSettingsUnlocked = false
-								}
-								UIImpactFeedbackGenerator(style: .light).impactOccurred()
-							} else {
-								_presentAdvancedSettingsWarning()
-							}
-						} label: {
-							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
-						}
-						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
-						}
 					}
 				}
 
@@ -376,11 +370,16 @@ struct SettingsView: View {
 						.accessibilityLabel("Close")
 					} else {
 						Button {
-							UIApplication.open("https://github.com/zagorskey/zag-store")
+							if _advancedSettingsUnlocked {
+								withAnimation(.snappy) { _advancedSettingsUnlocked = false }
+								UIImpactFeedbackGenerator(style: .light).impactOccurred()
+							} else {
+								_presentAdvancedSettingsWarning()
+							}
 						} label: {
-							Image(systemName: "chevron.left.forwardslash.chevron.right")
+							Image(systemName: _advancedSettingsUnlocked ? "lock.open.fill" : "lock.fill")
 						}
-						.accessibilityLabel("GitHub Repository")
+						.accessibilityLabel(_advancedSettingsUnlocked ? "Lock Advanced Settings" : "Unlock Advanced Settings")
 						ZagProfileToolbarButton()
 							.tint(.primary)
 							.padding(.trailing, -2)
@@ -427,6 +426,54 @@ struct SettingsView: View {
 			)
 		}
 	}
+}
+
+// Custom GitHub-inspired cat silhouette, tinted like the native toolbar icons.
+// Exact Octicons GitHub mark supplied as the shape reference.
+// The 16×16 vector is scaled to the same 23-point height as neighbouring toolbar icons.
+private struct ZagGitHubMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 8, y: 0))
+        path.addCurve(to: CGPoint(x: 0, y: 8), control1: CGPoint(x: 3.58, y: 0), control2: CGPoint(x: 0, y: 3.58))
+        path.addCurve(to: CGPoint(x: 5.47, y: 15.59), control1: CGPoint(x: 0, y: 11.54), control2: CGPoint(x: 2.29, y: 14.53))
+        path.addCurve(to: CGPoint(x: 6.02, y: 15.21), control1: CGPoint(x: 5.87, y: 15.66), control2: CGPoint(x: 6.02, y: 15.42))
+        path.addCurve(to: CGPoint(x: 6.01, y: 13.72), control1: CGPoint(x: 6.02, y: 15.02), control2: CGPoint(x: 6.01, y: 14.39))
+        path.addCurve(to: CGPoint(x: 3.32, y: 12.78), control1: CGPoint(x: 4, y: 14.09), control2: CGPoint(x: 3.48, y: 13.23))
+        path.addCurve(to: CGPoint(x: 2.5, y: 11.65), control1: CGPoint(x: 3.23, y: 12.55), control2: CGPoint(x: 2.84, y: 11.84))
+        path.addCurve(to: CGPoint(x: 2.49, y: 11.12), control1: CGPoint(x: 2.22, y: 11.5), control2: CGPoint(x: 1.82, y: 11.13))
+        path.addCurve(to: CGPoint(x: 3.72, y: 11.94), control1: CGPoint(x: 3.12, y: 11.11), control2: CGPoint(x: 3.57, y: 11.7))
+        path.addCurve(to: CGPoint(x: 6.05, y: 12.6), control1: CGPoint(x: 4.44, y: 13.15), control2: CGPoint(x: 5.59, y: 12.81))
+        path.addCurve(to: CGPoint(x: 6.56, y: 11.53), control1: CGPoint(x: 6.12, y: 12.08), control2: CGPoint(x: 6.33, y: 11.73))
+        path.addCurve(to: CGPoint(x: 2.92, y: 7.58), control1: CGPoint(x: 4.78, y: 11.33), control2: CGPoint(x: 2.92, y: 10.64))
+        path.addCurve(to: CGPoint(x: 3.74, y: 5.43), control1: CGPoint(x: 2.92, y: 6.71), control2: CGPoint(x: 3.23, y: 5.99))
+        path.addCurve(to: CGPoint(x: 3.82, y: 3.31), control1: CGPoint(x: 3.66, y: 5.23), control2: CGPoint(x: 3.38, y: 4.41))
+        path.addCurve(to: CGPoint(x: 6.02, y: 4.13), control1: CGPoint(x: 3.82, y: 3.31), control2: CGPoint(x: 4.49, y: 3.1))
+        path.addCurve(to: CGPoint(x: 8.02, y: 3.86), control1: CGPoint(x: 6.66, y: 3.95), control2: CGPoint(x: 7.34, y: 3.86))
+        path.addCurve(to: CGPoint(x: 10.02, y: 4.13), control1: CGPoint(x: 8.7, y: 3.86), control2: CGPoint(x: 9.38, y: 3.95))
+        path.addCurve(to: CGPoint(x: 12.22, y: 3.31), control1: CGPoint(x: 11.55, y: 3.09), control2: CGPoint(x: 12.22, y: 3.31))
+        path.addCurve(to: CGPoint(x: 12.3, y: 5.43), control1: CGPoint(x: 12.66, y: 4.41), control2: CGPoint(x: 12.38, y: 5.23))
+        path.addCurve(to: CGPoint(x: 13.12, y: 7.58), control1: CGPoint(x: 12.81, y: 5.99), control2: CGPoint(x: 13.12, y: 6.7))
+        path.addCurve(to: CGPoint(x: 9.47, y: 11.53), control1: CGPoint(x: 13.12, y: 10.65), control2: CGPoint(x: 11.25, y: 11.33))
+        path.addCurve(to: CGPoint(x: 10.01, y: 13.01), control1: CGPoint(x: 9.76, y: 11.78), control2: CGPoint(x: 10.01, y: 12.26))
+        path.addCurve(to: CGPoint(x: 10, y: 15.21), control1: CGPoint(x: 10.01, y: 14.08), control2: CGPoint(x: 10, y: 14.94))
+        path.addCurve(to: CGPoint(x: 10.55, y: 15.59), control1: CGPoint(x: 10, y: 15.42), control2: CGPoint(x: 10.15, y: 15.67))
+        path.addCurve(to: CGPoint(x: 16, y: 8), control1: CGPoint(x: 13.71, y: 14.53), control2: CGPoint(x: 16, y: 11.53))
+        path.addCurve(to: CGPoint(x: 8, y: 0), control1: CGPoint(x: 16, y: 3.58), control2: CGPoint(x: 12.42, y: 0))
+        path.closeSubpath()
+        return path.applying(CGAffineTransform(translationX: rect.minX, y: rect.minY).scaledBy(x: rect.width / 16, y: rect.height / 16))
+    }
+}
+
+private struct ZagGitHubToolbarGlyph: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZagGitHubMark()
+            .fill(colorScheme == .dark ? Color.white : Color.black)
+            .frame(width: 23, height: 23)
+            .accessibilityHidden(true)
+    }
 }
 
 // MARK: - View extension
@@ -495,12 +542,13 @@ extension SettingsView {
     // and advanced settings only when unlocked.
     private var _settingsSearchResults: some View {
         Group {
+            if _settingsSearchMatches("Support Zag Store Donate Contribute Patreon PayPal Stripe Ko-fi GitHub Sponsors Buy Me a Coffee Independent") {
+                _supportSection
+            }
             ForEach(_settingsSectionOrder.filter { section in
                 switch section {
                 case .display:
-                    return _settingsSearchMatches("Display Appearance App Icon")
-                case .pages:
-                    return _settingsSearchMatches("Pages Customise Dock Reset to Default Animated Splash Screen Splash Sound Mute Unmute Remember Last Page Default Start Page")
+                    return _settingsSearchMatches("Zag Store Appearance App Icon Bottom Dock Customise Dock Shrink on Scroll Splash Screen Animated Splash Screen Splash Sound Main Pages Pages Remember Last Page Default Start Page Sliding Pages")
                 case .certificates:
                     return _settingsSearchMatches("Certificates Active Certificate Ask every time Allow Customisation Signing")
                 case .features:
@@ -512,7 +560,7 @@ extension SettingsView {
                 case .refreshingApps:
                     return _settingsSearchMatches("Refreshing Apps Background Updates Automatic Preparation Automatic Installation Disable Idle Timeout")
                 case .aboutUs:
-                    return _settingsSearchMatches("About Us Zag Store Submit Feedback Bug Report")
+                    return _settingsSearchMatches("About About Us Zag Store GitHub Feedback Bug Report")
                 case .misc:
                     return _settingsSearchMatches("Browse Documents Archives Certificates Files")
                 case .reset:
@@ -538,80 +586,57 @@ extension SettingsView {
 	private func _settingsSection(_ section: ZagSettingsSection) -> some View {
 		switch section {
 		case .display:
-			Section {
-				NavigationLink(destination: AppearanceView().zagSettingsDestinationAvatar()) {
-					Label(.localized("Appearance"), systemImage: "circle.lefthalf.filled")
-				}
-				NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
-					Label(.localized("App Icon"), systemImage: "app.badge")
-				}
-			} header: {
-				Text("Display")
-			}
-
-		case .pages:
-			Section {
-                NavigationLink(destination: ZagDockCustomizationView().zagSettingsDestinationAvatar()) {
-                    Label { Text("Customise Dock") } icon: { Image(systemName: "square.grid.3x2").foregroundStyle(ZagWideGamutTint.color(hex: userTintColor)) }
+            Section {
+                NavigationLink(destination: AppearanceView().zagSettingsDestinationAvatar()) {
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
                 }
-				Toggle(isOn: $_animatedSplashEnabled) {
-					Label("Animated Splash Screen", systemImage: "sparkles.rectangle.stack")
-				}
-				Toggle(isOn: $_splashSoundEnabled) {
-					Label("Splash Sound", systemImage: _splashSoundEnabled ? "speaker.wave.2" : "speaker.slash")
-				}
-				.disabled(!_animatedSplashEnabled)
-				Toggle(isOn: $_rememberLastPage) {
-					Label("Remember Last Page", systemImage: "clock.arrow.circlepath")
-				}
-
-				Picker(selection: $_defaultStartPage) {
-					ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
-						Text(tab.title).tag(tab.rawValue)
-					}
-				} label: {
-					Label("Default Start Page", systemImage: "rectangle.portrait.and.arrow.right")
-				}
-				.disabled(_rememberLastPage)
-                .onChange(of: _dockTabs) { _ in
-                    if !ZagDockConfiguration.tabs.contains(where: { $0.rawValue == _defaultStartPage }) {
-                        _defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+                NavigationLink(destination: ZagDockCustomizationView().zagSettingsDestinationAvatar()) {
+                    Label {
+                        Text("Bottom Dock")
+                    } icon: {
+                        ZagPhoneSettingsIcon(content: .dock)
+                             .frame(width: 25, height: 25)
+                            .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
                     }
                 }
-			}
-			header: {
-				Text("Pages")
-			}
-			footer: {
-				Text(
-					(
-						_rememberLastPage
-							? "Zag Store will reopen on the last main page you used."
-							: "Choose which main page Zag Store opens on."
-					)
-					+ " The cinematic splash plays only on cold launches. Tap anywhere during video playback to skip. Sound can be muted separately; the iPhone silent switch is respected."
-				)
-			}
+                NavigationLink(destination: ZagSplashScreenSettingsView().zagSettingsDestinationAvatar()) {
+                    Label {
+                        Text("Splash Screen")
+                    } icon: {
+                        ZagPhoneSettingsIcon(content: .splash)
+                            .frame(width: 25, height: 25)
+                            .foregroundStyle(ZagWideGamutTint.color(hex: userTintColor))
+                    }
+                }
+                NavigationLink(destination: ZagPagesSettingsView().zagSettingsDestinationAvatar()) {
+                    Label("Main Pages", systemImage: "square.on.square")
+                }
+                NavigationLink(destination: AppIconView(currentIcon: $_currentIcon).zagSettingsDestinationAvatar()) {
+                    Label("App Icon", systemImage: "app.badge")
+                }
+            } header: {
+                Text("Zag Store")
+            } footer: {
+                Text("Unleash full Zag Store customisation")
+            }
 
 		case .certificates:
 			Section {
-				NavigationLink(destination: CertificatesView().zagSettingsDestinationAvatar()) {
+				NavigationLink(destination: CertificatesView().zagSettingsDestinationAvatar(showClose: false)) {
 					Label {
                         Text(.localized("Certificates"))
                     } icon: {
-                        Image(systemName: _certificates.isEmpty ? "checkmark.seal" : "checkmark.seal.fill")
+                        Image(systemName: _certificates.isEmpty ? "checkmark.shield" : "checkmark.shield.fill")
                             .foregroundStyle(_certificates.isEmpty ? Color.primary : Color(uiColor: UIColor(displayP3Red: 0.12, green: 0.83, blue: 0.34, alpha: 1)))
                     }
 				}
 
 				if let cert = selectedCertificate {
-					VStack(alignment: .leading, spacing: 8) {
-						CertificatesCellView(cert: cert)
-						Divider().frame(maxWidth: .infinity)
-					}
+					CertificatesCellView(cert: cert)
+                        .padding(.vertical, 0)
 					.contentShape(Rectangle())
 					.onTapGesture { _selectedCertificateInfo = cert }
-					.listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
 					.swipeActions(edge: .trailing) {
 						Button(role: .destructive) {
 							_pendingCertificateDelete = cert
@@ -630,7 +655,7 @@ extension SettingsView {
 			} header: {
 				Text(.localized("Certificates"))
 			} footer: {
-				Text(.localized("Add and manage certificates used for signing apps."))
+				Text("Manage certificated used for signing apps.")
 			}
 
 		case .features:
@@ -810,6 +835,18 @@ extension SettingsView {
 			? _storedCustomSettingsSectionOrder()
 			: zagDefaultSettingsSectionOrder
 	}
+	/// Always first, outside the reorderable sections. A plain Form row keeps
+	/// the native Settings margins, corner radius and spacing.
+	private var _supportSection: some View {
+		let accent = ZagWideGamutTint.color(hex: userTintColor)
+		return Section {
+			NavigationLink(destination: ZagSupportContributionsView().zagSettingsDestinationAvatar()) {
+				ZagSupportSettingsRow(accent: accent)
+			}
+			.listRowBackground(ZagSupportCardBackground(accent: accent))
+		}
+	}
+
 	@ViewBuilder
 	private var _backupAndRestoreSection: some View {
 		Section {
@@ -831,12 +868,35 @@ extension SettingsView {
 				Label {
 					Text("Zag Store")
 				} icon: {
-					FRAppIconView(size: 23)
+					FRAppIconView(size: 25)
 				}
 			}
-            
-			Button(.localized("Submit Feedback"), systemImage: "safari") {
-				let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
+
+            Button {
+                UIApplication.open("https://github.com/zagorskey/zag-store")
+            } label: {
+                // Built like the Zag Store and Feedback rows: a plain Label,
+                // so the list draws only its own separator.
+                HStack {
+                    Label {
+                        Text("GitHub")
+                    } icon: {
+                        ZagGitHubMark()
+                            .fill(ZagWideGamutTint.color(hex: userTintColor))
+                            .frame(width: 25, height: 25)
+                    }
+                    Spacer(minLength: 8)
+                    // Sized and coloured like the chevron on the row above.
+                    Image(systemName: "arrow.up.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                        .accessibilityHidden(true)
+                }
+            }
+
+            Button {
+
+                let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
 					UIApplication.open(_makeGitHubIssueURL(url: _githubUrl))
 				}
 				
@@ -849,11 +909,18 @@ extension SettingsView {
 					message: nil,
 					actions: [bugAction, chooseAction]
 				)
-			}
-		} header: {
-			Text("About Us")
-		} footer: {
-			Text(.localized("If any issues occur within the app please report it via the GitHub repository. When submitting an issue, make sure to submit detailed information."))
+            } label: {
+                Label {
+                    Text("Feedback")
+                } icon: {
+                    Image(systemName: "text.bubble")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 25, height: 25)
+                }
+            }
+        } header: {
+            Text("About")
 		}
 	}
     
@@ -2372,3 +2439,512 @@ private struct ZagInstallationDiagnosticsView: View {
 }
 
 
+
+
+// MARK: - Voluntary support
+/// The Support Zag Store card at the top of Settings. It is a native Form
+/// row (so it keeps the Settings margins, corner radius and navigation),
+/// given more room, a theme-tinted Liquid Glass heart and a quiet wash of the
+/// theme colour. Everything is static: one bounce on first appearance only.
+private struct ZagSupportSettingsRow: View {
+	let accent: Color
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	@Environment(\.dynamicTypeSize) private var dynamicTypeSize
+	@ScaledMetric(relativeTo: .title3) private var iconSize: CGFloat = 54
+	@State private var hasAppeared = false
+
+	var body: some View {
+		// At accessibility text sizes the icon sits above the text, so the
+		// text keeps the full width of the card.
+		let stacked = dynamicTypeSize.isAccessibilitySize
+		HStack(alignment: .center, spacing: 16) {
+			if !stacked {
+				icon
+			}
+			VStack(alignment: .leading, spacing: 14) {
+				if stacked {
+					icon
+				}
+				titles
+				Text("Enjoying the experience? Your support helps us make it even better for everyone.")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+		}
+		.multilineTextAlignment(.leading)
+		.padding(.vertical, 14)
+		.accessibilityElement(children: .combine)
+		.accessibilityAddTraits(.isButton)
+		.onAppear { hasAppeared = true }
+	}
+
+	private var titles: some View {
+		VStack(alignment: .leading, spacing: 3) {
+			Text("Support Zag Store")
+				.font(.title3.weight(.semibold))
+				.foregroundStyle(.primary)
+			Text("Help keep it independent.")
+				.font(.subheadline)
+				.foregroundStyle(.secondary)
+		}
+	}
+
+	private var heart: some View {
+		Image(systemName: "sparkles.rectangle.stack.fill")
+			.font(.system(size: iconSize * 0.42, weight: .semibold))
+			.foregroundStyle(.white)
+			.shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
+			.frame(width: iconSize, height: iconSize)
+			.accessibilityHidden(true)
+	}
+
+	@ViewBuilder
+	private var icon: some View {
+		let bounce = !reduceMotion && hasAppeared
+		if #available(iOS 26.0, *) {
+			heart
+				.symbolEffect(.bounce, value: bounce)
+				.glassEffect(.regular.tint(accent), in: Circle())
+		} else if #available(iOS 17.0, *) {
+			heart
+				.symbolEffect(.bounce, value: bounce)
+				.background(Self.disc(accent), in: Circle())
+		} else {
+			heart
+				.background(Self.disc(accent), in: Circle())
+		}
+	}
+
+	/// Pre-iOS 26: the theme colour as a softly lit disc.
+	private static func disc(_ accent: Color) -> LinearGradient {
+		LinearGradient(
+			colors: [accent.opacity(0.85), accent],
+			startPoint: .topLeading,
+			endPoint: .bottomTrailing
+		)
+	}
+}
+
+/// Row background for the Support card: the standard grouped cell colour with
+/// a restrained wash of the theme colour from the top leading corner and a
+/// faint highlight. The Form clips it to the section's native corner radius.
+private struct ZagSupportCardBackground: View {
+	let accent: Color
+	@Environment(\.colorScheme) private var colorScheme
+
+	var body: some View {
+		let dark = colorScheme == .dark
+		ZStack {
+			Color(uiColor: .secondarySystemGroupedBackground)
+			LinearGradient(
+				stops: [
+					.init(color: accent.opacity(dark ? 0.30 : 0.18), location: 0),
+					.init(color: accent.opacity(dark ? 0.10 : 0.06), location: 0.55),
+					.init(color: accent.opacity(0), location: 1)
+				],
+				startPoint: .topLeading,
+				endPoint: .bottomTrailing
+			)
+			RadialGradient(
+				colors: [Color.white.opacity(dark ? 0.07 : 0.45), Color.white.opacity(0)],
+				center: .topLeading,
+				startRadius: 0,
+				endRadius: 220
+			)
+		}
+		.accessibilityHidden(true)
+	}
+}
+
+private struct ZagSupportContributionsView: View {
+    private enum SupportGroup: String, CaseIterable, Identifiable {
+        case direct = "Direct"
+        case community = "Community"
+        var id: String { rawValue }
+    }
+
+    @State private var group: SupportGroup = .direct
+    @State private var groupSlide = ZagTabSlideState()
+    @AppStorage("Feather.userTintColor") private var themeColorHex = "#0090FF"
+    @Environment(\.openURL) private var openURL
+
+    private let paypalURL = URL(string: "https://www.paypal.com/ncp/payment/QDG7HMX4ZDP46")!
+    private let stripeURL = URL(string: "https://buy.stripe.com/00wcN494EbB80hl4yYa3u00")!
+    private let kofiURL = URL(string: "https://ko-fi.com/zagstore")!
+    private let buyMeACoffeeURL = URL(string: "https://buymeacoffee.com/zagstore")!
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(spacing: 12) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 38, weight: .medium))
+                        .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
+                        .padding(.top, 10)
+                    Text("Support Zag Store")
+                        .font(.title2.bold())
+                    Text("Help us build a better, more open app discovery experience.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 8)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Section {
+                supportReason("Independent development", detail: "Support ongoing improvements and new features.", symbol: "chevron.left.forwardslash.chevron.right")
+                supportReason("Infrastructure and testing", detail: "Help cover servers, signing research and device testing.", symbol: "server.rack")
+                supportReason("Entirely voluntary", detail: "Every contribution helps, but no features are locked behind payment.", symbol: "heart")
+            }
+
+            Section {
+                // Settings → App Icon's full-width native scope bar.
+                ZagScopeBar(
+                    selection: Binding(
+                        get: { group.rawValue },
+                        set: { group = SupportGroup(rawValue: $0) ?? group }
+                    ).zagTabSlide($groupSlide, order: SupportGroup.allCases.map(\.rawValue)),
+                    titles: SupportGroup.allCases.map(\.rawValue)
+                )
+                .accessibilityLabel("Contribution methods")
+                .zagScopeBarFormRow()
+            } header: {
+                Text("Method")
+            }
+            .zagScopeBarSection(tightBelow: true)
+
+            if group == .direct {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .paypal)
+                            Text("PayPal")
+                        }
+                            .font(.headline)
+                        Text("Choose your contribution amount in GBP. Checkout is securely handled by PayPal.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(paypalURL)
+                        } label: {
+                            Text("Contribute with PayPal")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    .zagTabSlideInRow(groupSlide)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .stripe)
+                            Text("Stripe")
+                                .font(.headline)
+                        }
+                        Text("Choose a one-time contribution amount in GBP. Checkout is securely handled by Stripe.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(stripeURL)
+                        } label: {
+                            Text("Contribute with Stripe")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    .zagTabSlideInRow(groupSlide)
+                }
+                .zagScopeBarContentSection()
+            } else {
+                Section {
+                    comingSoonRow("Patreon", provider: .patreon)
+                        .zagTabSlideInRow(groupSlide)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .kofi)
+                            Text("Ko-fi")
+                                .font(.headline)
+                        }
+                        Text("Support Zag Store through our Ko-fi community page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(kofiURL)
+                        } label: {
+                            Text("Contribute with Ko-fi")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    .zagTabSlideInRow(groupSlide)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .buyMeACoffee)
+                            Text("Buy Me a Coffee")
+                                .font(.headline)
+                        }
+                        Text("Make a one-time contribution through our Buy Me a Coffee page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(buyMeACoffeeURL)
+                        } label: {
+                            Text("Contribute with Buy Me a Coffee")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    .zagTabSlideInRow(groupSlide)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            ZagContributionProviderIcon(provider: .githubSponsors)
+                            Text("GitHub Sponsors")
+                                .font(.headline)
+                        }
+                        Text("Support Zag Store's development through our GitHub Sponsors page.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openURL(URL(string: "https://github.com/sponsors/zagorskey")!)
+                        } label: {
+                            Text("Contribute with GitHub Sponsors")
+                                .font(.headline.weight(.bold))
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 6)
+                    .zagTabSlideInRow(groupSlide)
+                } footer: {
+                    Text("Community contributions are securely handled by each provider. Patreon will be available later.")
+                }
+                .zagScopeBarContentSection()
+            }
+
+        }
+        // Lets the Method tab bar row be exactly the bar's height, as on
+        // Settings → App Icon. Every other row here is taller than the
+        // minimum, so none of them change.
+        .environment(\.defaultMinListRowHeight, 0)
+        .navigationTitle("Support Zag Store")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(ZagWideGamutTint.color(hex: themeColorHex))
+        .zagWallpaperSurface()
+    }
+
+    private func supportReason(_ title: String, detail: String, symbol: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(ZagWideGamutTint.color(hex: themeColorHex))
+                .frame(width: 30)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func comingSoonRow(_ name: String, provider: ZagContributionProviderIcon.Provider) -> some View {
+        HStack(spacing: 12) {
+            ZagContributionProviderIcon(provider: provider)
+            Text(name)
+            Spacer()
+            Text("Coming soon")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+
+// MARK: - Zag Store contribution brand icons
+// Original brand silhouettes from Simple Icons, displayed unmodified in a
+// shared neutral rounded container. Brand marks remain owned by their holders.
+private struct ZagContributionProviderIcon: View {
+    enum Provider {
+        case paypal, stripe, patreon, kofi, buyMeACoffee, githubSponsors
+    }
+
+    let provider: Provider
+
+    private var asset: String {
+        switch provider {
+        case .paypal: return "ZagProviderPayPal"
+        case .stripe: return "ZagProviderStripe"
+        case .patreon: return "ZagProviderPatreon"
+        case .kofi: return "ZagProviderKofi"
+        case .buyMeACoffee: return "ZagProviderBuyMeACoffee"
+        case .githubSponsors: return "ZagProviderGitHubSponsors"
+        }
+    }
+
+    private var brandColor: Color {
+        switch provider {
+        case .paypal: return Color(red: 0.00, green: 0.36, blue: 0.73)
+        case .stripe: return Color(red: 0.39, green: 0.33, blue: 0.95)
+        case .patreon: return Color(red: 1.00, green: 0.27, blue: 0.29)
+        case .kofi: return Color(red: 0.17, green: 0.66, blue: 0.88)
+        case .buyMeACoffee: return Color(red: 0.98, green: 0.73, blue: 0.16)
+        case .githubSponsors: return Color(red: 0.91, green: 0.25, blue: 0.53)
+        }
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        switch provider {
+        case .paypal, .kofi, .buyMeACoffee:
+            // Full-colour vector assets retain their individually coloured paths.
+            Image(asset)
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+        default:
+            Image(asset)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(brandColor)
+        }
+    }
+
+    var body: some View {
+        artwork
+            .frame(width: 48, height: 48)
+            .frame(width: 62, height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.16), lineWidth: 0.7)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+
+// MARK: - Dedicated startup preferences
+private struct ZagSplashScreenSettingsView: View {
+    @AppStorage("ZagStore.animatedSplashEnabled") private var animatedSplashEnabled = true
+    @AppStorage("ZagStore.splashSoundEnabled") private var splashSoundEnabled = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Animated Splash Screen", isOn: $animatedSplashEnabled)
+                Toggle("Splash Sound", isOn: $splashSoundEnabled)
+                    .disabled(!animatedSplashEnabled)
+            } footer: {
+                Text("The cinematic splash plays on cold launches. Tap during playback to skip. Sound respects the iPhone silent switch.")
+            }
+        }
+        .navigationTitle("Splash Screen")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ZagPagesSettingsView: View {
+    @AppStorage(ZagPageStartupPolicy.rememberLastPageKey) private var rememberLastPage = true
+    @AppStorage(ZagPageStartupPolicy.defaultStartPageKey) private var defaultStartPage = TabEnum.sources.rawValue
+    @AppStorage(ZagDockConfiguration.storageKey) private var dockTabs = ""
+    @AppStorage(ZagPageSlide.enabledKey) private var slidingPages = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Sliding Pages", isOn: $slidingPages)
+            } footer: {
+                Text("Main pages slide in quickly when you choose them from the dock.")
+            }
+            Section {
+                Toggle("Remember Last Page", isOn: $rememberLastPage)
+                Picker("Default Start Page", selection: $defaultStartPage) {
+                    ForEach(TabEnum.defaultTabs, id: \.rawValue) { tab in
+                        Text(tab.title).tag(tab.rawValue)
+                    }
+                }
+                .disabled(rememberLastPage)
+            } footer: {
+                Text(rememberLastPage
+                    ? "Zag Store will reopen on the last main page you used."
+                    : "Choose which main page Zag Store opens on.")
+            }
+        }
+        .navigationTitle("Pages")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: dockTabs) { _ in
+            if !ZagDockConfiguration.tabs.contains(where: { $0.rawValue == defaultStartPage }) {
+                defaultStartPage = ZagDockConfiguration.tabs.first?.rawValue ?? TabEnum.discover.rawValue
+            }
+        }
+    }
+}
+
+
+// MARK: - Zag Store phone-shaped Settings icons
+/// A shared modern iPhone silhouette with a Dynamic Island and either the
+/// bottom dock or the same Z mark used by the Sources dock tab.
+private struct ZagPhoneSettingsIcon: View {
+    enum Content { case dock, splash }
+    let content: Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            ZStack {
+                RoundedRectangle(cornerRadius: w * 0.23, style: .continuous)
+                    .strokeBorder(lineWidth: 1.8)
+                    .frame(width: w * 0.68, height: h * 0.96)
+
+                Capsule()
+                    .fill(.primary)
+                    .frame(width: w * 0.18, height: h * 0.052)
+                    .offset(y: -h * 0.35)
+
+                switch content {
+                case .dock:
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                            .fill(.primary.opacity(0.20))
+                        HStack(spacing: w * 0.055) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                    .fill(.primary)
+                                    .frame(width: w * 0.085, height: h * 0.085)
+                            }
+                        }
+                    }
+                    .frame(width: w * 0.49, height: h * 0.17)
+                    .offset(y: h * 0.29)
+                case .splash:
+                    Image(uiImage: ZagSourcesTabIcon.image)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: w * 0.34, height: h * 0.34)
+                }
+            }
+            .frame(width: w, height: h)
+        }
+        .accessibilityHidden(true)
+    }
+}

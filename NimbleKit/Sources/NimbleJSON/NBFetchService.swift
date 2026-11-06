@@ -16,31 +16,69 @@ public struct NBRepositoryFetchMetric: Codable, Identifiable, Sendable {
 	public let networkSeconds: Double
 	public let decodeSeconds: Double
 	public let recordedAt: Date
+	/// HTTP status of this attempt, when a response arrived.
+	public var httpStatus: Int? = nil
+	/// Content-Length announced by the server, when known.
+	public var expectedBytes: Int64? = nil
+	/// Why the attempt failed (then a cached copy or nothing was used).
+	public var error: String? = nil
+	public var startedAt: Date? = nil
 
 	public var id: String { url }
 }
 
+/// Stored in a file rather than UserDefaults. A metric is recorded for every
+/// repository on every refresh, and each UserDefaults write re-evaluates every
+/// SwiftUI view holding @AppStorage, including the app's root tab view, while
+/// the refresh animation is running.
 public enum NBRepositoryFetchDiagnostics {
-	private static let key = "ZagStore.RepositoryFetchMetrics"
+	/// Where builds before the file store kept the metrics.
+	private static let legacyKey = "ZagStore.RepositoryFetchMetrics"
+	private static let lock = NSLock()
+	private static let fileURL: URL? = FileManager.default
+		.urls(for: .cachesDirectory, in: .userDomainMask)
+		.first?
+		.appendingPathComponent("ZagStore-RepositoryFetchMetrics.json")
 
 	public static var metrics: [NBRepositoryFetchMetric] {
-		guard
-			let data = UserDefaults.standard.data(forKey: key),
-			let decoded = try? JSONDecoder().decode([NBRepositoryFetchMetric].self, from: data)
-		else { return [] }
-		return decoded.sorted { $0.recordedAt > $1.recordedAt }
+		lock.lock(); defer { lock.unlock() }
+		return load().sorted { $0.recordedAt > $1.recordedAt }
+	}
+
+	/// The latest metric for one repository URL.
+	public static func metric(for url: String) -> NBRepositoryFetchMetric? {
+		lock.lock(); defer { lock.unlock() }
+		return load().first { $0.url == url }
 	}
 
 	public static func record(_ metric: NBRepositoryFetchMetric) {
-		var current = metrics.filter { $0.url != metric.url }
+		lock.lock(); defer { lock.unlock() }
+		var current = load().filter { $0.url != metric.url }
 		current.append(metric)
-		if let data = try? JSONEncoder().encode(current) {
-			UserDefaults.standard.set(data, forKey: key)
+		guard let fileURL, let data = try? JSONEncoder().encode(current) else { return }
+		try? data.write(to: fileURL, options: .atomic)
+		// One-time migration: the file now holds the older metrics as well.
+		if UserDefaults.standard.object(forKey: legacyKey) != nil {
+			UserDefaults.standard.removeObject(forKey: legacyKey)
 		}
 	}
 
 	public static func clear() {
-		UserDefaults.standard.removeObject(forKey: key)
+		lock.lock(); defer { lock.unlock() }
+		if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
+		if UserDefaults.standard.object(forKey: legacyKey) != nil {
+			UserDefaults.standard.removeObject(forKey: legacyKey)
+		}
+	}
+
+	/// Caller holds `lock`.
+	private static func load() -> [NBRepositoryFetchMetric] {
+		let data = fileURL.flatMap { try? Data(contentsOf: $0) }
+			?? UserDefaults.standard.data(forKey: legacyKey)
+		guard let data,
+			let decoded = try? JSONDecoder().decode([NBRepositoryFetchMetric].self, from: data)
+		else { return [] }
+		return decoded
 	}
 }
 
@@ -52,6 +90,7 @@ public class NBFetchService {
 		case networkError(Error)
 		case noData
 		case parsingError(Error)
+		case partialData(received: Int, expected: Int64)
 
 		public var errorDescription: String? {
 			switch self {
@@ -59,6 +98,7 @@ public class NBFetchService {
 			case .networkError(let error): "Network error: \(error.localizedDescription)"
 			case .noData: "No data received."
 			case .parsingError(let error): "Failed to parse data: \(error.localizedDescription)"
+			case .partialData(let received, let expected): "Incomplete download: \(received) of \(expected) bytes."
 			}
 		}
 	}
@@ -143,6 +183,14 @@ public class NBFetchService {
 		defaults.removeObject(forKey: validatorKey("modified", url: url))
 	}
 
+	/// Every UserDefaults write re-evaluates all @AppStorage views (the root
+	/// tab view among them), so an unchanged validator is not written again.
+	private func storeValidator(_ value: String, forKey key: String) {
+		let defaults = UserDefaults.standard
+		guard defaults.string(forKey: key) != value else { return }
+		defaults.set(value, forKey: key)
+	}
+
 	public func retainCachedRepositories(for urls: Set<URL>) {
 		let retainedKeys = Set(urls.map(\.absoluteString))
 		decodedCacheQueue.sync {
@@ -196,29 +244,41 @@ public class NBFetchService {
 		cachedData: Data?,
 		networkElapsed: Double,
 		failure: Error,
+		response: HTTPURLResponse? = nil,
+		receivedBytes: Int = 0,
+		startedAt: Date? = nil,
 		completion: @escaping (Result<T, Error>) -> Void
 	) {
+		func record(_ status: String, bytes: Int) {
+			var metric = NBRepositoryFetchMetric(
+				url: url.absoluteString,
+				status: status,
+				byteCount: bytes,
+				networkSeconds: networkElapsed,
+				decodeSeconds: 0,
+				recordedAt: Date()
+			)
+			metric.httpStatus = response?.statusCode
+			metric.expectedBytes = response.flatMap { $0.expectedContentLength > 0 ? $0.expectedContentLength : nil }
+			metric.error = failure.localizedDescription
+			metric.startedAt = startedAt
+			NBRepositoryFetchDiagnostics.record(metric)
+		}
 		if let decoded: T = cachedDecodedValue(for: url, as: T.self) {
+			record("decoded-cache/fallback", bytes: receivedBytes)
+			print("[Zag Store Sources] Cache fallback (decoded): \(url.host ?? url.absoluteString) — \(failure.localizedDescription)")
 			completion(.success(decoded))
 			return
 		}
 		if let cachedData,
 		   let decoded = try? JSONDecoder().decode(T.self, from: cachedData) {
 			storeDecodedValue(decoded, for: url, byteCost: cachedData.count)
-			NBRepositoryFetchDiagnostics.record(
-				NBRepositoryFetchMetric(
-					url: url.absoluteString,
-					status: "disk-cache/fallback",
-					byteCount: cachedData.count,
-					networkSeconds: networkElapsed,
-					decodeSeconds: 0,
-					recordedAt: Date()
-				)
-			)
+			record("disk-cache/fallback", bytes: receivedBytes)
 			print("[Zag Store Sources] Cache fallback: \(url.host ?? url.absoluteString) — \(failure.localizedDescription)")
 			completion(.success(decoded))
 			return
 		}
+		record("failed", bytes: receivedBytes)
 		completion(.failure(failure))
 	}
 }
@@ -266,22 +326,24 @@ extension NBFetchService {
 			}
 
 			let requestStartedAt = CFAbsoluteTimeGetCurrent()
+			let startedAtDate = Date()
 			URLSession.shared.dataTask(with: request) { data, response, error in
 				let networkElapsed = CFAbsoluteTimeGetCurrent() - requestStartedAt
+				let http = response as? HTTPURLResponse
+				let received = data?.count ?? 0
 
 
 				if let error {
-					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.networkError(error), completion: completion)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.networkError(error), response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
 					return
 				}
 
-				let http = response as? HTTPURLResponse
 				if let http, http.statusCode != 304,
 				   !(200...299).contains(http.statusCode) {
 					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.networkError(
 						NSError(domain: "NBFetchService.HTTP", code: http.statusCode,
 							userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
-					), completion: completion)
+					), response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
 					return
 				}
 
@@ -292,28 +354,35 @@ extension NBFetchService {
 					responseData = cachedData
 					sourceLabel = "disk-cache/304"
 				} else if http?.statusCode == 304 {
-					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, completion: completion)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
+					return
+				} else if let data, let http, http.expectedContentLength > 0,
+				          Int64(data.count) < http.expectedContentLength {
+					// A body shorter than its Content-Length is a cut-off
+					// download: never parse or commit it.
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.partialData(received: data.count, expected: http.expectedContentLength), response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
 					return
 				} else if let data {
 					responseData = data
 					sourceLabel = "network/\(http?.statusCode ?? 0)"
 				} else {
-					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, completion: completion)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.noData, response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
 					return
 				}
 
 				if http?.statusCode == 304,
 				   let decoded: T = self.cachedDecodedValue(for: url, as: T.self) {
-					NBRepositoryFetchDiagnostics.record(
-						NBRepositoryFetchMetric(
-							url: url.absoluteString,
-							status: "decoded-cache/304",
-							byteCount: responseData.count,
-							networkSeconds: networkElapsed,
-							decodeSeconds: 0,
-							recordedAt: Date()
-						)
+					var metric = NBRepositoryFetchMetric(
+						url: url.absoluteString,
+						status: "decoded-cache/304",
+						byteCount: responseData.count,
+						networkSeconds: networkElapsed,
+						decodeSeconds: 0,
+						recordedAt: Date()
 					)
+					metric.httpStatus = 304
+					metric.startedAt = startedAtDate
+					NBRepositoryFetchDiagnostics.record(metric)
 					print(
 						"[Zag Store Sources] " +
 							"\(url.host ?? url.absoluteString) — decoded-cache/304 — " +
@@ -351,18 +420,11 @@ extension NBFetchService {
 					if http?.statusCode != 304, let payloadURL {
 						do {
 							try responseData.write(to: payloadURL, options: .atomic)
-							let defaults = UserDefaults.standard
 							if let etag = http?.value(forHTTPHeaderField: "ETag") {
-								defaults.set(
-									etag,
-									forKey: self.validatorKey("etag", url: url)
-								)
+								self.storeValidator(etag, forKey: self.validatorKey("etag", url: url))
 							}
 							if let modified = http?.value(forHTTPHeaderField: "Last-Modified") {
-								defaults.set(
-									modified,
-									forKey: self.validatorKey("modified", url: url)
-								)
+								self.storeValidator(modified, forKey: self.validatorKey("modified", url: url))
 							}
 						} catch {
 							print(
@@ -373,16 +435,18 @@ extension NBFetchService {
 						}
 					}
 
-					NBRepositoryFetchDiagnostics.record(
-						NBRepositoryFetchMetric(
-							url: url.absoluteString,
-							status: sourceLabel,
-							byteCount: responseData.count,
-							networkSeconds: networkElapsed,
-							decodeSeconds: decodeElapsed,
-							recordedAt: Date()
-						)
+					var metric = NBRepositoryFetchMetric(
+						url: url.absoluteString,
+						status: sourceLabel,
+						byteCount: responseData.count,
+						networkSeconds: networkElapsed,
+						decodeSeconds: decodeElapsed,
+						recordedAt: Date()
 					)
+					metric.httpStatus = http?.statusCode
+					metric.expectedBytes = http.flatMap { $0.expectedContentLength > 0 ? $0.expectedContentLength : nil }
+					metric.startedAt = startedAtDate
+					NBRepositoryFetchDiagnostics.record(metric)
 					print(
 						"[Zag Store Sources] " +
 						"\(url.host ?? url.absoluteString) — \(sourceLabel) — " +
@@ -394,7 +458,7 @@ extension NBFetchService {
 				} catch {
 					// Never replace the last-known-good payload unless the new
 					// response decoded successfully.
-					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.parsingError(error), completion: completion)
+					self.completeFromCache(url: url, cachedData: cachedData, networkElapsed: networkElapsed, failure: NBFetchServiceError.parsingError(error), response: http, receivedBytes: received, startedAt: startedAtDate, completion: completion)
 				}
 			}.resume()
 		}

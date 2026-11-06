@@ -95,6 +95,95 @@ if [[ $# -ge 1 ]]; then
 	check "generated identifier $sample matches a permitted pattern" matches_permitted "$1"
 fi
 
+
+# Refresh performance: each finished repository publishes SourcesViewModel.
+# Only views that render repository state may observe it, or every refresh
+# re-renders the tab root and every Apps row once per repository.
+VIEWS="$ROOT/Feather/Views"
+check "root tab view does not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/TabView/VariedTabbarView.swift")"
+check "root tab view does not observe UpdateManager" \
+	absent '@StateObject private var updateManager = UpdateManager.shared' "$(sed -n '/^struct VariedTabbarView/,/^}/p' "$VIEWS/TabView/VariedTabbarView.swift")"
+check "iOS 18 tab container does not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/TabView/Bars/ExtendedTabbarView.swift")"
+check "Apps page and Updates popup do not observe SourcesViewModel" \
+	absent 'Object.*SourcesViewModel' "$(cat "$VIEWS/Library/LibraryView.swift")"
+cell_struct=$(sed -n '/^struct LibraryCellView/,/^}/p' "$VIEWS/Library/LibraryCellView.swift")
+check "Apps rows do not observe SourcesViewModel" absent 'SourcesViewModel' "$cell_struct"
+check "Apps row badge observes repository state itself" \
+	grep -q 'private struct ZagLibraryRepositoryBadge' "$VIEWS/Library/LibraryCellView.swift"
+TABS="$VIEWS/TabView/TabEnum.swift"
+check "Games indexes from the published repository snapshot" \
+	grep -q '\.onReceive(sourcesModel\.\$sources) { loaded in' "$TABS"
+check "Games rebuilds when a refresh ends (finished, failed or cancelled)" \
+	grep -q '\.onReceive(sourcesModel\.\$isRefreshing\.dropFirst()) { refreshing in' "$TABS"
+check "Games shows only the newest build's result" grep -q 'indexState.accepts(generation: generation)' "$TABS"
+check "Games no longer depends on objectWillChange ordering" absent 'sourcesModel.objectWillChange' "$(cat "$TABS")"
+fetch_body=$(function_body "$VIEWS/Sources/SourcesViewModel.swift" fetchSources)
+refresh_cleared_in_defer() {
+	[[ $(grep -c 'self.isRefreshing = false' <<< "$fetch_body") == 1 ]] &&
+	awk '/defer {/{d=1} d && /self.isRefreshing = false/{found=1} d && /^\t\t}/{d=0} END{exit !found}' <<< "$fetch_body"
+}
+check "isRefreshing is cleared only in fetchSources' defer, after every snapshot" refresh_cleared_in_defer
+LIB="$VIEWS/Library/LibraryView.swift"
+check "Updates popup persists once per completed reconciliation" \
+	grep -q '\.onReceive(updateManager\.\$reconciliationGeneration\.dropFirst()) {' "$LIB"
+check "Updates popup no longer persists on repository publications" absent 'onReceive(sourcesViewModel\.\$' "$(cat "$LIB")"
+check "Updates popup persistence is not deferred" absent 'DispatchQueue.main.async { _cacheAvailableRows() }' "$(cat "$LIB")"
+generation_is_last() {
+	local body; body=$(sed -n '/func refresh(\n*/,/^\t}$/p' "$1")
+	local done_line gen_line
+	done_line=$(grep -n 'forKey: Self.persistedUpdateCountKey' "$1" | tail -1 | cut -d: -f1)
+	gen_line=$(grep -n 'reconciliationGeneration &+= 1' "$1" | cut -d: -f1)
+	local completed_line; completed_line=$(grep -n 'hasCompletedReconciliation = true' "$1" | cut -d: -f1)
+	[[ -n "$gen_line" && "$gen_line" -gt "$done_line" && "$gen_line" -gt "$completed_line" ]]
+}
+check "reconciliation signal publishes after updates and counts are final" \
+	generation_is_last "$VIEWS/Sources/SourcesViewModel.swift"
+SVM="$VIEWS/Sources/SourcesViewModel.swift"
+check "visibleUpdates reuses decoded Updated Recently rows" \
+	grep -q 'let recent = _recentUpdateRows()' "$SVM"
+check "decoded rows are reused only while the stored bytes are unchanged" \
+	grep -q 'if let cache = recentRowsCache, cache.data == data {' "$SVM"
+check "build lookups are remembered for one reconciliation only" \
+	bash -c 'grep -q "buildVersionMemo = \[:\]" "$1" && grep -q "defer { buildVersionMemo = nil }" "$1"' _ "$SVM"
+
+FETCH="$ROOT/NimbleKit/Sources/NimbleJSON/NBFetchService.swift"
+diagnostics_off_defaults() {
+	local body; body=$(awk '/^public enum NBRepositoryFetchDiagnostics/{f=1} f&&/^}/{print; exit} f' "$FETCH")
+	[[ -n "$body" ]] && ! grep -q 'UserDefaults.standard.set' <<< "$body"
+}
+check "Fetch diagnostics are not stored in UserDefaults (root re-evaluated per repository)" diagnostics_off_defaults
+check "Cache validators are written only when they change" \
+	grep -q 'guard defaults.string(forKey: key) != value else { return }' "$FETCH"
+check "Fetch completion writes validators only through storeValidator" absent 'defaults.set(\s*$' "$(cat "$FETCH")"
+
+FETCH_WORK=$(mktemp -d "${TMPDIR:-/tmp}/zag-fetch-defaults.XXXXXX")
+if swiftc -warnings-as-errors -parse-as-library -module-name ZagFetchDefaultsTests \
+	"$FETCH" "$ROOT/scripts/ZagFetchDefaultsTests.swift" \
+	-o "$FETCH_WORK/tests" 2>"$FETCH_WORK/swiftc.log"; then
+	if (cd "$FETCH_WORK" && HOME="$FETCH_WORK" ./tests); then echo "PASS  fetch defaults behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
+else
+	cat "$FETCH_WORK/swiftc.log"
+	echo "FAIL  fetch defaults tests did not compile"
+	FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$FETCH_WORK"
+
+LIFECYCLE_WORK=$(mktemp -d "${TMPDIR:-/tmp}/zag-refresh-lifecycle.XXXXXX")
+if swiftc -warnings-as-errors -parse-as-library \
+	"$ROOT/Feather/Utilities/ZagRepositoryIndexState.swift" \
+	"$ROOT/Feather/Views/Library/ZagUpdateRowSnapshot.swift" \
+	"$ROOT/scripts/ZagRefreshLifecycleTests.swift" \
+	-o "$LIFECYCLE_WORK/tests" 2>"$LIFECYCLE_WORK/swiftc.log"; then
+	if "$LIFECYCLE_WORK/tests"; then echo "PASS  refresh lifecycle behaviour tests"; else FAILURES=$((FAILURES + 1)); fi
+else
+	cat "$LIFECYCLE_WORK/swiftc.log"
+	echo "FAIL  refresh lifecycle tests did not compile"
+	FAILURES=$((FAILURES + 1))
+fi
+rm -rf "$LIFECYCLE_WORK"
+
 if (( FAILURES > 0 )); then
 	echo "$FAILURES check(s) failed"
 	exit 1

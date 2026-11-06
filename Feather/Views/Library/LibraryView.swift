@@ -27,6 +27,7 @@
 
 
 import SwiftUI
+import Combine
 
 
 
@@ -92,7 +93,9 @@ struct LibraryView: View {
 
 
 
-	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	// Read only by handlers (and passed to SourceAppsView, which observes it).
+	// Observing it here re-rendered this view for every refreshed repository.
+	private let sourcesViewModel = SourcesViewModel.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 	@State private var _selectedRepositorySource: AltSource?
 
@@ -1294,7 +1297,11 @@ extension LibraryView {
 		guard rppairingCore.pairingFileExists else { return false }
 
 		let installedBundleIDs: Set<String>
-		do {
+		if let uuid = app.uuid, let captured = ZagMobileDataInstallCoordinator.shared.takeInventory(jobID: uuid) {
+			// Mobile Data install: the device list was read before Mobile
+			// Data came back on; a new query now would be refused.
+			installedBundleIDs = captured
+		} else { do {
 			installedBundleIDs = try await withCheckedThrowingContinuation {
 				(continuation: CheckedContinuation<Set<String>, Error>) in
 				do {
@@ -1311,7 +1318,7 @@ extension LibraryView {
 				withAnimation(.easeInOut(duration: 0.35)) { _transactionSignedUUIDs.remove(uuid) }
 			}
 			return false
-		}
+		} }
 
 		guard installedBundleIDs.contains(identifier) else {
 			if let uuid = app.uuid {
@@ -1333,6 +1340,10 @@ extension LibraryView {
 	}
 
 	private func _refreshInstalledAppsFromDevice() {
+		// While Mobile Data Fix runs, returning from Shortcuts must not start
+		// an inventory session: it would hold the one RPPairing connection
+		// the install or removal needs. The operation refreshes afterwards.
+		guard !ZagMobileDataInstallCoordinator.shared.isBusy else { return }
 		guard rppairingCore.pairingFileExists else {
 			_reconcileManagedInstalledApps()
 			_updateRepositoryUpdates()
@@ -1453,23 +1464,77 @@ extension LibraryView {
 			}
 		}
 
-		do {
-			try ZagRPPairingCore.shared.uninstallGate4App(
-				bundleID: identifier,
-				deviceIP: "10.7.0.1"
-			) { result in
-				switch result {
-				case .success:
-					finishDirectRemoval()
-				case .failure:
-					// Fully Local Server and other non-RPPairing setups retain the
-					// existing LaunchServices uninstall path as a fallback.
-					tryLaunchServicesFallback()
+		// Mobile Data Fix wraps the unchanged RPPairing uninstall when Mobile
+		// Data blocks it; on Wi-Fi it runs directly as before. With Mobile
+		// Data off, the removal is submitted once the connection is free and
+		// confirmed against the device's app list before Mobile Data returns.
+		Task { @MainActor in
+			let coordinator = ZagMobileDataInstallCoordinator.shared
+			do {
+				try await coordinator.perform(.uninstall, jobID: "uninstall-\(identifier)") {
+					if coordinator.usingMobileDataFix {
+						let confirmation = try await ZagRPPairingUninstall(env: Self.uninstallEnvironment()).run(bundleID: identifier)
+						coordinator.note("Uninstall confirmed: \(confirmation)")
+					} else {
+						try await Self.submitUninstall(identifier).get()
+					}
 				}
+				finishDirectRemoval()
+			} catch let reason as ZagMobileDataInstallError {
+				// The RPPairing uninstall never started; say why rather than
+				// trying a fallback that cannot help on Mobile Data.
+				_removingBundleIDs.remove(identifier)
+				UIAlertController.showAlertWithOk(
+					title: .localized("Remove App"),
+					message: reason.localizedDescription
+				)
+			} catch let reason as ZagRPPairingUninstallFailure {
+				// Mobile Data path: report the real result. The installed
+				// marker stays, because the app was not confirmed removed.
+				_removingBundleIDs.remove(identifier)
+				UIAlertController.showAlertWithOk(
+					title: .localized("Remove App"),
+					message: reason.localizedDescription
+				)
+			} catch {
+				// Fully Local Server and other non-RPPairing setups retain the
+				// existing LaunchServices uninstall path as a fallback.
+				tryLaunchServicesFallback()
 			}
-		} catch {
-			tryLaunchServicesFallback()
 		}
+	}
+
+	/// The existing RPPairing uninstall, awaited.
+	private static func submitUninstall(_ bundleID: String) async -> Result<Void, Error> {
+		await withCheckedContinuation { continuation in
+			do {
+				try ZagRPPairingCore.shared.uninstallGate4App(bundleID: bundleID, deviceIP: "10.7.0.1") { result in
+					continuation.resume(returning: result)
+				}
+			} catch {
+				continuation.resume(returning: .failure(error))
+			}
+		}
+	}
+
+	@MainActor
+	private static func uninstallEnvironment() -> ZagRPPairingUninstall.Environment {
+		ZagRPPairingUninstall.Environment(
+			transportBusy: { ZagRPPairingCore.shared.isTransportBusy },
+			uninstall: { await submitUninstall($0) },
+			installedApps: {
+				await withCheckedContinuation { continuation in
+					do {
+						try ZagRPPairingCore.shared.refreshInstalledApps { continuation.resume(returning: $0) }
+					} catch {
+						continuation.resume(returning: .failure(error))
+					}
+				}
+			},
+			sleep: { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
+			now: { Date() },
+			log: { ZagMobileDataInstallCoordinator.shared.note($0) }
+		)
 	}
 
 	@ViewBuilder
@@ -2230,36 +2295,6 @@ private struct ZagUpdateIconAppearanceModifier: ViewModifier {
 	}
 }
 
-struct ZagUpdateRowSnapshot: Codable, Identifiable {
-	let id: String
-	let bundleID: String
-	let name: String
-	let iconURL: String?
-	let sourceIconURL: String?
-	let releaseDateText: String?
-	let releaseNotes: String?
-	let metadataText: String?
-	let version: String
-	// Optional for compatibility with snapshots saved by older Zag Store builds.
-	let build: String?
-	let completedAt: Date?
-
-	static let availableKey = "ZagStore.availableUpdateRows"
-	static let recentKey = "ZagStore.updatedRecentlyRows"
-
-	static func load(_ key: String) -> [Self] {
-		guard let data = UserDefaults.standard.data(forKey: key),
-			  let rows = try? JSONDecoder().decode([Self].self, from: data)
-		else { return [] }
-		return rows
-	}
-
-	static func save(_ rows: [Self], key: String) {
-		guard let data = try? JSONEncoder().encode(rows) else { return }
-		UserDefaults.standard.set(data, forKey: key)
-	}
-}
-
 private struct ZagUpdateRow: View {
 	enum Mode {
 		case available
@@ -2281,7 +2316,6 @@ private struct ZagUpdateRow: View {
 	private var shouldChangeIconsBasedOffStyle: Bool = false
 
 	@State private var showsFullReleaseNotes = false
-	@State private var ringRotation: Double = 0
 	@State private var justCompleted = false
 
 	private var useDarkIconAppearance: Bool {
@@ -2473,57 +2507,26 @@ private struct ZagUpdateRow: View {
 		let stage = transactionManager.stage(for: update)
 
 		VStack(spacing: 2) {
-			ZStack {
-				if mode == .recentlyUpdated {
-					ZagActionPill(
-						title: .localized("Open"),
-						backgroundColor: zagUpdatePillBackground
-					) {
+			// One control: Update contracts into the progress circle and
+			// expands into Open when the update is confirmed.
+			let showsOpen = mode == .recentlyUpdated || justCompleted
+			ZagInstallControl(
+				mode: showsOpen
+					? .pill(ZagInstallPill(title: .localized("Open"), accessibilityLabel: "Open \(update.app.currentName)"))
+					: (stage != nil && !isFailed(stage))
+						? .spinner(.none)
+						: .pill(ZagInstallPill(title: stage?.title ?? .localized("Update"), accessibilityLabel: "Update \(update.app.currentName)")),
+				fill: zagUpdatePillBackground,
+				action: {
+					if showsOpen {
 						if let bundleID = update.app.id {
 							UIApplication.openApp(with: bundleID)
 						}
-					}
-				} else if justCompleted {
-					ZagActionPill(
-						title: .localized("Open"),
-						backgroundColor: zagUpdatePillBackground
-					) {
-						if let bundleID = update.app.id {
-							UIApplication.openApp(with: bundleID)
-						}
-					}
-				} else if stage != nil, !isFailed(stage) {
-					ZStack {
-						Circle()
-							.stroke(zagUpdatesBlue.opacity(0.22), lineWidth: 2.3)
-						Circle()
-							.trim(from: 0.08, to: 0.72)
-							.stroke(
-								zagUpdatesBlue,
-								style: StrokeStyle(lineWidth: 2.3, lineCap: .round)
-							)
-							.rotationEffect(.degrees(ringRotation - 90))
-					}
-					.frame(width: 31, height: 31)
-					.onAppear {
-						ringRotation = 0
-						withAnimation(
-							.linear(duration: 0.85)
-								.repeatForever(autoreverses: false)
-						) {
-							ringRotation = 360
-						}
-					}
-				} else {
-					ZagActionPill(
-						title: stage?.title ?? .localized("Update"),
-						backgroundColor: zagUpdatePillBackground
-					) {
+					} else if stage == nil || isFailed(stage) {
 						_startInlineUpdate()
 					}
 				}
-			}
-			.frame(width: ZagListLayout.actionWidth, height: ZagListLayout.actionHeight)
+			)
 
 			Text(_stageCaption(stage))
 				.font(.system(size: 9, weight: .medium))
@@ -2639,7 +2642,9 @@ struct ZagUpdatesPopup: View {
 			)
 		]
 	) private var sources: FetchedResults<AltSource>
-	@StateObject private var sourcesViewModel = SourcesViewModel.shared
+	// Read only by handlers (and passed to SourceAppsView, which observes it).
+	// Observing it here re-rendered this view for every refreshed repository.
+	private let sourcesViewModel = SourcesViewModel.shared
 	@ObservedObject private var pairingCore = ZagRPPairingCore.shared
 	@State private var selectedUpdate: UpdateManager.AvailableUpdate?
 	@State private var isUpdatingAll = false
@@ -2794,13 +2799,12 @@ struct ZagUpdatesPopup: View {
 				let bundleIDs = updates.compactMap { $0.app.id }
 				try? pairingCore.refreshInstalledAppIcons(bundleIDs: bundleIDs)
 			}
-			.onReceive(sourcesViewModel.$sources) { _ in
+			// Row snapshots derive only from UpdateManager's reconciled state.
+			// Persist once per completed reconciliation: this publishes after
+			// updates and completion state are final, so no deferral is needed
+			// and back-to-back refreshes each save their own final result.
+			.onReceive(updateManager.$reconciliationGeneration.dropFirst()) { _ in
 				_cacheAvailableRows()
-			}
-			.onReceive(updateManager.$updates) { _ in
-				// @Published sends before the stored value changes. Cache after
-				// publication, or a previous update snapshot may be saved again.
-				DispatchQueue.main.async { _cacheAvailableRows() }
 			}
 			.animation(.easeInOut(duration: 0.35), value: displayedAvailableCount)
 			.navigationTitle(.localized("App Updates"))
@@ -3681,16 +3685,20 @@ final class ZagUpdateTransactionManager: ObservableObject {
 
 		defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
 
-		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			Task { @MainActor in
-				do {
-					try ZagRPPairingCore.shared.installGate4IPA(
-						at: packageURL,
-						deviceIP: "10.7.0.1",
-						completion: { result in continuation.resume(with: result) }
-					)
-				} catch {
-					continuation.resume(throwing: error)
+		// Mobile Data Fix wraps the existing installer when Mobile Data blocks it.
+		try await ZagMobileDataInstallCoordinator.shared.install(jobID: signedUUID) {
+			try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+				Task { @MainActor in
+					do {
+						try ZagRPPairingCore.shared.installGate4IPA(
+							at: packageURL,
+							deviceIP: ZagDeviceLink.peerAddress,
+							retryTransientFailures: true,
+							completion: { result in continuation.resume(with: result) }
+						)
+					} catch {
+						continuation.resume(throwing: error)
+					}
 				}
 			}
 		}

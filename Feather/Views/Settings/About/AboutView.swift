@@ -1,119 +1,88 @@
-//
-//  AboutView.swift
-//  Feather
-//
-//  Created by samara on 30.04.2025.
-//
-
 import SwiftUI
 import NimbleViews
-import NimbleJSON
 
-// MARK: - Extension: Model
-extension AboutView {
-	struct CreditsModel: Codable, Hashable {
-		let name: String?
-		let desc: String?
-		let github: String
-	}
-}
-
-// MARK: - View
+// MARK: - Zag Store About
 struct AboutView: View {
-	@State private var _credits: [CreditsModel] = [
-		.init(name: "C", desc: "Developer", github: "claration"),
-		.init(name: "Asami", desc: "Developer", github: "Nyasami"),
-		.init(name: "Lakhan Lothiyi", desc: "AltStore Repositories", github: "llsc12"),
-	]
-	
-	let pngURL = URL(string: "https://sponsors.claration.dev/sponsors.png")!
-	
-	// MARK: Body
-	var body: some View {
-		NBList(.localized("About")) {
-			Section {
-				VStack {
-					FRAppIconView(size: 72)
-					
-					Text(Bundle.main.exec)
-						.font(.largeTitle)
-						.bold()
-						.foregroundStyle(Color.accentColor)
-					
-					HStack(spacing: 4) {
-						Text(.localized("Version"))
-						Text(Bundle.main.version)
-					}
-					.font(.footnote)
-					.foregroundStyle(.secondary)
-				}
-			}
-			.frame(maxWidth: .infinity)
-			.listRowBackground(EmptyView())
-			
-			NBSection(.localized("Credits")) {
-				ForEach(_credits, id: \.github) { credit in
-					_credit(name: credit.name, desc: credit.desc, github: credit.github)
-				}
-				.transition(.slide)
-			}
-			
-			NBSection(.localized("Sponsors")) {
-				Text(.localized("💜 This couldn't of been done without my sponsors!"))
-					.foregroundStyle(.secondary)
-					.padding(.vertical, 2)
-				AsyncImage(url: pngURL) { phase in
-					switch phase {
-					case .empty:
-						ProgressView()
-							.frame(maxWidth: .infinity)
-							.frame(height: 120)
-					case .success(let image):
-						image
-							.resizable()
-							.scaledToFit()
-							.frame(maxWidth: .infinity)
-							.listRowInsets(EdgeInsets())
-					case .failure:
-						Image(systemName: "photo")
-							.resizable()
-							.scaledToFit()
-							.frame(maxWidth: .infinity)
-							.foregroundColor(.gray)
-							.frame(height: 120)
-						
-					@unknown default:
-						EmptyView()
-					}
-				}
-			}
-		}
-	}
-}
+    @State private var gradientRotation: Double = 0
+    // Only show a recorded successful update, never filesystem creation dates
+    // (which may incorrectly resolve to the Unix epoch).
+    @AppStorage("ZagStore.lastSuccessfulUpdateTimestamp") private var lastSuccessfulUpdateTimestamp: Double = 0
 
-// MARK: - Extension: view
-extension AboutView {
-	@ViewBuilder
-	private func _credit(
-		name: String?,
-		desc: String?,
-		github: String
-	) -> some View {
-		Button {
-			UIApplication.open("https://github.com/\(github)")
-		} label: {
-			HStack {
-				FRIconCellView(
-					title: name ?? github,
-					subtitle: desc ?? "",
-					iconUrl: URL(string: "https://github.com/\(github).png")!,
-					size: 45,
-					isCircle: true
-				)
-				
-				Image(systemName: "arrow.up.right")
-					.foregroundColor(.secondary.opacity(0.65))
-			}
-		}
-	}
+    private var lastUpdatedText: String {
+        guard lastSuccessfulUpdateTimestamp > 0 else { return "Never" }
+        let date = Date(timeIntervalSince1970: lastSuccessfulUpdateTimestamp)
+        guard date > Date(timeIntervalSince1970: 946684800), date <= Date() else { return "Never" }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        NBList(.localized("About")) {
+            Section {
+                VStack(spacing: 12) {
+                    FRAppIconView(size: 72)
+
+                    Text("Zag Store")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.primary)
+
+                    (
+                        Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")")
+                            .foregroundColor(.white)
+                        + Text(" · Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")")
+                            .foregroundColor(.secondary)
+                    )
+                    .font(.subheadline)
+
+                    Text("Last updated: \(lastUpdatedText)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .listRowBackground(EmptyView())
+
+            Section {
+                Button {
+                    UIApplication.open("https://github.com/zagorskey")
+                } label: {
+                    HStack(spacing: 14) {
+                    Image("ZagAuthorPortrait")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 46, height: 46)
+                        .clipShape(Circle())
+                        .padding(3)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(
+                                    AngularGradient(colors: [.blue, .purple, .pink, .orange, .blue], center: .center, angle: .degrees(gradientRotation)),
+                                    lineWidth: 1.5
+                                )
+                                .animation(.linear(duration: 5).repeatForever(autoreverses: false), value: gradientRotation)
+                        }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("ZAGORSKI")
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Text("Author")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right")
+                        .foregroundStyle(.secondary.opacity(0.65))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 4)
+                .onAppear {
+                    gradientRotation = 360
+                }
+            } header: {
+                Text("Credits")
+            }
+        }
+    }
 }

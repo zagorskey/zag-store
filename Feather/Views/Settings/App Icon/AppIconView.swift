@@ -198,7 +198,7 @@ struct AppIconView: View {
             Section {
                 // Measure the real scope instead of shifting a 76-point
                 // search bar outside a 21-point Form row.
-                ZagAppIconScopeBar(selection: $previewAppearance)
+                ZagScopeBar(selection: $previewAppearance, titles: ["Light", "Dark"])
                     .frame(maxWidth: .infinity)
                     .frame(height: UISegmentedControl(items: ["Light", "Dark"]).intrinsicContentSize.height)
                     .accessibilityLabel("App Icon Preview Appearance")
@@ -271,109 +271,6 @@ private struct ZagAppIconSectionMargins: ViewModifier {
             content.listSectionMargins(edges, 0)
         } else {
             content
-        }
-    }
-}
-
-// Preserve the native Games UISearchBar scope without its background.
-// A Form row must measure the scope's actual height. This host also
-// measures UIKit's own horizontal scope insets and uses the extra canvas
-// width needed for the scope to align with the surrounding icon grid.
-// No fixed horizontal offsets, replacement segmented controls or masks.
-private struct ZagAppIconScopeBar: UIViewRepresentable {
-    @Binding var selection: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
-    }
-
-    func makeUIView(context: Context) -> ScopeHost {
-        let host = ScopeHost(frame: .zero)
-        host.searchBar.delegate = context.coordinator
-        host.searchBar.selectedScopeButtonIndex = selection == "Dark" ? 1 : 0
-        return host
-    }
-
-    func updateUIView(_ host: ScopeHost, context: Context) {
-        context.coordinator.selection = $selection
-        let index = selection == "Dark" ? 1 : 0
-        if host.searchBar.selectedScopeButtonIndex != index {
-            host.searchBar.selectedScopeButtonIndex = index
-        }
-    }
-
-    final class Coordinator: NSObject, UISearchBarDelegate {
-        var selection: Binding<String>
-
-        init(selection: Binding<String>) {
-            self.selection = selection
-        }
-
-        func searchBar(_ searchBar: UISearchBar, selectedScopeButtonIndexDidChange index: Int) {
-            selection.wrappedValue = index == 1 ? "Dark" : "Light"
-        }
-    }
-
-    final class ScopeHost: UIView {
-        let searchBar = UISearchBar(frame: .zero)
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            backgroundColor = .clear
-            isOpaque = false
-
-            searchBar.searchBarStyle = .minimal
-            searchBar.showsScopeBar = true
-            searchBar.scopeButtonTitles = ["Light", "Dark"]
-            searchBar.searchTextField.isHidden = true
-            searchBar.backgroundImage = UIImage()
-            searchBar.scopeBarBackgroundImage = UIImage()
-            addSubview(searchBar)
-        }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-
-        override func layoutSubviews() {
-            super.layoutSubviews()
-            guard bounds.width > 0, bounds.height > 0 else { return }
-
-            // Match the Games search bar's 76-point UIKit layout canvas.
-            let canvasHeight = max(76, searchBar.sizeThatFits(
-                CGSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude)
-            ).height)
-            searchBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: canvasHeight)
-            searchBar.layoutIfNeeded()
-
-            guard let scope = findScope(in: searchBar), scope.bounds.width > 0 else {
-                return
-            }
-            let original = scope.convert(scope.bounds, to: searchBar)
-            guard original.minX.isFinite, original.minY.isFinite,
-                  original.maxX.isFinite, original.height.isFinite else {
-                return
-            }
-
-            // UIKit adds horizontal insets inside UISearchBar. Expand the
-            // search bar by those measured insets, keeping its native scope.
-            let leading = max(0, original.minX)
-            let trailing = max(0, bounds.width - original.maxX)
-            searchBar.frame = CGRect(
-                x: -leading,
-                y: (bounds.height - original.height) / 2 - original.minY,
-                width: bounds.width + leading + trailing,
-                height: canvasHeight
-            )
-            searchBar.layoutIfNeeded()
-        }
-
-        private func findScope(in view: UIView) -> UISegmentedControl? {
-            if let scope = view as? UISegmentedControl { return scope }
-            for child in view.subviews {
-                if let scope = findScope(in: child) { return scope }
-            }
-            return nil
         }
     }
 }
