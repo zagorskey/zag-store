@@ -7,11 +7,12 @@ command -v pngcrush >/dev/null || { echo "pngcrush is required (Xcode command li
 command -v sips >/dev/null || { echo "sips is required." >&2; exit 1; }
 before=0; after=0; improved=0; unchanged=0; failed=0
 while IFS= read -r -d '' file; do
+  printf "Processing: %s\n" "$file"
   bytes=$(stat -f %z "$file")
   before=$((before+bytes))
   tmpdir=$(mktemp -d "${TMPDIR:-/tmp/}zag-png.XXXXXXXX")
   tmp="$tmpdir/optimised.png"
-  if pngcrush -q -brute "$file" "$tmp" >/dev/null 2>&1 && [ -s "$tmp" ]; then
+  if pngcrush -q "$file" "$tmp" >/dev/null 2>&1 && [ -s "$tmp" ]; then
     old_dims=$(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null | tail -2)
     new_dims=$(sips -g pixelWidth -g pixelHeight "$tmp" 2>/dev/null | tail -2)
     new_bytes=$(stat -f %z "$tmp")
