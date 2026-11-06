@@ -13,7 +13,10 @@
 
 </div>
 
-<br>
+
+## Built for independence
+
+**No desktop companion. No second phone. No Wi-Fi-only installation requirement for supported workflows.** The experience stays centered on your iPhone; pairing, LocalDevVPN and initial signing prerequisites are explained below.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/promises-dark.svg">
@@ -50,7 +53,7 @@
 
 <p align="center"><sub>Unedited screenshots of the current beta, captured in the iOS Simulator with open-source repositories. Shown side by side for comparison; one iPhone is all you need.</sub></p>
 
-## A different kind of app store
+## Discover a different kind of app store
 
 Discover beautifully. Sign independently. Make it yours.
 
@@ -85,7 +88,7 @@ Follow every download, signing step and installation as it happens. Pause and re
 </tr>
 </table>
 
-## Your certificate, your signature
+## Your identity. Your signature.
 
 Zag Store doesn't provide, share or rent certificates. You import your own `.p12` certificate and matching provisioning profile, and every app is signed on your iPhone with them.
 
@@ -96,7 +99,7 @@ Zag Store doesn't provide, share or rent certificates. You import your own `.p12
 > [!IMPORTANT]
 > Never upload your private key, `.p12` file or certificate password to a service you don't trust. Zag Store's maintainers will never ask for them.
 
-## Make it yours
+## Designed around you
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/app-icons-dark.png">
@@ -105,7 +108,10 @@ Zag Store doesn't provide, share or rent certificates. You import your own `.p12
 
 Choose your app icon, your accent colour and your wallpaper, and arrange the dock with the tabs you use most. On iOS 26, Zag Store uses the system's own Liquid Glass controls, so it looks and behaves like the rest of your iPhone.
 
-## Install
+---
+
+## Get started
+
 
 > [!NOTE]
 > **Zag Store is in public beta.** No release on this page is recommended for installation yet. The first public build will be published here, with its SHA-256 checksum, once it has been verified.
@@ -128,7 +134,7 @@ Choose your app icon, your accent colour and your wallpaper, and arrange the doc
 
 The release IPA is ad-hoc signed only. It carries no developer identity, so a stock iPhone won't install it until you sign it.
 
-## Build from source
+## For developers · Build from source
 
 You need macOS with **Xcode 26** and [Rust](https://rustup.rs).
 
@@ -160,7 +166,7 @@ make iphoneos                       # → packages/ZagStore.ipa
 
 </details>
 
-## Open source
+## The open-source foundation
 
 Zag Store is a fork of **[Feather](https://github.com/claration/Feather)** by [claration](https://github.com/claration) and its contributors. It keeps Feather's GPL-3.0 licence and copyright notices. Thank you to everyone who built it.
 
@@ -179,7 +185,7 @@ Each component's own licence applies to that component. The README artwork uses 
 
 Zag Store is licensed under the [GNU General Public License v3.0](LICENSE).
 
-## Contributing and security
+## Build the future with us
 
 Bug reports, design feedback and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first, and see the [Changelog](CHANGELOG.md) for what's new.
 
