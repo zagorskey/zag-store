@@ -199,6 +199,14 @@ private struct RPPairingView: View {
 		}
 
 		Section {
+			ZagMobileDataFixRow()
+		} header: {
+			Text("Mobile Data")
+		} footer: {
+			Text("Install over 4G or 5G by letting an Apple Shortcut turn Mobile Data off during the install.")
+		}
+
+		Section {
 			NavigationLink {
 				RPPairingDiagnosticsView()
                     .zagSettingsDestinationAvatar()
@@ -456,6 +464,14 @@ struct RPPairingDiagnosticsView: View {
 	@State private var showInstalledAppsInventory = false
 	@State private var inventoryError: String?
 	@State private var healthMessage: String?
+	@State private var reportState: ReportState = .idle
+
+	private enum ReportState { case idle, preparing, copied }
+	@State private var traceState: ReportState = .idle
+	@ObservedObject private var mobileDataToggle = ZagMobileDataToggleController.shared
+	@ObservedObject private var mobileDataInstall = ZagMobileDataInstallCoordinator.shared
+	@State private var toggleLogCopied = false
+	@State private var traceSummary: [String] = []
 
 	var body: some View {
 		NBList("RPPairing Diagnostics") {
@@ -501,10 +517,133 @@ struct RPPairingDiagnosticsView: View {
 					Label(pairingCore.isGate2Running ? "Running Health Check…" : "Run Full Health Check", systemImage: pairingCore.isGate2Running ? "wave.3.right" : "stethoscope")
 				}
 				.disabled(pairingCore.isGate2Running)
+
+				Button {
+					guard pairingCore.pairingFileExists else {
+						healthMessage = "Pair this iPhone first."
+						return
+					}
+					pairingCore.startGate2Probe(endpoint: .loopbackExperimental)
+				} label: {
+					Label("Run Loopback Health Check (Experimental)", systemImage: "flask")
+				}
+				.disabled(pairingCore.isGate2Running)
+
+				if pairingCore.gate2Endpoint != .localDevVPN {
+					LabeledContent("Target") {
+						Text("\(pairingCore.gate2Endpoint.address):\(ZagDeviceLink.rsdPort)")
+							.font(.footnote.monospaced())
+					}
+				}
+				if let last = pairingCore.gate2Steps.last, !pairingCore.isGate2Running {
+					LabeledContent("Duration") { Text("\(last.elapsedMilliseconds) ms") }
+				}
+
+				Button {
+					reportState = .preparing
+					Task { @MainActor in
+						let report = await ZagLocalVPNMonitor.shared.makeReport(
+							steps: pairingCore.gate2Steps,
+							sessionFailure: pairingCore.gate2Failure,
+							endpoint: pairingCore.gate2Endpoint
+						)
+						UIPasteboard.general.string = report
+						reportState = .copied
+					}
+				} label: {
+					switch reportState {
+					case .idle: Label("Copy Diagnostic Report", systemImage: "doc.on.doc")
+					case .preparing: Label("Preparing Report…", systemImage: "hourglass")
+					case .copied: Label("Report Copied", systemImage: "checkmark")
+					}
+				}
+				.disabled(pairingCore.isGate2Running || reportState == .preparing)
 			} header: {
 				Text("Health Checks")
 			} footer: {
-				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup.")
+				Text("Connect LocalDevVPN first. This verifies pairing, Pair-Verify, TLS-PSK, RSD, Installation Proxy, app lookup, and AFC/PublicStaging write-read-cleanup. The copied report includes the network type, timings and the first failing step, without device names, identifiers or keys.")
+			}
+
+			Section {
+				Button {
+					traceState = .preparing
+					Task { @MainActor in
+						guard !pairingCore.isTransportBusy else {
+							traceSummary = ["A device session is running. Try again when it finishes."]
+							traceState = .idle
+							return
+						}
+						let result = await ZagTransportTrace.run()
+						traceSummary = ZagTransportTrace.findings(result)
+						UIPasteboard.general.string = ZagTransportTrace.report(
+							result,
+							deviceSummary: "\(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)"
+						)
+						traceState = .copied
+					}
+				} label: {
+					switch traceState {
+					case .idle: Label("Run Connection Trace", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+					case .preparing: Label("Tracing…", systemImage: "hourglass")
+					case .copied: Label("Trace Copied", systemImage: "checkmark")
+					}
+				}
+				.disabled(traceState == .preparing || pairingCore.isGate2Running)
+
+				ForEach(traceSummary, id: \.self) { finding in
+					Text(finding).font(.footnote).textSelection(.enabled)
+				}
+			} header: {
+				Text("Connection Trace")
+			} footer: {
+				Text("Tests whether TCP crosses LocalDevVPN and how the RemotePairing port answers on this network, then copies a redacted trace. Nothing is sent on these connections. Run it on Wi-Fi and on mobile data and compare.")
+			}
+
+			Section {
+				ForEach(ZagMobileDataToggle.Command.allCases, id: \.self) { command in
+					Button {
+						toggleLogCopied = false
+						mobileDataToggle.run(command)
+					} label: {
+						Label("Run \(command.rawValue)", systemImage: command == .status ? "checkmark.shield" : (command == .off ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right"))
+					}
+					.disabled(mobileDataToggle.isBusy || pairingCore.isGate2Running)
+				}
+
+				if mobileDataToggle.isBusy {
+					Button("Cancel", role: .cancel) { mobileDataToggle.cancel() }
+				}
+
+				ForEach(mobileDataToggle.events) { event in
+					Text("+\(event.milliseconds) ms  \(event.text)")
+						.font(.footnote.monospaced())
+						.textSelection(.enabled)
+				}
+
+				if !mobileDataInstall.decisionLog.isEmpty {
+					DisclosureGroup("Last Install or Removal Decision") {
+						ForEach(Array(mobileDataInstall.decisionLog.enumerated()), id: \.offset) { _, line in
+							Text(line)
+								.font(.footnote.monospaced())
+								.textSelection(.enabled)
+						}
+					}
+				}
+
+				if !mobileDataToggle.events.isEmpty || !mobileDataInstall.decisionLog.isEmpty {
+					Button {
+						UIPasteboard.general.string = mobileDataToggle.report()
+							+ "\n\nLast install or removal decision\n"
+							+ mobileDataInstall.decisionLog.joined(separator: "\n")
+						toggleLogCopied = true
+					} label: {
+						Label(toggleLogCopied ? "Log Copied" : "Copy Shortcut Log", systemImage: toggleLogCopied ? "checkmark" : "doc.on.doc")
+					}
+				}
+			} header: {
+				Text(ZagMobileDataToggle.shortcutName)
+			} footer: {
+				Text("Runs the Shortcut with one command and records every callback parameter Shortcuts returns. After off, RPPairing readiness is confirmed by the full health check; after on, by the system network path.")
 			}
 
 			Section {

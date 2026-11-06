@@ -115,7 +115,16 @@ final class ZagRPPairingCore: ObservableObject {
 	// All native RPPairing workers open their own socket. Never overlap them.
 	// Gate2 is queued behind an automatic inventory request for diagnostics.
 	private var transportOwner: String?
-	private var pendingGate2IP: String?
+	/// True while any native RPPairing worker owns the transport.
+	var isTransportBusy: Bool { transportOwner != nil }
+	/// Timed, redacted steps of the latest health check, for the report.
+	private(set) var gate2Steps: [ZagDiagnosticStep] = []
+	private(set) var gate2Failure: String?
+	private var gate2StartedAt = Date()
+	private var pendingGate2Endpoint: ZagRPPairingEndpoint?
+	/// The endpoint of the current or most recent health check. Fixed when a
+	/// check starts; every check without an explicit endpoint uses LocalDevVPN.
+	@Published private(set) var gate2Endpoint: ZagRPPairingEndpoint = .localDevVPN
 	private func acquireTransport(_ operation: String) -> Bool {
 		guard transportOwner == nil else {
 			ZagLogger.shared.warning("RPPairing", "Transport busy | requested=\(operation) owner=\(transportOwner ?? "unknown")")
@@ -129,10 +138,10 @@ final class ZagRPPairingCore: ObservableObject {
 		guard transportOwner == operation else { return }
 		transportOwner = nil
 		ZagLogger.shared.info("RPPairing", "Transport released | owner=\(operation)")
-		if let ip = pendingGate2IP {
-			pendingGate2IP = nil
+		if let endpoint = pendingGate2Endpoint {
+			pendingGate2Endpoint = nil
 			gate2State = .idle
-			startGate2Probe(deviceIP: ip)
+			startGate2Probe(endpoint: endpoint)
 		}
 	}
 
@@ -190,6 +199,14 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 	private var gate4Completion: ((Result<Void, Error>) -> Void)?
 	private var gate4Progress: ((Int) -> Void)?
+	/// Retries apply only to user installs that opt in, and only to failures
+	/// before installation began on the device (see ZagRPPairingFailure).
+	private var gate4RetryPlan = ZagGate4RetryPlan()
+	private var gate4RetryEnabled = false
+	private var gate4StagedIPA: URL?
+	private var gate4DeviceIP = ZagDeviceLink.peerAddress
+	/// Callback codes that mean the device has started changing state.
+	private static let gate4InstallationCodes: Set<Int32> = [205, 206, 208, 209, 210]
 	private var gate4UninstallCompletion: ((Result<Void, Error>) -> Void)?
 	private var gate4UninstallRunning = false
 	private var gate2DeviceInfo: (name: String, model: String, version: String, build: String)?
@@ -229,13 +246,17 @@ final class ZagRPPairingCore: ObservableObject {
 
 	func installGate4IPA(
 		at sourceURL: URL,
-		deviceIP: String = "10.7.0.1",
+		deviceIP: String = ZagDeviceLink.peerAddress,
+		retryTransientFailures: Bool = false,
 		progress: ((Int) -> Void)? = nil,
 		completion: ((Result<Void, Error>) -> Void)? = nil
 	) throws {
 		guard !isGate4Running, acquireTransport("Gate4 install") else {
 			throw Gate4InstallError.alreadyRunning
 		}
+		_ = gate4RetryPlan.begin()
+		gate4RetryEnabled = retryTransientFailures
+		gate4DeviceIP = deviceIP
 		gate4AttemptEvents = []
 		gate4Completion = completion
 		gate4Progress = progress
@@ -253,23 +274,19 @@ final class ZagRPPairingCore: ObservableObject {
 			// No worker was started, so no callback will ever run these.
 			// The caller reports the thrown error instead.
 			releaseTransport("Gate4 install")
+			gate4RetryPlan.end()
 			gate4Completion = nil
 			gate4Progress = nil
 			throw error
 		}
 
 		ZagLogger.shared.info("RPPairing", "Gate4 install starting | deviceIP=\(deviceIP) | ipa=\(sourceURL.lastPathComponent)")
+		gate4StagedIPA = localURL
 		gate4State = .starting
 		recordGate4Event("IPA staged; requesting native Gate4 worker startup")
-		let started = deviceIP.withCString { ip in
-			Self.pairingFileURL.path.withCString { pairingPath in
-				localURL.path.withCString { ipaPath in
-					zag_gate4_install(ip, pairingPath, ipaPath, zagGate4Callback)
-				}
-			}
-		}
-		if !started {
+		if !startGate4Worker(deviceIP: deviceIP, ipa: localURL) {
 			releaseTransport("Gate4 install")
+			gate4RetryPlan.end()
 			recordGate4Event("Native Gate4 worker failed to start")
 			ZagLogger.shared.error("RPPairing", gate4LastEvent)
 			let error = Gate4InstallError.couldNotStart
@@ -280,6 +297,56 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 		recordGate4Event("Native Gate4 worker accepted startup; awaiting callback")
 		ZagLogger.shared.info("RPPairing", gate4LastEvent)
+	}
+
+	private func startGate4Worker(deviceIP: String, ipa: URL) -> Bool {
+		deviceIP.withCString { ip in
+			Self.pairingFileURL.path.withCString { pairingPath in
+				ipa.path.withCString { ipaPath in
+					zag_gate4_install(ip, pairingPath, ipaPath, zagGate4Callback)
+				}
+			}
+		}
+	}
+
+	/// Runs the same staged IPA again after a transient, pre-installation
+	/// failure. The transport stays owned throughout, so nothing else can
+	/// start in between, and the caller still receives exactly one result.
+	private func retryGate4(after delay: TimeInterval, kind: ZagRPPairingFailureKind, message: String) {
+		guard let ipa = gate4StagedIPA else { return }
+		recordGate4Event("Gate4 \(kind) before installation; retry \(gate4RetryPlan.retriesUsed) in \(Int(delay)) s: \(message)")
+		ZagLogger.shared.warning("RPPairing", gate4LastEvent)
+		gate4State = .starting
+		NotificationCenter.default.post(name: .zagDeviceLinkRecheckRequested, object: nil)
+		Task { @MainActor [weak self] in
+			try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+			// Retry only while the tunnel is plausibly there. With no tunnel
+			// interface and no answer, LocalDevVPN is off: fail now rather than
+			// spend another full connection timeout.
+			let tunnel = ZagTunnelInterface.containsLocalDevTunnel(ZagTunnelInterface.current())
+			let probe = await ZagEndpointProbe.connect(host: self?.gate4DeviceIP ?? ZagDeviceLink.peerAddress, timeout: 2)
+			guard let self, self.gate4RetryPlan.active else { return }
+			if ZagDeviceLinkModel.tunnelIsDown(probe, interfacePresent: tunnel) {
+				self.gate4RetryPlan.end()
+				self.receiveGate4(code: -4, message: message)
+				return
+			}
+			self.gate4AttemptEvents = []
+			if !self.startGate4Worker(deviceIP: self.gate4DeviceIP, ipa: ipa) {
+				self.gate4RetryPlan.end()
+				self.receiveGate4(code: -4, message: Gate4InstallError.couldNotStart.localizedDescription)
+			}
+		}
+	}
+
+	private func publishReadiness(_ readiness: ZagRPPairingReadiness) {
+		NotificationCenter.default.post(name: .zagRPPairingReadinessDidChange, object: readiness)
+	}
+
+	/// Health checks on an experimental endpoint never change the toolbar.
+	private func publishGate2Readiness(_ readiness: ZagRPPairingReadiness) {
+		guard gate2Endpoint.publishesReadiness else { return }
+		publishReadiness(readiness)
 	}
 
 	fileprivate func receiveGate4(code: Int32, message: String) {
@@ -293,7 +360,9 @@ final class ZagRPPairingCore: ObservableObject {
 		}
 		switch code {
 		case 201: gate4State = .starting
-		case 202: gate4State = .pairVerified
+		case 202:
+			gate4State = .pairVerified
+			publishReadiness(.verified(Date()))
 		case 203: gate4State = .tunnel
 		case 204: gate4State = .rsd
 		case 205: gate4State = .installing
@@ -313,16 +382,27 @@ final class ZagRPPairingCore: ObservableObject {
 		case 207:
 			ZagLogger.shared.info("RPPairing", "Gate4 install completed")
 			gate4State = .complete
+			gate4RetryPlan.end()
 			releaseTransport("Gate4 install")
 			gate4Completion?(.success(()))
 			gate4Completion = nil
 			gate4Progress = nil
 		case -4:
+			let installationStarted = gate4AttemptEvents.contains { Self.gate4InstallationCodes.contains($0.code) }
+			let kind = ZagRPPairingFailure.classify(message, installationStarted: installationStarted)
+			if gate4RetryEnabled, let delay = gate4RetryPlan.delayAfterFailure(kind) {
+				retryGate4(after: delay, kind: kind, message: message)
+				return
+			}
+			gate4RetryPlan.end()
+			if kind != .installation && kind != .other { publishReadiness(.failed(kind, Date())) }
 			releaseTransport("Gate4 install")
 			gate4SelfUpdateCommandSent = false
-			ZagLogger.shared.error("RPPairing", "Gate4 install failed: \(message)")
+			ZagLogger.shared.error("RPPairing", "Gate4 install failed (\(kind)): \(message)")
 			gate4State = .failed(message)
-			let error = Gate4InstallError.installFailed(message)
+			let error: Gate4InstallError = gate4RetryEnabled
+				? .classifiedFailure(message, kind)
+				: .installFailed(message)
 			gate4Completion?(.failure(error))
 			gate4Completion = nil
 			gate4Progress = nil
@@ -633,16 +713,21 @@ final class ZagRPPairingCore: ObservableObject {
 		installedApps[bundleID]
 	}
 
-	func startGate2Probe(deviceIP: String = "10.7.0.1") {
+	func startGate2Probe(endpoint: ZagRPPairingEndpoint = .localDevVPN) {
 		guard !isGate2Running else { return }
+		let deviceIP = endpoint.address
 		guard acquireTransport("Gate2 health probe") else {
 			// Manual diagnostics should run after background inventory finishes.
-			pendingGate2IP = deviceIP
+			pendingGate2Endpoint = endpoint
 			gate2State = .starting
 			ZagLogger.shared.info("RPPairing", "Gate2 health probe queued behind active transport")
 			return
 		}
 		ZagLogger.shared.info("RPPairing", "Gate2 health probe starting | deviceIP=\(deviceIP)")
+		gate2Endpoint = endpoint
+		gate2Steps = []
+		gate2Failure = nil
+		gate2StartedAt = Date()
 		gate2State = .starting
 		let started = deviceIP.withCString { ip in
 			Self.pairingFileURL.path.withCString { pairingPath in
@@ -656,6 +741,7 @@ final class ZagRPPairingCore: ObservableObject {
 	}
 
 	fileprivate func receiveGate2(code: Int32, message: String) {
+		recordGate2Step(code: code, message: message)
 		switch code {
 		case 101:
 			gate2State = .starting
@@ -663,8 +749,13 @@ final class ZagRPPairingCore: ObservableObject {
 			gate2State = .lockdown(message)
 		case 103:
 			gate2State = .pairing(message)
+		case 114:
+			// Diagnostic sessions only: the unauthenticated handshake finished.
+			gate2State = .pairing(message)
 		case 104:
 			gate2State = .pairRecord(message)
+			// The iPhone accepted the saved credentials over the real transport.
+			publishGate2Readiness(.verified(Date()))
 		case 105:
 			gate2State = .coreDevice(message)
 		case 106:
@@ -704,6 +795,7 @@ final class ZagRPPairingCore: ObservableObject {
 			case .some(let result): appResult = result
 			case .none: appResult = (0, false)
 			}
+			publishGate2Readiness(.verified(Date()))
 			gate2State = .complete(
 				name: previous.name,
 				model: previous.model,
@@ -715,10 +807,48 @@ final class ZagRPPairingCore: ObservableObject {
 		case -2:
 			releaseTransport("Gate2 health probe")
 			ZagLogger.shared.error("RPPairing", "Gate2 health probe failed: \(message)")
+			gate2Failure = message
+			let kind = ZagRPPairingFailure.classify(message, installationStarted: false)
+			if kind != .other { publishGate2Readiness(.failed(kind, Date())) }
 			gate2State = .failed(message)
 		default:
 			break
 		}
+	}
+
+	private func recordGate2Step(code: Int32, message: String) {
+		let stage: String
+		var detail = message
+		switch code {
+		case 101:
+			stage = "Start"
+			let networks = ZagLocalVPNMonitor.shared.physicalNetworks
+			let tunnels = ZagLocalVPNMonitor.tunnelInterfaceNames()
+			detail = "endpoint \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort) (\(gate2Endpoint.label)); network \(networks.isEmpty ? "none" : networks.joined(separator: ", ")); LocalDevVPN interface \(tunnels.isEmpty ? "not present" : tunnels.joined(separator: ", "))"
+		case 102: stage = "TCP connection to \(gate2Endpoint.address):\(ZagDeviceLink.rsdPort)"
+		case 103: stage = "Handshake started"
+		case 114: stage = "Handshake completed; Pair-Verify started"
+		case 104: stage = "Pair-Verify succeeded (credentials accepted)"
+		case 105: stage = "TLS-PSK device tunnel"
+		case 106: stage = "RSD"
+		case 107:
+			stage = "Device information"
+			// Never record the device name.
+			let fields = message.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+			detail = fields.dropFirst().filter { !$0.isEmpty }.joined(separator: ", ")
+		case 108: stage = "Installation Proxy"
+		case 109: stage = "Installed Apps Lookup"
+		case 110: stage = "AFC"
+		case 111: stage = "PublicStaging Write"
+		case 112: stage = "PublicStaging Verify"
+		case 113: stage = "Complete"
+		case -2:
+			let reached = gate2Steps.last?.stage ?? "Start"
+			stage = "After \(reached)"
+		default: return
+		}
+		let elapsed = Int(Date().timeIntervalSince(gate2StartedAt) * 1000)
+		gate2Steps.append(ZagDiagnosticStep(stage: stage, detail: detail, elapsedMilliseconds: elapsed, failed: code == -2))
 	}
 
 	var pairingFileExists: Bool {
@@ -1040,6 +1170,9 @@ private enum Gate4InstallError: LocalizedError {
 	case alreadyRunning
 	case couldNotStart
 	case installFailed(String)
+	/// User installs: the raw error plus what it means and whether anything
+	/// changed on the device.
+	case classifiedFailure(String, ZagRPPairingFailureKind)
 
 	var errorDescription: String? {
 		switch self {
@@ -1056,8 +1189,17 @@ private enum Gate4InstallError: LocalizedError {
 				"No installation was confirmed."
 			}
 			return message
+		case .classifiedFailure(let message, let kind):
+			return ZagRPPairingFailure.explanation(kind) + "\n\nDetails: " + message
 		}
 	}
+}
+
+extension Notification.Name {
+	/// Ask the Local VPN monitor to check the device link now.
+	static let zagDeviceLinkRecheckRequested = Notification.Name("ZagDeviceLinkRecheckRequested")
+	/// Posted with a ZagRPPairingReadiness object after a real RPPairing session.
+	static let zagRPPairingReadinessDidChange = Notification.Name("ZagRPPairingReadinessDidChange")
 }
 
 

@@ -53,12 +53,17 @@ final class ArchiveHandler: NSObject {
 			let zipUrl = self._uniqueWorkDir.appendingPathComponent("Archive.zip")
 			let ipaUrl = self._uniqueWorkDir.appendingPathComponent("Archive.ipa")
 			
+			// Zip reports progress per file; report in 1 % steps so packaging
+			// doesn't flood the main thread.
+			var lastReported = -1.0
 			try Zip.zipFiles(
 				paths: [payloadUrl],
 				zipFilePath: zipUrl,
 				password: nil,
 				compression: ZipCompression.allCases[ArchiveHandler.getCompressionLevel()],
 				progress: { progress in
+					guard progress >= 1 || progress - lastReported >= 0.01 else { return }
+					lastReported = progress
 					Task { @MainActor in
 						self.viewModel?.packageProgress = progress
 					}

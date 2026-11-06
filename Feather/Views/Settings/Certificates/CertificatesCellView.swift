@@ -30,7 +30,7 @@ struct CertificatesCellView: View {
         } ?? false
         let needsAttention = cert.revoked || !isCurrent || !hasP12 || expiringSoon
 
-        return VStack(alignment: .leading, spacing: 13) {
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: needsAttention ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
                     .font(.system(size: 24, weight: .medium))
@@ -47,35 +47,37 @@ struct CertificatesCellView: View {
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Text(title)
+                            .font(.system(size: 19, weight: .bold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        Button {
+                            _copyCertificateName()
+                        } label: {
+                            Image(systemName: isCopyFeedbackActive ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(isCopyFeedbackActive ? copyFeedbackColor : Color.secondary)
+                                .frame(width: 21, height: 21)
+                                .background(Color.primary.opacity(0.05), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Copy Certificate Name")
+                        .accessibilityHint("Copies the original provisioning profile name")
+                    }
 
                     Text(profile?.TeamName ?? profile?.AppIDName ?? "Unknown signing team")
-                        .font(.subheadline)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 Spacer(minLength: 4)
-
-                Button {
-                    _copyCertificateName()
-                } label: {
-                    Image(systemName: isCopyFeedbackActive ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(isCopyFeedbackActive ? copyFeedbackColor : Color.secondary)
-                        .frame(width: 34, height: 34)
-                        .background(Color.primary.opacity(0.05), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy Certificate Name")
-                .accessibilityHint("Copies the original provisioning profile name")
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 if needsAttention {
                     Label(
                         cert.revoked ? "Marked revoked" :
@@ -90,17 +92,18 @@ struct CertificatesCellView: View {
                 Spacer(minLength: 4)
 
                 if let profileExpiry {
-                    Label {
-                        Text(profileExpiry, style: .date)
-                    } icon: {
+                    HStack(spacing: 4) {
                         Image(systemName: "calendar")
+                            .font(.system(size: 11, weight: .medium))
+                        Text(profileExpiry.formatted(.dateTime.day().month(.abbreviated).year()))
                     }
                     .foregroundStyle(.secondary)
                 }
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
+            .padding(.top, 1)
 
             if cert.ppQCheck {
                 Label("PPQ Check", systemImage: "shield.lefthalf.filled")
