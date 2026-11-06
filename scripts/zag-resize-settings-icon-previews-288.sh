@@ -1,91 +1,78 @@
-#!/bin/bash
-# Optimise only Zag Store Settings > App Icon thumbnails for 96 pt @3x.
-# Home Screen icons in *.appiconset are never modified.
+#!/usr/bin/env bash
+# Resize only Settings > App Icon previews to 288px (@3x for 96pt).
+# Reads real image filenames from each imageset Contents.json; supports 512px
+# and 1024px originals. Never modifies *.appiconset home-screen artwork.
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ASSETS="$ROOT/Feather/Resources/Assets.xcassets"
-NAMES=(
-  ZagOriginalLight ZagOriginalDark
-  ZagClearGlassLight ZagClearGlassDark
-  ZagFirewoodLight ZagFirewoodDark
-  ZagMatrixLight ZagMatrixDark
-  ZagMoneyLight ZagMoneyDark
-  ZagGBPLight ZagGBPDark
-  ZagNeonFluxLight ZagNeonFluxDark
-)
-command -v sips >/dev/null || { echo "ERROR: macOS sips is required" >&2; exit 1; }
-command -v git >/dev/null || { echo "ERROR: git is required" >&2; exit 1; }
-[[ -d "$ASSETS" ]] || { echo "ERROR: Missing asset catalog: $ASSETS" >&2; exit 1; }
-[[ "$(git -C "$ROOT" rev-parse --show-toplevel)" == "$ROOT" ]] || { echo "ERROR: unexpected repository root" >&2; exit 1; }
+cd "$ROOT"
+python3 - <<'PY'
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
-# Validate the entire input set before changing a single file.
-for name in "${NAMES[@]}"; do
-  file="$ASSETS/$name.imageset/$(/usr/bin/python3 - "$ASSETS/$name.imageset/Contents.json" <<'JSONPY'
-import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
-files = [x["filename"] for x in data["images"] if x.get("filename")]
-if len(files) != 1:
-    raise SystemExit("Expected exactly one preview image")
-print(files[0])
-JSONPY
-)"
-  [[ -f "$file" ]] || { echo "ERROR: Missing preview $file" >&2; exit 1; }
-  dims="$(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null)"
-  if ! grep -q 'pixelWidth: 1024' <<< "$dims" || ! grep -q 'pixelHeight: 1024' <<< "$dims"; then
-    echo "ERROR: Expected 1024x1024 preview: $file" >&2
-    exit 1
-  fi
-done
+root = Path("Feather/Resources/Assets.xcassets")
+names = [
+    "ZagOriginalLight", "ZagOriginalDark",
+    "ZagClearGlassLight", "ZagClearGlassDark",
+    "ZagFirewoodLight", "ZagFirewoodDark",
+    "ZagMatrixLight", "ZagMatrixDark",
+    "ZagMoneyLight", "ZagMoneyDark",
+    "ZagGBPLight", "ZagGBPDark",
+    "ZagNeonFluxLight", "ZagNeonFluxDark",
+]
+sources = []
+for name in names:
+    folder = root / f"{name}.imageset"
+    manifest = folder / "Contents.json"
+    if not manifest.is_file():
+        raise RuntimeError(f"Missing manifest: {manifest}")
+    entries = json.loads(manifest.read_text()).get("images", [])
+    filenames = [x["filename"] for x in entries if x.get("filename")]
+    if len(filenames) != 1:
+        raise RuntimeError(f"Expected one preview image in {manifest}")
+    path = folder / filenames[0]
+    if not path.is_file():
+        raise RuntimeError(f"Missing preview: {path}")
+    info = subprocess.run(
+        ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    width = int(re.search(r"pixelWidth:\s*(\d+)", info).group(1))
+    height = int(re.search(r"pixelHeight:\s*(\d+)", info).group(1))
+    if width != height or width < 288:
+        raise RuntimeError(f"Unexpected dimensions: {name} {width}x{height}")
+    sources.append((name, path, width))
 
-backup="$(mktemp -d "${TMPDIR:-/tmp}/zag-preview-originals.XXXXXXXX")"
-stage="$(mktemp -d "${TMPDIR:-/tmp}/zag-preview-288.XXXXXXXX")"
-echo "Original preview backup: $backup"
-echo "Staging resized previews: $stage"
+backup = Path(tempfile.mkdtemp(prefix="zag-preview-originals-"))
+stage = Path(tempfile.mkdtemp(prefix="zag-preview-resized-"))
+print("Original preview backup:", backup)
+for name, path, width in sources:
+    shutil.copy2(path, backup / f"{name}.png")
+    target = stage / f"{name}.png"
+    if width == 288:
+        shutil.copy2(path, target)
+    else:
+        subprocess.run(
+            ["sips", "-s", "format", "png", "-z", "288", "288",
+             str(path), "--out", str(target)],
+            check=True, stdout=subprocess.DEVNULL,
+        )
+    info = subprocess.run(
+        ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(target)],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    if "pixelWidth: 288" not in info or "pixelHeight: 288" not in info:
+        raise RuntimeError(f"Invalid resized output: {name}")
 
-for name in "${NAMES[@]}"; do
-  file="$ASSETS/$name.imageset/$(/usr/bin/python3 - "$ASSETS/$name.imageset/Contents.json" <<'JSONPY'
-import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
-files = [x["filename"] for x in data["images"] if x.get("filename")]
-if len(files) != 1:
-    raise SystemExit("Expected exactly one preview image")
-print(files[0])
-JSONPY
-)"
-  cp -p "$file" "$backup/$name.png"
-  sips -s format png -z 288 288 "$file" --out "$stage/$name.png" >/dev/null
-  dims="$(sips -g pixelWidth -g pixelHeight "$stage/$name.png" 2>/dev/null)"
-  if ! grep -q 'pixelWidth: 288' <<< "$dims" || ! grep -q 'pixelHeight: 288' <<< "$dims"; then
-    echo "ERROR: Invalid resized preview $name; source files are unchanged" >&2
-    exit 1
-  fi
-done
-
-# All 14 thumbnails were produced successfully; now replace only those files.
-before=0
-after=0
-for name in "${NAMES[@]}"; do
-  file="$ASSETS/$name.imageset/$(/usr/bin/python3 - "$ASSETS/$name.imageset/Contents.json" <<'JSONPY'
-import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
-files = [x["filename"] for x in data["images"] if x.get("filename")]
-if len(files) != 1:
-    raise SystemExit("Expected exactly one preview image")
-print(files[0])
-JSONPY
-)"
-  old="$(stat -f %z "$file")"
-  new="$(stat -f %z "$stage/$name.png")"
-  before=$((before + old))
-  after=$((after + new))
-  cp "$stage/$name.png" "$file"
-  printf '%-24s %8d -> %8d bytes\n' "$name" "$old" "$new"
-done
-echo "Preview PNG source bytes: $before -> $after (saved $((before - after)))"
-echo "Home Screen .appiconset files were not changed."
-echo "Next: inspect git diff, build once, check Settings thumbnails, and measure IPA."
-echo "Restore originals if needed from: $backup"
+before = sum(path.stat().st_size for _, path, _ in sources)
+for name, path, width in sources:
+    shutil.copy2(stage / f"{name}.png", path)
+    print(f"{name}: {width}x{width} -> 288x288")
+after = sum(path.stat().st_size for _, path, _ in sources)
+print(f"Source PNG savings: {(before - after) / 1048576:.2f} MiB")
+print("Home Screen .appiconset artwork unchanged.")
+print("Backup:", backup)
+PY

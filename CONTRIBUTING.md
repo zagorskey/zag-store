@@ -1,62 +1,40 @@
-# Contributing
+# Contributing to Zag Store
 
-Feather is a sideloading app meant to be used on stock versions, to keep compatibility we have to utililize stock features to keep it working. As such, we have specific contribution rules in place to maintain this and Feathers integrity.
+Thanks for your interest in improving Zag Store.
 
-Any contributions should follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
+Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
 
-## Rules
+## Guidelines
 
-- **No usage of any exploits of any kind**.
-- **No contributions related to retrieving any signing certificates owned by companies**.
-- **Modifying any hardcoded links should be discussed before changing**.
-- **If you're planning on making a large contribution, please [make an issue](https://github.com/khcrysalis/Feather) beforehand**.
-- **Your contributions should be licensed appropriately**. 
-  - Feather: GPLv3
-  - AltSourceKit: MIT
-  - NimbleKit: MIT 
-  - Zsign: MIT
-- **Typo contributions are okay**, just make sure they are appropriate.
-  - This includes localizations
-- **Code cleaning contributions are okay**.
+- Open an issue before undertaking a large architectural change.
+- Work on a dedicated feature branch; avoid direct changes to `main`.
+- Keep changes focused and include reproducible test results.
+- Preserve existing installation, signing, update, and navigation functionality.
+- Do not introduce exploits, entitlement bypasses, or certificate harvesting.
+- Do not commit certificates, private keys, provisioning profiles, passwords, device identifiers, or internal infrastructure secrets.
+- Discuss changes to production endpoints or signing workflows before implementation.
+- Respect the licences and notices of Feather, AltSourceKit, NimbleKit, Zsign, and other dependencies.
 
-## Contributing to Feather
+## Bug reports
 
-#### Compiling requirements
+Include the Zag Store version, iOS version, device model, steps to reproduce, expected behaviour, and sanitized logs. Remove personal and signing information.
 
-- Xcode 16.0
-- Swift 6.0
-- iOS 16.0
+## Building
 
-1. Clone repository
-    ```sh
-    git clone https://github.com/khcrysalis/Feather --recursive
-    ```
-    - `Zsign` is a submodule, recursive is required.
+Clone with submodules:
 
-2. Opening with Xcode
-    ```sh
-    cd Feather && open Feather.xcworkspace
-    ```
+```bash
+git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
+cd zag-store
+```
 
-#### Localizations
-- For localizations, you will need Xcode 15 or higher to edit the `Feather/Resources/Localizable.xcstrings` file, or some alternative software which allows you to edit an `.xcstrings` file. 
-- We use a newer format for convenience, but at a cost of less accessibility when it comes to actually editing it.
-  - **Disclaimer: do NOT edit by hand.**
-- Some localizations were imported from V1, if they don't make sense please feel free to change them.
-- After localizing, please have another person review your localizations (unless the owners have asked you personally to help translate). 
-  - We want high quality localizations and have them actually make sense when in the application.
-  - They will not be merged unless the latter was done.
+Then follow the steps in [README.md](README.md#build-from-source): build the Rust core with `bash RPPairingCore/build-rust.sh`, then run `make iphoneos`. The resulting `packages/ZagStore.ipa` is ad-hoc signed and must be signed with your own certificate before a stock device will install it.
 
-#### Making a pull request
+## Pull requests
 
-- Make sure your contributions stay isolated in their own branch, and not `main`.
-- When contributing don't be afraid of any reviewers requesting changes or judging how you wrote something, it's all to keep the project clean and tidy.
+- Open pull requests against `main`. Changes reach `main` only through reviewed pull requests.
+- Describe what you tested, on which device and iOS version.
 
-## Contributing to Zsign
+## Licensing
 
-When contributing to Zsign, head over to [khcrysalis/Zsign-Package](https://github.com/khcrysalis/Zsign-Package/tree/package) and make your contributions.
-
-Any contributions to here will be immediately updated to here, to keep things consistent.
-
-## Contributing to the wiki
-- If you want to add a page or suggest edits, make an issue with your proposed changes.
+Contributions to Zag Store must be compatible with GPL-3.0 and applicable third-party licences. Retain original copyright and attribution notices.

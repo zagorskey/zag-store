@@ -127,9 +127,11 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         case channelNotPublished
         case keychainContinuityMismatch
         case previousAttemptUnverified
+        case incompatibleDeviceFamily
 
         var errorDescription: String? {
             switch self {
+            case .incompatibleDeviceFamily: return "This update is built for a different device type (iPhone or iPad) and would not run natively on this device."
             case .previousAttemptUnverified: return "A previous update attempt has not been confirmed yet. Reopen Zag Store to verify it, or clear it in Zag Store Update and try again."
             case .keychainContinuityMismatch: return "The signed update would lose access to Zag Store's saved keychain data. Sign it with a certificate from the same team as the installed app."
             case .invalidRelease: return "The release metadata is incomplete or invalid."
@@ -697,6 +699,15 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
               version == release.version,
               build == release.build else {
             throw UpdateError.signedIdentityMismatch
+        }
+        // An iPhone-only build would run in compatibility mode on an iPad, and
+        // an iPad-only build cannot install on an iPhone.
+        guard ZagDeviceFamilyPolicy.allowsReplacement(
+            candidate: ZagDeviceFamilyPolicy.families(fromInfoPlistValue: info["UIDeviceFamily"]),
+            installed: ZagDeviceFamilyPolicy.families(fromInfoPlistValue: Bundle.main.object(forInfoDictionaryKey: "UIDeviceFamily")),
+            device: ZagDeviceFamilyPolicy.currentDevice()
+        ) else {
+            throw UpdateError.incompatibleDeviceFamily
         }
         try validateProvisioningTeam(at: appURL)
         try validateExecutableIdentity(at: appURL)
