@@ -1,3 +1,6 @@
+> [!NOTE]
+> This page describes the design of the upstream [Feather](https://github.com/claration/Feather) project, which Zag Store is based on. Zag Store's own installation path (RPPairing over a local VPN, on Wi-Fi or Mobile Data) differs in places.
+
 ## How does it work?
 
 How Feather works is a bit complicated, with having multiple ways to install, app management, tweaks, etc. However, I'll point out how the important features work here.

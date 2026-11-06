@@ -1,8 +1,8 @@
 name: Legacy release workflow disabled
 
-# The upstream Feather release workflow must not publish Zag Store builds.
-# Releases are packaged with the local AppTesters signing script and
-# published to the separate public zag-store-releases repository.
+# The upstream Feather release workflow is disabled and must not publish
+# Zag Store builds. Releases are built with `make iphoneos` and published
+# manually by the maintainers after review.
 on:
   workflow_dispatch:
 
