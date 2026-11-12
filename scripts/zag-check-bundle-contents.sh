@@ -53,4 +53,18 @@ if (( ${#LEAKS[@]} > 0 )); then
 	exit 1
 fi
 
+# A test-only build (scripts/build-zag-first-launch-test.sh) has first-launch reporting
+# compiled on; it must never be released. ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD=1 permits it for
+# the approved preview acceptance only; publish-zag-release.zsh always clears it.
+TEST_MARKER=ZAG-FIRST-LAUNCH-TEST-BUILD-NOT-FOR-RELEASE
+if [[ -d "$TARGET" ]]; then
+	grep -rqaF "$TEST_MARKER" "$TARGET" && marked=1 || marked=0
+else
+	unzip -p "$TARGET" | grep -qaF "$TEST_MARKER" && marked=1 || marked=0
+fi
+if (( marked )) && [[ "${ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD:-}" != 1 ]]; then
+	echo "Refusing $TARGET: first-launch test build (reporting compiled on); not for release." >&2
+	exit 1
+fi
+
 echo "Bundle contents check passed: $TARGET"

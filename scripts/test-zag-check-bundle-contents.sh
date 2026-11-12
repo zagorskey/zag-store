@@ -54,6 +54,17 @@ done
 
 expect 2 "missing target is a usage error" "$WORK/does-not-exist"
 
+# First-launch test builds (reporting compiled on) are never releasable.
+marked=$(make_app marked)
+printf 'binary\0ZAG-FIRST-LAUNCH-TEST-BUILD-NOT-FOR-RELEASE\0more' > "$marked/Feather"
+expect 1 "rejects a first-launch test build (app)" "$marked"
+(cd "$WORK/marked" && zip -qr marked.ipa Payload)
+expect 1 "rejects a first-launch test build (ipa)" "$WORK/marked/marked.ipa"
+status=0; ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD=1 bash "$GUARD" "$WORK/marked/marked.ipa" >/dev/null 2>&1 || status=$?
+if [[ "$status" == 0 ]]; then echo "PASS  explicit override for the approved acceptance"; else echo "FAIL  override (exit $status)"; FAILURES=$((FAILURES + 1)); fi
+status=0; ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD=yes bash "$GUARD" "$WORK/marked/marked.ipa" >/dev/null 2>&1 || status=$?
+if [[ "$status" == 1 ]]; then echo "PASS  only the exact override value is accepted"; else echo "FAIL  loose override (exit $status)"; FAILURES=$((FAILURES + 1)); fi
+
 if (( FAILURES > 0 )); then
 	echo "$FAILURES test(s) failed"
 	exit 1

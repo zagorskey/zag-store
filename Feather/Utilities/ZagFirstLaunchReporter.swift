@@ -19,8 +19,19 @@ import UIKit
 /// (ZagFirstLaunchDisclosure) or in Settings › Privacy. Nothing is stored
 /// or sent before that, and turning it off stops any pending report.
 actor ZagFirstLaunchReporter {
-	/// Compile-time switch. Must stay false until approval.
+	/// Compile-time switch. Release builds: false until approval. Only the
+	/// test-only build (scripts/build-zag-first-launch-test.sh, compilation
+	/// condition ZAG_FIRST_LAUNCH_TEST_BUILD) turns it on, for the preview
+	/// acceptance; the user's consent is still required there.
+#if ZAG_FIRST_LAUNCH_TEST_BUILD
+	static let featureEnabled = true
+	/// Marks the binary; zag-check-bundle-contents.sh, and so
+	/// publish-zag-release.zsh, refuse any bundle that contains it.
+	static let testBuildMarker: String? = "ZAG-FIRST-LAUNCH-TEST-BUILD-NOT-FOR-RELEASE"
+#else
 	static let featureEnabled = false
+	static let testBuildMarker: String? = nil
+#endif
 	/// The user's opt-in (default off).
 	static let consentKey = "ZagStore.firstLaunchReportingConsent"
 	/// Set once the disclosure has been answered or dismissed.

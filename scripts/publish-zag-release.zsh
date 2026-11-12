@@ -25,7 +25,8 @@ unzip -q "$IPA" -d "$TMP/unpacked"
 APP="$TMP/unpacked/Payload/Feather.app"
 [[ -f "$APP/Info.plist" ]] || { echo "Invalid IPA payload"; exit 1; }
 # Never publish source code, backup copies or build configuration.
-bash "${0:A:h}/zag-check-bundle-contents.sh" "$IPA"
+# (Never a first-launch test build: the override is cleared for this check.)
+env -u ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD bash "${0:A:h}/zag-check-bundle-contents.sh" "$IPA"
 codesign --verify --deep --strict "$APP"
 # A canonical artifact must not embed a customer-specific provisioning profile.
 [[ ! -e "$APP/embedded.mobileprovision" ]] || { echo "Canonical IPA contains embedded.mobileprovision; refusing publication"; exit 1; }

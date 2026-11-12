@@ -25,7 +25,30 @@ hook_after_interactive() {
 	hook=$(grep -n 'ZagFirstLaunchReporter.launchBecameInteractive()' <<< "$finish_body" | head -1 | cut -d: -f1)
 	[[ -n "$interactive" && -n "$hook" && "$interactive" -lt "$hook" ]]
 }
-check "feature is compiled off" grep -q 'static let featureEnabled = false' "$REPORTER"
+# Release default: off. Only the test-only build's compilation condition turns it on, and
+# nothing in the project or xcconfig sets that condition.
+flag_branches() {
+	[[ "$(grep -c 'static let featureEnabled' "$REPORTER")" == 2 ]] &&
+	awk '/^#if ZAG_FIRST_LAUNCH_TEST_BUILD$/ {s=1; next} /^#else$/ && s==1 {s=2; next} /^#endif$/ {s=0}
+		s==1 && /static let featureEnabled = true$/ {on=1} s==2 && /static let featureEnabled = false$/ {off=1}
+		END {exit !(on && off)}' "$REPORTER"
+}
+check "feature is compiled off except in the test-only build" flag_branches
+check "no project setting enables the test-only build" \
+	bash -c "! grep -rq 'ZAG_FIRST_LAUNCH_TEST_BUILD' '$ROOT/Feather.xcodeproj' '$ROOT'/*.xcconfig '$ROOT/Feather' --exclude=ZagFirstLaunchReporter.swift"
+check "the test-only build is made only by its script, unsigned, no IPA" \
+	bash -c "grep -q \"SWIFT_ACTIVE_COMPILATION_CONDITIONS='\\\$(inherited) ZAG_FIRST_LAUNCH_TEST_BUILD'\" '$ROOT/scripts/build-zag-first-launch-test.sh' && grep -q 'CODE_SIGNING_ALLOWED=NO' '$ROOT/scripts/build-zag-first-launch-test.sh' && ! grep -qiE 'zip|\\.ipa|codesign |exportArchive' '$ROOT/scripts/build-zag-first-launch-test.sh'"
+consent_gate_unchanged() {
+	# The flag changes featureEnabled and the marker only; the consent gate is shared.
+	grep -q 'featureEnabled && UserDefaults.standard.bool(forKey: consentKey)' "$REPORTER" &&
+	[[ "$(grep -c '^#if ZAG_FIRST_LAUNCH_TEST_BUILD$' "$REPORTER")" == 1 ]] &&
+	! grep -n 'ZAG_FIRST_LAUNCH_TEST_BUILD' "$REPORTER" | grep -vE '^[0-9]+:(#if ZAG_FIRST_LAUNCH_TEST_BUILD$|[[:space:]]*///)' | grep -q .
+}
+check "the test-only build still requires consent (same gate)" consent_gate_unchanged
+check "the test-only build is installed outside _build/ (what ZagStore-Package.zsh packages)" \
+	bash -c "grep -q 'DSTROOT=\"\\\$OUT/dstroot\"' '$ROOT/scripts/build-zag-first-launch-test.sh' && grep -q 'REFUSING: the build changed' '$ROOT/scripts/build-zag-first-launch-test.sh'"
+check "the release script refuses test builds (override cleared)" \
+	grep -q 'env -u ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD bash .*zag-check-bundle-contents.sh' "$ROOT/scripts/publish-zag-release.zsh"
 check "reporting also needs the user's consent (default off)" \
 	grep -q 'UserDefaults.standard.bool(forKey: consentKey)' "$REPORTER"
 check "hooked after the interface is interactive" hook_after_interactive

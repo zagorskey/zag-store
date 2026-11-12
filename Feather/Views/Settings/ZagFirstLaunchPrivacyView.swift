@@ -27,6 +27,14 @@ struct ZagFirstLaunchPrivacyView: View {
 				Text(_statusFooter)
 			}
 
+			if let marker = ZagFirstLaunchReporter.testBuildMarker {
+				Section {
+					Text("Test build for the preview acceptance. Not for release.")
+				} footer: {
+					Text(marker)
+				}
+			}
+
 			Section {
 				ForEach(ZagFirstLaunchDisclosure.sent, id: \.self) { Label($0, systemImage: "arrow.up.circle") }
 			} header: {
