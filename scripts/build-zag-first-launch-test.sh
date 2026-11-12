@@ -1,6 +1,6 @@
 #!/bin/bash
 # TEST-ONLY build for the first-launch preview acceptance (website repository:
-# ops/first-launch-analytics/PREVIEW-ACCEPTANCE.md). It compiles the Release configuration
+# ops/first-launch-analytics/ACCEPTANCE-REPORTER.md). It compiles the Release configuration
 # with the condition ZAG_FIRST_LAUNCH_TEST_BUILD: first-launch reporting is compiled on, and
 # the one-time disclosure still asks for consent before anything is stored or sent.
 #
