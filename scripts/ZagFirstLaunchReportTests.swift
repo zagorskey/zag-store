@@ -119,6 +119,38 @@ import Security
 		                                    now: t0.addingTimeInterval(R.tokenLifetime + 1))
 		expect(expiredStep == .none && expired?.outcome == .gaveUp, "nothing sent after the token lifetime")
 
+		// Offline: no network uses no attempt and waits for a later launch.
+		expect(R.response(for: .notConnectedToInternet) == .unreachable
+		       && R.response(for: .dataNotAllowed) == .unreachable
+		       && R.response(for: .internationalRoamingOff) == .unreachable, "no network is unreachable")
+		expect(R.response(for: .timedOut) == .transportFailure && R.response(for: .cannotFindHost) == .transportFailure
+		       && R.response(for: .secureConnectionFailed) == .transportFailure, "network failures use an attempt")
+		let fresh0 = R.plan(attribution: parsed, state: nil, completed: false, now: t0).0!
+		let unreachable = R.record(.unreachable, in: fresh0, now: t0)
+		expect(unreachable.attempts == 0 && unreachable.outcome == nil
+		       && unreachable.nextAttempt == t0.addingTimeInterval(R.offlineRecheck), "offline keeps the attempt")
+		// Offline for 10 days, launched every hour, then online: delivered with one request.
+		var away = fresh0
+		var clock = t0
+		var requests = 0
+		for _ in 0..<(10 * 24) {
+			let (planned, next) = R.plan(attribution: parsed, state: away, completed: false, now: clock)
+			away = planned!
+			if next == .send { away = R.record(.unreachable, in: away, now: clock) }
+			clock = clock.addingTimeInterval(3600)
+		}
+		expect(away.attempts == 0 && away.outcome == nil, "ten days offline: no attempt used, not given up")
+		let (back, backStep) = R.plan(attribution: parsed, state: away, completed: false, now: clock)
+		if backStep == .send { requests += 1; away = R.record(.status(202, retryAfter: nil), in: back!, now: clock) }
+		expect(requests == 1 && away.outcome == .delivered, "reports once back online")
+		// Offline beyond the report window: given up without a request.
+		let (stale, staleStep) = R.plan(attribution: parsed, state: unreachable, completed: false,
+		                                now: t0.addingTimeInterval(R.reportWindow + 1))
+		expect(staleStep == .none && stale?.outcome == .gaveUp, "nothing sent after the report window")
+		expect(R.reportWindow < R.tokenLifetime, "report window inside the token validity")
+		expect(R.maxAttempts == 10 && R.retryDelays.reduce(0, +) < R.reportWindow,
+		       "ten requests at most, all inside the report window")
+
 		// A newly signed IPA installed over the app is a new job's first launch.
 		let other = R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#))
 		let (fresh, freshStep) = R.plan(attribution: other, state: delivered, completed: false, now: t0)

@@ -19,9 +19,19 @@ enum ZagFirstLaunchReport {
 	static let documentName = "ZagInstallAttribution.json"
 	static let maxDocumentBytes = 256
 	static let tokenLifetime: TimeInterval = 30 * 24 * 3600
+	/// Nothing is sent later than this after the first launch: the server's
+	/// token validity is 30 days from the signing, which came first.
+	static let reportWindow: TimeInterval = tokenLifetime - 24 * 3600
 	/// Delay before attempt n + 1 (seconds); the length bounds the attempts.
-	static let retryDelays: [TimeInterval] = [60, 300, 1800, 7200, 21_600, 86_400, 86_400]
+	/// Ten requests at most, spread over about 14 days, so a report survives
+	/// days of server trouble without ever being chatty.
+	static let retryDelays: [TimeInterval] = [60, 300, 1800, 7200, 21_600, 86_400, 172_800, 345_600, 604_800]
 	static var maxAttempts: Int { retryDelays.count + 1 }
+	/// With no network at all nothing is sent and no attempt is used; the
+	/// next try is on a launch at least this much later. A device offline for
+	/// longer than the schedule therefore still reports when it reconnects,
+	/// within the report window.
+	static let offlineRecheck: TimeInterval = 900
 
 	static let endpoints: [String: URL] = [
 		"production": URL(string: "https://zagstore.app/api/zag/v1/first-launch")!,
@@ -149,7 +159,7 @@ enum ZagFirstLaunchReport {
 		}
 		guard var state = current else { return (nil, .none) }
 		if state.outcome != nil { return (state, .none) }
-		if state.attempts >= maxAttempts || now.timeIntervalSince(state.firstLaunch) > tokenLifetime {
+		if state.attempts >= maxAttempts || now.timeIntervalSince(state.firstLaunch) > reportWindow {
 			state.outcome = .gaveUp
 			return (state, .none)
 		}
@@ -159,12 +169,30 @@ enum ZagFirstLaunchReport {
 
 	enum Response: Equatable {
 		case status(Int, retryAfter: TimeInterval?)
+		/// The request may have reached the network (DNS, TLS, timeout...).
 		case transportFailure
+		/// The device had no usable network: nothing left it.
+		case unreachable
+	}
+
+	/// How a URLSession failure counts: only failures that prove the device
+	/// had no network leave the attempt budget untouched.
+	static func response(for code: URLError.Code) -> Response {
+		switch code {
+		case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff, .callIsActive:
+			return .unreachable
+		default:
+			return .transportFailure
+		}
 	}
 
 	/// The state after one attempt.
 	static func record(_ response: Response, in state: State, now: Date) -> State {
 		var state = state
+		if response == .unreachable {
+			state.nextAttempt = now.addingTimeInterval(offlineRecheck)
+			return state
+		}
 		state.attempts += 1
 		switch response {
 		case .status(202, _):
@@ -175,7 +203,7 @@ enum ZagFirstLaunchReport {
 			state.nextAttempt = nil
 		case .status(_, let retryAfter):
 			state.nextAttempt = now.addingTimeInterval(delay(after: state.attempts, retryAfter: retryAfter))
-		case .transportFailure:
+		case .transportFailure, .unreachable:
 			state.nextAttempt = now.addingTimeInterval(delay(after: state.attempts, retryAfter: nil))
 		}
 		if state.outcome == nil, state.attempts >= maxAttempts { state.outcome = .gaveUp }

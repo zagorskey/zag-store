@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import UIKit
 
 /// Sends the first-launch report (see ZagFirstLaunchReport) after the
@@ -9,14 +10,21 @@ import UIKit
 /// Never delays launch: ZagLaunchGate.finish() only starts a detached,
 /// low-priority task, after the splash has gone. One report per signed IPA,
 /// a bounded number of attempts (ZagFirstLaunchReport.retryDelays), retried
-/// only on later launches or within this session's backoff. Sends the
-/// attribution document, app and OS versions and the hardware model
-/// identifier; no device name, identifier, location or account data.
+/// only on later launches or within this session's backoff; no background
+/// tasks or wake-ups. Sends the attribution document, app and OS versions
+/// and the hardware model identifier; no device name, identifier, location
+/// or account data.
+///
+/// Consent: off until the user turns it on, in the one-time disclosure
+/// (ZagFirstLaunchDisclosure) or in Settings › Privacy. Nothing is stored
+/// or sent before that, and turning it off stops any pending report.
 actor ZagFirstLaunchReporter {
 	/// Compile-time switch. Must stay false until approval.
 	static let featureEnabled = false
-	/// The user's opt-in. No UI sets it yet; the consent flow is pending review.
+	/// The user's opt-in (default off).
 	static let consentKey = "ZagStore.firstLaunchReportingConsent"
+	/// Set once the disclosure has been answered or dismissed.
+	static let disclosureShownKey = "ZagStore.firstLaunchReportingDisclosureShown"
 
 	static let shared = ZagFirstLaunchReporter()
 
@@ -43,6 +51,40 @@ actor ZagFirstLaunchReporter {
 
 	nonisolated static var isActive: Bool {
 		featureEnabled && UserDefaults.standard.bool(forKey: consentKey)
+	}
+
+	/// Records the user's choice; allowing starts the report at once.
+	nonisolated static func setConsent(_ allowed: Bool) {
+		UserDefaults.standard.set(allowed, forKey: consentKey)
+		UserDefaults.standard.set(true, forKey: disclosureShownKey)
+		if allowed { launchBecameInteractive() }
+	}
+
+	/// The disclosure is shown once, and only to a copy of the app that has
+	/// something to report (an IPA signed on the website).
+	nonisolated static var shouldPresentDisclosure: Bool {
+		featureEnabled && !UserDefaults.standard.bool(forKey: disclosureShownKey) && bundledAttribution() != nil
+	}
+
+	enum Status: Equatable {
+		/// This copy carries no attribution document: there is nothing to send.
+		case notApplicable
+		case off
+		case pending
+		case sent
+		/// Refused by the server, or attempts or the report window ran out.
+		case stopped
+	}
+
+	nonisolated static func status() -> Status {
+		guard let attribution = bundledAttribution() else { return .notApplicable }
+		let store = store()
+		let state = store?.load()
+		if state?.fingerprint == attribution.fingerprint, let outcome = state?.outcome {
+			return outcome == .delivered ? .sent : .stopped
+		}
+		if store?.isCompleted(attribution.fingerprint) == true { return .sent }
+		return UserDefaults.standard.bool(forKey: consentKey) ? .pending : .off
 	}
 
 	private func run() async {
@@ -75,6 +117,11 @@ actor ZagFirstLaunchReporter {
 					try? store.save(state)
 					return
 				}
+				// No network: send nothing and keep the attempt for later.
+				guard await Self.networkAvailable() else {
+					try? store.save(ZagFirstLaunchReport.record(.unreachable, in: state, now: Date()))
+					return
+				}
 				// Count the attempt before sending, so a crash mid-request
 				// still uses up one of the bounded attempts.
 				var inFlight = state
@@ -98,12 +145,37 @@ actor ZagFirstLaunchReporter {
 			guard let http = response as? HTTPURLResponse else { return .transportFailure }
 			let retryAfter = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
 			return .status(http.statusCode, retryAfter: retryAfter)
+		} catch let error as URLError {
+			return ZagFirstLaunchReport.response(for: error.code)
 		} catch {
 			return .transportFailure
 		}
 	}
 
-	private static func bundledAttribution() -> ZagFirstLaunchReport.Attribution? {
+	/// Whether the system currently has a usable network path (asked once,
+	/// with a short timeout; no monitoring is left running).
+	private static func networkAvailable() async -> Bool {
+		await withCheckedContinuation { continuation in
+			let monitor = NWPathMonitor()
+			let queue = DispatchQueue(label: "app.zagstore.first-launch.path")
+			let lock = NSLock()
+			var resumed = false
+			let finish: (Bool) -> Void = { value in
+				lock.lock()
+				defer { lock.unlock() }
+				guard !resumed else { return }
+				resumed = true
+				monitor.cancel()
+				continuation.resume(returning: value)
+			}
+			monitor.pathUpdateHandler = { finish($0.status == .satisfied) }
+			monitor.start(queue: queue)
+			// Unknown after 2 s: try anyway; a failure is classified then.
+			queue.asyncAfter(deadline: .now() + 2) { finish(true) }
+		}
+	}
+
+	nonisolated private static func bundledAttribution() -> ZagFirstLaunchReport.Attribution? {
 		guard let url = Bundle.main.url(forResource: "ZagInstallAttribution", withExtension: "json"),
 		      let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
 		      size <= ZagFirstLaunchReport.maxDocumentBytes,
@@ -111,7 +183,7 @@ actor ZagFirstLaunchReporter {
 		return ZagFirstLaunchReport.attribution(from: data)
 	}
 
-	private static func store() -> ZagFirstLaunchStore? {
+	nonisolated private static func store() -> ZagFirstLaunchStore? {
 		guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
 		else { return nil }
 		return ZagFirstLaunchStore(directory: support.appendingPathComponent("ZagFirstLaunch", isDirectory: true))

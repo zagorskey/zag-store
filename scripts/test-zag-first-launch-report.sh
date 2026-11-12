@@ -36,6 +36,20 @@ check "single call site (no other launch reporting)" \
 check "no device identifiers or location" \
 	bash -c "! grep -nE 'identifierForVendor|advertisingIdentifier|ASIdentifierManager|CLLocation|UIDevice.current.name' '$CORE' '$REPORTER'"
 check "ephemeral session without cookies" grep -q 'URLSessionConfiguration.ephemeral' "$REPORTER"
+PRIVACY="$ROOT/Feather/Views/Settings/ZagFirstLaunchPrivacyView.swift"
+SETTINGS="$ROOT/Feather/Views/Settings/SettingsView.swift"
+check "consent toggle defaults to off" \
+	grep -q '@AppStorage(ZagFirstLaunchReporter.consentKey) private var _consent = false' "$PRIVACY"
+check "disclosure only with the feature on and a document to report" \
+	grep -q 'featureEnabled && !UserDefaults.standard.bool(forKey: disclosureShownKey) && bundledAttribution() != nil' "$REPORTER"
+check "dismissing the disclosure counts as declining" grep -q 'ZagFirstLaunchReporter.setConsent(false)' "$PRIVACY"
+check "both disclosure choices have equal weight" \
+	bash -c "! grep -q 'borderedProminent' '$PRIVACY' && grep -q 'buttonStyle(.bordered)' '$PRIVACY'"
+check "Settings row only with the feature on" \
+	bash -c "grep -B1 'ZagFirstLaunchPrivacyView()' '$SETTINGS' | grep -q 'if ZagFirstLaunchReporter.featureEnabled'"
+check "disclosure presenter attached to the app root" grep -q 'ZagFirstLaunchDisclosurePresenter()' "$APP"
+check "no background tasks or wake-ups" \
+	bash -c "! grep -nE 'BGTaskScheduler|BGAppRefresh|setMinimumBackgroundFetchInterval|beginBackgroundTask' '$CORE' '$REPORTER'"
 
 export ZAG_FIRST_LAUNCH_BODY_OUT="$WORK/body.json"
 if swiftc -warnings-as-errors -parse-as-library "$CORE" "$ROOT/scripts/ZagFirstLaunchReportTests.swift" \

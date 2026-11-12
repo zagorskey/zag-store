@@ -42,6 +42,8 @@ struct FeatherApp: App {
 				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
+			// One-time first-launch report disclosure (off with the feature).
+			.modifier(ZagFirstLaunchDisclosurePresenter())
 			.onAppear { ZagInventorySnapshotRecorder.shared.start() }
             .onAppear {
                 NotificationCenter.default.post(
