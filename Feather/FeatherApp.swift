@@ -201,6 +201,8 @@ final class ZagLaunchGate {
             object: nil,
             userInfo: ["visible": false]
         )
+        // After the interface is interactive; returns at once (off by default).
+        ZagFirstLaunchReporter.launchBecameInteractive()
     }
 }
 
