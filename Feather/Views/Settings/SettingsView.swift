@@ -768,7 +768,7 @@ extension SettingsView {
 
 		case .diagnostics:
 			Section {
-				if ZagFirstLaunchReporter.featureEnabled {
+				if ZagFirstLaunchReporter.hasReport {
 					NavigationLink(destination: ZagFirstLaunchPrivacyView().zagSettingsDestinationAvatar()) {
 						Label("Privacy", systemImage: "hand.raised")
 					}

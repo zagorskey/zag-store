@@ -1,5 +1,5 @@
 #!/bin/bash
-# Regression checks for the first-launch reporter (off by default).
+# Regression checks for the first-launch reporter (preview copies only).
 # Usage: bash scripts/test-zag-first-launch-report.sh
 # With ZAG_WEBSITE_REPO set to the website checkout, the request body built
 # here is also parsed by the server endpoint's own validator.
@@ -25,32 +25,29 @@ hook_after_interactive() {
 	hook=$(grep -n 'ZagFirstLaunchReporter.launchBecameInteractive()' <<< "$finish_body" | head -1 | cut -d: -f1)
 	[[ -n "$interactive" && -n "$hook" && "$interactive" -lt "$hook" ]]
 }
-# Release default: off. Only the test-only build's compilation condition turns it on, and
-# nothing in the project or xcconfig sets that condition.
+# Release: on, preview copies only, no prompt (owner's decision 2026-11-12). The test-only
+# build differs only by its marker.
 flag_branches() {
-	[[ "$(grep -c 'static let featureEnabled' "$REPORTER")" == 2 ]] &&
+	[[ "$(grep -c 'static let featureEnabled' "$REPORTER")" == 1 ]] &&
+	grep -q '^	static let featureEnabled = true$' "$REPORTER" &&
 	awk '/^#if ZAG_FIRST_LAUNCH_TEST_BUILD$/ {s=1; next} /^#else$/ && s==1 {s=2; next} /^#endif$/ {s=0}
-		s==1 && /static let featureEnabled = true$/ {on=1} s==2 && /static let featureEnabled = false$/ {off=1}
-		END {exit !(on && off)}' "$REPORTER"
+		s==1 && /testBuildMarker: String\? = "ZAG-FIRST-LAUNCH-TEST-BUILD-NOT-FOR-RELEASE"$/ {on=1}
+		s==2 && /testBuildMarker: String\? = nil$/ {off=1} s && /featureEnabled/ {bad=1}
+		END {exit !(on && off && !bad)}' "$REPORTER"
 }
-check "feature is compiled off except in the test-only build" flag_branches
+check "feature on; the test-only build differs only by its marker" flag_branches
 check "no project setting enables the test-only build" \
 	bash -c "! grep -rq 'ZAG_FIRST_LAUNCH_TEST_BUILD' '$ROOT/Feather.xcodeproj' '$ROOT'/*.xcconfig '$ROOT/Feather' --exclude=ZagFirstLaunchReporter.swift"
 check "the test-only build is made only by its script, unsigned, no IPA" \
 	bash -c "grep -q \"SWIFT_ACTIVE_COMPILATION_CONDITIONS='\\\$(inherited) ZAG_FIRST_LAUNCH_TEST_BUILD'\" '$ROOT/scripts/build-zag-first-launch-test.sh' && grep -q 'CODE_SIGNING_ALLOWED=NO' '$ROOT/scripts/build-zag-first-launch-test.sh' && ! grep -qiE 'zip|\\.ipa|codesign |exportArchive' '$ROOT/scripts/build-zag-first-launch-test.sh'"
-consent_gate_unchanged() {
-	# The flag changes featureEnabled and the marker only; the consent gate is shared.
-	grep -q 'featureEnabled && UserDefaults.standard.bool(forKey: consentKey)' "$REPORTER" &&
-	[[ "$(grep -c '^#if ZAG_FIRST_LAUNCH_TEST_BUILD$' "$REPORTER")" == 1 ]] &&
-	! grep -n 'ZAG_FIRST_LAUNCH_TEST_BUILD' "$REPORTER" | grep -vE '^[0-9]+:(#if ZAG_FIRST_LAUNCH_TEST_BUILD$|[[:space:]]*///)' | grep -q .
-}
-check "the test-only build still requires consent (same gate)" consent_gate_unchanged
 check "the test-only build is installed outside _build/ (what ZagStore-Package.zsh packages)" \
 	bash -c "grep -q 'DSTROOT=\"\\\$OUT/dstroot\"' '$ROOT/scripts/build-zag-first-launch-test.sh' && grep -q 'REFUSING: the build changed' '$ROOT/scripts/build-zag-first-launch-test.sh'"
 check "the release script refuses test builds (override cleared)" \
 	grep -q 'env -u ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD bash .*zag-check-bundle-contents.sh' "$ROOT/scripts/publish-zag-release.zsh"
-check "reporting also needs the user's consent (default off)" \
-	grep -q 'UserDefaults.standard.bool(forKey: consentKey)' "$REPORTER"
+check "the user's opt-out stops reporting" \
+	grep -q 'featureEnabled && !UserDefaults.standard.bool(forKey: optOutKey)' "$REPORTER"
+check "preview endpoint only (production reporting disabled)" \
+	bash -c "grep -q '\"preview\": URL(string: \"https://preview.zagstore.app/api/zag/v1/first-launch\")' '$CORE' && ! grep -q 'https://zagstore.app' '$CORE' '$REPORTER'"
 check "hooked after the interface is interactive" hook_after_interactive
 check "the launch gate does not wait for it" bash -c "! grep -q 'await ZagFirstLaunchReporter' '$APP'"
 check "the hook starts a detached background task" grep -q 'Task.detached(priority: .background)' "$REPORTER"
@@ -61,16 +58,17 @@ check "no device identifiers or location" \
 check "ephemeral session without cookies" grep -q 'URLSessionConfiguration.ephemeral' "$REPORTER"
 PRIVACY="$ROOT/Feather/Views/Settings/ZagFirstLaunchPrivacyView.swift"
 SETTINGS="$ROOT/Feather/Views/Settings/SettingsView.swift"
-check "consent toggle defaults to off" \
-	grep -q '@AppStorage(ZagFirstLaunchReporter.consentKey) private var _consent = false' "$PRIVACY"
-check "disclosure only with the feature on and a document to report" \
-	grep -q 'featureEnabled && !UserDefaults.standard.bool(forKey: disclosureShownKey) && bundledAttribution() != nil' "$REPORTER"
-check "dismissing the disclosure counts as declining" grep -q 'ZagFirstLaunchReporter.setConsent(false)' "$PRIVACY"
-check "both disclosure choices have equal weight" \
-	bash -c "! grep -q 'borderedProminent' '$PRIVACY' && grep -q 'buttonStyle(.bordered)' '$PRIVACY'"
-check "Settings row only with the feature on" \
-	bash -c "grep -B1 'ZagFirstLaunchPrivacyView()' '$SETTINGS' | grep -q 'if ZagFirstLaunchReporter.featureEnabled'"
-check "disclosure presenter attached to the app root" grep -q 'ZagFirstLaunchDisclosurePresenter()' "$APP"
+check "sharing toggle defaults to on (no prompt)" \
+	grep -q '@AppStorage(ZagFirstLaunchReporter.optOutKey) private var _optedOut = false' "$PRIVACY"
+check "no first-launch prompt or sheet" \
+	bash -c "! grep -rqE 'ZagFirstLaunchDisclosurePresenter|shouldPresentDisclosure|consentKey' '$ROOT/Feather' && ! grep -q '\\.sheet' '$PRIVACY'"
+check "Settings row only in copies with a report" \
+	bash -c "grep -B1 'ZagFirstLaunchPrivacyView()' '$SETTINGS' | grep -q 'if ZagFirstLaunchReporter.hasReport'"
+check "one report run at a time (duplicate activations)" grep -q 'guard !running, Self.isActive else { return }' "$REPORTER"
+check "attempt counted before the request (crash mid-request)" \
+	bash -c "awk '/inFlight.attempts \\+= 1/ {a=NR} /await send\\(url:/ {b=NR} END {exit !(a && b && a < b)}' '$REPORTER'"
+check "no logging of the document or token" \
+	bash -c "! grep -nE 'print\\(|NSLog|os_log|Logger\\(|ZagLog' '$CORE' '$REPORTER'"
 check "no background tasks or wake-ups" \
 	bash -c "! grep -nE 'BGTaskScheduler|BGAppRefresh|setMinimumBackgroundFetchInterval|beginBackgroundTask' '$CORE' '$REPORTER'"
 

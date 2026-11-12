@@ -10,7 +10,7 @@ import Security
 /// launch of that IPA the app sends the document back once, with four
 /// metadata fields, so the server can count the job as launched. Nothing is
 /// sent on later launches, for apps without the file (App Store-style builds,
-/// self-updates) or when the feature is off.
+/// self-updates), for production documents, or when the user turned it off.
 ///
 /// The token only shows that the sender holds a copy of that job's IPA. It
 /// does not identify a device, and the server counts at most one launch per
@@ -33,8 +33,9 @@ enum ZagFirstLaunchReport {
 	/// within the report window.
 	static let offlineRecheck: TimeInterval = 900
 
+	/// Preview only. Production reporting stays disabled: a production
+	/// document has no endpoint, so it is not even parsed as an attribution.
 	static let endpoints: [String: URL] = [
-		"production": URL(string: "https://zagstore.app/api/zag/v1/first-launch")!,
 		"preview": URL(string: "https://preview.zagstore.app/api/zag/v1/first-launch")!,
 	]
 

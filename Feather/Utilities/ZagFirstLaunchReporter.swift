@@ -3,9 +3,9 @@ import Network
 import UIKit
 
 /// Sends the first-launch report (see ZagFirstLaunchReport) after the
-/// interface is interactive. OFF: `featureEnabled` stays false until the
-/// endpoint, the privacy notice and the consent approach are approved, and
-/// even then nothing is sent without the user's consent.
+/// interface is interactive, for copies signed on the PREVIEW website only:
+/// production documents are ignored, and copies without a document (App
+/// Store-style builds, self-updates, production signings) send nothing.
 ///
 /// Never delays launch: ZagLaunchGate.finish() only starts a detached,
 /// low-priority task, after the splash has gone. One report per signed IPA,
@@ -15,27 +15,21 @@ import UIKit
 /// and the hardware model identifier; no device name, identifier, location
 /// or account data.
 ///
-/// Consent: off until the user turns it on, in the one-time disclosure
-/// (ZagFirstLaunchDisclosure) or in Settings › Privacy. Nothing is stored
-/// or sent before that, and turning it off stops any pending report.
+/// No prompt (owner's decision, 2026-11-12): on by default for preview
+/// copies, explained in Settings › Privacy, where turning it off stops any
+/// pending report. That row appears only in copies that have a report.
 actor ZagFirstLaunchReporter {
-	/// Compile-time switch. Release builds: false until approval. Only the
-	/// test-only build (scripts/build-zag-first-launch-test.sh, compilation
-	/// condition ZAG_FIRST_LAUNCH_TEST_BUILD) turns it on, for the preview
-	/// acceptance; the user's consent is still required there.
-#if ZAG_FIRST_LAUNCH_TEST_BUILD
+	/// Compile-time switch for the whole feature.
 	static let featureEnabled = true
+#if ZAG_FIRST_LAUNCH_TEST_BUILD
 	/// Marks the binary; zag-check-bundle-contents.sh, and so
 	/// publish-zag-release.zsh, refuse any bundle that contains it.
 	static let testBuildMarker: String? = "ZAG-FIRST-LAUNCH-TEST-BUILD-NOT-FOR-RELEASE"
 #else
-	static let featureEnabled = false
 	static let testBuildMarker: String? = nil
 #endif
-	/// The user's opt-in (default off).
-	static let consentKey = "ZagStore.firstLaunchReportingConsent"
-	/// Set once the disclosure has been answered or dismissed.
-	static let disclosureShownKey = "ZagStore.firstLaunchReportingDisclosureShown"
+	/// Set when the user turns the report off in Settings › Privacy.
+	static let optOutKey = "ZagStore.firstLaunchReportingOptOut"
 
 	static let shared = ZagFirstLaunchReporter()
 
@@ -61,20 +55,19 @@ actor ZagFirstLaunchReporter {
 	}
 
 	nonisolated static var isActive: Bool {
-		featureEnabled && UserDefaults.standard.bool(forKey: consentKey)
+		featureEnabled && !UserDefaults.standard.bool(forKey: optOutKey)
 	}
 
-	/// Records the user's choice; allowing starts the report at once.
-	nonisolated static func setConsent(_ allowed: Bool) {
-		UserDefaults.standard.set(allowed, forKey: consentKey)
-		UserDefaults.standard.set(true, forKey: disclosureShownKey)
-		if allowed { launchBecameInteractive() }
+	/// Records the user's choice; turning it back on resumes a pending report.
+	nonisolated static func setSharing(_ enabled: Bool) {
+		UserDefaults.standard.set(!enabled, forKey: optOutKey)
+		if enabled { launchBecameInteractive() }
 	}
 
-	/// The disclosure is shown once, and only to a copy of the app that has
-	/// something to report (an IPA signed on the website).
-	nonisolated static var shouldPresentDisclosure: Bool {
-		featureEnabled && !UserDefaults.standard.bool(forKey: disclosureShownKey) && bundledAttribution() != nil
+	/// Whether this copy carries a preview attribution document (an IPA
+	/// signed on the preview website), so has a report to send.
+	nonisolated static var hasReport: Bool {
+		featureEnabled && bundledAttribution() != nil
 	}
 
 	enum Status: Equatable {
@@ -95,7 +88,7 @@ actor ZagFirstLaunchReporter {
 			return outcome == .delivered ? .sent : .stopped
 		}
 		if store?.isCompleted(attribution.fingerprint) == true { return .sent }
-		return UserDefaults.standard.bool(forKey: consentKey) ? .pending : .off
+		return UserDefaults.standard.bool(forKey: optOutKey) ? .off : .pending
 	}
 
 	private func run() async {

@@ -42,8 +42,6 @@ struct FeatherApp: App {
 				ZagAnimatedLaunchOverlay()
 			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
-			// One-time first-launch report disclosure (off with the feature).
-			.modifier(ZagFirstLaunchDisclosurePresenter())
 			.onAppear { ZagInventorySnapshotRecorder.shared.start() }
             .onAppear {
                 NotificationCenter.default.post(
@@ -203,7 +201,7 @@ final class ZagLaunchGate {
             object: nil,
             userInfo: ["visible": false]
         )
-        // After the interface is interactive; returns at once (off by default).
+        // After the interface is interactive; returns at once (preview copies only).
         ZagFirstLaunchReporter.launchBecameInteractive()
     }
 }

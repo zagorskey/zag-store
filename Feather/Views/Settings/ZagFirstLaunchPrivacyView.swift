@@ -1,17 +1,17 @@
 import SwiftUI
 
-/// Settings › Privacy: the first-launch report setting (off by default).
-/// Shown only while ZagFirstLaunchReporter.featureEnabled is true.
+/// Settings › Privacy: the first-launch report setting (on by default).
+/// Shown only in copies that have a report (ZagFirstLaunchReporter.hasReport).
 struct ZagFirstLaunchPrivacyView: View {
-	@AppStorage(ZagFirstLaunchReporter.consentKey) private var _consent = false
+	@AppStorage(ZagFirstLaunchReporter.optOutKey) private var _optedOut = false
 	@State private var _status = ZagFirstLaunchReporter.status()
 
 	var body: some View {
 		Form {
 			Section {
 				Toggle(isOn: Binding(
-					get: { _consent },
-					set: { ZagFirstLaunchReporter.setConsent($0); _status = ZagFirstLaunchReporter.status() }
+					get: { !_optedOut },
+					set: { ZagFirstLaunchReporter.setSharing($0); _status = ZagFirstLaunchReporter.status() }
 				)) {
 					Text("Share First-Launch Report")
 				}
@@ -71,7 +71,7 @@ struct ZagFirstLaunchPrivacyView: View {
 		case .off:
 			return "Nothing is sent while this is off."
 		case .pending:
-			return "The report is sent the next time a network connection is available. Turning this off stops it."
+			return "The report is sent shortly after Zag Store opens with a network connection. Turning this off stops it."
 		case .sent:
 			return "The report has been sent. It is never sent again, and turning this off changes nothing already sent."
 		case .stopped:
@@ -80,12 +80,9 @@ struct ZagFirstLaunchPrivacyView: View {
 	}
 }
 
-/// The one-time first-launch disclosure: what is asked, in plain words, with
-/// two equal choices. Not answering counts as "Don't Share".
-struct ZagFirstLaunchDisclosure: View {
-	let onChoice: (Bool) -> Void
-
-	static let summary = "Lets Zag Store tell the website, once, that the copy you installed from it has opened. It helps count how many website installations actually start. It is off unless you turn it on."
+/// What the first-launch report contains, in plain words.
+enum ZagFirstLaunchDisclosure {
+	static let summary = "Zag Store tells the preview website, once, that the copy you installed from it has opened. It helps count how many website installations actually start. Turn this off and nothing is sent."
 	static let sent = [
 		"The installation code from your download (it identifies that download, not you or your device)",
 		"Zag Store version and build",
@@ -99,80 +96,4 @@ struct ZagFirstLaunchDisclosure: View {
 		"Which apps you install or use",
 	]
 	static let limits = "Sent once over an encrypted connection. The server stores the report without your IP address. It does not identify you, and anyone with a copy of the same download could send the same code."
-
-	var body: some View {
-		NavigationStack {
-			ScrollView {
-				VStack(alignment: .leading, spacing: 18) {
-					Image(systemName: "checkmark.shield")
-						.font(.system(size: 44, weight: .regular))
-						.foregroundStyle(.tint)
-						.accessibilityHidden(true)
-					Text("Help Count Website Installations?")
-						.font(.title2.bold())
-					Text(Self.summary)
-					VStack(alignment: .leading, spacing: 8) {
-						Text("Sent once").font(.headline)
-						ForEach(Self.sent, id: \.self) { Label($0, systemImage: "arrow.up.circle") }
-					}
-					VStack(alignment: .leading, spacing: 8) {
-						Text("Never sent").font(.headline)
-						ForEach(Self.neverSent, id: \.self) { Label($0, systemImage: "xmark.circle") }
-					}
-					Text(Self.limits).font(.footnote).foregroundStyle(.secondary)
-					Text("You can change this at any time in Settings › Privacy.")
-						.font(.footnote).foregroundStyle(.secondary)
-				}
-				.padding(24)
-			}
-			.safeAreaInset(edge: .bottom) {
-				// Equal weight: neither choice is the highlighted default.
-				HStack(spacing: 12) {
-					Button { onChoice(false) } label: {
-						Text("Don't Share").frame(maxWidth: .infinity)
-					}
-					Button { onChoice(true) } label: {
-						Text("Share Once").frame(maxWidth: .infinity)
-					}
-				}
-				.buttonStyle(.bordered)
-				.controlSize(.large)
-				.padding(.horizontal, 24)
-				.padding(.vertical, 12)
-				.background(.bar)
-			}
-		}
-	}
-}
-
-/// Presents the disclosure once, after the launch splash has finished, and
-/// only when the feature is on and this copy has something to report.
-struct ZagFirstLaunchDisclosurePresenter: ViewModifier {
-	@State private var _presented = false
-
-	func body(content: Content) -> some View {
-		content
-			.onReceive(NotificationCenter.default.publisher(for: .zagLaunchSplashVisibilityDidChange)) { note in
-				guard (note.userInfo?["visible"] as? Bool) == false else { return }
-				_presentIfNeeded()
-			}
-			.onAppear {
-				if ZagLaunchGate.shared.isFinished { _presentIfNeeded() }
-			}
-			.sheet(isPresented: $_presented, onDismiss: {
-				// Swiped away without a choice: the same as "Don't Share".
-				if !UserDefaults.standard.bool(forKey: ZagFirstLaunchReporter.disclosureShownKey) {
-					ZagFirstLaunchReporter.setConsent(false)
-				}
-			}) {
-				ZagFirstLaunchDisclosure { allowed in
-					ZagFirstLaunchReporter.setConsent(allowed)
-					_presented = false
-				}
-			}
-	}
-
-	private func _presentIfNeeded() {
-		if ZagFirstLaunchReporter.shouldPresentDisclosure { _presented = true }
-	}
 }

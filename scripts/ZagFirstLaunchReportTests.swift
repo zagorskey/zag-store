@@ -24,8 +24,12 @@ import Security
 		let parsed = R.attribution(from: valid)
 		expect(parsed?.environment == "preview" && parsed?.token == token, "server document parses")
 		expect(parsed?.fingerprint == R.sha256(valid), "fingerprint is the document hash")
-		expect(R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#))?.environment == "production",
-		       "production document parses")
+		expect(R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#)) == nil,
+		       "production document ignored (production reporting disabled)")
+		expect(R.endpoints == ["preview": URL(string: "https://preview.zagstore.app/api/zag/v1/first-launch")!],
+		       "only the preview endpoint exists")
+		expect(R.attribution(from: document(#"{"v":1,"tok":"\#(token)","env":"preview"}"#)) != nil,
+		       "key order does not matter")
 		let invalid: [(String, String)] = [
 			(#"{"env":"preview","tok":"\#(token)","v":1,"job":"x"}"#, "extra field"),
 			(#"{"env":"preview","tok":"\#(token)"}"#, "missing version"),
@@ -37,6 +41,11 @@ import Security
 			(#"{"env":"preview","tok":"\#(token)A","v":1}"#, "44-character token"),
 			(#"{"env":"preview","tok":"\#(token.dropLast())B","v":1}"#, "non-canonical final character"),
 			(#"{"env":"preview","tok":"\#(token.dropLast())+","v":1}"#, "standard-base64 character"),
+			(#"{"env":"preview","tok":"\#(token)=","v":1}"#, "padded token"),
+			(#"{"env":"preview","tok":" \#(token.dropFirst())","v":1}"#, "space in token"),
+			(#"{"env":"preview","tok":7,"v":1}"#, "numeric token"),
+			(#"{"env":"Preview","tok":"\#(token)","v":1}"#, "environment case"),
+			(#"{"env":"preview","tok":"\#(token)","v":"1"}"#, "string version"),
 			("[1]", "not an object"), ("", "empty"), ("{", "truncated"),
 		]
 		for (body, label) in invalid {
@@ -64,6 +73,14 @@ import Security
 		       "request has exactly the schema fields")
 		expect(object["launched_at"] as? String == "2026-11-12 08:00:00", "launch time in UTC")
 		expect(!String(decoding: body, as: UTF8.self).contains("identifierForVendor"), "no identifiers")
+		let sentDocument = object["attribution"] as? [String: Any] ?? [:]
+		expect(Set(sentDocument.keys) == ["v", "env", "tok"] && sentDocument["env"] as? String == "preview"
+		       && sentDocument["tok"] as? String == token && (sentDocument["v"] as? Int) == 1,
+		       "request carries the document unchanged")
+		expect(object["v"] as? Int == 1 && object["app_version"] as? String == "1.0.0" && object["app_build"] as? String == "1"
+		       && object["os_version"] as? String == "26.1" && object["device_model"] as? String == "iPhone17,1",
+		       "request carries the metadata")
+		expect(body.count <= 1024, "request fits the server's 1 KB limit")
 		if let out = ProcessInfo.processInfo.environment["ZAG_FIRST_LAUNCH_BODY_OUT"] {
 			try? body.write(to: URL(fileURLWithPath: out))
 		}
@@ -89,6 +106,18 @@ import Security
 		}
 		let limited = R.record(.status(429, retryAfter: 600), in: state!, now: t0)
 		expect(limited.outcome == nil && limited.nextAttempt == t0.addingTimeInterval(600), "429 waits Retry-After")
+		expect(R.record(.status(429, retryAfter: nil), in: state!, now: t0).nextAttempt == t0.addingTimeInterval(60),
+		       "429 without Retry-After uses the schedule")
+		let unavailable = R.record(.status(503, retryAfter: nil), in: state!, now: t0)
+		expect(unavailable.outcome == nil && unavailable.attempts == 1 && unavailable.nextAttempt == t0.addingTimeInterval(60),
+		       "503 retries later")
+		expect(R.record(.status(500, retryAfter: nil), in: state!, now: t0).outcome == nil, "500 retries later")
+		expect(R.record(.status(200, retryAfter: nil), in: state!, now: t0).outcome == nil, "only 202 counts as delivered")
+		let timedOut = R.record(R.response(for: .timedOut), in: state!, now: t0)
+		expect(timedOut.outcome == nil && timedOut.attempts == 1 && timedOut.nextAttempt == t0.addingTimeInterval(60),
+		       "timeout uses one attempt and retries later")
+		let second = R.record(.status(503, retryAfter: nil), in: unavailable, now: t0.addingTimeInterval(60))
+		expect(second.nextAttempt == t0.addingTimeInterval(60 + 300), "backoff grows")
 		let busy = R.record(.status(503, retryAfter: 30), in: state!, now: t0)
 		expect(busy.nextAttempt == t0.addingTimeInterval(60), "Retry-After never shortens the schedule")
 		expect(R.record(.status(503, retryAfter: 1e9), in: state!, now: t0).nextAttempt == t0.addingTimeInterval(86_400),
@@ -152,10 +181,12 @@ import Security
 		       "ten requests at most, all inside the report window")
 
 		// A newly signed IPA installed over the app is a new job's first launch.
-		let other = R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#))
+		let other = R.attribution(from: document(#"{"env":"preview","tok":"BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8","v":1}"#))
 		let (fresh, freshStep) = R.plan(attribution: other, state: delivered, completed: false, now: t0)
-		expect(freshStep == .send && fresh?.fingerprint == other?.fingerprint && fresh?.attempts == 0,
+		expect(other != nil && freshStep == .send && fresh?.fingerprint == other?.fingerprint && fresh?.attempts == 0,
 		       "different IPA starts afresh")
+		expect(R.plan(attribution: other, state: delivered, completed: true, now: t0).1 == .none,
+		       "a finished document is not re-sent after reinstall")
 
 		// Durable store: file plus Keychain, with a disposable namespace.
 		let directory = FileManager.default.temporaryDirectory
