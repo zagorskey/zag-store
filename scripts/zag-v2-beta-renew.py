@@ -46,11 +46,53 @@ def timestamp(value):
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def new_release(args, previous):
+    """Release fields for a new IPA. The build number is the app's own
+    (CFBundleVersion); only the metadata sequence must increase."""
+    import plistlib
+    import zipfile
+    if not args.ipa_url or not args.notes:
+        raise ValueError("--release-ipa requires --ipa-url and --notes")
+    prefix = "https://github.com/zagorskey/zag-store-releases/releases/download/"
+    if not args.ipa_url.startswith(prefix):
+        raise ValueError("IPA URL must be a zag-store-releases download URL")
+    data = args.release_ipa.read_bytes()
+    with zipfile.ZipFile(args.release_ipa) as ipa:
+        names = ipa.namelist()
+        plists = [n for n in names if n.count("/") == 2 and n.startswith("Payload/") and n.endswith(".app/Info.plist")]
+        if len(plists) != 1:
+            raise ValueError("Expected one Payload/*.app/Info.plist")
+        app = plists[0].rsplit("/", 1)[0]
+        if app + "/embedded.mobileprovision" in names:
+            raise ValueError("IPA contains a provisioning profile; publish only the unsigned IPA")
+        info = plistlib.loads(ipa.read(plists[0]))
+    if info.get("CFBundleIdentifier") != "app.zagstore.ios":
+        raise ValueError("Unexpected bundle identifier")
+    notes = args.notes.read_text(encoding="utf-8").strip()
+    if not notes:
+        raise ValueError("Release notes are empty")
+    release = {
+        "version": info["CFBundleShortVersionString"],
+        "build": info["CFBundleVersion"],
+        "minimumIOSVersion": info["MinimumOSVersion"],
+        "ipaURL": args.ipa_url,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "releaseNotes": notes,
+    }
+    print(f"New release: {release['version']} ({release['build']}) sha256 {release['sha256']}")
+    if release["sha256"] == previous["sha256"]:
+        raise ValueError("IPA is identical to the published release")
+    return release
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--renew", action="store_true", help="Generate locally signed successor (does not publish)")
     parser.add_argument("--private-key", type=Path, help="Existing production Ed25519 private PEM")
     parser.add_argument("--output", type=Path, help="New, nonexistent output JSON file")
+    parser.add_argument("--release-ipa", type=Path, help="With --renew: sign a NEW release from this local IPA instead of renewing the current one")
+    parser.add_argument("--ipa-url", help="With --release-ipa: its public zag-store-releases download URL")
+    parser.add_argument("--notes", type=Path, help="With --release-ipa: UTF-8 release notes file")
     args = parser.parse_args()
     envelope, payload = fetch()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
@@ -84,6 +126,8 @@ def main():
     verify(envelope, public, "beta", now=min(now, expires - dt.timedelta(seconds=1)))
     successor = dict(payload)
     successor["sequence"] = payload["sequence"] + 1
+    if args.release_ipa:
+        successor.update(new_release(args, payload))
     successor["publishedAt"] = now.isoformat().replace("+00:00", "Z")
     successor["expiresAt"] = (now + dt.timedelta(days=6)).isoformat().replace("+00:00", "Z")
     signed = sign(successor, key, KEY_ID)
