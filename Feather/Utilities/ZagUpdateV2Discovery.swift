@@ -4,9 +4,21 @@ import Foundation
 /// Intentionally NOT connected to ZagSelfUpdateCoordinator or live channels.
 /// A missing production key must fail closed, before any network request.
 enum ZagUpdateV2Discovery {
-    enum DiscoveryError: Error {
+    enum DiscoveryError: Error, LocalizedError {
         case unprovisionedTrust, invalidChannel, insecureURL
         case invalidResponse, httpStatus(Int), oversizedResponse
+
+        var errorDescription: String? {
+            switch self {
+            case .unprovisionedTrust: return "This version of Zag Store has no update signing key."
+            case .invalidChannel: return "This update channel isn't supported."
+            case .insecureURL: return "The update address isn't secure."
+            case .invalidResponse: return "The update server sent an unexpected response."
+            case .httpStatus(404): return "No update information is published for this channel yet."
+            case .httpStatus(let code): return "The update server responded with HTTP \(code)."
+            case .oversizedResponse: return "The update information is too large."
+            }
+        }
     }
 
     static let maximumEnvelopeBytes = 256 * 1024

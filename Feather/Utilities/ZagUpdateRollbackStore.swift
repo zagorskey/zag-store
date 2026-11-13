@@ -7,9 +7,20 @@ import CryptoKit
 actor ZagUpdateRollbackStore {
     static let shared = ZagUpdateRollbackStore()
 
-    enum StoreError: Error {
+    enum StoreError: Error, LocalizedError {
         case invalidChannel, invalidSequence, invalidStoredValue
         case keychain(OSStatus), rollback, conflictingSequence
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidChannel: return "This update channel isn't supported."
+            case .invalidSequence: return "The update information has an invalid sequence number."
+            case .invalidStoredValue: return "Zag Store's saved update history is unreadable."
+            case .keychain(let status): return "Zag Store couldn't access its saved update history (\(status))."
+            case .rollback: return "The published update information is older than information this device has already accepted."
+            case .conflictingSequence: return "The published update information conflicts with information this device has already accepted."
+            }
+        }
     }
 
     private let service: String
