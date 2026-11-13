@@ -15,8 +15,28 @@ enum ZagUpdateMetadataV2 {
             let signature: String
         }
 
-        enum ValidationError: Error {
+        // Append new cases only: shipped builds report these by position
+        // ("ValidationError error 3" is invalidPayload).
+        enum ValidationError: Error, LocalizedError {
             case invalidEnvelope, untrustedKey, invalidSignature, invalidPayload
+            case expired, notYetValid
+
+            var errorDescription: String? {
+                switch self {
+                case .invalidEnvelope:
+                    return "The update information is malformed."
+                case .untrustedKey:
+                    return "The update information is signed with a key this version of Zag Store doesn't trust."
+                case .invalidSignature:
+                    return "The update information's signature is invalid."
+                case .invalidPayload:
+                    return "The update information doesn't match this app or channel."
+                case .expired:
+                    return "The published update information has expired. Zag Store will find updates again once it is renewed."
+                case .notYetValid:
+                    return "The update information isn't valid yet. Check that this device's date and time are correct."
+                }
+            }
         }
 
         static func verifiedPayload(_ data: Data, trustedKeys: [String: Data]) throws -> Data {
@@ -121,10 +141,13 @@ enum ZagUpdateMetadataV2 {
                   let expires = formatter.date(from: payload.expiresAt),
                   payload.publishedAt.hasSuffix("Z"), payload.expiresAt.hasSuffix("Z"),
                   published < expires,
-                  expires.timeIntervalSince(published) <= 7 * 24 * 3600,
-                  published <= now, now < expires else {
+                  expires.timeIntervalSince(published) <= 7 * 24 * 3600 else {
                 throw ValidationError.invalidPayload
             }
+            // Same window as before, reported separately so an unrenewed
+            // manifest isn't shown as corrupt.
+            guard published <= now else { throw ValidationError.notYetValid }
+            guard now < expires else { throw ValidationError.expired }
             return payload
         }
     }
