@@ -26,8 +26,27 @@ spec.loader.exec_module(signer)
 sign, verify = signer.sign, signer.verify
 
 URL = "https://raw.githubusercontent.com/zagorskey/zag-store-releases/main/releases/v2/beta.json"
-KEY_ID = "zag-v2-2026-a"
-PUBLIC_KEY_SHA256 = "1310a5ac9ccfbc82ac3f3dcb3e6eb1c90fd68fcb1efb3cbf59a647de04568e48"
+TRUST_STORE = Path(__file__).resolve().parent.parent / "Feather/Utilities/ZagUpdateTrustStore.swift"
+# Public keys that signed published manifests but are no longer in the app's
+# trust store. Used only to verify a predecessor, never to sign.
+RETIRED_KEYS = {
+    "zag-v2-2026-a": bytes.fromhex("97c762c6062134d6c38129751029463e0ad51f56a2a473e5cc0fa937d2d12d6c"),
+}
+
+
+def trusted_keys():
+    """Key ID -> raw public key, read from the app's own trust store."""
+    import re
+    source = TRUST_STORE.read_text()
+    keys = {}
+    for key_id, body in re.findall(r'"([A-Za-z0-9._-]+)":\s*Data\(\[([^\]]*)\]\)', source):
+        raw = bytes(int(b, 16) for b in re.findall(r"0x([0-9a-fA-F]{2})", body))
+        if len(raw) != 32:
+            raise ValueError(f"Trust-store key {key_id} is not 32 bytes")
+        keys[key_id] = raw
+    if not keys:
+        raise ValueError("No keys found in the trust store")
+    return keys
 
 
 def fetch():
@@ -37,7 +56,7 @@ def fetch():
         raise ValueError("Manifest too large")
     envelope = json.loads(data)
     payload = json.loads(base64.b64decode(envelope["payload"], validate=True))
-    if envelope["keyId"] != KEY_ID or payload["channel"] != "beta":
+    if envelope["keyId"] not in {**RETIRED_KEYS, **trusted_keys()} or payload["channel"] != "beta":
         raise ValueError("Unexpected key or channel")
     return envelope, payload
 
@@ -88,7 +107,8 @@ def new_release(args, previous):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--renew", action="store_true", help="Generate locally signed successor (does not publish)")
-    parser.add_argument("--private-key", type=Path, help="Existing production Ed25519 private PEM")
+    parser.add_argument("--private-key", type=Path, help="Production Ed25519 private PEM (may be passphrase-encrypted)")
+    parser.add_argument("--key-id", help="With --renew: the trust-store key ID the private key belongs to")
     parser.add_argument("--output", type=Path, help="New, nonexistent output JSON file")
     parser.add_argument("--release-ipa", type=Path, help="With --renew: sign a NEW release from this local IPA instead of renewing the current one")
     parser.add_argument("--ipa-url", help="With --release-ipa: its public zag-store-releases download URL")
@@ -110,27 +130,38 @@ def main():
         print("OK: metadata validity window is healthy")
         return 0
 
-    if not args.private_key or not args.output:
-        parser.error("--renew requires --private-key and --output")
+    if not args.private_key or not args.output or not args.key_id:
+        parser.error("--renew requires --private-key, --key-id and --output")
     if args.output.exists():
         parser.error("Output exists: refusing overwrite")
-    key = serialization.load_pem_private_key(args.private_key.read_bytes(), password=None)
+    trusted = trusted_keys()
+    if args.key_id not in trusted:
+        parser.error(f"{args.key_id} is not in {TRUST_STORE.name}")
+    pem = args.private_key.read_bytes()
+    try:
+        key = serialization.load_pem_private_key(pem, password=None)
+    except TypeError:
+        import getpass
+        key = serialization.load_pem_private_key(pem, password=getpass.getpass("Key passphrase: ").encode())
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("Expected Ed25519 private key")
     public = key.public_key()
-    raw_public = public.public_bytes(Encoding.Raw, PublicFormat.Raw)
-    if hashlib.sha256(raw_public).hexdigest() != PUBLIC_KEY_SHA256:
-        raise ValueError("Private key does not match the pinned production trust root")
-    # Validate the published predecessor's signature before reusing its
-    # release identity and artifact digest. Expiry is expected during recovery.
-    verify(envelope, public, "beta", now=min(now, expires - dt.timedelta(seconds=1)))
+    if public.public_bytes(Encoding.Raw, PublicFormat.Raw) != trusted[args.key_id]:
+        raise ValueError(f"Private key does not match trust-store key {args.key_id}")
+    # Validate the published predecessor's signature, with the key that signed
+    # it, before reusing its release identity. Expiry is expected in recovery.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    previous_key = Ed25519PublicKey.from_public_bytes({**RETIRED_KEYS, **trusted}[envelope["keyId"]])
+    verify(envelope, previous_key, "beta", now=min(now, expires - dt.timedelta(seconds=1)))
+    if envelope["keyId"] != args.key_id and not args.release_ipa:
+        parser.error("Changing keys needs --release-ipa: a build that trusts the new key must be released with it")
     successor = dict(payload)
     successor["sequence"] = payload["sequence"] + 1
     if args.release_ipa:
         successor.update(new_release(args, payload))
     successor["publishedAt"] = now.isoformat().replace("+00:00", "Z")
     successor["expiresAt"] = (now + dt.timedelta(days=6)).isoformat().replace("+00:00", "Z")
-    signed = sign(successor, key, KEY_ID)
+    signed = sign(successor, key, args.key_id)
     verify(signed, public, "beta", now=now)
     args.output.write_bytes(json.dumps(signed, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii"))
     print(f"Signed successor sequence {successor['sequence']} at {args.output}")
