@@ -75,7 +75,7 @@ See [release channels](../releases/README.md).
 ## Appearance
 
 - **Mode:** Light, Dark or Automatic.
-- **Theme:** accent presets including Native, Violet and Matrix, or a **custom colour**.
+- **Theme:** accent presets including Native, Violet and Matrix, or a **custom colour**, all rendered in wide-gamut Display P3.
 - **Wallpapers.**
 - **App icons:** Official, Liquid Glass, Burning Wood, Matrix, Golden Reserve, Sterling and Neon Flux.
 - **Zag Store Designer:** live-preview control of header alignment, rows, separators and badges.

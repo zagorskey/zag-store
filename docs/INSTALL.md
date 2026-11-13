@@ -3,7 +3,7 @@
 Zag Store installs from Safari on the iPhone or iPad you want to use it on. You don't need a computer, a cable or a second device. This guide covers what you need, what happens at each step, and what to do when something goes wrong.
 
 > [!NOTE]
-> Zag Store is in **public beta**. Features and steps may change as the beta develops.
+> Zag Store is in **public beta**, and the Safari installer is **in testing**. Features and steps may change as the beta develops.
 
 ## Requirements
 
