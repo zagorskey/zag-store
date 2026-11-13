@@ -24,10 +24,15 @@ import Security
 		let parsed = R.attribution(from: valid)
 		expect(parsed?.environment == "preview" && parsed?.token == token, "server document parses")
 		expect(parsed?.fingerprint == R.sha256(valid), "fingerprint is the document hash")
-		expect(R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#)) == nil,
-		       "production document ignored (production reporting disabled)")
-		expect(R.endpoints == ["preview": URL(string: "https://preview.zagstore.app/api/zag/v1/first-launch")!],
-		       "only the preview endpoint exists")
+		let production = R.attribution(from: document(#"{"env":"production","tok":"\#(token)","v":1}"#))
+		expect(production?.environment == "production" && production.flatMap { R.endpoints[$0.environment] }
+		       == URL(string: "https://zagstore.app/api/zag/v1/first-launch")!,
+		       "production document reports to zagstore.app")
+		expect(R.attribution(from: document(#"{"env":"staging","tok":"\#(token)","v":1}"#)) == nil,
+		       "any other environment ignored")
+		expect(R.endpoints == ["preview": URL(string: "https://preview.zagstore.app/api/zag/v1/first-launch")!,
+		                       "production": URL(string: "https://zagstore.app/api/zag/v1/first-launch")!],
+		       "exactly the two website endpoints")
 		expect(R.attribution(from: document(#"{"v":1,"tok":"\#(token)","env":"preview"}"#)) != nil,
 		       "key order does not matter")
 		let invalid: [(String, String)] = [

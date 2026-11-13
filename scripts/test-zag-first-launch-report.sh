@@ -1,5 +1,5 @@
 #!/bin/bash
-# Regression checks for the first-launch reporter (preview copies only).
+# Regression checks for the first-launch reporter (website-signed copies).
 # Usage: bash scripts/test-zag-first-launch-report.sh
 # With ZAG_WEBSITE_REPO set to the website checkout, the request body built
 # here is also parsed by the server endpoint's own validator.
@@ -25,7 +25,7 @@ hook_after_interactive() {
 	hook=$(grep -n 'ZagFirstLaunchReporter.launchBecameInteractive()' <<< "$finish_body" | head -1 | cut -d: -f1)
 	[[ -n "$interactive" && -n "$hook" && "$interactive" -lt "$hook" ]]
 }
-# Release: on, preview copies only, no prompt (owner's decision 2026-11-12). The test-only
+# Release: on, website-signed copies only, no prompt (owner's decision 2026-11-12). The test-only
 # build differs only by its marker.
 flag_branches() {
 	[[ "$(grep -c 'static let featureEnabled' "$REPORTER")" == 1 ]] &&
@@ -46,8 +46,8 @@ check "the release script refuses test builds (override cleared)" \
 	grep -q 'env -u ZAG_ALLOW_FIRST_LAUNCH_TEST_BUILD bash .*zag-check-bundle-contents.sh' "$ROOT/scripts/publish-zag-release.zsh"
 check "the user's opt-out stops reporting" \
 	grep -q 'featureEnabled && !UserDefaults.standard.bool(forKey: optOutKey)' "$REPORTER"
-check "preview endpoint only (production reporting disabled)" \
-	bash -c "grep -q '\"preview\": URL(string: \"https://preview.zagstore.app/api/zag/v1/first-launch\")' '$CORE' && ! grep -q 'https://zagstore.app' '$CORE' '$REPORTER'"
+check "exactly the two website endpoints, no other URL" \
+	bash -c "grep -q '\"preview\": URL(string: \"https://preview.zagstore.app/api/zag/v1/first-launch\")' '$CORE' && grep -q '\"production\": URL(string: \"https://zagstore.app/api/zag/v1/first-launch\")' '$CORE' && [ \"\$(grep -c 'https://' '$CORE' '$REPORTER' | awk -F: '{s+=\$2} END {print s}')\" = 2 ]"
 check "hooked after the interface is interactive" hook_after_interactive
 check "the launch gate does not wait for it" bash -c "! grep -q 'await ZagFirstLaunchReporter' '$APP'"
 check "the hook starts a detached background task" grep -q 'Task.detached(priority: .background)' "$REPORTER"
@@ -118,9 +118,18 @@ with_jb = parse("launch-jailbreak.json")
 assert with_jb["jailbreak"] == {"consent": "opt_in", "status": "detected", "layout": "rootless", "checks": 1}, with_jb
 jb = parse("jailbreak.json")
 assert jb["kind"] == "jailbreak" and jb["jailbreak"]["status"] == "unknown" and "metadata" not in jb, jb
+# The same report from a production-signed copy, on zagstore.app; never the other site.
+import json
+body = json.loads(open(sys.argv[2] + "/launch.json", "rb").read())
+body["attribution"]["env"] = "production"
+production = json.dumps(body, sort_keys=True).encode()
+token_hash, payload = endpoint.parse_request(production, "production")
+assert token_hash is not None and payload["version"] == 2, payload
+assert endpoint.parse_request(production, "preview")[0] is None
+assert endpoint.parse_request(open(sys.argv[2] + "/launch.json", "rb").read(), "production")[0] is None
 PY
 	}
-	check "server endpoint accepts the app's v2 launch and jailbreak reports" interop_v2
+	check "server endpoint accepts the app's v2 reports, each on its own site only" interop_v2
 fi
 
 [[ $FAILURES -eq 0 ]] && echo "All first-launch reporter checks passed" || { echo "$FAILURES failed"; exit 1; }

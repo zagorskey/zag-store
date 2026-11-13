@@ -3,9 +3,9 @@ import Network
 import UIKit
 
 /// Sends the first-launch report (see ZagFirstLaunchReport) after the
-/// interface is interactive, for copies signed on the PREVIEW website only:
-/// production documents are ignored, and copies without a document (App
-/// Store-style builds, self-updates, production signings) send nothing.
+/// interface is interactive, for copies signed on the Zag Store website, to
+/// the site they were signed on. Copies without a document (App Store-style
+/// builds, self-updates, signings before attribution) send nothing.
 ///
 /// Never delays launch: ZagLaunchGate.finish() only starts a detached,
 /// low-priority task, after the splash has gone. One report per signed IPA,
@@ -15,8 +15,8 @@ import UIKit
 /// and the hardware model identifier; no device name, identifier, location
 /// or account data.
 ///
-/// No prompt (owner's decision, 2026-11-12): on by default for preview
-/// copies, explained in Settings › Privacy, where turning it off stops any
+/// No prompt (owner's decision, 2026-11-12; production 2026-11-13): on by
+/// default, explained in Settings › Privacy, where turning it off stops any
 /// pending report. That row appears only in copies that have a report.
 ///
 /// Report v2 also sends the OS build, and a jailbreak classification only
@@ -83,8 +83,8 @@ actor ZagFirstLaunchReporter {
 		if enabled { launchBecameInteractive() }
 	}
 
-	/// Whether this copy carries a preview attribution document (an IPA
-	/// signed on the preview website), so has a report to send.
+	/// Whether this copy carries an attribution document (an IPA signed on
+	/// the website), so has a report to send.
 	nonisolated static var hasReport: Bool {
 		featureEnabled && bundledAttribution() != nil
 	}

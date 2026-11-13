@@ -96,7 +96,7 @@ struct ZagFirstLaunchPrivacyView: View {
 
 /// What the first-launch report contains, in plain words.
 enum ZagFirstLaunchDisclosure {
-	static let summary = "Zag Store tells the preview website, once, that the copy you installed from it has opened. It helps count how many website installations actually start. Turn this off and nothing is sent."
+	static let summary = "Zag Store tells the website you downloaded it from, once, that the copy you installed from it has opened. It helps count how many website installations actually start. Turn this off and nothing is sent."
 	static let sent = [
 		"The installation code from your download (it identifies that download, not you or your device)",
 		"Zag Store version and build",

@@ -201,7 +201,7 @@ final class ZagLaunchGate {
             object: nil,
             userInfo: ["visible": false]
         )
-        // After the interface is interactive; returns at once (preview copies only).
+        // After the interface is interactive; returns at once (website-signed copies only).
         ZagFirstLaunchReporter.launchBecameInteractive()
     }
 }
