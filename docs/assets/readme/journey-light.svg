@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-label="Step one, get Zag Store: open zagstore.app in Safari, add your own certificate and provisioning profile, Zag Store's isolated signing service signs your copy and delivers it by a private expiring link, and iOS installs it after verifying the signature and profile. No computer, no second device, no cable. Your own signing certificate and profile are still required.">
+<title>Step one, get Zag Store: open zagstore.app in Safari, add your own certificate and provisioning profile, Zag Store's isolated signing service signs your copy and delivers it by a private expiring link, and iOS installs it after verifying the signature and profile. No computer, no second device, no cable. Your own signing certificate and profile are still required.</title>
+<style>
+text{font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Roboto, Arial, sans-serif}
+.mono{font-family:ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace}
+@keyframes drift{0%{transform:translate(0,0)}50%{transform:translate(40px,-24px)}100%{transform:translate(0,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes flow{to{stroke-dashoffset:-48}}
+.drift{animation:drift 14s ease-in-out infinite}
+.drift2{animation:drift 18s ease-in-out infinite reverse}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 60s linear infinite}
+.spin2{transform-box:fill-box;transform-origin:center;animation:spin 90s linear infinite reverse}
+.pulse{animation:pulse 3.2s ease-in-out infinite}
+.flow{stroke-dasharray:10 14;animation:flow 2.4s linear infinite}
+@media (prefers-reduced-motion:reduce){.drift,.drift2,.spin,.spin2,.pulse,.flow{animation:none}}
+</style>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7f9fd"/><stop offset="1" stop-color="#eef2f9"/></linearGradient>
+<linearGradient id="spec" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0891c9"/><stop offset=".5" stop-color="#3a5ce8"/><stop offset="1" stop-color="#b02fd9"/></linearGradient>
+<linearGradient id="specText" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0891c9"/><stop offset=".5" stop-color="#3a5ce8"/><stop offset="1" stop-color="#b02fd9"/></linearGradient>
+<radialGradient id="atA"><stop offset="0" stop-color="#0891c9" stop-opacity="0.2"/><stop offset="1" stop-color="#0891c9" stop-opacity="0"/></radialGradient>
+<radialGradient id="atB"><stop offset="0" stop-color="#b02fd9" stop-opacity="0.15"/><stop offset="1" stop-color="#b02fd9" stop-opacity="0"/></radialGradient>
+<radialGradient id="atC"><stop offset="0" stop-color="#3a5ce8" stop-opacity="0.12"/><stop offset="1" stop-color="#3a5ce8" stop-opacity="0"/></radialGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset=".5" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+<filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>
+<filter id="lift" x="-40%" y="-60%" width="180%" height="260%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0a1440" flood-opacity="0.12"/></filter>
+<clipPath id="frame"><rect width="1600" height="640" rx="32"/></clipPath>
+
+</defs>
+<g clip-path="url(#frame)">
+<rect width="1600" height="640" fill="url(#bg)"/>
+<g class="drift"><ellipse cx="200" cy="60" rx="480" ry="260" fill="url(#atA)"/></g>
+<g class="drift2"><ellipse cx="1440" cy="600" rx="480" ry="260" fill="url(#atB)"/></g>
+<g class="drift"><ellipse cx="800" cy="320" rx="520" ry="260" fill="url(#atC)"/></g>
+<text x="72" y="92" font-size="21" font-weight="600" fill="#5d6782" text-anchor="start" letter-spacing="4">STEP ONE  ·  GET ZAG STORE</text>
+<text x="70" y="156" font-size="54" font-weight="700" fill="#0f1729" text-anchor="start" letter-spacing="-1.2">From Safari to your Home Screen.</text>
+<g filter="url(#lift)"><rect x="72" y="214" width="350" height="312" rx="28" fill="#ffffff" fill-opacity="0.7"/></g><rect x="72" y="214" width="350" height="312" rx="28" fill="url(#sheen)"/><rect x="72.5" y="214.5" width="349" height="311" rx="27.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+<g transform="translate(102 244) scale(1.9166666666666667)" fill="none" stroke="url(#spec)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M15.8 8.2 13.4 13.4 8.2 15.8 10.6 10.6Z"/></g>
+<text x="392" y="276" font-size="26" font-weight="700" fill="url(#specText)" text-anchor="end">01</text>
+<text x="102" y="362" font-size="30" font-weight="700" fill="#0f1729" text-anchor="start">Open zagstore.app</text>
+<text x="102" y="410.0" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">In Safari, on the iPhone</text><text x="102" y="441.24" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">or iPad you install on.</text><text x="102" y="472.48" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">Nothing else to set up.</text>
+<g filter="url(#lift)"><rect x="446" y="214" width="350" height="312" rx="28" fill="#ffffff" fill-opacity="0.7"/></g><rect x="446" y="214" width="350" height="312" rx="28" fill="url(#sheen)"/><rect x="446.5" y="214.5" width="349" height="311" rx="27.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+<g transform="translate(476 244) scale(1.9166666666666667)" fill="none" stroke="url(#spec)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="12.5" rx="2.2"/><path d="M7.5 8.5h9M7.5 12h5"/><circle cx="16" cy="16.5" r="2.6"/><path d="M14.6 18.6 14 21.5l2-1 2 1-.6-2.9"/></g>
+<text x="766" y="276" font-size="26" font-weight="700" fill="url(#specText)" text-anchor="end">02</text>
+<text x="476" y="362" font-size="30" font-weight="700" fill="#0f1729" text-anchor="start">Your certificate</text>
+<text x="476" y="410.0" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">Your .p12, its password</text><text x="476" y="441.24" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">and a provisioning profile</text><text x="476" y="472.48" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">that includes this device.</text>
+<g filter="url(#lift)"><rect x="820" y="214" width="350" height="312" rx="28" fill="#ffffff" fill-opacity="0.7"/></g><rect x="820" y="214" width="350" height="312" rx="28" fill="url(#sheen)"/><rect x="820.5" y="214.5" width="349" height="311" rx="27.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+<g transform="translate(850 244) scale(1.9166666666666667)" fill="none" stroke="url(#spec)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19.5 6v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6Z"/><path d="m8.7 12 2.3 2.3 4.4-4.6"/></g>
+<text x="1140" y="276" font-size="26" font-weight="700" fill="url(#specText)" text-anchor="end">03</text>
+<text x="850" y="362" font-size="30" font-weight="700" fill="#0f1729" text-anchor="start">Isolated signing</text>
+<text x="850" y="410.0" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">A dedicated service signs</text><text x="850" y="441.24" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">this copy, then delivers it</text><text x="850" y="472.48" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">by a private, expiring link.</text>
+<g filter="url(#lift)"><rect x="1194" y="214" width="350" height="312" rx="28" fill="#ffffff" fill-opacity="0.7"/></g><rect x="1194" y="214" width="350" height="312" rx="28" fill="url(#sheen)"/><rect x="1194.5" y="214.5" width="349" height="311" rx="27.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+<g transform="translate(1224 244) scale(1.9166666666666667)" fill="none" stroke="url(#spec)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2.5" width="14" height="19" rx="3"/><rect x="8" y="6.5" width="3.2" height="3.2" rx=".9"/><rect x="12.8" y="6.5" width="3.2" height="3.2" rx=".9"/><rect x="8" y="11.3" width="3.2" height="3.2" rx=".9"/><path d="M10.5 18.5h3"/></g>
+<text x="1514" y="276" font-size="26" font-weight="700" fill="url(#specText)" text-anchor="end">04</text>
+<text x="1224" y="362" font-size="30" font-weight="700" fill="#0f1729" text-anchor="start">iOS installs it</text>
+<text x="1224" y="410.0" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">Once iOS has verified the</text><text x="1224" y="441.24" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">signature and that your</text><text x="1224" y="472.48" font-size="22" font-weight="400" fill="#4a5670" text-anchor="start">profile covers the device.</text>
+<g transform="translate(72 562) scale(1.25)" fill="none" stroke="#4a5670" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="5" width="15" height="10" rx="1.6"/><path d="M2.5 18.5h19"/></g>
+<path d="M74 564 L100 590" stroke="#b02fd9" stroke-width="3.2" stroke-linecap="round"/>
+<text x="114" y="585" font-size="23" font-weight="600" fill="#0f1729" text-anchor="start">No computer</text>
+<g transform="translate(295 562) scale(1.25)" fill="none" stroke="#4a5670" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7.5" y="3" width="9" height="18" rx="2.4"/><path d="M11 6h2"/></g>
+<path d="M297 564 L323 590" stroke="#b02fd9" stroke-width="3.2" stroke-linecap="round"/>
+<text x="337" y="585" font-size="23" font-weight="600" fill="#0f1729" text-anchor="start">No second device</text>
+<g transform="translate(583 562) scale(1.25)" fill="none" stroke="#4a5670" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v5M11 3v5M5.5 8h7v3a3.5 3.5 0 0 1-7 0Z"/><path d="M9 14.5V17a4 4 0 0 0 8 0V9"/></g>
+<path d="M585 564 L611 590" stroke="#b02fd9" stroke-width="3.2" stroke-linecap="round"/>
+<text x="625" y="585" font-size="23" font-weight="600" fill="#0f1729" text-anchor="start">No cable</text>
+<text x="1528" y="585" font-size="21" font-weight="500" fill="#5d6782" text-anchor="end">Still required: your own signing certificate and profile.</text>
+</g>
+<rect x=".5" y=".5" width="1599" height="639" rx="31.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="240" viewBox="0 0 1600 240" role="img" aria-label="Chapter 04: Engineering beneath the surface. Isolated signing, verified delivery, signed update metadata.">
+<title>Chapter 04: Engineering beneath the surface. Isolated signing, verified delivery, signed update metadata.</title>
+<style>
+text{font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Roboto, Arial, sans-serif}
+.mono{font-family:ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace}
+@keyframes drift{0%{transform:translate(0,0)}50%{transform:translate(40px,-24px)}100%{transform:translate(0,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes flow{to{stroke-dashoffset:-48}}
+.drift{animation:drift 14s ease-in-out infinite}
+.drift2{animation:drift 18s ease-in-out infinite reverse}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 60s linear infinite}
+.spin2{transform-box:fill-box;transform-origin:center;animation:spin 90s linear infinite reverse}
+.pulse{animation:pulse 3.2s ease-in-out infinite}
+.flow{stroke-dasharray:10 14;animation:flow 2.4s linear infinite}
+@media (prefers-reduced-motion:reduce){.drift,.drift2,.spin,.spin2,.pulse,.flow{animation:none}}
+</style>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7f9fd"/><stop offset="1" stop-color="#eef2f9"/></linearGradient>
+<linearGradient id="spec" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0891c9"/><stop offset=".5" stop-color="#3a5ce8"/><stop offset="1" stop-color="#b02fd9"/></linearGradient>
+<linearGradient id="specText" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0891c9"/><stop offset=".5" stop-color="#3a5ce8"/><stop offset="1" stop-color="#b02fd9"/></linearGradient>
+<radialGradient id="atA"><stop offset="0" stop-color="#0891c9" stop-opacity="0.2"/><stop offset="1" stop-color="#0891c9" stop-opacity="0"/></radialGradient>
+<radialGradient id="atB"><stop offset="0" stop-color="#b02fd9" stop-opacity="0.15"/><stop offset="1" stop-color="#b02fd9" stop-opacity="0"/></radialGradient>
+<radialGradient id="atC"><stop offset="0" stop-color="#3a5ce8" stop-opacity="0.12"/><stop offset="1" stop-color="#3a5ce8" stop-opacity="0"/></radialGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/><stop offset=".5" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+<filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>
+<filter id="lift" x="-40%" y="-60%" width="180%" height="260%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0a1440" flood-opacity="0.12"/></filter>
+<clipPath id="frame"><rect width="1600" height="240" rx="32"/></clipPath>
+
+</defs>
+<g clip-path="url(#frame)">
+<rect width="1600" height="240" fill="url(#bg)"/>
+<g class="drift"><ellipse cx="160" cy="120" rx="360" ry="200" fill="url(#atA)"/></g>
+<g class="drift2"><ellipse cx="1500" cy="200" rx="420" ry="200" fill="url(#atB)"/></g>
+<text x="72" y="178" font-size="168" font-weight="800" fill="none" stroke="url(#spec)" stroke-width="2.4" letter-spacing="-6">04</text>
+<rect x="340" y="62" width="4" height="116" rx="2" fill="url(#spec)"/>
+<text x="380" y="112" font-size="60" font-weight="700" fill="#0f1729" text-anchor="start" letter-spacing="-1.5">Engineering beneath the surface</text>
+<text x="382" y="162" font-size="27" font-weight="500" fill="#4a5670" text-anchor="start">Isolated signing, verified delivery, signed update metadata.</text>
+</g>
+<rect x=".5" y=".5" width="1599" height="239" rx="31.5" fill="none" stroke="#1e305a" stroke-opacity="0.11"/>
+</svg>
