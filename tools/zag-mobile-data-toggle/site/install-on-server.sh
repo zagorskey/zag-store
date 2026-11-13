@@ -2,7 +2,7 @@
 # Installs the official Shortcut page into the static landing site.
 # Writes only /var/www/zagstore-landing/shortcuts/mobile-data-fix/ (creating
 # shortcuts/ if needed). Never touches the homepage, Nginx or other files.
-# Run on zagstore-prod-01: sudo sh ~/zagstore-shortcuts-staging/install-on-server.sh
+# Run as root on the website host, from the staged copy of this folder.
 set -eu
 umask 022
 SRC="$(cd "$(dirname "$0")" && pwd)/shortcuts/mobile-data-fix"

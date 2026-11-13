@@ -27,8 +27,11 @@ We are particularly interested in:
 - certificate, private key and password handling;
 - IPA signing;
 - pairing and installation on the device;
-- the integrity of in-app updates;
-- parsing of repositories and IPAs.
+- the integrity of in-app updates and signed update metadata;
+- parsing of repositories and IPAs;
+- the Safari installer and signing service on zagstore.app, and the reports Zag Store sends to it.
+
+The website's services aren't part of this repository, but reports about them are welcome through the same private channel. Please don't test against them in ways that could affect other users: no load testing, no attempts to reach other people's jobs or data, and no use of certificates that aren't yours.
 
 Problems in upstream projects (for example Feather, Zsign or idevice) should also be reported to those projects.
 

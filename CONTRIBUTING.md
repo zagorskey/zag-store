@@ -28,7 +28,7 @@ git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
 cd zag-store
 ```
 
-Then follow the steps in [README.md](README.md#build-from-source): build the Rust core with `bash RPPairingCore/build-rust.sh`, then run `make iphoneos`. The resulting `packages/ZagStore.ipa` is ad-hoc signed and must be signed with your own certificate before a stock device will install it.
+Then follow [Building Zag Store](docs/BUILDING.md): build the Rust core with `bash RPPairingCore/build-rust.sh`, then run `make iphoneos`. The same page lists the host-run test suites. The resulting `packages/ZagStore.ipa` is ad-hoc signed and must be signed with your own certificate before a stock device will install it.
 
 ## Pull requests
 
