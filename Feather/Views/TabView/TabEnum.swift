@@ -1870,19 +1870,19 @@ private struct ZagGamesPage: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarLeading) {
                     gameFiltersMenu
-                    Button { showGameLibrary = true } label: {
-                        ZagPrimaryTabIcons.label(for: .games)
-                            .frame(width: 30, height: 30)
-                    }
-                        .accessibilityLabel("Game Library")
-                }
-                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
-                ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showCollections = true } label: {
                         ZagPrimaryTabIcons.label(for: .collections)
                             .frame(width: 30, height: 30)
                     }
                         .accessibilityLabel("Game Collections")
+                }
+                ToolbarItem(placement: .principal) { ZagLocalVPNToolbarStatus() }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showGameLibrary = true } label: {
+                        ZagPrimaryTabIcons.label(for: .games)
+                            .frame(width: 30, height: 30)
+                    }
+                        .accessibilityLabel("Game Library")
                     ZagProfileToolbarButton()
                         .tint(.primary)
                         .padding(.trailing, -2)
@@ -2854,6 +2854,13 @@ struct ZagDockCustomizationView: View {
             ZagPrimaryTabIcons.label(for: .discover)
         case .sources:
             ZagSourcesTabIcon.label
+        case .library:
+            ZagAppsTabIcon(
+                hasUpdates: false,
+                hasStoreUpdate: false,
+                isSelected: true,
+                tintHex: themeTintHex
+            )
         case .games:
             ZagPrimaryTabIcons.label(for: .games)
         case .activity:
