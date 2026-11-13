@@ -22,7 +22,7 @@ def fixture():
     public = private.public_key().public_bytes_raw()
     payload = {
         "schema": 2,
-        "appId": "com.cwd43.gu29",
+        "appId": "app.zagstore.ios",
         "channel": "beta",
         "sequence": 7,
         "version": "1.0.1",
