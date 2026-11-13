@@ -67,9 +67,27 @@ iOS refuses Zag Store's local installation connection while Mobile Data is switc
 
 The Shortcut accepts exactly three commands (`status`, `off`, `on`) and never toggles blindly. It sets Mobile Data to an explicit state. On Wi-Fi, none of this happens.
 
+## Alternative: sign the unsigned IPA yourself
+
+If you'd rather not use the Safari installer, sign Zag Store with your own tools:
+
+1. Download `ZagStore-1.0.0-unsigned.ipa` from the **[1.0.0 Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)**.
+2. Check that its SHA-256 checksum is exactly:
+
+   ```
+   5bb93c02230a97f3b4eb2c22e4f98ba15f4c5cf71602c2035de139ed81193cd6
+   ```
+
+   On a Mac, run `shasum -a 256 ZagStore-1.0.0-unsigned.ipa`. If the checksum differs, don't install the file.
+3. Sign it with your certificate and a provisioning profile that includes your device, using any signing tool you trust, then install it.
+
+Then continue with [Set up direct installation](#2-set-up-direct-installation).
+
 ## Updating Zag Store
 
 Zag Store checks for updates on launch and when you return to it. Choose the **Stable** (default), **Beta** or **Nightly** channel in Settings. Downloads are SHA-256 verified. **Download Updates on Wi-Fi** downloads automatically on Wi-Fi only. Signing and installing always wait for your approval. See [release channels](../releases/README.md).
+
+**Coming from Beta 1?** Beta 2 signs its update information with a new key, `zag-v2-2026-b`. Beta 1 trusts only the retired key, so it can't verify this update and reports that the update information is signed with a key it doesn't trust. Install Beta 2 once, manually, from the Safari installer or the unsigned IPA. From Beta 2 on, Beta updates arrive in the app.
 
 ## Older iOS versions
 

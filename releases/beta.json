@@ -1,9 +1,0 @@
-{
-  "version": "1.0.0",
-  "build": "2",
-  "bundleIdentifier": "com.cwd43.gu29",
-  "ipaURL": "https://github.com/zagorskey/zag-store/releases/download/v1.0.0-beta.1/ZagStore-v1.0.0-build2-iOS-AppTesters.ipa",
-  "sha256": "24fedd186e1479211d46e86ade8a120c4c9c86cfc443b502b024b85148d14256",
-  "minimumIOSVersion": "16.0",
-  "releaseNotes": "Zag Store 1.0.0 Beta 1. Adds Stable, Beta and Nightly channel selection and manual update checks."
-}
