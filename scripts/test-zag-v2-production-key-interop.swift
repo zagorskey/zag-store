@@ -13,8 +13,8 @@ struct ProductionKeyInterop {
             exit(2)
         }
         let envelope = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
-        let keyID = "zag-v2-2026-a"
-        let expectedFingerprint = "1310a5ac9ccfbc82ac3f3dcb3e6eb1c90fd68fcb1efb3cbf59a647de04568e48"
+        let keyID = "zag-v2-2026-b"
+        let expectedFingerprint = "844fe8a9856d5e7ebc09c94f5d73acb8e61fb0d26a40d6533e3d9ee65616efa0"
         guard let key = ZagUpdateTrustStore.publicKey(for: keyID),
               key.count == 32,
               Data(SHA256.hash(data: key)).map({ String(format: "%02x", $0) }).joined() == expectedFingerprint else {
