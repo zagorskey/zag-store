@@ -4,7 +4,7 @@
 
 - macOS with **Xcode 26** and the iOS 26 SDK
 - **[Rust](https://rustup.rs)** via rustup. The build script adds the `aarch64-apple-ios` and `aarch64-apple-ios-sim` targets
-- Git, with access to the submodules (see [Submodules](#submodules))
+- Git. All submodules are public (see [Submodules](#submodules))
 
 ## Build
 
@@ -25,10 +25,12 @@ The IPA is **unsigned** (ad-hoc signed frameworks only). Sign it with your own c
 
 | Path | Repository | Licence |
 | --- | --- | --- |
-| `Zsign` | [zagorskey/Zsign-Zag-Experimental](https://github.com/zagorskey/Zsign-Zag-Experimental), branch `zag-cms-experimental` | MIT |
+| `Zsign` | [zagorskey/Zsign-Zag](https://github.com/zagorskey/Zsign-Zag), pinned at `ab579165`, a fork of [khcrysalis/Zsign-Package](https://github.com/khcrysalis/Zsign-Package) | MIT |
 | `IDeviceKitten` | [zagorskey/IDeviceKit-Zag](https://github.com/zagorskey/IDeviceKit-Zag), branch `zag-ios16.4-v0.1.68-clean`, a fork of [claration/idevicekit](https://github.com/claration/idevicekit) | MIT |
 
 The Rust pairing core also depends on `IDeviceKit-Zag`, pinned by commit in `RPPairingCore/rust-core/Cargo.toml`.
+
+Every dependency is public, so the project builds without any private access. [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md) records which source each published release was built from.
 
 ## Tests
 
