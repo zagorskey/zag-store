@@ -29,7 +29,7 @@ It began as a fork of [Feather](https://github.com/claration/Feather). Since the
 <tr>
 <td width="33%" valign="top">
 
-**🧭 Install from Safari**<br>
+**🧭 Install from Safari** <sub>in testing</sub><br>
 <sub>Open <a href="https://zagstore.app/install/">zagstore.app</a> on the iPhone itself, add your certificate, and install. No computer, cable or companion app.</sub>
 
 </td>
@@ -76,7 +76,7 @@ Zag Store doesn't just rename Feather. It has its own name, its own iconography 
 
 - **Seven original app icons.** Official, Liquid Glass, Burning Wood, Matrix, Golden Reserve, Sterling and Neon Flux, each with light and dark variants.
 - **A cinematic launch.** A branded splash plays on cold launch. Tap to skip it. Its sound can be turned off and respects the silent switch.
-- **Your colours.** Feather's accent presets, retuned with Native, Violet and Matrix, plus a custom colour, wallpapers and Light, Dark or Automatic mode.
+- **Your colours, in Display P3.** Feather's accent presets, retuned with Native, Violet and Matrix, plus a custom colour. Every theme is rendered as wide-gamut Display P3 colour. Wallpapers, and Light, Dark or Automatic mode.
 - **Zag Store Designer.** Live-preview controls for headers, row styles, separators, and standard and update badges.
 
 <br>
@@ -262,14 +262,15 @@ Jailbreak statistics are published only as weekly totals of at least 10 devices,
 | | Status |
 | --- | --- |
 | The iOS app: discovery, sources, signing, installation, self-update | 🟣 Public beta |
-| Installing Zag Store from Safari with your own certificate | 🟣 Public beta |
+| Installing Zag Store from Safari with your own certificate | 🟠 In testing, as shown on [zagstore.app](https://zagstore.app/how-it-works/) |
+| Developer diagnostics: controlled test install, House Arrest browser, update-signature diagnostics | 🟡 Experimental |
 | Ed25519-signed metadata for the Stable and Nightly channels | 🔵 Planned |
 | A downloadable unsigned IPA on this repository's Releases page | 🔵 Planned: published once a build is verified |
 | Installing catalogue apps directly from zagstore.app | 🔵 Planned |
 | Pages for every repository app on the website | 🔵 Planned |
 | Optional accounts and settings sync | 🔵 Planned |
 
-Planned items aren't promises. They ship when they're ready and verified.
+🟣 **Public beta**: in the current beta app, still being refined. 🟠 **In testing**: live, being verified end to end. 🟡 **Experimental**: tools for diagnosing problems, which may change or be removed. 🔵 **Planned**: not available yet. Planned items aren't promises. They ship when they're ready and verified.
 
 <br>
 

@@ -30,7 +30,7 @@ A Feather feature is called "not built in" only after searching Feather's source
 | | |
 | --- | --- |
 | **July 2026 · Foundation** | Fork from Feather v2.9.0. Zag Store name, bundle identity and branding |
-| **Identity** | Seven original app icons, a cinematic splash with optional sound, retuned accent presets, custom colour, wallpapers and Zag Store Designer |
+| **Identity** | Seven original app icons, a cinematic splash with optional sound, retuned accent presets rendered in Display P3, custom colour, wallpapers and Zag Store Designer |
 | **Navigation** | Customisable five-slot dock, Discover, Games and Activity, redesigned Sources, Apps, Certificates and Settings, unified search with voice input |
 | **Native polish** | Liquid Glass surfaces on iOS 26, native tab and refresh animations, dock that shrinks on scroll, consistent layout and spacing |
 | **Installation independence** | On-device RPPairing in Rust, LocalDevVPN integration, health checks and connection traces, Mobile Data Fix with the Zag Mobile Data Toggle Shortcut |
@@ -41,7 +41,7 @@ A Feather feature is called "not built in" only after searching Feather's source
 
 ## Feature inventory
 
-**Legend:** **Inherited**: from Feather, largely unchanged. **Redesigned**: from Feather, substantially reworked. **New**: added by Zag Store. **Beta**: available and still being refined. **Planned**: not available yet.
+**Legend:** **Inherited**: from Feather, largely unchanged. **Redesigned**: from Feather, substantially reworked. **New**: added by Zag Store. **Available**: part of the public beta. **In testing**: live, being verified end to end. **Experimental**: diagnostic tools that may change or be removed. **Planned**: not available yet.
 
 ### App experience
 
@@ -59,7 +59,7 @@ A Feather feature is called "not built in" only after searching Feather's source
 | Liquid Glass surfaces (SwiftUI `glassEffect`) | New | Available on iOS 26 |
 | Cinematic splash with optional sound | New | Available |
 | Original app icons (7) | New (Feather offers alternate *Feather* icons) | Available |
-| Accent presets | Inherited, retuned (Native, Violet, Matrix replace three of Feather's) | Available |
+| Accent presets | Inherited, retuned (Native, Violet, Matrix replace three of Feather's) and rendered in Display P3 | Available |
 | Custom colour, wallpapers, Zag Store Designer | New | Available |
 | Certificate management | Redesigned: status at a glance, voice-searchable list | Available |
 | Signing options | Inherited, redesigned presentation | Available |
@@ -71,10 +71,11 @@ A Feather feature is called "not built in" only after searching Feather's source
 | Feature | Origin | Status |
 | --- | --- | --- |
 | On-device signing with Zsign | Inherited | Available |
-| Install Zag Store **from Safari** with your own certificate | New (website) | Beta |
+| Install Zag Store **from Safari** with your own certificate | New (website) | In testing |
 | On-device **RPPairing** with a pairing code (iOS 17+) | New | Available |
 | Rust pairing core: Pair-Verify, TLS-PSK, RSD, installation proxy, AFC | New | Available |
 | Installation health check and connection trace | New | Available |
+| Controlled test install, House Arrest browser, update-signature diagnostics | New | Experimental |
 | **Mobile Data Fix** (Shortcut-assisted installs on mobile data) | New | Available |
 | Pairing-file installation for iOS 16.4–16.7 | Inherited (Feather's *IDevice* method) | Available |
 | Feather's *Server* method (local HTTPS + `itms-services`) | Removed in Zag Store | Not included |
@@ -94,7 +95,7 @@ A Feather feature is called "not built in" only after searching Feather's source
 | Feature | Status |
 | --- | --- |
 | zagstore.app catalogue and repository directory | Beta |
-| Isolated signing service with gateway, workers and expiring delivery | Beta, in production |
+| Isolated signing service with gateway, workers and expiring delivery | In testing, live on zagstore.app |
 | Installation attribution and first-launch reporting | In production |
 | Network classification of signing requests | In production |
 | Installing catalogue apps from the website | Planned |
