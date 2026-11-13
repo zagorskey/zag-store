@@ -10,12 +10,13 @@
 <br>
 
 [![Public beta](https://img.shields.io/badge/status-public%20beta-4777f8?style=flat-square)](https://zagstore.app/how-it-works/)
+[![Latest: 1.0.0 Beta 2](https://img.shields.io/badge/latest-1.0.0%20Beta%202-e35cd6?style=flat-square)](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)
 [![iOS 16.4+](https://img.shields.io/badge/iOS%20%26%20iPadOS-16.4%2B-0f1729?style=flat-square&logo=apple&logoColor=white)](docs/INSTALL.md#requirements)
 [![SwiftUI](https://img.shields.io/badge/SwiftUI-Liquid%20Glass-13d5ed?style=flat-square&logo=swift&logoColor=white)](docs/FEATURES.md)
 [![Rust pairing core](https://img.shields.io/badge/pairing%20core-Rust-bc44e5?style=flat-square&logo=rust&logoColor=white)](RPPairingCore)
 [![GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-35cba5?style=flat-square)](LICENSE)
 
-[**zagstore.app**](https://zagstore.app) &nbsp;·&nbsp; [Install](docs/INSTALL.md) &nbsp;·&nbsp; [Features](docs/FEATURES.md) &nbsp;·&nbsp; [From Feather](docs/FROM-FEATHER.md) &nbsp;·&nbsp; [Build](docs/BUILDING.md) &nbsp;·&nbsp; [Security](SECURITY.md)
+[**zagstore.app**](https://zagstore.app) &nbsp;·&nbsp; [Install](docs/INSTALL.md) &nbsp;·&nbsp; [Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2) &nbsp;·&nbsp; [Features](docs/FEATURES.md) &nbsp;·&nbsp; [From Feather](docs/FROM-FEATHER.md) &nbsp;·&nbsp; [Build](docs/BUILDING.md) &nbsp;·&nbsp; [Security](SECURITY.md)
 
 </div>
 
@@ -265,7 +266,7 @@ Jailbreak statistics are published only as weekly totals of at least 10 devices,
 | Installing Zag Store from Safari with your own certificate | 🟠 In testing, as shown on [zagstore.app](https://zagstore.app/how-it-works/) |
 | Developer diagnostics: controlled test install, House Arrest browser, update-signature diagnostics | 🟡 Experimental |
 | Ed25519-signed metadata for the Stable and Nightly channels | 🔵 Planned |
-| A downloadable unsigned IPA on this repository's Releases page | 🔵 Planned: published once a build is verified |
+| A downloadable unsigned IPA, with its SHA-256 checksum | 🟣 Public beta: [1.0.0 Beta 2](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2) |
 | Installing catalogue apps directly from zagstore.app | 🔵 Planned |
 | Pages for every repository app on the website | 🔵 Planned |
 | Optional accounts and settings sync | 🔵 Planned |
@@ -311,8 +312,7 @@ Read the full, evidence-based account in **[From Feather to Zag Store](docs/FROM
 
 The [installation guide](docs/INSTALL.md) covers requirements, mobile data, older iOS versions and troubleshooting.
 
-> [!NOTE]
-> No unsigned IPA has been published on this repository's Releases page yet. The first one will come with its SHA-256 checksum once it's verified.
+**Prefer to sign it yourself?** Download the unsigned IPA from the **[1.0.0 Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)**, check its SHA-256 checksum, and sign and install it with any tool you trust. The [installation guide](docs/INSTALL.md#alternative-sign-the-unsigned-ipa-yourself) explains how.
 
 ## Build from source
 
@@ -336,6 +336,7 @@ You need macOS with Xcode 26 and [Rust](https://rustup.rs). See **[Building Zag 
 | [Ecosystem and privacy](docs/ECOSYSTEM.md) | Website, signing service, release channels and data handling |
 | [Building](docs/BUILDING.md) | Build, test and repository layout |
 | [Release channels](releases/README.md) | How self-update channels and manifests work |
+| [Source provenance](docs/SOURCE-PROVENANCE.md) | The exact source each published build was made from |
 
 ## Acknowledgements and licence
 
@@ -346,7 +347,7 @@ Zag Store is a fork of **[Feather](https://github.com/claration/Feather)** and k
 | [Feather](https://github.com/claration/Feather) | The original app, signing and repository experience | GPL-3.0 |
 | [AltSourceKit](AltSourceKit), [NimbleKit](NimbleKit) | Repository models and SwiftUI helpers, from Feather | MIT |
 | [idevice](https://github.com/jkcoxson/idevice) | Device communication, via the [IDeviceKit-Zag](https://github.com/zagorskey/IDeviceKit-Zag) fork | MIT |
-| [Zsign](https://github.com/zhlynn/zsign) | IPA signing | MIT |
+| [Zsign](https://github.com/zhlynn/zsign) | IPA signing, via the [Zsign-Zag](https://github.com/zagorskey/Zsign-Zag) fork | MIT, with LiveContainer code under Apache-2.0 |
 | [ElleKit](https://github.com/evelyneee/ellekit) | Tweak injection support | [BSD-style](LICENSE_ELLEKIT) |
 | [Nuke](https://github.com/kean/Nuke) | Image loading and caching | MIT |
 | [OpenSSL](https://github.com/krzyzanowskim/OpenSSL) | Cryptography | Apache-2.0 |
@@ -354,7 +355,7 @@ Zag Store is a fork of **[Feather](https://github.com/claration/Feather)** and k
 
 The complete list, including the Rust crates and Feather's own acknowledgements, is in **[ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)**. Each component's own licence applies to that component.
 
-Zag Store is licensed under the [GNU General Public License v3.0](LICENSE).
+Zag Store is licensed under the [GNU General Public License v3.0](LICENSE). The complete source of every published build, including all submodules, is public; [Source provenance](docs/SOURCE-PROVENANCE.md) maps each release to its exact commits.
 
 ## Contributing
 
