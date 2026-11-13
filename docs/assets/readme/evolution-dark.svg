@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="700" viewBox="0 0 1600 700" role="img" aria-label="From Feather 2.9.0 to Zag Store: Swift source grew from 10,224 lines at the fork to 50,332 lines today. 2,071 commits since the fork, 74 new Swift source files, 46 Feather files reworked, 2,273 lines of Rust pairing core and 40 host test suites.">
+<title>From Feather 2.9.0 to Zag Store: Swift source grew from 10,224 lines at the fork to 50,332 lines today. 2,071 commits since the fork, 74 new Swift source files, 46 Feather files reworked, 2,273 lines of Rust pairing core and 40 host test suites.</title>
+<style>
+text{font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Roboto, Arial, sans-serif}
+.mono{font-family:ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace}
+@keyframes drift{0%{transform:translate(0,0)}50%{transform:translate(40px,-24px)}100%{transform:translate(0,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes flow{to{stroke-dashoffset:-48}}
+.drift{animation:drift 14s ease-in-out infinite}
+.drift2{animation:drift 18s ease-in-out infinite reverse}
+.spin{transform-box:fill-box;transform-origin:center;animation:spin 60s linear infinite}
+.spin2{transform-box:fill-box;transform-origin:center;animation:spin 90s linear infinite reverse}
+.pulse{animation:pulse 3.2s ease-in-out infinite}
+.flow{stroke-dasharray:10 14;animation:flow 2.4s linear infinite}
+@media (prefers-reduced-motion:reduce){.drift,.drift2,.spin,.spin2,.pulse,.flow{animation:none}}
+</style>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#05060c"/><stop offset="1" stop-color="#0d1020"/></linearGradient>
+<linearGradient id="spec" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#13d5ed"/><stop offset=".5" stop-color="#4777f8"/><stop offset="1" stop-color="#bc44e5"/></linearGradient>
+<linearGradient id="specText" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5ff0ff"/><stop offset=".5" stop-color="#8ea3ff"/><stop offset="1" stop-color="#d36cf2"/></linearGradient>
+<radialGradient id="atA"><stop offset="0" stop-color="#13d5ed" stop-opacity="0.3"/><stop offset="1" stop-color="#13d5ed" stop-opacity="0"/></radialGradient>
+<radialGradient id="atB"><stop offset="0" stop-color="#bc44e5" stop-opacity="0.26"/><stop offset="1" stop-color="#bc44e5" stop-opacity="0"/></radialGradient>
+<radialGradient id="atC"><stop offset="0" stop-color="#4777f8" stop-opacity="0.22"/><stop offset="1" stop-color="#4777f8" stop-opacity="0"/></radialGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/><stop offset=".5" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+<filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>
+<filter id="lift" x="-40%" y="-60%" width="180%" height="260%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0a1440" flood-opacity="0.55"/></filter>
+<clipPath id="frame"><rect width="1600" height="700" rx="32"/></clipPath>
+
+</defs>
+<g clip-path="url(#frame)">
+<rect width="1600" height="700" fill="url(#bg)"/>
+<g class="drift"><ellipse cx="240" cy="80" rx="520" ry="260" fill="url(#atA)"/></g>
+<g class="drift2"><ellipse cx="1400" cy="640" rx="520" ry="280" fill="url(#atB)"/></g>
+<text x="72" y="92" font-size="21" font-weight="600" fill="#7f879f" text-anchor="start" letter-spacing="4">FROM FEATHER 2.9.0 TO ZAG STORE</text>
+<text x="70" y="156" font-size="54" font-weight="700" fill="#f3f5fb" text-anchor="start" letter-spacing="-1.2">Five times the app it started as.</text>
+<text x="72" y="236" font-size="24" font-weight="600" fill="#a9b0c6" text-anchor="start">Swift source in the app target</text>
+<rect x="72" y="266" width="1080" height="44" rx="22" fill="#ffffff" fill-opacity="0.055"/>
+<rect x="72" y="266" width="219" height="44" rx="22" fill="#7f879f" fill-opacity="0.55"/>
+<text x="1176" y="297" font-size="26" font-weight="700" fill="#f3f5fb" text-anchor="start">10,224 lines</text>
+<text x="309.38170547564175" y="296" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">Feather 2.9.0, at the fork</text>
+<rect x="72" y="340" width="1080" height="44" rx="22" fill="#ffffff" fill-opacity="0.055"/>
+<rect x="72" y="340" width="1080" height="44" rx="22" fill="url(#spec)" fill-opacity="1"/>
+<text x="1176" y="371" font-size="26" font-weight="700" fill="#f3f5fb" text-anchor="start">50,332 lines</text>
+<text x="92" y="370" font-size="21" font-weight="600" fill="#ffffff" text-anchor="start">Zag Store today</text>
+<g filter="url(#lift)"><rect x="72" y="446" width="276" height="150" rx="26" fill="#ffffff" fill-opacity="0.055"/></g><rect x="72" y="446" width="276" height="150" rx="26" fill="url(#sheen)"/><rect x="72.5" y="446.5" width="275" height="149" rx="25.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+<text x="98" y="522" font-size="54" font-weight="800" fill="url(#specText)" text-anchor="start" letter-spacing="-1.5">2,071</text>
+<text x="100" y="564" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">commits since the fork</text>
+<g filter="url(#lift)"><rect x="366" y="446" width="276" height="150" rx="26" fill="#ffffff" fill-opacity="0.055"/></g><rect x="366" y="446" width="276" height="150" rx="26" fill="url(#sheen)"/><rect x="366.5" y="446.5" width="275" height="149" rx="25.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+<text x="392" y="522" font-size="54" font-weight="800" fill="url(#specText)" text-anchor="start" letter-spacing="-1.5">74</text>
+<text x="394" y="564" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">new Swift source files</text>
+<g filter="url(#lift)"><rect x="660" y="446" width="276" height="150" rx="26" fill="#ffffff" fill-opacity="0.055"/></g><rect x="660" y="446" width="276" height="150" rx="26" fill="url(#sheen)"/><rect x="660.5" y="446.5" width="275" height="149" rx="25.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+<text x="686" y="522" font-size="54" font-weight="800" fill="url(#specText)" text-anchor="start" letter-spacing="-1.5">46</text>
+<text x="688" y="564" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">Feather files reworked</text>
+<g filter="url(#lift)"><rect x="954" y="446" width="276" height="150" rx="26" fill="#ffffff" fill-opacity="0.055"/></g><rect x="954" y="446" width="276" height="150" rx="26" fill="url(#sheen)"/><rect x="954.5" y="446.5" width="275" height="149" rx="25.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+<text x="980" y="522" font-size="54" font-weight="800" fill="url(#specText)" text-anchor="start" letter-spacing="-1.5">2,273</text>
+<text x="982" y="564" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">lines of Rust pairing core</text>
+<g filter="url(#lift)"><rect x="1248" y="446" width="276" height="150" rx="26" fill="#ffffff" fill-opacity="0.055"/></g><rect x="1248" y="446" width="276" height="150" rx="26" fill="url(#sheen)"/><rect x="1248.5" y="446.5" width="275" height="149" rx="25.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+<text x="1274" y="522" font-size="54" font-weight="800" fill="url(#specText)" text-anchor="start" letter-spacing="-1.5">40</text>
+<text x="1276" y="564" font-size="21" font-weight="600" fill="#a9b0c6" text-anchor="start">host test suites</text>
+<text x="72" y="650" font-size="18" font-weight="500" fill="#7f879f" text-anchor="start">Measured with git from fork point 4db3efff (Feather v2.9.0, 4 July 2026) to Zag Store main 9a3995e4. Swift counted under Feather/.</text>
+</g>
+<rect x=".5" y=".5" width="1599" height="699" rx="31.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+</svg>
