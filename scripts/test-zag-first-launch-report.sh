@@ -69,10 +69,17 @@ check "attempt counted before the request (crash mid-request)" \
 	bash -c "awk '/inFlight.attempts \\+= 1/ {a=NR} /await send\\(url:/ {b=NR} END {exit !(a && b && a < b)}' '$REPORTER'"
 check "no logging of the document or token" \
 	bash -c "! grep -nE 'print\\(|NSLog|os_log|Logger\\(|ZagLog' '$CORE' '$REPORTER'"
+check "jailbreak sharing off by default, and only while reporting is on" \
+	bash -c "grep -q '@AppStorage(ZagFirstLaunchReporter.jailbreakOptInKey) private var _sharesJailbreak = false' '$PRIVACY' && grep -q 'isActive && UserDefaults.standard.bool(forKey: jailbreakOptInKey)' '$REPORTER'"
+check "jailbreak detector: no installed-app queries or library probing" \
+	bash -c "! grep -nE 'canOpenURL|LSApplicationQueriesSchemes|_dyld_|dlopen' '$CORE' '$REPORTER'"
+check "jailbreak classified only for a report that carries it" \
+	grep -q 'let jailbreak = carriesJailbreak ? Self.detectJailbreak() : nil' "$REPORTER"
 check "no background tasks or wake-ups" \
 	bash -c "! grep -nE 'BGTaskScheduler|BGAppRefresh|setMinimumBackgroundFetchInterval|beginBackgroundTask' '$CORE' '$REPORTER'"
 
 export ZAG_FIRST_LAUNCH_BODY_OUT="$WORK/body.json"
+export ZAG_FIRST_LAUNCH_V2_BODIES_OUT="$WORK"
 if swiftc -warnings-as-errors -parse-as-library "$CORE" "$ROOT/scripts/ZagFirstLaunchReportTests.swift" \
 	-o "$WORK/report-tests" 2>"$WORK/swiftc.log"; then
 	if "$WORK/report-tests"; then echo "PASS  first-launch report unit tests"; else FAILURES=$((FAILURES + 1)); fi
@@ -94,6 +101,26 @@ assert metadata["launched_at"] == "2026-11-12 08:00:00", metadata
 PY
 	}
 	check "server endpoint accepts the app's request body" interop
+	interop_v2() {
+		python3 -B - "$ZAG_WEBSITE_REPO/server/signing-engine/services" "$WORK" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import zag_first_launch_endpoint as endpoint
+def parse(name):
+    token_hash, payload = endpoint.parse_request(open(sys.argv[2] + "/" + name, "rb").read(), "preview")
+    assert token_hash is not None and len(token_hash) == 64, token_hash
+    assert payload["version"] == 2, payload
+    return payload
+launch = parse("launch.json")
+assert launch["kind"] == "launch" and launch["os_build"] == "23B85" and launch["jailbreak"] is None, launch
+assert len(launch["report_id"]) == 22, launch
+with_jb = parse("launch-jailbreak.json")
+assert with_jb["jailbreak"] == {"consent": "opt_in", "status": "detected", "layout": "rootless", "checks": 1}, with_jb
+jb = parse("jailbreak.json")
+assert jb["kind"] == "jailbreak" and jb["jailbreak"]["status"] == "unknown" and "metadata" not in jb, jb
+PY
+	}
+	check "server endpoint accepts the app's v2 launch and jailbreak reports" interop_v2
 fi
 
 [[ $FAILURES -eq 0 ]] && echo "All first-launch reporter checks passed" || { echo "$FAILURES failed"; exit 1; }

@@ -211,6 +211,114 @@ import Security
 		let afterLoss = R.plan(attribution: parsed, state: store.load(), completed: store.isCompleted(parsed!.fingerprint), now: t0)
 		expect(afterLoss.1 == .none, "after local state loss, a finished document is not re-sent")
 
+		// Report v2 (the website's REPORT-V2.md §1-2).
+		func json(_ data: Data) -> [String: Any] { (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:] }
+		let idPattern = #"^[A-Za-z0-9_-]{22}$"#
+		let ids = (0..<64).map { _ in R.newReportID() }
+		expect(ids.allSatisfy { $0.range(of: idPattern, options: .regularExpression) != nil }, "report id: 22 base64url characters")
+		expect(Set(ids).count == ids.count, "report ids are random")
+		let v2 = R.plan(attribution: parsed, state: nil, completed: false, now: t0, newID: { "AAAAAAAAAAAAAAAAAAAAAA" }).0!
+		expect(v2.version == 2 && v2.reportID == "AAAAAAAAAAAAAAAAAAAAAA" && v2.jailbreak == false && v2.kind == nil,
+		       "a new report is v2, jailbreak not included by default")
+		let v2Body = R.requestBody(for: v2, attribution: parsed!, metadata: metadata, osBuild: "23B85", jailbreak: nil)
+		let v2Object = json(v2Body)
+		expect(Set(v2Object.keys) == ["v", "kind", "report_id", "attribution", "app_version", "app_build", "os_version",
+		                              "device_model", "launched_at", "os_build"]
+		       && v2Object["v"] as? Int == 2 && v2Object["kind"] as? String == "launch"
+		       && v2Object["report_id"] as? String == "AAAAAAAAAAAAAAAAAAAAAA" && v2Object["os_build"] as? String == "23B85",
+		       "v2 launch report: the v1 fields plus kind, report id and OS build")
+		let detected = R.Jailbreak(status: .detected, layout: .rootless)
+		expect(json(R.requestBody(for: v2, attribution: parsed!, metadata: metadata, osBuild: "23B85", jailbreak: detected))["jailbreak"] == nil,
+		       "no jailbreak result unless the report was created with sharing on")
+		for build in ["", "23b85", "23B85xy", "123B85", "B85", "23B"] {
+			expect(json(R.requestBody(for: v2, attribution: parsed!, metadata: metadata, osBuild: build, jailbreak: nil))["os_build"] == nil,
+			       "invalid OS build left out: \"\(build)\"")
+		}
+		expect(R.isOSBuild("22G5054d") && R.isOSBuild("23B85"), "OS build pattern (release and beta)")
+		let withJailbreak = R.plan(attribution: parsed, state: nil, completed: false, now: t0, includeJailbreak: true).0!
+		expect(withJailbreak.jailbreak == true, "sharing on when the report is created: included")
+		let jbLaunch = R.requestBody(for: withJailbreak, attribution: parsed!, metadata: metadata, osBuild: "23B85", jailbreak: detected)
+		let jbObject = json(jbLaunch)["jailbreak"] as? [String: Any] ?? [:]
+		expect(Set(jbObject.keys) == ["consent", "status", "layout", "checks"] && jbObject["consent"] as? String == "opt_in"
+		       && jbObject["status"] as? String == "detected" && jbObject["layout"] as? String == "rootless"
+		       && jbObject["checks"] as? Int == R.detectorVersion,
+		       "jailbreak: consent, status, layout and detector version only")
+		let clean = R.jailbreakObject(R.Jailbreak(status: .notDetected, layout: .rootful))
+		expect(Set(clean.keys) == ["consent", "status", "checks"] && clean["status"] as? String == "not_detected",
+		       "layout only with detected")
+		expect(R.classify(rootless: true, rootful: false, inspected: true) == R.Jailbreak(status: .detected, layout: .rootless)
+		       && R.classify(rootless: false, rootful: true, inspected: true) == R.Jailbreak(status: .detected, layout: .rootful)
+		       && R.classify(rootless: true, rootful: true, inspected: true) == R.Jailbreak(status: .detected, layout: nil)
+		       && R.classify(rootless: false, rootful: false, inspected: true) == R.Jailbreak(status: .notDetected, layout: nil)
+		       && R.classify(rootless: true, rootful: true, inspected: false) == R.Jailbreak(status: .unknown, layout: nil),
+		       "classification")
+		for body in [v2Body, jbLaunch] { expect(body.count <= 1024, "v2 report fits the server's 1 KB limit") }
+
+		// The same report id for every retry; a new one only for a new report.
+		let retried = R.record(.status(503, retryAfter: nil), in: withJailbreak, now: t0)
+		let (again, againStep) = R.plan(attribution: parsed, state: retried, completed: false, now: t0.addingTimeInterval(61))
+		expect(againStep == .send && again?.reportID == withJailbreak.reportID && again?.jailbreak == true,
+		       "a retry keeps the report id and what it carries")
+
+		// unsupported_version: the only answer that falls back, to v1.
+		expect(R.response(status: 400, body: Data(#"{"status":"unsupported_version","supported_versions":[1]}"#.utf8), retryAfter: nil)
+		       == .unsupportedVersion, "400 unsupported_version recognised")
+		expect(R.response(status: 400, body: Data(#"{"status":"invalid"}"#.utf8), retryAfter: nil) == .status(400, retryAfter: nil)
+		       && R.response(status: 202, body: Data(), retryAfter: nil) == .status(202, retryAfter: nil),
+		       "any other answer counts by its status")
+		let fellBack = R.record(.unsupportedVersion, in: withJailbreak, now: t0)
+		expect(fellBack.version == 1 && fellBack.reportID == nil && fellBack.jailbreak == false && fellBack.outcome == nil
+		       && fellBack.attempts == 1 && fellBack.nextAttempt == nil, "unsupported_version: v1 next, at once")
+		expect(R.plan(attribution: parsed, state: fellBack, completed: false, now: t0).1 == .send, "the v1 report is sent")
+		let v1Again = json(R.requestBody(for: fellBack, attribution: parsed!, metadata: metadata, osBuild: "23B85", jailbreak: detected))
+		expect(Set(v1Again.keys) == ["v", "attribution", "app_version", "app_build", "os_version", "device_model", "launched_at"]
+		       && v1Again["v"] as? Int == 1, "the fallback is exactly the v1 report (no OS build, no jailbreak)")
+		expect(R.record(.unsupportedVersion, in: fellBack, now: t0).outcome == .rejected, "v1 refused too: stop")
+		expect(R.record(.status(400, retryAfter: nil), in: withJailbreak, now: t0).outcome == .rejected, "400 invalid stays final")
+
+		// A report started by an earlier build stays v1.
+		let legacy = try? JSONDecoder().decode(R.State.self, from: Data(#"{"fingerprint":"f","firstLaunch":0,"attempts":2}"#.utf8))
+		expect(legacy?.version == nil && legacy?.attempts == 2, "earlier builds' state still loads")
+		expect(json(R.requestBody(for: legacy!, attribution: parsed!, metadata: metadata, osBuild: "23B85", jailbreak: nil))["v"] as? Int == 1,
+		       "and is finished as v1")
+
+		// The separate jailbreak report.
+		let later = t0.addingTimeInterval(86_400)
+		let jb = R.plan(attribution: parsed, state: nil, completed: false, now: later, kind: .jailbreak, start: t0).0!
+		expect(jb.kind == .jailbreak && jb.version == 2 && jb.reportID != nil && jb.firstLaunch == t0,
+		       "jailbreak report: v2, own id, window from the first launch")
+		let jbBody = R.requestBody(for: jb, attribution: parsed!, metadata: metadata, osBuild: "23B85",
+		                           jailbreak: R.Jailbreak(status: .unknown, layout: nil))
+		let jbReport = json(jbBody)
+		expect(Set(jbReport.keys) == ["v", "kind", "report_id", "attribution", "jailbreak"] && jbReport["kind"] as? String == "jailbreak",
+		       "jailbreak report: no device metadata, no OS build")
+		expect(R.requestBody(for: jb, attribution: parsed!, metadata: metadata, osBuild: nil, jailbreak: nil).isEmpty,
+		       "no jailbreak report without a classification")
+		expect(R.record(.unsupportedVersion, in: jb, now: later).outcome == .rejected, "a jailbreak report has no v1 form")
+		let (jbLate, jbLateStep) = R.plan(attribution: parsed, state: jb, completed: false, now: t0.addingTimeInterval(R.reportWindow + 1),
+		                                  kind: .jailbreak, start: t0)
+		expect(jbLateStep == .none && jbLate?.outcome == .gaveUp, "no jailbreak report after the report window")
+		if let out = ProcessInfo.processInfo.environment["ZAG_FIRST_LAUNCH_V2_BODIES_OUT"] {
+			try? v2Body.write(to: URL(fileURLWithPath: out + "/launch.json"))
+			try? jbLaunch.write(to: URL(fileURLWithPath: out + "/launch-jailbreak.json"))
+			try? jbBody.write(to: URL(fileURLWithPath: out + "/jailbreak.json"))
+		}
+
+		// The jailbreak report's own file and Keychain record.
+		let jbStore = ZagFirstLaunchStore(directory: directory, keychainService: service, kind: .jailbreak)
+		let launchStore = ZagFirstLaunchStore(directory: directory, keychainService: service)
+		var finishedJB = jb
+		finishedJB.outcome = .delivered
+		try? jbStore.save(finishedJB)
+		expect(jbStore.load() == finishedJB && launchStore.load() != finishedJB, "separate state files")
+		expect(jbStore.isCompleted(parsed!.fingerprint), "jailbreak report recorded as finished")
+		let otherFingerprint = String(repeating: "e", count: 64)
+		jbStore.markCompleted(otherFingerprint)
+		expect(!launchStore.isCompleted(otherFingerprint), "a finished jailbreak report does not finish the launch report")
+		launchStore.markCompleted(String(repeating: "d", count: 64))
+		expect(!jbStore.isCompleted(String(repeating: "d", count: 64)), "and the other way round")
+		try? FileManager.default.removeItem(at: directory)
+
 		print(failures == 0 ? "All first-launch report tests passed" : "\(failures) failed")
 		exit(failures == 0 ? 0 : 1)
 	}

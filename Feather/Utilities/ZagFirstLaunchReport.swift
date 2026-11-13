@@ -15,6 +15,11 @@ import Security
 /// The token only shows that the sender holds a copy of that job's IPA. It
 /// does not identify a device, and the server counts at most one launch per
 /// job however many copies report.
+///
+/// Report v2 (the website's REPORT-V2.md) adds a random report id, the same
+/// for every retry of one report (the server's idempotency key), the OS build,
+/// and, only when the user turned it on, a jailbreak classification. A server
+/// that answers unsupported_version gets the v1 report instead.
 enum ZagFirstLaunchReport {
 	static let documentName = "ZagInstallAttribution.json"
 	static let maxDocumentBytes = 256
@@ -38,6 +43,12 @@ enum ZagFirstLaunchReport {
 	static let endpoints: [String: URL] = [
 		"preview": URL(string: "https://preview.zagstore.app/api/zag/v1/first-launch")!,
 	]
+
+	/// The version a new report is sent as.
+	static let reportVersion = 2
+	/// The jailbreak detector's version ("checks"): the server never mixes
+	/// results from different detector versions.
+	static let detectorVersion = 1
 
 	// MARK: Attribution document
 
@@ -98,20 +109,109 @@ enum ZagFirstLaunchReport {
 		value.range(of: pattern, options: .regularExpression) != nil
 	}
 
+	/// Apple's build number, as the server accepts it (23B85; betas 22G5054d).
+	static func isOSBuild(_ value: String) -> Bool {
+		matches(value, #"^\d{1,2}[A-Z]\d{1,5}[a-z]?$"#)
+	}
+
+	/// 128 random bits as 22 base64url characters: the report id.
+	static func newReportID() -> String {
+		var bytes = [UInt8](repeating: 0, count: 16)
+		if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+			var generator = SystemRandomNumberGenerator()
+			bytes = bytes.map { _ in generator.next() }
+		}
+		return Data(bytes).base64EncodedString()
+			.replacingOccurrences(of: "+", with: "-")
+			.replacingOccurrences(of: "/", with: "_")
+			.replacingOccurrences(of: "=", with: "")
+	}
+
+	// MARK: Jailbreak classification (sent only when the user turned it on)
+
+	struct Jailbreak: Equatable {
+		enum Status: String { case detected, notDetected = "not_detected", unknown }
+		enum Layout: String { case rootless, rootful }
+		let status: Status
+		let layout: Layout?
+	}
+
+	/// The classification from what the detector found on the device. Which
+	/// location matched is never part of it.
+	static func classify(rootless: Bool, rootful: Bool, inspected: Bool) -> Jailbreak {
+		guard inspected else { return Jailbreak(status: .unknown, layout: nil) }
+		switch (rootless, rootful) {
+		case (true, false): return Jailbreak(status: .detected, layout: .rootless)
+		case (false, true): return Jailbreak(status: .detected, layout: .rootful)
+		case (true, true): return Jailbreak(status: .detected, layout: nil)
+		case (false, false): return Jailbreak(status: .notDetected, layout: nil)
+		}
+	}
+
+	/// The server's strict form: consent, status, optional layout, detector version.
+	static func jailbreakObject(_ jailbreak: Jailbreak) -> [String: Any] {
+		var object: [String: Any] = ["consent": "opt_in", "status": jailbreak.status.rawValue, "checks": detectorVersion]
+		if jailbreak.status == .detected, let layout = jailbreak.layout { object["layout"] = layout.rawValue }
+		return object
+	}
+
 	// MARK: Request
 
+	enum Kind: String, Codable {
+		/// The first-launch report.
+		case launch
+		/// The separate jailbreak report, sent once when the user turns
+		/// jailbreak sharing on after the launch report was delivered.
+		case jailbreak
+	}
+
+	/// The v1 report, exactly what every earlier build sends.
 	static func requestBody(attribution: Attribution, metadata: Metadata, firstLaunch: Date) -> Data {
-		let document: [String: Any] = ["v": 1, "env": attribution.environment, "tok": attribution.token]
-		let body: [String: Any] = [
-			"v": 1,
-			"attribution": document,
+		encode(launchFields(attribution: attribution, metadata: metadata, firstLaunch: firstLaunch, version: 1))
+	}
+
+	/// The body for `state`: v1, or v2 with the state's report id. The
+	/// jailbreak classification goes into a v2 launch report only when the
+	/// state was created with jailbreak sharing on (`state.jailbreak`), and is
+	/// the whole content of a jailbreak report.
+	static func requestBody(for state: State, attribution: Attribution, metadata: Metadata,
+	                        osBuild: String?, jailbreak: Jailbreak?) -> Data {
+		let version = state.version ?? 1
+		if (state.kind ?? .launch) == .jailbreak {
+			guard version == 2, let reportID = state.reportID, let jailbreak else { return Data() }
+			return encode(["v": 2, "kind": "jailbreak", "report_id": reportID,
+			               "attribution": document(attribution), "jailbreak": jailbreakObject(jailbreak)])
+		}
+		guard version == 2, let reportID = state.reportID else {
+			return requestBody(attribution: attribution, metadata: metadata, firstLaunch: state.firstLaunch)
+		}
+		var body = launchFields(attribution: attribution, metadata: metadata, firstLaunch: state.firstLaunch, version: 2)
+		body["kind"] = "launch"
+		body["report_id"] = reportID
+		if let osBuild, isOSBuild(osBuild) { body["os_build"] = osBuild }
+		if state.jailbreak == true, let jailbreak { body["jailbreak"] = jailbreakObject(jailbreak) }
+		return encode(body)
+	}
+
+	private static func document(_ attribution: Attribution) -> [String: Any] {
+		["v": 1, "env": attribution.environment, "tok": attribution.token]
+	}
+
+	private static func launchFields(attribution: Attribution, metadata: Metadata, firstLaunch: Date,
+	                                 version: Int) -> [String: Any] {
+		[
+			"v": version,
+			"attribution": document(attribution),
 			"app_version": metadata.appVersion,
 			"app_build": metadata.appBuild,
 			"os_version": metadata.osVersion,
 			"device_model": metadata.deviceModel,
 			"launched_at": utcString(firstLaunch),
 		]
-		return (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])) ?? Data()
+	}
+
+	private static func encode(_ body: [String: Any]) -> Data {
+		(try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])) ?? Data()
 	}
 
 	static func utcString(_ date: Date) -> String {
@@ -140,6 +240,17 @@ enum ZagFirstLaunchReport {
 		var attempts: Int
 		var nextAttempt: Date?
 		var outcome: Outcome?
+		/// The version being sent. nil: a report started by an earlier build,
+		/// which sent v1, so it stays v1.
+		var version: Int?
+		/// The v2 idempotency key, the same for every retry of this report.
+		var reportID: String?
+		/// nil: the launch report.
+		var kind: Kind?
+		/// Launch report: whether it carries the jailbreak classification.
+		/// Fixed when the report is created, so a retry never changes what
+		/// the same report id stands for.
+		var jailbreak: Bool?
 	}
 
 	enum Step: Equatable {
@@ -150,13 +261,20 @@ enum ZagFirstLaunchReport {
 
 	/// What to do on an interactive launch. `state` may be nil after local
 	/// data loss; `completed` is the Keychain record of finished documents.
-	static func plan(attribution: Attribution?, state: State?, completed: Bool, now: Date) -> (State?, Step) {
+	/// A new report gets `reportVersion`, a new report id, and `start` as its
+	/// first launch (the jailbreak report keeps the launch report's, so it
+	/// stays within the token's lifetime).
+	static func plan(attribution: Attribution?, state: State?, completed: Bool, now: Date,
+	                 kind: Kind = .launch, start: Date? = nil, includeJailbreak: Bool = false,
+	                 newID: () -> String = newReportID) -> (State?, Step) {
 		guard let attribution else { return (state, .none) }
 		guard !completed else { return (state, .none) }
 		var current = state
 		if current?.fingerprint != attribution.fingerprint {
 			// First launch of this IPA (a different job's IPA starts afresh).
-			current = State(fingerprint: attribution.fingerprint, firstLaunch: now, attempts: 0)
+			current = State(fingerprint: attribution.fingerprint, firstLaunch: start ?? now, attempts: 0,
+			                version: reportVersion, reportID: newID(), kind: kind == .launch ? nil : kind,
+			                jailbreak: kind == .launch ? includeJailbreak : nil)
 		}
 		guard var state = current else { return (nil, .none) }
 		if state.outcome != nil { return (state, .none) }
@@ -170,6 +288,9 @@ enum ZagFirstLaunchReport {
 
 	enum Response: Equatable {
 		case status(Int, retryAfter: TimeInterval?)
+		/// 400 {"status": "unsupported_version"}: the server does not know
+		/// this report version. The only answer that changes the version.
+		case unsupportedVersion
 		/// The request may have reached the network (DNS, TLS, timeout...).
 		case transportFailure
 		/// The device had no usable network: nothing left it.
@@ -187,6 +308,16 @@ enum ZagFirstLaunchReport {
 		}
 	}
 
+	/// How an HTTP answer counts; the body matters only for a 400.
+	static func response(status: Int, body: Data, retryAfter: TimeInterval?) -> Response {
+		if status == 400, body.count <= 1024,
+		   let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+		   object["status"] as? String == "unsupported_version" {
+			return .unsupportedVersion
+		}
+		return .status(status, retryAfter: retryAfter)
+	}
+
 	/// The state after one attempt.
 	static func record(_ response: Response, in state: State, now: Date) -> State {
 		var state = state
@@ -196,6 +327,17 @@ enum ZagFirstLaunchReport {
 		}
 		state.attempts += 1
 		switch response {
+		case .unsupportedVersion where (state.version ?? 1) > 1 && (state.kind ?? .launch) == .launch:
+			// Nothing was looked up or stored: send the v1 report right away
+			// (v1 carries no jailbreak classification).
+			state.version = 1
+			state.reportID = nil
+			state.jailbreak = false
+			state.nextAttempt = nil
+		case .unsupportedVersion:
+			// v1 itself, or a jailbreak report, which has no older form.
+			state.outcome = .rejected
+			state.nextAttempt = nil
 		case .status(202, _):
 			state.outcome = .delivered
 			state.nextAttempt = nil
@@ -228,13 +370,25 @@ enum ZagFirstLaunchReport {
 struct ZagFirstLaunchStore {
 	let directory: URL
 	let keychainService: String
+	/// The launch report and the jailbreak report each keep their own file
+	/// and their own Keychain records.
+	let kind: ZagFirstLaunchReport.Kind
 
-	init(directory: URL, keychainService: String = "app.zagstore.ios.first-launch-report") {
+	init(directory: URL, keychainService: String = "app.zagstore.ios.first-launch-report",
+	     kind: ZagFirstLaunchReport.Kind = .launch) {
 		self.directory = directory
 		self.keychainService = keychainService
+		self.kind = kind
 	}
 
-	private var fileURL: URL { directory.appendingPathComponent("state.json") }
+	private var fileURL: URL {
+		directory.appendingPathComponent(kind == .launch ? "state.json" : "jailbreak-state.json")
+	}
+
+	/// The launch report's records keep their original names.
+	private func account(_ fingerprint: String) -> String {
+		kind == .launch ? fingerprint : "jailbreak:" + fingerprint
+	}
 
 	func load() -> ZagFirstLaunchReport.State? {
 		guard let data = try? Data(contentsOf: fileURL) else { return nil }
@@ -255,7 +409,7 @@ struct ZagFirstLaunchStore {
 		let query: [String: Any] = [
 			kSecClass as String: kSecClassGenericPassword,
 			kSecAttrService as String: keychainService,
-			kSecAttrAccount as String: fingerprint,
+			kSecAttrAccount as String: account(fingerprint),
 			kSecMatchLimit as String: kSecMatchLimitOne,
 		]
 		return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
@@ -265,7 +419,7 @@ struct ZagFirstLaunchStore {
 		let item: [String: Any] = [
 			kSecClass as String: kSecClassGenericPassword,
 			kSecAttrService as String: keychainService,
-			kSecAttrAccount as String: fingerprint,
+			kSecAttrAccount as String: account(fingerprint),
 			kSecValueData as String: Data("1".utf8),
 			kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
 		]

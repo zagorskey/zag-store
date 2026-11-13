@@ -4,6 +4,7 @@ import SwiftUI
 /// Shown only in copies that have a report (ZagFirstLaunchReporter.hasReport).
 struct ZagFirstLaunchPrivacyView: View {
 	@AppStorage(ZagFirstLaunchReporter.optOutKey) private var _optedOut = false
+	@AppStorage(ZagFirstLaunchReporter.jailbreakOptInKey) private var _sharesJailbreak = false
 	@State private var _status = ZagFirstLaunchReporter.status()
 
 	var body: some View {
@@ -25,6 +26,19 @@ struct ZagFirstLaunchPrivacyView: View {
 				LabeledContent("Status", value: _statusText)
 			} footer: {
 				Text(_statusFooter)
+			}
+
+			Section {
+				Toggle(isOn: Binding(
+					get: { _sharesJailbreak },
+					set: { ZagFirstLaunchReporter.setJailbreakSharing($0) }
+				)) {
+					Text("Share Jailbreak Status")
+				}
+				.toggleStyle(ZagThemeTintToggleStyle())
+				.disabled(_status == .notApplicable || _optedOut)
+			} footer: {
+				Text(ZagFirstLaunchDisclosure.jailbreak)
 			}
 
 			if let marker = ZagFirstLaunchReporter.testBuildMarker {
@@ -86,7 +100,7 @@ enum ZagFirstLaunchDisclosure {
 	static let sent = [
 		"The installation code from your download (it identifies that download, not you or your device)",
 		"Zag Store version and build",
-		"iOS or iPadOS version",
+		"iOS or iPadOS version and build, such as 26.1 (23B85)",
 		"Device model type, such as iPhone17,1",
 	]
 	static let neverSent = [
@@ -95,5 +109,6 @@ enum ZagFirstLaunchDisclosure {
 		"Location",
 		"Which apps you install or use",
 	]
+	static let jailbreak = "Off unless you turn it on. When on, Zag Store sends once whether this device appears jailbroken (yes, no or unknown, and rootless or rootful), never which files, tweaks or apps it found. The website only publishes weekly totals of at least 10 devices, and deletes each individual result within 30 days."
 	static let limits = "Sent once over an encrypted connection. The server stores the report without your IP address. It does not identify you, and anyone with a copy of the same download could send the same code."
 }

@@ -18,6 +18,11 @@ import UIKit
 /// No prompt (owner's decision, 2026-11-12): on by default for preview
 /// copies, explained in Settings › Privacy, where turning it off stops any
 /// pending report. That row appears only in copies that have a report.
+///
+/// Report v2 also sends the OS build, and a jailbreak classification only
+/// when the user turned "Share Jailbreak Status" on (off by default): in the
+/// launch report if it was on before that was first sent, otherwise once, as
+/// a separate report, after the launch report was delivered.
 actor ZagFirstLaunchReporter {
 	/// Compile-time switch for the whole feature.
 	static let featureEnabled = true
@@ -30,6 +35,8 @@ actor ZagFirstLaunchReporter {
 #endif
 	/// Set when the user turns the report off in Settings › Privacy.
 	static let optOutKey = "ZagStore.firstLaunchReportingOptOut"
+	/// Set only when the user turns jailbreak sharing on (off by default).
+	static let jailbreakOptInKey = "ZagStore.jailbreakReportingOptIn"
 
 	static let shared = ZagFirstLaunchReporter()
 
@@ -64,6 +71,18 @@ actor ZagFirstLaunchReporter {
 		if enabled { launchBecameInteractive() }
 	}
 
+	/// Whether the user turned jailbreak sharing on (and reporting is on).
+	nonisolated static var sharesJailbreak: Bool {
+		isActive && UserDefaults.standard.bool(forKey: jailbreakOptInKey)
+	}
+
+	/// Records the jailbreak choice; turning it on sends the separate
+	/// jailbreak report if the launch report has already been delivered.
+	nonisolated static func setJailbreakSharing(_ enabled: Bool) {
+		UserDefaults.standard.set(enabled, forKey: jailbreakOptInKey)
+		if enabled { launchBecameInteractive() }
+	}
+
 	/// Whether this copy carries a preview attribution document (an IPA
 	/// signed on the preview website), so has a report to send.
 	nonisolated static var hasReport: Bool {
@@ -82,7 +101,7 @@ actor ZagFirstLaunchReporter {
 
 	nonisolated static func status() -> Status {
 		guard let attribution = bundledAttribution() else { return .notApplicable }
-		let store = store()
+		let store = store(.launch)
 		let state = store?.load()
 		if state?.fingerprint == attribution.fingerprint, let outcome = state?.outcome {
 			return outcome == .delivered ? .sent : .stopped
@@ -95,12 +114,35 @@ actor ZagFirstLaunchReporter {
 		guard !running, Self.isActive else { return }
 		running = true
 		defer { running = false }
-		guard let store = Self.store(), let attribution = Self.bundledAttribution() else { return }
+		guard let store = Self.store(.launch), let attribution = Self.bundledAttribution() else { return }
 		let metadata = await Self.metadata()
-		while Self.isActive {
+		let osBuild = Self.osBuild()
+		await deliver(store: store, attribution: attribution, metadata: metadata, osBuild: osBuild)
+		await deliverJailbreak(launch: store, attribution: attribution, metadata: metadata)
+	}
+
+	/// The jailbreak report, once, when sharing is on and the launch report
+	/// was delivered as v2 without the classification. Nothing otherwise.
+	private func deliverJailbreak(launch: ZagFirstLaunchStore, attribution: ZagFirstLaunchReport.Attribution,
+	                              metadata: ZagFirstLaunchReport.Metadata) async {
+		guard Self.sharesJailbreak, let store = Self.store(.jailbreak),
+		      let state = launch.load(), state.fingerprint == attribution.fingerprint,
+		      state.outcome == .delivered, state.version == 2, state.jailbreak != true
+		else { return }
+		await deliver(store: store, attribution: attribution, metadata: metadata, osBuild: nil,
+		              kind: .jailbreak, start: state.firstLaunch)
+	}
+
+	/// Sends one report kind until it is delivered, refused, out of attempts,
+	/// or waiting for a later launch.
+	private func deliver(store: ZagFirstLaunchStore, attribution: ZagFirstLaunchReport.Attribution,
+	                     metadata: ZagFirstLaunchReport.Metadata, osBuild: String?,
+	                     kind: ZagFirstLaunchReport.Kind = .launch, start: Date? = nil) async {
+		while Self.isActive, kind == .launch || Self.sharesJailbreak {
 			let (planned, step) = ZagFirstLaunchReport.plan(
 				attribution: attribution, state: store.load(),
-				completed: store.isCompleted(attribution.fingerprint), now: Date())
+				completed: store.isCompleted(attribution.fingerprint), now: Date(),
+				kind: kind, start: start, includeJailbreak: Self.sharesJailbreak)
 			guard var state = planned else { return }
 			switch step {
 			case .none:
@@ -115,7 +157,12 @@ actor ZagFirstLaunchReporter {
 				try? await Task.sleep(for: .seconds(max(delay, 1)))
 				continue
 			case .send:
-				guard ZagFirstLaunchReport.isValid(metadata),
+				// Detected only for a report that carries it, and never kept.
+				let carriesJailbreak = kind == .jailbreak || (state.version == 2 && state.jailbreak == true)
+				let jailbreak = carriesJailbreak ? Self.detectJailbreak() : nil
+				let body = ZagFirstLaunchReport.requestBody(
+					for: state, attribution: attribution, metadata: metadata, osBuild: osBuild, jailbreak: jailbreak)
+				guard kind == .jailbreak || ZagFirstLaunchReport.isValid(metadata), !body.isEmpty,
 				      let url = ZagFirstLaunchReport.endpoints[attribution.environment] else {
 					state.outcome = .gaveUp
 					try? store.save(state)
@@ -131,9 +178,14 @@ actor ZagFirstLaunchReporter {
 				var inFlight = state
 				inFlight.attempts += 1
 				try? store.save(inFlight)
-				let response = await send(url: url, body: ZagFirstLaunchReport.requestBody(
-					attribution: attribution, metadata: metadata, firstLaunch: state.firstLaunch))
-				try? store.save(ZagFirstLaunchReport.record(response, in: state, now: Date()))
+				let response = await send(url: url, body: body)
+				let recorded = ZagFirstLaunchReport.record(response, in: state, now: Date())
+				try? store.save(recorded)
+				// A launch report that carried the classification is the
+				// jailbreak report too: never send that separately.
+				if kind == .launch, recorded.outcome == .delivered, recorded.jailbreak == true {
+					Self.store(.jailbreak)?.markCompleted(attribution.fingerprint)
+				}
 			}
 		}
 	}
@@ -145,10 +197,10 @@ actor ZagFirstLaunchReporter {
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 		request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 		do {
-			let (_, response) = try await session.data(for: request)
+			let (data, response) = try await session.data(for: request)
 			guard let http = response as? HTTPURLResponse else { return .transportFailure }
 			let retryAfter = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
-			return .status(http.statusCode, retryAfter: retryAfter)
+			return ZagFirstLaunchReport.response(status: http.statusCode, body: data, retryAfter: retryAfter)
 		} catch let error as URLError {
 			return ZagFirstLaunchReport.response(for: error.code)
 		} catch {
@@ -187,10 +239,40 @@ actor ZagFirstLaunchReporter {
 		return ZagFirstLaunchReport.attribution(from: data)
 	}
 
-	nonisolated private static func store() -> ZagFirstLaunchStore? {
+	nonisolated private static func store(_ kind: ZagFirstLaunchReport.Kind = .launch) -> ZagFirstLaunchStore? {
 		guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
 		else { return nil }
-		return ZagFirstLaunchStore(directory: support.appendingPathComponent("ZagFirstLaunch", isDirectory: true))
+		return ZagFirstLaunchStore(directory: support.appendingPathComponent("ZagFirstLaunch", isDirectory: true),
+		                           kind: kind)
+	}
+
+	/// Apple's OS build number, e.g. "23B85" (shared by every device on that
+	/// release).
+	private static func osBuild() -> String? {
+		var size = 0
+		guard sysctlbyname("kern.osversion", nil, &size, nil, 0) == 0, size > 0 else { return nil }
+		var bytes = [CChar](repeating: 0, count: size)
+		guard sysctlbyname("kern.osversion", &bytes, &size, nil, 0) == 0 else { return nil }
+		return String(cString: bytes)
+	}
+
+	/// Detector version ZagFirstLaunchReport.detectorVersion: whether
+	/// well-known locations of rootless (/var/jb) and rootful jailbreaks
+	/// exist. Read-only, and only the classification is returned: which
+	/// location matched is never kept, logged or sent. No installed-app
+	/// queries. The simulator is "unknown" (its file system is the Mac's).
+	nonisolated static func detectJailbreak() -> ZagFirstLaunchReport.Jailbreak {
+#if targetEnvironment(simulator)
+		return ZagFirstLaunchReport.classify(rootless: false, rootful: false, inspected: false)
+#else
+		let files = FileManager.default
+		let rootless = (try? files.destinationOfSymbolicLink(atPath: "/var/jb")) != nil
+			|| files.fileExists(atPath: "/var/jb")
+		let rootful = ["/Applications/Cydia.app", "/Applications/Sileo.app", "/Applications/Zebra.app",
+		               "/bin/bash", "/usr/sbin/sshd", "/etc/apt", "/usr/lib/libsubstrate.dylib"]
+			.contains { files.fileExists(atPath: $0) }
+		return ZagFirstLaunchReport.classify(rootless: rootless, rootful: rootful, inspected: true)
+#endif
 	}
 
 	@MainActor
