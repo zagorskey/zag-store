@@ -83,21 +83,36 @@ final class Storage {
 }
 
 enum FR {
-	/// SHA-256 of the bytes handed to each import, in call order.
+	/// Number of import attempts the coordinator started.
+	static var importAttempts = 0
+	/// SHA-256 of the bytes each successful import extracted, in call order.
 	static var importedDigests: [String] = []
 	/// Info.plist identity the stub importer gives every imported app.
 	static var importIdentity: [String: String] = [:]
 	/// Thrown by signPackageFile so prepareSignedUpdate stops after import.
 	struct StopAfterImport: Error {}
 
+	/// Mirrors AppFileHandler: copy into a fresh working directory, verify
+	/// that copy with the real ZagPackageIntegrity, and extract only the copy.
 	static func handlePackageFile(
 		_ ipa: URL,
+		expectedSHA256: String? = nil,
 		importedUUID: ((String) -> Void)? = nil,
 		completion: @escaping (Error?) -> Void
 	) {
 		Task { @MainActor in
+			importAttempts += 1
+			let workDirectory = FileManager.default.temporaryDirectory
+				.appendingPathComponent("FeatherImport_\(UUID().uuidString)", isDirectory: true)
+			defer { try? FileManager.default.removeItem(at: workDirectory) }
 			do {
-				let data = try Data(contentsOf: ipa)
+				try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+				let copy = workDirectory.appendingPathComponent(ipa.lastPathComponent)
+				try FileManager.default.copyItem(at: ipa, to: copy)
+				if let expectedSHA256 {
+					try ZagPackageIntegrity.verify(copy, expectedSHA256: expectedSHA256)
+				}
+				let data = try Data(contentsOf: copy)
 				importedDigests.append(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
 				let imported = try Storage.shared.insert(Imported.self, identity: importIdentity)
 				importedUUID?(imported.uuid!)

@@ -177,26 +177,9 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             configuration.waitsForConnectivity = false
             let session = URLSession(configuration: configuration)
             defer { session.invalidateAndCancel() }
-            let (temporary, response) = try await session.download(from: release.ipaURL)
-            defer { try? FileManager.default.removeItem(at: temporary) }
-            guard wifiAvailable,
-                  let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                throw UpdateError.invalidRelease
-            }
-            let data = try Data(contentsOf: temporary)
-            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard digest.caseInsensitiveCompare(release.sha256) == .orderedSame else {
-                throw UpdateError.checksumMismatch
-            }
-            let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let destination = folder.appendingPathComponent("verified-release.ipa")
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: temporary, to: destination)
-            preparedIPA = destination
+            let data = try await downloadVerifiedIPA(release, session: session)
+            guard wifiAvailable else { throw UpdateError.invalidRelease }
+            preparedIPA = try stageVerifiedIPA(data)
             downloadedReleaseIdentity = identity
             automaticDownloadStatus = "Downloaded and SHA-256 verified — ready to sign"
         } catch {
@@ -421,31 +404,41 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.insecureDownload
         }
         if downloadedReleaseIdentity == releaseIdentity(release),
-           let cached = preparedIPA, FileManager.default.fileExists(atPath: cached.path) {
-            let digest = SHA256.hash(data: try Data(contentsOf: cached))
-                .map { String(format: "%02x", $0) }.joined()
-            if digest.caseInsensitiveCompare(release.sha256) == .orderedSame {
-                return cached
-            }
+           let cached = preparedIPA, FileManager.default.fileExists(atPath: cached.path),
+           (try? ZagPackageIntegrity.verify(cached, expectedSHA256: release.sha256)) != nil {
+            return cached
         }
-        let (temporary, response) = try await URLSession.shared.download(from: release.ipaURL)
+        // Whatever was prepared before is stale now. Discard it first, so a
+        // failed attempt can never leave an earlier file available to import.
+        discardPreparedIPA()
+        let destination = try stageVerifiedIPA(try await downloadVerifiedIPA(release, session: .shared))
+        preparedIPA = destination
+        return destination
+    }
+
+    /// Downloads the IPA into memory and checks it against the signed SHA-256.
+    /// Nothing reaches disk unless it verifies, so a rejected or interrupted
+    /// download leaves no file behind (a download task would leave its own
+    /// temporary file when the connection drops).
+    private func downloadVerifiedIPA(_ release: Release, session: URLSession) async throws -> Data {
+        let (data, response) = try await session.data(from: release.ipaURL)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw UpdateError.invalidRelease
         }
-        let data = try Data(contentsOf: temporary)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard digest.caseInsensitiveCompare(release.sha256) == .orderedSame else {
             throw UpdateError.checksumMismatch
         }
+        return data
+    }
+
+    /// Writes verified bytes to the single staging location.
+    private func stageVerifiedIPA(_ data: Data) throws -> URL {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let destination = folder.appendingPathComponent("verified-release.ipa")
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: temporary, to: destination)
-        preparedIPA = destination
+        try data.write(to: destination, options: .atomic)
         return destination
     }
 
@@ -480,8 +473,23 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = pending
     }
 
+    /// Forget and delete the staged IPA. Pending-installation and recovery
+    /// records are separate and deliberately untouched.
+    private func discardPreparedIPA() {
+        if let staged = preparedIPA {
+            try? FileManager.default.removeItem(at: staged)
+        }
+        if downloadedReleaseIdentity != nil {
+            automaticDownloadStatus = "Not downloaded"
+        }
+        preparedIPA = nil
+        downloadedReleaseIdentity = nil
+    }
+
     /// Import a checksum-verified IPA through the same handler used by
     /// repository downloads. Never download the IPA again after verification.
+    /// The handler re-verifies the signed SHA-256 on its own working copy, the
+    /// file it extracts, so a file changed after `prepare` is never imported.
     func importPreparedRelease(_ release: Release) async throws -> Imported {
         guard isSupportedReleaseIdentity(release.bundleIdentifier),
               let ipa = preparedIPA,
@@ -492,9 +500,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             var importedUUID: String?
             FR.handlePackageFile(
                 ipa,
+                expectedSHA256: release.sha256,
                 importedUUID: { importedUUID = $0 },
                 completion: { error in
-                    if let error {
+                    if case ZagPackageIntegrity.Failure.checksumMismatch? = error {
+                        continuation.resume(throwing: UpdateError.checksumMismatch)
+                    } else if let error {
                         continuation.resume(throwing: error)
                     } else if let uuid = importedUUID {
                         continuation.resume(returning: uuid)
@@ -521,63 +532,6 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             throw UpdateError.incompatibleBundleIdentifier
         }
         return imported
-    }
-
-    /// Local IPA diagnostic path. No manifest or installation is involved.
-    /// The imported app's on-disk Info.plist supplies the identity to validate.
-    func prepareLocalIPA(_ source: URL, certificate: CertificatePair) async throws -> Signed {
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let destination = folder.appendingPathComponent("local-test-release.ipa")
-        guard source.pathExtension.lowercased() == "ipa",
-              source.standardizedFileURL != destination.standardizedFileURL else {
-            throw UpdateError.invalidRelease
-        }
-        let temporary = folder.appendingPathComponent(UUID().uuidString + ".ipa")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        try FileManager.default.copyItem(at: source, to: temporary)
-        let data = try Data(contentsOf: temporary)
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: temporary, to: destination)
-        preparedIPA = destination
-
-        // Import first, then validate the actual extracted bundle and build.
-        let uuid: String = try await withCheckedThrowingContinuation { continuation in
-            var importedUUID: String?
-            FR.handlePackageFile(destination, importedUUID: { importedUUID = $0 }) { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if let importedUUID {
-                    continuation.resume(returning: importedUUID)
-                } else {
-                    continuation.resume(throwing: UpdateError.invalidRelease)
-                }
-            }
-        }
-        let request = NSFetchRequest<Imported>(entityName: "Imported")
-        request.fetchLimit = 1
-        request.predicate = NSPredicate(format: "uuid == %@", uuid)
-        guard let imported = try Storage.shared.context.fetch(request).first,
-              let appURL = Storage.shared.getAppDirectory(for: imported),
-              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
-              let bundleID = info["CFBundleIdentifier"] as? String,
-              let version = info["CFBundleShortVersionString"] as? String,
-              let build = info["CFBundleVersion"] as? String,
-              (bundleID == currentBundleID || bundleID == "app.zagstore.ios" || bundleID == "thewonderofyou.Feather"),
-              imported.identifier == bundleID,
-              imported.version == version else {
-            throw UpdateError.incompatibleBundleIdentifier
-        }
-        let release = Release(
-            version: version, build: build, bundleIdentifier: currentBundleID,
-            ipaURL: destination, sha256: digest,
-            minimumIOSVersion: nil, releaseNotes: nil
-        )
-        return try await signImportedRelease(imported, release: release, certificate: certificate)
     }
 
     /// Prepare a release for a separate, explicitly confirmed installation.
@@ -1143,28 +1097,6 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         guard pendingInstallation == nil else { throw UpdateError.previousAttemptUnverified }
         guard signed.identifier == currentBundleID else { throw UpdateError.incompatibleBundleIdentifier }
         try await performPreparedHandoff(signed, release: release)
-    }
-
-    /// Build release metadata from the selected signed candidate, not from
-    /// whichever Zag Store record happens to be first in the database.
-    func installSelectedLocalCandidate(_ signed: Signed, userConfirmedSelfReplacement: Bool) async throws {
-        guard userConfirmedSelfReplacement else { throw UpdateError.invalidRelease }
-        guard let ipa = preparedIPA, FileManager.default.fileExists(atPath: ipa.path),
-              let appURL = Storage.shared.getAppDirectory(for: signed),
-              let info = NSDictionary(contentsOf: appURL.appendingPathComponent("Info.plist")),
-              let identifier = info["CFBundleIdentifier"] as? String,
-              let version = info["CFBundleShortVersionString"] as? String,
-              let build = info["CFBundleVersion"] as? String,
-              identifier == currentBundleID else {
-            throw UpdateError.signedIdentityMismatch
-        }
-        let data = try Data(contentsOf: ipa)
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        let release = Release(version: version, build: build, bundleIdentifier: identifier,
-                              ipaURL: ipa, sha256: digest,
-                              minimumIOSVersion: nil, releaseNotes: nil)
-        try await installVerifiedSignedUpdate(signed, release: release,
-                                              userConfirmedSelfReplacement: true)
     }
 
     /// Read-only assessment of the prepared candidate and Gate4 prerequisites.
