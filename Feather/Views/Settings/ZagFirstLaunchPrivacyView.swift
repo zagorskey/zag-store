@@ -1,14 +1,38 @@
 import SwiftUI
 
-/// Settings › Privacy: the first-launch report setting (on by default).
-/// Shown only in copies that have a report (ZagFirstLaunchReporter.hasReport).
+/// Settings › Privacy: usage statistics (every copy) and the first-launch
+/// report (on by default; only copies with a report can send one). The two
+/// settings are independent.
 struct ZagFirstLaunchPrivacyView: View {
+	@AppStorage(ZagActivityReporter.optOutKey) private var _activityOptedOut = false
 	@AppStorage(ZagFirstLaunchReporter.optOutKey) private var _optedOut = false
 	@AppStorage(ZagFirstLaunchReporter.jailbreakOptInKey) private var _sharesJailbreak = false
 	@State private var _status = ZagFirstLaunchReporter.status()
 
 	var body: some View {
 		Form {
+			Section {
+				Toggle(isOn: Binding(
+					get: { !_activityOptedOut },
+					set: { ZagActivityReporter.setSharing($0) }
+				)) {
+					Text("Share Usage Statistics")
+				}
+				.toggleStyle(ZagThemeTintToggleStyle())
+			} header: {
+				Text("Usage Statistics")
+			} footer: {
+				Text(ZagActivityDisclosure.summary)
+			}
+
+			Section {
+				ForEach(ZagActivityDisclosure.sent, id: \.self) { Label($0, systemImage: "arrow.up.circle") }
+			} header: {
+				Text("Sent While Zag Store Is Open")
+			} footer: {
+				Text(ZagActivityDisclosure.limits)
+			}
+
 			Section {
 				Toggle(isOn: Binding(
 					get: { !_optedOut },
@@ -92,6 +116,18 @@ struct ZagFirstLaunchPrivacyView: View {
 			return "The report could not be delivered and will not be retried."
 		}
 	}
+}
+
+/// What the usage statistics contain, in plain words.
+enum ZagActivityDisclosure {
+	static let summary = "On by default. While Zag Store is open, it tells the Zag Store website that a session is active, about once a minute, so the website can estimate how many people are using the app. Nothing is sent in the background. Turn this off and nothing more is sent, starting immediately."
+	static let sent = [
+		"A random session code, new for each session and never reused or linked to other sessions or days",
+		"Whether the session started, is still open or ended",
+		"Zag Store version and build",
+		"iOS or iPadOS version, such as 26.1",
+	]
+	static let limits = "Sent over an encrypted connection. Nothing that identifies you or your device is sent: no Apple Account, certificates, device identifiers, location, or which apps or sources you use. The server does not store your IP address with these events. Session records are deleted after 30 days and hourly totals after 90 days."
 }
 
 /// What the first-launch report contains, in plain words.
