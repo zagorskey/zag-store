@@ -768,10 +768,8 @@ extension SettingsView {
 
 		case .diagnostics:
 			Section {
-				if ZagFirstLaunchReporter.hasReport {
-					NavigationLink(destination: ZagFirstLaunchPrivacyView().zagSettingsDestinationAvatar()) {
-						Label("Privacy", systemImage: "hand.raised")
-					}
+				NavigationLink(destination: ZagFirstLaunchPrivacyView().zagSettingsDestinationAvatar()) {
+					Label("Privacy", systemImage: "hand.raised")
 				}
 				NavigationLink(destination: ZagInstallationDiagnosticsView().zagSettingsDestinationAvatar()) {
 					Label("Installation Diagnostics", systemImage: "arrow.down.app")

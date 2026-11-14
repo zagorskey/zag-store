@@ -62,8 +62,10 @@ check "sharing toggle defaults to on (no prompt)" \
 	grep -q '@AppStorage(ZagFirstLaunchReporter.optOutKey) private var _optedOut = false' "$PRIVACY"
 check "no first-launch prompt or sheet" \
 	bash -c "! grep -rqE 'ZagFirstLaunchDisclosurePresenter|shouldPresentDisclosure|consentKey' '$ROOT/Feather' && ! grep -q '\\.sheet' '$PRIVACY'"
-check "Settings row only in copies with a report" \
-	bash -c "grep -B1 'ZagFirstLaunchPrivacyView()' '$SETTINGS' | grep -q 'if ZagFirstLaunchReporter.hasReport'"
+# Settings › Privacy is in every copy (usage statistics); the report's own toggle is disabled
+# in copies without a report.
+check "report toggle disabled in copies without a report" \
+	grep -q '.disabled(_status == .notApplicable)$' "$PRIVACY"
 check "one report run at a time (duplicate activations)" grep -q 'guard !running, Self.isActive else { return }' "$REPORTER"
 check "attempt counted before the request (crash mid-request)" \
 	bash -c "awk '/inFlight.attempts \\+= 1/ {a=NR} /await send\\(url:/ {b=NR} END {exit !(a && b && a < b)}' '$REPORTER'"

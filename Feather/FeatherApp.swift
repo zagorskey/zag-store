@@ -203,6 +203,8 @@ final class ZagLaunchGate {
         )
         // After the interface is interactive; returns at once (website-signed copies only).
         ZagFirstLaunchReporter.launchBecameInteractive()
+        // Foreground usage activity; independent of the report above, returns at once.
+        ZagActivityReporter.launchBecameInteractive()
     }
 }
 
