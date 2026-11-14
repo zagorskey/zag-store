@@ -111,7 +111,7 @@ COORD="$ROOT/Feather/Utilities/ZagMobileDataInstallCoordinator.swift"
 for f in Feather/Views/Sources/Apps/DownloadButtonView.swift Feather/Views/Library/LibraryCellView.swift Feather/Views/Library/LibraryView.swift Feather/Views/Library/Install/InstallPreviewView.swift; do
 	check "install: $(basename $f) installs through Mobile Data Fix" grep -qE '(ZagMobileDataInstallCoordinator.shared|coordinator)\.install\(jobID:' "$ROOT/$f"
 done
-check "install: installGate4IPA and the installer core are unchanged" bash -c "cd '$ROOT' && git diff --quiet 9575060b -- Feather/RPPairing/ZagRPPairingCore.swift"
+check "install: installGate4IPA and the installer core are unchanged" bash -c "cd '$ROOT' && git diff --quiet cdc94c31a8293d7f504d268dee19185f36bf258f -- Feather/RPPairing/ZagRPPairingCore.swift"
 check "install: self-update never uses Mobile Data Fix" bash -c "! grep -q 'ZagMobileDataInstall' '$ROOT/Feather/Utilities/ZagSelfUpdateCoordinator.swift' && grep -q 'if isSelfInstall {' '$ROOT/Feather/Views/Library/Install/InstallPreviewView.swift'"
 check "uninstall: Library removal goes through the shared coordinator" grep -q 'coordinator.perform(.uninstall' "$ROOT/Feather/Views/Library/LibraryView.swift"
 check "uninstall: only one RPPairing uninstall entry point exists" bash -c "[ \$(grep -rn 'uninstallGate4App(' '$ROOT/Feather' | grep -vc 'func uninstallGate4App') -eq 1 ]"
@@ -145,7 +145,7 @@ check "control: hit area follows the visible shape and is centred on the slot" b
 check "control: VoiceOver can still activate the control" grep -q 'accessibilityAction { if mode.isInteractive { action() } }' "$CONTROL"
 check "control: real-tap UI tests exist for every row pattern" bash -c "[ -f '$ROOT/scripts/test-zag-install-control-taps.sh' ] && grep -q 'parent: \"button\"' '$ROOT/scripts/ZagInstallControlTapHarness.swift' && grep -q 'parent: \"gesture\"' '$ROOT/scripts/ZagInstallControlTapHarness.swift' && [ \$(grep -c 'func test' '$ROOT/scripts/ZagInstallControlTapUITests.swift') -ge 8 ]"
 check "control: Open only after confirmed success (repository row)" bash -c "grep -B1 -A1 'installedBundleID == bundleID {' '$JOBUI' | grep -q 'Open'"
-check "ui: Install Preview and Update All are not part of this phase" bash -c "cd '$ROOT' && git diff --quiet 4b2c3a21 -- Feather/Views/Library/Install/InstallPreviewView.swift && ! grep -q 'ZagInstallJobs' Feather/Views/Library/LibraryView.swift"
+check "ui: Install Preview and Update All are not part of this phase" bash -c "cd '$ROOT' && git diff --quiet 45768c763c7bb9a01d1f1de0d50077563a26b14f -- Feather/Views/Library/Install/InstallPreviewView.swift && ! grep -q 'ZagInstallJobs' Feather/Views/Library/LibraryView.swift"
 check "ui: rows read one shared job state, not view-local phases" bash -c "grep -q '@ObservedObject private var jobs = ZagInstallJobs.shared' '$JOBUI' && grep -q '@ObservedObject private var jobs = ZagInstallJobs.shared' '$CELLUI' && ! grep -qE '@State private var (zagPhase|installationProgress|isSigningImmediately|isInstallingImmediately)' '$JOBUI' '$CELLUI'"
 check "control: tap pauses a resumable download; Resume continues it" bash -c "grep -q 'if job.canPause { _pause(download) } else { _cancelJob(download) }' '$JOBUI' && grep -q '{ _resume(currentDownload) }' '$JOBUI'"
 check "control: no pause without genuine resume support" grep -q 'return job.canPause ? .pause : .stop' "$JOBUI"

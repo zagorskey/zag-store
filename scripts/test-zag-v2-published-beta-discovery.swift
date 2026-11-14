@@ -32,19 +32,28 @@ struct V2PublishedBetaDiscoveryTest {
         }
         print("PASS: HTTPS endpoint serves exact signed envelope bytes")
 
+        // Expected values come from the local signed envelope, so the check
+        // follows each published release instead of hard-coding one.
+        let envelope = try JSONSerialization.jsonObject(with: local) as! [String: Any]
+        let expected = try JSONSerialization.jsonObject(
+            with: Data(base64Encoded: envelope["payload"] as! String)!
+        ) as! [String: Any]
+        let expectedSequence = expected["sequence"] as! Int
+
         let payload = try await ZagUpdateV2Discovery.fetchVerified(
             from: url, channel: "beta",
             trustedKeys: ZagUpdateTrustStore.productionKeys,
             store: store, session: session
         )
-        guard payload.version == "1.0.0", payload.build == "3",
-              payload.sequence == 1,
-              payload.sha256 == "4bde33478245490c985282db6f5fde82699ad3043c1f0c981666e927d599a7ef",
-              try await store.highestAccepted(channel: "beta") == 1 else {
+        guard payload.version == expected["version"] as? String,
+              payload.build == expected["build"] as? String,
+              payload.sequence == expectedSequence,
+              payload.sha256 == expected["sha256"] as? String,
+              try await store.highestAccepted(channel: "beta") == expectedSequence else {
             fatalError("Verified discovery returned unexpected metadata")
         }
         print("PASS: real HTTPS discovery authenticated production-signed Beta")
-        print("PASS: isolated Keychain accepted sequence 1")
+        print("PASS: isolated Keychain accepted sequence \(expectedSequence)")
 
         do {
             _ = try await ZagUpdateV2Discovery.fetchVerified(
@@ -57,7 +66,7 @@ struct V2PublishedBetaDiscoveryTest {
             print("PASS: wrong-channel discovery rejected")
         }
         guard try await store.highestAccepted(channel: "stable") == nil,
-              try await store.highestAccepted(channel: "beta") == 1 else {
+              try await store.highestAccepted(channel: "beta") == expectedSequence else {
             fatalError("Rejected discovery modified rollback history")
         }
         print("PASS: rejected request did not change isolated rollback history")
