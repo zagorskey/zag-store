@@ -140,7 +140,7 @@ struct AboutView: View {
 
             Section {
                 _linkRow("GNU General Public License v3.0", systemImage: "doc.text", url: "https://www.gnu.org/licenses/gpl-3.0.html")
-                _linkRow("Source Code", systemImage: "chevron.left.forwardslash.chevron.right", url: "https://github.com/zagorskey/zag-store")
+                _linkRow("Source Code", systemImage: "chevron.left.forwardslash.chevron.right", url: "https://github.com/zagstore/zag-store")
                 _linkRow("Acknowledgements", systemImage: "list.bullet.rectangle", url: UIApplication.openSettingsURLString)
             } header: {
                 Text("Licence")

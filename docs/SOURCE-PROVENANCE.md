@@ -6,7 +6,7 @@ This page records which source each published Zag Store build was made from. Eac
 
 | | |
 | --- | --- |
-| Release | [`v1.0.0-beta.2`](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2) |
+| Release | [`v1.0.0-beta.2`](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2) |
 | Unsigned IPA | [`ZagStore-1.0.0-unsigned.ipa`](https://github.com/zagorskey/zag-store-releases/releases/download/v1.0.0-beta.2/ZagStore-1.0.0-unsigned.ipa) |
 | IPA SHA-256 | `5bb93c02230a97f3b4eb2c22e4f98ba15f4c5cf71602c2035de139ed81193cd6` |
 | App source | `a2a2475a1d63706423fa2f5442e4de2cfe1811ec`, merged into `main` by `afb85da912f81aca128239063debb87668c6be90` |

@@ -316,7 +316,7 @@ struct SettingsView: View {
 					}
 					if !embeddedInAccountNavigation {
 						Button {
-							UIApplication.open("https://github.com/zagorskey/zag-store")
+							UIApplication.open("https://github.com/zagstore/zag-store")
 						} label: {
 							ZagGitHubToolbarGlyph()
 						}
@@ -973,7 +973,7 @@ extension SettingsView {
 			}
 
             Button {
-                UIApplication.open("https://github.com/zagorskey/zag-store")
+                UIApplication.open("https://github.com/zagstore/zag-store")
             } label: {
                 Label {
                     HStack {

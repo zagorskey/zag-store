@@ -4,7 +4,7 @@ This file tracks public Zag Store releases.
 
 ## 1.0.0 Beta 2 (build 2): 13 November 2026
 
-Maintenance and update infrastructure release. [Release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)
+Maintenance and update infrastructure release. [Release](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2)
 
 - Beta channel update information is signed with the new key `zag-v2-2026-b`, which replaces the retired `zag-v2-2026-a`.
 - Signature, expiry and anti-rollback checks stay in place, now with the new key.
