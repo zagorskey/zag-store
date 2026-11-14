@@ -175,7 +175,9 @@ def main():
         for variant, raw in variants.items():
             key = f"{index:02d}-{variant}"
             differentials[key] = {
-                "expectedAccepted": raw == canonical,
+                # Release notes must be non-empty (signer and app), so the
+                # empty-notes cases are rejected even in canonical form.
+                "expectedAccepted": raw == canonical and notes != "",
                 "envelope": {
                     "schema": 2,
                     "keyId": TEST_KEY_ID,
