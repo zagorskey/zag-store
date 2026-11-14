@@ -71,7 +71,7 @@ The Shortcut accepts exactly three commands (`status`, `off`, `on`) and never to
 
 If you'd rather not use the Safari installer, sign Zag Store with your own tools:
 
-1. Download `ZagStore-1.0.0-unsigned.ipa` from the **[1.0.0 Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)**.
+1. Download `ZagStore-1.0.0-unsigned.ipa` from the **[1.0.0 Beta 2 release](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2)**.
 2. Check that its SHA-256 checksum is exactly:
 
    ```
@@ -102,6 +102,6 @@ On **iOS 16.4 to 16.7**, Zag Store uses the earlier installation method inherite
 | "Untrusted Developer" | Trust the certificate in **Settings → General → VPN & Device Management** |
 | Direct install fails | Connect LocalDevVPN, check that Developer Mode is on, then run the **health check** in **Settings → Installation → Diagnostics** |
 | Install fails on mobile data | Set up Mobile Data Fix, or connect to Wi-Fi |
-| Still stuck | Ask at [zagstore.app/support](https://zagstore.app/support/) or [open an issue](https://github.com/zagorskey/zag-store/issues/new/choose). Remove personal and signing information from any logs |
+| Still stuck | Ask at [zagstore.app/support](https://zagstore.app/support/) or [open an issue](https://github.com/zagstore/zag-store/issues/new/choose). Remove personal and signing information from any logs |
 
 Diagnostic reports from Zag Store include the network type, timings and the first failing step. They don't include pairing records, certificate material or private keys. Still, check a report before you share it.

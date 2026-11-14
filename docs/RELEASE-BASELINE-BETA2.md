@@ -11,7 +11,7 @@ Verified on 13 November 2026. [Source provenance](SOURCE-PROVENANCE.md) maps the
 | Version | 1.0.0 (build 2) |
 | Bundle identifier | `app.zagstore.ios` |
 | Minimum OS | iOS and iPadOS 16.4 (on-device pairing needs iOS 17) |
-| Release | [`v1.0.0-beta.2`](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2), tag on `1724a764d71a0a6bcf3d4eefdd7ba3aeaf2cfb93` |
+| Release | [`v1.0.0-beta.2`](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2), tag on `1724a764d71a0a6bcf3d4eefdd7ba3aeaf2cfb93` |
 | App source | `a2a2475a1d63706423fa2f5442e4de2cfe1811ec` (later commits on `main` up to the tag change documentation and the Zsign pin only) |
 | Unsigned IPA | [`ZagStore-1.0.0-unsigned.ipa`](https://github.com/zagorskey/zag-store-releases/releases/download/v1.0.0-beta.2/ZagStore-1.0.0-unsigned.ipa), 60,786,617 bytes |
 | IPA SHA-256 | `5bb93c02230a97f3b4eb2c22e4f98ba15f4c5cf71602c2035de139ed81193cd6` |
@@ -24,7 +24,7 @@ The IPA is hosted in [zag-store-releases](https://github.com/zagorskey/zag-store
 
 | Component | Repository | Pinned revision |
 | --- | --- | --- |
-| App | [zagorskey/zag-store](https://github.com/zagorskey/zag-store) | `1724a764` (tag `v1.0.0-beta.2`) |
+| App | [zagstore/zag-store](https://github.com/zagstore/zag-store) | `1724a764` (tag `v1.0.0-beta.2`) |
 | `Zsign` submodule | [zagorskey/Zsign-Zag](https://github.com/zagorskey/Zsign-Zag) | `ab5791658466abc5ebf43fa329dec308acecb922` (tag `zag-1.0.0-beta.2`) |
 | `IDeviceKitten` submodule | [zagorskey/IDeviceKit-Zag](https://github.com/zagorskey/IDeviceKit-Zag) | `47476ac2a220d30fe89c8b12992197d0aaf7d61d` |
 | Rust `idevice` crate | [zagorskey/IDeviceKit-Zag](https://github.com/zagorskey/IDeviceKit-Zag) | `191f36cae9b08b21b6610452fb1771880b4eae45`, set in `RPPairingCore/rust-core/Cargo.toml` |
@@ -79,7 +79,7 @@ codesign -dv beta2/Payload/Feather.app 2>&1 | grep -E 'Identifier|Signature'
 Check the source and its submodules:
 
 ```sh
-git clone --recurse-submodules --branch v1.0.0-beta.2 https://github.com/zagorskey/zag-store.git
+git clone --recurse-submodules --branch v1.0.0-beta.2 https://github.com/zagstore/zag-store.git
 cd zag-store
 git rev-parse HEAD                 # 1724a764d71a0a6bcf3d4eefdd7ba3aeaf2cfb93
 git submodule status               # Zsign ab579165…, IDeviceKitten 47476ac2…

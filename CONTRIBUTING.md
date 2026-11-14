@@ -24,7 +24,7 @@ Include the Zag Store version, iOS version, device model, steps to reproduce, ex
 Clone with submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
+git clone --recurse-submodules https://github.com/zagstore/zag-store.git
 cd zag-store
 ```
 

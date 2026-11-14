@@ -9,7 +9,7 @@
 ## Build
 
 ```bash
-git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
+git clone --recurse-submodules https://github.com/zagstore/zag-store.git
 cd zag-store
 
 bash RPPairingCore/build-rust.sh   # builds ZagRPPairingCore.xcframework

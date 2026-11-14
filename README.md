@@ -10,13 +10,13 @@
 <br>
 
 [![Public beta](https://img.shields.io/badge/status-public%20beta-4777f8?style=flat-square)](https://zagstore.app/how-it-works/)
-[![Latest: 1.0.0 Beta 2](https://img.shields.io/badge/latest-1.0.0%20Beta%202-e35cd6?style=flat-square)](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)
+[![Latest: 1.0.0 Beta 2](https://img.shields.io/badge/latest-1.0.0%20Beta%202-e35cd6?style=flat-square)](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2)
 [![iOS 16.4+](https://img.shields.io/badge/iOS%20%26%20iPadOS-16.4%2B-0f1729?style=flat-square&logo=apple&logoColor=white)](docs/INSTALL.md#requirements)
 [![SwiftUI](https://img.shields.io/badge/SwiftUI-Liquid%20Glass-13d5ed?style=flat-square&logo=swift&logoColor=white)](docs/FEATURES.md)
 [![Rust pairing core](https://img.shields.io/badge/pairing%20core-Rust-bc44e5?style=flat-square&logo=rust&logoColor=white)](RPPairingCore)
 [![GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-35cba5?style=flat-square)](LICENSE)
 
-[**zagstore.app**](https://zagstore.app) &nbsp;·&nbsp; [Install](docs/INSTALL.md) &nbsp;·&nbsp; [Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2) &nbsp;·&nbsp; [Features](docs/FEATURES.md) &nbsp;·&nbsp; [From Feather](docs/FROM-FEATHER.md) &nbsp;·&nbsp; [Build](docs/BUILDING.md) &nbsp;·&nbsp; [Security](SECURITY.md)
+[**zagstore.app**](https://zagstore.app) &nbsp;·&nbsp; [Install](docs/INSTALL.md) &nbsp;·&nbsp; [Beta 2 release](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2) &nbsp;·&nbsp; [Features](docs/FEATURES.md) &nbsp;·&nbsp; [From Feather](docs/FROM-FEATHER.md) &nbsp;·&nbsp; [Build](docs/BUILDING.md) &nbsp;·&nbsp; [Security](SECURITY.md)
 
 </div>
 
@@ -266,7 +266,7 @@ Jailbreak statistics are published only as weekly totals of at least 10 devices,
 | Installing Zag Store from Safari with your own certificate | 🟠 In testing, as shown on [zagstore.app](https://zagstore.app/how-it-works/) |
 | Developer diagnostics: controlled test install, House Arrest browser, update-signature diagnostics | 🟡 Experimental |
 | Ed25519-signed metadata for the Stable and Nightly channels | 🔵 Planned |
-| A downloadable unsigned IPA, with its SHA-256 checksum | 🟣 Public beta: [1.0.0 Beta 2](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2) |
+| A downloadable unsigned IPA, with its SHA-256 checksum | 🟣 Public beta: [1.0.0 Beta 2](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2) |
 | Installing catalogue apps directly from zagstore.app | 🔵 Planned |
 | Pages for every repository app on the website | 🔵 Planned |
 | Optional accounts and settings sync | 🔵 Planned |
@@ -312,12 +312,12 @@ Read the full, evidence-based account in **[From Feather to Zag Store](docs/FROM
 
 The [installation guide](docs/INSTALL.md) covers requirements, mobile data, older iOS versions and troubleshooting.
 
-**Prefer to sign it yourself?** Download the unsigned IPA from the **[1.0.0 Beta 2 release](https://github.com/zagorskey/zag-store/releases/tag/v1.0.0-beta.2)**, check its SHA-256 checksum, and sign and install it with any tool you trust. The [installation guide](docs/INSTALL.md#alternative-sign-the-unsigned-ipa-yourself) explains how.
+**Prefer to sign it yourself?** Download the unsigned IPA from the **[1.0.0 Beta 2 release](https://github.com/zagstore/zag-store/releases/tag/v1.0.0-beta.2)**, check its SHA-256 checksum, and sign and install it with any tool you trust. The [installation guide](docs/INSTALL.md#alternative-sign-the-unsigned-ipa-yourself) explains how.
 
 ## Build from source
 
 ```bash
-git clone --recurse-submodules https://github.com/zagorskey/zag-store.git
+git clone --recurse-submodules https://github.com/zagstore/zag-store.git
 cd zag-store
 bash RPPairingCore/build-rust.sh   # the Rust pairing core, once
 make iphoneos                       # → packages/ZagStore.ipa (unsigned)
