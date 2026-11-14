@@ -166,7 +166,7 @@ swiftc -parse-as-library -module-name Feather \
 - **Published Beta discovery:** expects sequence 1, build 3 and an earlier IPA checksum. Those values predate Beta 2.
 - **Test vector:** its fixture uses an application identifier from before metadata was bound to `app.zagstore.ios`, which the signer now rejects.
 
-Seven Swift test files have no runner and test types that no longer exist: the six `scripts/ZagMetadataV2*Tests.swift` files and `scripts/ZagMetadataV2TestVerifier.swift`. They belong to an earlier metadata design that the current `ZagUpdate*` pipeline replaced. `scripts/ZagVariantLineageResolverTests.swift` also has no runner, but the types it tests still exist.
+Seven Swift test files have no runner: the six `scripts/ZagMetadataV2*Tests.swift` files and `scripts/ZagMetadataV2TestVerifier.swift`. They test standalone October prototypes kept in `scripts/ZagMetadataV2*.swift`, not the shipped `ZagUpdate*` pipeline, which replaced that design. `scripts/ZagVariantLineageResolverTests.swift` also has no runner, but it tests code the app ships.
 
 The repository has no automated CI. The only workflow, `.github/workflows/release.yml`, can only be started manually, and its job is disabled.
 
