@@ -4,7 +4,9 @@
 # Compiles the real Feather/Utilities/ZagSelfUpdateCoordinator.swift (and the
 # self-contained helpers it uses) against scripts/ZagSelfUpdateIntegrityStubs.swift
 # into a small simulator app running scripts/ZagSelfUpdateIntegrityTests.swift,
-# then installs, runs and removes it. Network access is stubbed.
+# then installs, runs and removes it. Network access is stubbed. The importer
+# itself (AppFileHandler, FR) cannot be compiled here, so source checks below
+# confirm it verifies its own working copy, as the stub does.
 #
 #   SIMULATOR_ID=<udid>   simulator to use (default: first booted iPhone)
 set -euo pipefail
@@ -34,7 +36,67 @@ REAL=(
 	"$U/ZagUpdateVerifiedPipeline.swift" "$U/ZagUpdateV2Discovery.swift"
 	"$U/ZagDeviceFamilyPolicy.swift" "$U/ZagSelfUpdateRetryPolicy.swift" "$U/ZagSelfUpdateKeychainProbe.swift"
 	"$U/ZagMachOSignatureInspector.swift" "$U/ZagLogger.swift" "$U/AnyCodable.swift"
+	"$U/ZagPackageIntegrity.swift"
 )
+
+# Source checks for code the harness cannot compile or must not contain.
+SOURCE_FAILURES=0
+source_check() {
+	local label="$1"; shift
+	if "$@"; then echo "PASS: source: $label"; else echo "FAIL: source: $label"; SOURCE_FAILURES=$((SOURCE_FAILURES + 1)); fi
+}
+# Print the body of a Swift function (from its signature to the next "func ").
+function_body() {
+	awk -v name="$2" '
+		$0 ~ "func " name "\\(" { inside = 1; print; next }
+		inside && /^[[:space:]]*(private |fileprivate |static |@MainActor )*func / { exit }
+		inside { print }
+	' "$1"
+}
+HANDLER="$U/Handlers/AppFileHandler.swift"
+COORD="$U/ZagSelfUpdateCoordinator.swift"
+copy_body=$(function_body "$HANDLER" copy)
+verifies_own_copy() {
+	local assign verify
+	assign=$(grep -n '_ipa = destinationURL' <<< "$copy_body" | head -1 | cut -d: -f1)
+	verify=$(grep -n 'ZagPackageIntegrity.verify(_ipa, expectedSHA256:' <<< "$copy_body" | head -1 | cut -d: -f1)
+	[[ -n "$assign" && -n "$verify" && "$verify" -gt "$assign" ]]
+}
+source_check "AppFileHandler verifies its own working copy after copying it" verifies_own_copy
+source_check "AppFileHandler extracts that same working copy" \
+	grep -q 'Zip.unzipFile(' <(function_body "$HANDLER" extract)
+source_check "AppFileHandler extracts self._ipa" grep -q 'self._ipa,' <(function_body "$HANDLER" extract)
+source_check "FR.handlePackageFile passes the expected digest to AppFileHandler" \
+	grep -q 'AppFileHandler(file: ipa, download: download, expectedSHA256: expectedSHA256)' "$U/FR.swift"
+source_check "importPreparedRelease passes the signed SHA-256 to the importer" \
+	grep -q 'expectedSHA256: release.sha256' <(function_body "$COORD" importPreparedRelease)
+discards_before_download() {
+	local body discard download
+	body=$(function_body "$COORD" prepare)
+	discard=$(grep -n 'discardPreparedIPA()' <<< "$body" | head -1 | cut -d: -f1)
+	download=$(grep -n 'downloadVerifiedIPA(release, session: .shared)' <<< "$body" | head -1 | cut -d: -f1)
+	[[ -n "$discard" && -n "$download" && "$discard" -lt "$download" ]]
+}
+source_check "prepare discards earlier prepared state before downloading" discards_before_download
+streams_ipa_download() {
+	grep -q 'ZagPackageIntegrity.download(' "$COORD" &&
+		grep -q 'session.dataTask(with: url)' "$U/ZagPackageIntegrity.swift" &&
+		! grep -q -E '(data|bytes|download)\(from: release\.ipaURL|downloadTask|download\(from:' \
+			"$COORD" "$U/ZagPackageIntegrity.swift"
+}
+source_check "IPA downloads stream into the coordinator's own partial file, never a download task" streams_ipa_download
+every_import_passes_digest() {
+	# Each importer call in the coordinator names the signed digest.
+	awk '/FR\.handlePackageFile\(/ { calls++; window = 4 }
+		window > 0 && /expectedSHA256: release\.sha256/ { digests++; window = 0 }
+		window > 0 { window-- }
+		END { exit !(calls >= 1 && calls == digests) }' "$COORD" || return 1
+	# Only the coordinator may touch the staged self-update file.
+	! grep -r -l -E 'preparedIPA|verified-release' "$ROOT/Feather" | grep -v -q 'ZagSelfUpdateCoordinator.swift$'
+}
+source_check "every self-update import passes the signed SHA-256" every_import_passes_digest
+source_check "the unsigned local-candidate paths are removed" \
+	bash -c "! grep -q -E 'func (prepareLocalIPA|installSelectedLocalCandidate)\\(' '$COORD'"
 
 # Simulator apps carry their entitlements in the binary; the Keychain needs them.
 cat > "$WORK/entitlements.plist" <<PLIST
@@ -77,8 +139,9 @@ xcrun simctl install "$SIMULATOR_ID" "$APP"
 xcrun simctl launch --console-pty --terminate-running-process "$SIMULATOR_ID" "$BUNDLE_ID" \
 	| tee "$WORK/output.log" | grep -E '^(PASS|FAIL|KNOWN DEFECT|Summary|SUCCESS|FAILED)' || true
 
-if grep -q '^SUCCESS: self-update integrity checks passed' "$WORK/output.log"; then
+if [ "$SOURCE_FAILURES" -eq 0 ] && grep -q '^SUCCESS: self-update integrity checks passed' "$WORK/output.log"; then
 	exit 0
 fi
-grep -q '^FAILED' "$WORK/output.log" || echo "FAIL  harness did not report a result" >&2
+[ "$SOURCE_FAILURES" -eq 0 ] || echo "FAILED: $SOURCE_FAILURES source check(s) failed" >&2
+grep -q -E '^(FAILED|SUCCESS)' "$WORK/output.log" || echo "FAIL  harness did not report a result" >&2
 exit 1

@@ -16,11 +16,12 @@ enum FR {
 	static func handlePackageFile(
 		_ ipa: URL,
 		download: Download? = nil,
+		expectedSHA256: String? = nil,
 		importedUUID: ((String) -> Void)? = nil,
 		completion: @escaping (Error?) -> Void
 	) {
 		Task.detached {
-			let handler = AppFileHandler(file: ipa, download: download)
+			let handler = AppFileHandler(file: ipa, download: download, expectedSHA256: expectedSHA256)
 			
 			do {
 				try await handler.copy()

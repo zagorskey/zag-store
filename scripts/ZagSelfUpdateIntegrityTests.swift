@@ -7,8 +7,10 @@ import Security
 // real coordinator is compiled against ZagSelfUpdateIntegrityStubs.swift;
 // every network request is served by StubProtocol, nothing leaves the Mac.
 //
-// The central property: the bytes handed to the importer must be the bytes
-// authenticated by the signed SHA-256.
+// The central property: the bytes the importer extracts must be the bytes
+// authenticated by the signed SHA-256. The importer stub mirrors
+// AppFileHandler (verify its own working copy, then extract that copy);
+// test-zag-self-update-integrity.sh checks the real handler does the same.
 //
 // Output: PASS is a mandatory check that passed. KNOWN DEFECT is a documented
 // integrity defect that still reproduces. FAIL is a regression, a new defect,
@@ -19,6 +21,8 @@ final class StubProtocol: URLProtocol {
 	enum Behaviour {
 		case respond(status: Int, body: Data)
 		case dropAfter(Data)
+		/// Sends the headers and part of the body, then never finishes.
+		case stallAfter(Data)
 	}
 	static var behaviour = Behaviour.respond(status: 404, body: Data())
 	static var releaseRequests = 0
@@ -47,6 +51,11 @@ final class StubProtocol: URLProtocol {
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 			client?.urlProtocol(self, didLoad: partial)
 			client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+		case .stallAfter(let partial):
+			let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+			                               headerFields: ["Content-Length": String(partial.count * 2)])!
+			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+			client?.urlProtocol(self, didLoad: partial)
 		}
 	}
 	override func stopLoading() {}
@@ -65,17 +74,12 @@ struct ZagSelfUpdateIntegrityTests {
 	static func check(_ condition: Bool, _ message: String) { condition ? pass(message) : fail(message) }
 
 	/// Known integrity defects. `present` is true while the defect reproduces.
-	static let knownDefects: [String: String] = [
-		"replacedAfterVerificationIsImported":
-			"importPreparedRelease imports preparedIPA without re-verifying its SHA-256",
-		"failedRetryLeavesUsablePreparedIPA":
-			"a failed prepare keeps the earlier preparedIPA, which importPreparedRelease still imports",
-		"temporaryDownloadKeptAfterRejection":
-			"prepare does not delete the temporary download after a checksum or HTTP failure",
-		"selectedLocalCandidateSkipsIntegrity":
-			"installSelectedLocalCandidate hashes preparedIPA itself instead of checking a signed SHA-256",
-	]
+	/// Empty: the four defects found by the first version of this suite are
+	/// fixed and now covered by mandatory checks.
+	static let knownDefects: [String: String] = [:]
 	static var observedDefects: Set<String> = []
+	/// Every digest the importer extracted during the run.
+	static var allExtractedDigests: [String] = []
 
 	static func defect(_ name: String, present: Bool, evidence: String) {
 		guard let description = knownDefects[name] else { fail("unknown defect name \(name)"); return }
@@ -118,6 +122,12 @@ struct ZagSelfUpdateIntegrityTests {
 		return Set(names.filter { $0.hasPrefix("CFNetworkDownload") })
 	}
 
+	/// The coordinator's own partial files, next to verified-release.ipa.
+	static func partialDownloads() -> Set<String> {
+		let names = (try? FileManager.default.contentsOfDirectory(atPath: destination.deletingLastPathComponent().path)) ?? []
+		return Set(names.filter { $0.hasSuffix(".partial") })
+	}
+
 	/// Fresh coordinator state, no staged file, no recorded imports.
 	static func reset(_ coordinator: Coordinator, serving behaviour: StubProtocol.Behaviour) {
 		coordinator.preferencesChanged()
@@ -125,6 +135,8 @@ struct ZagSelfUpdateIntegrityTests {
 		for name in temporaryDownloads() {
 			try? FileManager.default.removeItem(atPath: NSTemporaryDirectory() + name)
 		}
+		allExtractedDigests += FR.importedDigests
+		FR.importAttempts = 0
 		FR.importedDigests = []
 		FR.importIdentity = identity
 		StubProtocol.behaviour = behaviour
@@ -164,7 +176,6 @@ struct ZagSelfUpdateIntegrityTests {
 		let authenticSHA = sha256(authentic)
 		var replacement = authentic
 		replacement[100] ^= 0xFF
-		let replacementSHA = sha256(replacement)
 
 		// 1. Normal path: the staged file and the imported bytes are authentic.
 		reset(coordinator, serving: .respond(status: 200, body: authentic))
@@ -198,7 +209,6 @@ struct ZagSelfUpdateIntegrityTests {
 			("HTTP 500 carrying the authentic body", .respond(status: 500, body: authentic), "invalidRelease"),
 			("connection dropped mid-download", .dropAfter(authentic.prefix(20_000)), ""),
 		]
-		var leaked: [String] = []
 		for (label, behaviour, expected) in rejected {
 			reset(coordinator, serving: behaviour)
 			let error = await errorName { _ = try await coordinator.prepare(release()) }
@@ -208,11 +218,42 @@ struct ZagSelfUpdateIntegrityTests {
 			      "\(label) stages no file")
 			let staleImport = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
 			check(staleImport != nil && FR.importedDigests.isEmpty, "\(label) leaves nothing to import")
-			if !temporaryDownloads().isEmpty { leaked.append(label) }
+			let leftover = temporaryDownloads()
+			check(leftover.isEmpty, "\(label) leaves no temporary download (\(leftover.sorted()))")
+			let partials = partialDownloads()
+			check(partials.isEmpty, "\(label) leaves no partial file (\(partials.sorted()))")
 		}
-		defect("temporaryDownloadKeptAfterRejection", present: !leaked.isEmpty,
-		       evidence: leaked.isEmpty ? "no CFNetworkDownload file left after any rejection"
-		                                : "CFNetworkDownload file left after: \(leaked.joined(separator: ", "))")
+
+		// Cancelled mid-download: nothing staged, nothing left, nothing to import.
+		reset(coordinator, serving: .stallAfter(authentic.prefix(20_000)))
+		let download = Task { try await coordinator.prepare(release()) }
+		var waited = 0
+		while StubProtocol.releaseRequests == 0 && waited < 100 {
+			try? await Task.sleep(nanoseconds: 20_000_000); waited += 1
+		}
+		try? await Task.sleep(nanoseconds: 200_000_000)
+		download.cancel()
+		let cancelled: String?
+		do { _ = try await download.value; cancelled = nil } catch { cancelled = String(describing: error) }
+		check(cancelled != nil, "cancelled download is not accepted (\(cancelled ?? "accepted"))")
+		check(!FileManager.default.fileExists(atPath: destination.path) && coordinator.preparedIPA == nil,
+		      "cancelled download stages no file")
+		check(partialDownloads().isEmpty && temporaryDownloads().isEmpty,
+		      "cancelled download leaves no partial or temporary file")
+		let afterCancel = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
+		check(afterCancel?.contains("invalidRelease") == true && FR.importAttempts == 0,
+		      "after a cancelled download import is refused without reaching the importer")
+
+		// A large package streams through in chunks and verifies.
+		let large = Data((0..<(64 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 131 &+ ($0 >> 16)) })
+		let largeSHA = sha256(large)
+		reset(coordinator, serving: .respond(status: 200, body: large))
+		let started = Date()
+		let largeResult = await errorName { _ = try await coordinator.prepare(release(sha256: largeSHA)) }
+		let seconds = Date().timeIntervalSince(started)
+		check(largeResult == nil && (try? ZagPackageIntegrity.sha256(of: destination)) == largeSHA,
+		      "a 64 MiB package streams, verifies and stages intact (\(String(format: "%.1f", seconds)) s)")
+		check(partialDownloads().isEmpty, "a verified download leaves no partial file")
 
 		// 8. Insecure scheme and wrong identity are refused before any request.
 		reset(coordinator, serving: .respond(status: 200, body: authentic))
@@ -239,52 +280,35 @@ struct ZagSelfUpdateIntegrityTests {
 		_ = await errorName { _ = try await coordinator.prepare(release()) }
 		try? replacement.write(to: destination)
 		let replaced = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
-		let importedReplacement = FR.importedDigests.contains(replacementSHA)
-		defect("replacedAfterVerificationIsImported", present: importedReplacement,
-		       evidence: "import \(replaced ?? "succeeded"); importer received \(FR.importedDigests), authenticated \(authenticSHA)")
+		check(replaced?.contains("checksumMismatch") == true && FR.importAttempts == 1 && FR.importedDigests.isEmpty,
+		      "file replaced after verification is rejected by the importer before extraction (\(replaced ?? "imported"))")
 
-		// 11. A failed retry after an earlier success.
+		// 11. A failed retry after an earlier success discards the earlier file.
 		reset(coordinator, serving: .respond(status: 200, body: authentic))
 		_ = await errorName { _ = try await coordinator.prepare(release()) }
 		StubProtocol.behaviour = .respond(status: 200, body: replacement)
 		let retry = await errorName { _ = try await coordinator.prepare(release()) }
 		check(retry?.contains("checksumMismatch") == true, "corrupted retry is rejected")
-		check((try? Data(contentsOf: destination)).map(sha256) == authenticSHA,
-		      "earlier verified file is left intact, not half-written, by a failed retry")
-		// The pointer survives; substitute the file and see whether import uses it.
+		check(coordinator.preparedIPA == nil && !FileManager.default.fileExists(atPath: destination.path),
+		      "a failed retry leaves no prepared file behind")
+		// Even if a file appears at the old location, nothing points at it.
 		try? replacement.write(to: destination)
-		FR.importedDigests = []
 		let stale = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
-		defect("failedRetryLeavesUsablePreparedIPA",
-		       present: coordinator.preparedIPA != nil && FR.importedDigests.contains(replacementSHA),
-		       evidence: "after the failed retry preparedIPA=\(coordinator.preparedIPA?.lastPathComponent ?? "nil"); import \(stale ?? "succeeded") with \(FR.importedDigests)")
+		check(stale?.contains("invalidRelease") == true && FR.importAttempts == 0,
+		      "after a failed retry import is refused without reaching the importer (\(stale ?? "imported"))")
+
 		// An authentic file whose app is another version still fails the
 		// identity check after import.
-		try? authentic.write(to: destination)
-		FR.importedDigests = []
+		reset(coordinator, serving: .respond(status: 200, body: authentic))
+		_ = await errorName { _ = try await coordinator.prepare(release()) }
 		FR.importIdentity = identity.merging(["CFBundleShortVersionString": "1.0.0"]) { $1 }
 		let otherRelease = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
 		check(otherRelease?.contains("incompatibleBundleIdentifier") == true,
 		      "imported app of another version is refused by the identity check (\(otherRelease ?? "accepted"))")
 
-		// 12. installSelectedLocalCandidate (no callers in the app) with a
-		//     substituted preparedIPA. Any failure other than an integrity
-		//     rejection means it reached later checks without one.
-		reset(coordinator, serving: .respond(status: 200, body: authentic))
-		_ = await errorName { _ = try await coordinator.prepare(release()) }
-		try? replacement.write(to: destination)
-		do {
-			let candidate = try Storage.shared.insert(Signed.self, identity: [
-				"CFBundleIdentifier": Bundle.main.bundleIdentifier!,
-				"CFBundleShortVersionString": "1.0.1", "CFBundleVersion": "3",
-			])
-			let local = await errorName { try await coordinator.installSelectedLocalCandidate(candidate, userConfirmedSelfReplacement: true) }
-			let rejectedForIntegrity = local?.contains("checksumMismatch") == true
-			defect("selectedLocalCandidateSkipsIntegrity", present: !rejectedForIntegrity,
-			       evidence: "with a substituted preparedIPA it stopped at \(local ?? "success"), not at an integrity check")
-		} catch {
-			fail("could not create a signed candidate: \(error)")
-		}
+		// 12. The unsigned local-candidate paths (prepareLocalIPA and
+		//     installSelectedLocalCandidate) are removed; the runner checks the
+		//     coordinator source no longer contains them.
 
 		// 13. Rollback state: no download outcome changes accepted metadata.
 		let service = "app.zagstore.ios.integrity-harness.\(UUID().uuidString)"
@@ -317,6 +341,9 @@ struct ZagSelfUpdateIntegrityTests {
 			fail("rollback-state checks failed: \(error)")
 		}
 
+		allExtractedDigests += FR.importedDigests
+		check(!allExtractedDigests.isEmpty && allExtractedDigests.allSatisfy { $0 == authenticSHA },
+		      "every package the importer extracted matched the signed SHA-256 (\(allExtractedDigests.count) imports)")
 		check(StubProtocol.unexpectedRequests.isEmpty,
 		      "no request left the stub (unexpected: \(StubProtocol.unexpectedRequests))")
 		for name in knownDefects.keys.sorted() where !observedDefects.contains(name) {

@@ -20,15 +20,20 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	private var _ipa: URL
 	private let _install: Bool
 	private let _download: Download?
-	
+	private let _expectedSHA256: String?
+
+	/// - Parameter expectedSHA256: signed digest the package must match. It is
+	///   checked on this handler's private copy, which is the file extracted.
 	init(
 		file ipa: URL,
 		install: Bool = false,
-		download: Download? = nil
+		download: Download? = nil,
+		expectedSHA256: String? = nil
 	) {
 		self._ipa = ipa
 		self._install = install
 		self._download = download
+		self._expectedSHA256 = expectedSHA256
 		self._uniqueWorkDir = _fileManager.temporaryDirectory
 			.appendingPathComponent("FeatherImport_\(_uuid)", isDirectory: true)
 		
@@ -46,6 +51,9 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		try _fileManager.copyItem(at: _ipa, to: destinationURL)
 		_ipa = destinationURL
 		Logger.misc.info("[\(self._uuid)] File copied to: \(self._ipa.path)")
+		if let expected = _expectedSHA256 {
+			try ZagPackageIntegrity.verify(_ipa, expectedSHA256: expected)
+		}
 	}
 	
 	func extract() async throws {
