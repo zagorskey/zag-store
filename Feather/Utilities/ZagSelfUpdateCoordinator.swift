@@ -177,9 +177,12 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
             configuration.waitsForConnectivity = false
             let session = URLSession(configuration: configuration)
             defer { session.invalidateAndCancel() }
-            let data = try await downloadVerifiedIPA(release, session: session)
-            guard wifiAvailable else { throw UpdateError.invalidRelease }
-            preparedIPA = try stageVerifiedIPA(data)
+            let staged = try await downloadVerifiedIPA(release, session: session)
+            guard wifiAvailable else {
+                try? FileManager.default.removeItem(at: staged)
+                throw UpdateError.invalidRelease
+            }
+            preparedIPA = staged
             downloadedReleaseIdentity = identity
             automaticDownloadStatus = "Downloaded and SHA-256 verified — ready to sign"
         } catch {
@@ -268,6 +271,7 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         pendingInstallation = Self.read(PendingInstallation.self, key: pendingKey)
         lastVerifiedInstallation = Self.read(PendingInstallation.self, key: completedKey)
         reconcileOnLaunch()
+        Self.removeAbandonedPartialDownloads()
         let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
         wifiMonitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
@@ -411,35 +415,52 @@ final class ZagSelfUpdateCoordinator: ObservableObject {
         // Whatever was prepared before is stale now. Discard it first, so a
         // failed attempt can never leave an earlier file available to import.
         discardPreparedIPA()
-        let destination = try stageVerifiedIPA(try await downloadVerifiedIPA(release, session: .shared))
+        let destination = try await downloadVerifiedIPA(release, session: .shared)
         preparedIPA = destination
         return destination
     }
 
-    /// Downloads the IPA into memory and checks it against the signed SHA-256.
-    /// Nothing reaches disk unless it verifies, so a rejected or interrupted
-    /// download leaves no file behind (a download task would leave its own
-    /// temporary file when the connection drops).
-    private func downloadVerifiedIPA(_ release: Release, session: URLSession) async throws -> Data {
-        let (data, response) = try await session.data(from: release.ipaURL)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw UpdateError.invalidRelease
-        }
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard digest.caseInsensitiveCompare(release.sha256) == .orderedSame else {
-            throw UpdateError.checksumMismatch
-        }
-        return data
+    private static var selfUpdateFolder: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
     }
 
-    /// Writes verified bytes to the single staging location.
-    private func stageVerifiedIPA(_ data: Data) throws -> URL {
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ZagStore/SelfUpdate", isDirectory: true)
+    /// Streams the IPA into a partial file this coordinator owns and moves it
+    /// to verified-release.ipa only when it matches the signed SHA-256. A
+    /// rejected, interrupted or cancelled download removes its partial file.
+    private func downloadVerifiedIPA(_ release: Release, session: URLSession) async throws -> URL {
+        let folder = Self.selfUpdateFolder
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let partial = folder.appendingPathComponent("incoming-\(UUID().uuidString).partial")
+        guard FileManager.default.createFile(atPath: partial.path, contents: nil) else {
+            throw UpdateError.invalidRelease
+        }
+        // After a successful move there is nothing left here to remove.
+        defer { try? FileManager.default.removeItem(at: partial) }
+        do {
+            try await ZagPackageIntegrity.download(
+                release.ipaURL, expectedSHA256: release.sha256, session: session, to: partial
+            )
+        } catch ZagPackageIntegrity.Failure.checksumMismatch {
+            throw UpdateError.checksumMismatch
+        } catch ZagPackageIntegrity.Failure.unexpectedResponse {
+            throw UpdateError.invalidRelease
+        }
         let destination = folder.appendingPathComponent("verified-release.ipa")
-        try data.write(to: destination, options: .atomic)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: partial, to: destination)
         return destination
+    }
+
+    /// Partial files can only outlive their download if the app was killed
+    /// mid-download. None is in use at launch, so all of them are removed.
+    private static func removeAbandonedPartialDownloads() {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: selfUpdateFolder.path)) ?? []
+        for name in names where name.hasSuffix(".partial") {
+            try? FileManager.default.removeItem(at: selfUpdateFolder.appendingPathComponent(name))
+        }
     }
 
     /// Call immediately before handing a signed, identity-validated IPA to

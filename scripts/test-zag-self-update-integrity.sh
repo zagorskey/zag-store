@@ -78,8 +78,23 @@ discards_before_download() {
 	[[ -n "$discard" && -n "$download" && "$discard" -lt "$download" ]]
 }
 source_check "prepare discards earlier prepared state before downloading" discards_before_download
-source_check "downloads go to memory, never to a download task's temporary file" \
-	bash -c "grep -q 'session.data(from: release.ipaURL)' '$COORD' && ! grep -q 'download(from:' '$COORD'"
+streams_ipa_download() {
+	grep -q 'ZagPackageIntegrity.download(' "$COORD" &&
+		grep -q 'session.dataTask(with: url)' "$U/ZagPackageIntegrity.swift" &&
+		! grep -q -E '(data|bytes|download)\(from: release\.ipaURL|downloadTask|download\(from:' \
+			"$COORD" "$U/ZagPackageIntegrity.swift"
+}
+source_check "IPA downloads stream into the coordinator's own partial file, never a download task" streams_ipa_download
+every_import_passes_digest() {
+	# Each importer call in the coordinator names the signed digest.
+	awk '/FR\.handlePackageFile\(/ { calls++; window = 4 }
+		window > 0 && /expectedSHA256: release\.sha256/ { digests++; window = 0 }
+		window > 0 { window-- }
+		END { exit !(calls >= 1 && calls == digests) }' "$COORD" || return 1
+	# Only the coordinator may touch the staged self-update file.
+	! grep -r -l -E 'preparedIPA|verified-release' "$ROOT/Feather" | grep -v -q 'ZagSelfUpdateCoordinator.swift$'
+}
+source_check "every self-update import passes the signed SHA-256" every_import_passes_digest
 source_check "the unsigned local-candidate paths are removed" \
 	bash -c "! grep -q -E 'func (prepareLocalIPA|installSelectedLocalCandidate)\\(' '$COORD'"
 
@@ -127,5 +142,6 @@ xcrun simctl launch --console-pty --terminate-running-process "$SIMULATOR_ID" "$
 if [ "$SOURCE_FAILURES" -eq 0 ] && grep -q '^SUCCESS: self-update integrity checks passed' "$WORK/output.log"; then
 	exit 0
 fi
-grep -q '^FAILED' "$WORK/output.log" || echo "FAIL  harness did not report a result" >&2
+[ "$SOURCE_FAILURES" -eq 0 ] || echo "FAILED: $SOURCE_FAILURES source check(s) failed" >&2
+grep -q -E '^(FAILED|SUCCESS)' "$WORK/output.log" || echo "FAIL  harness did not report a result" >&2
 exit 1

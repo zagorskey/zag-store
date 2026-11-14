@@ -21,6 +21,8 @@ final class StubProtocol: URLProtocol {
 	enum Behaviour {
 		case respond(status: Int, body: Data)
 		case dropAfter(Data)
+		/// Sends the headers and part of the body, then never finishes.
+		case stallAfter(Data)
 	}
 	static var behaviour = Behaviour.respond(status: 404, body: Data())
 	static var releaseRequests = 0
@@ -49,6 +51,11 @@ final class StubProtocol: URLProtocol {
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 			client?.urlProtocol(self, didLoad: partial)
 			client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+		case .stallAfter(let partial):
+			let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+			                               headerFields: ["Content-Length": String(partial.count * 2)])!
+			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+			client?.urlProtocol(self, didLoad: partial)
 		}
 	}
 	override func stopLoading() {}
@@ -113,6 +120,12 @@ struct ZagSelfUpdateIntegrityTests {
 	static func temporaryDownloads() -> Set<String> {
 		let names = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory())) ?? []
 		return Set(names.filter { $0.hasPrefix("CFNetworkDownload") })
+	}
+
+	/// The coordinator's own partial files, next to verified-release.ipa.
+	static func partialDownloads() -> Set<String> {
+		let names = (try? FileManager.default.contentsOfDirectory(atPath: destination.deletingLastPathComponent().path)) ?? []
+		return Set(names.filter { $0.hasSuffix(".partial") })
 	}
 
 	/// Fresh coordinator state, no staged file, no recorded imports.
@@ -207,7 +220,40 @@ struct ZagSelfUpdateIntegrityTests {
 			check(staleImport != nil && FR.importedDigests.isEmpty, "\(label) leaves nothing to import")
 			let leftover = temporaryDownloads()
 			check(leftover.isEmpty, "\(label) leaves no temporary download (\(leftover.sorted()))")
+			let partials = partialDownloads()
+			check(partials.isEmpty, "\(label) leaves no partial file (\(partials.sorted()))")
 		}
+
+		// Cancelled mid-download: nothing staged, nothing left, nothing to import.
+		reset(coordinator, serving: .stallAfter(authentic.prefix(20_000)))
+		let download = Task { try await coordinator.prepare(release()) }
+		var waited = 0
+		while StubProtocol.releaseRequests == 0 && waited < 100 {
+			try? await Task.sleep(nanoseconds: 20_000_000); waited += 1
+		}
+		try? await Task.sleep(nanoseconds: 200_000_000)
+		download.cancel()
+		let cancelled: String?
+		do { _ = try await download.value; cancelled = nil } catch { cancelled = String(describing: error) }
+		check(cancelled != nil, "cancelled download is not accepted (\(cancelled ?? "accepted"))")
+		check(!FileManager.default.fileExists(atPath: destination.path) && coordinator.preparedIPA == nil,
+		      "cancelled download stages no file")
+		check(partialDownloads().isEmpty && temporaryDownloads().isEmpty,
+		      "cancelled download leaves no partial or temporary file")
+		let afterCancel = await errorName { _ = try await coordinator.importPreparedRelease(release()) }
+		check(afterCancel?.contains("invalidRelease") == true && FR.importAttempts == 0,
+		      "after a cancelled download import is refused without reaching the importer")
+
+		// A large package streams through in chunks and verifies.
+		let large = Data((0..<(64 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 131 &+ ($0 >> 16)) })
+		let largeSHA = sha256(large)
+		reset(coordinator, serving: .respond(status: 200, body: large))
+		let started = Date()
+		let largeResult = await errorName { _ = try await coordinator.prepare(release(sha256: largeSHA)) }
+		let seconds = Date().timeIntervalSince(started)
+		check(largeResult == nil && (try? ZagPackageIntegrity.sha256(of: destination)) == largeSHA,
+		      "a 64 MiB package streams, verifies and stages intact (\(String(format: "%.1f", seconds)) s)")
+		check(partialDownloads().isEmpty, "a verified download leaves no partial file")
 
 		// 8. Insecure scheme and wrong identity are refused before any request.
 		reset(coordinator, serving: .respond(status: 200, body: authentic))
