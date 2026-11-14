@@ -23,8 +23,11 @@ struct V2DiscoveryPreflightTests {
             }
         }
 
-        await rejects("empty production trust", expected: "unprovisionedTrust") {
-            _ = try await ZagUpdateV2Discovery.fetchVerified(from: validURL, channel: "beta")
+        // Production trust is provisioned since Beta 2 (see test-zag-v2-trust-store),
+        // so check fail-closed behaviour with an explicitly empty key set. This
+        // fails before any network request.
+        await rejects("empty trust", expected: "unprovisionedTrust") {
+            _ = try await ZagUpdateV2Discovery.fetchVerified(from: validURL, channel: "beta", trustedKeys: [:])
         }
         await rejects("invalid channel", expected: "invalidChannel") {
             _ = try await ZagUpdateV2Discovery.fetchVerified(from: validURL, channel: "preview")

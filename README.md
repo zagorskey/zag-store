@@ -357,6 +357,21 @@ The complete list, including the Rust crates and Feather's own acknowledgements,
 
 Zag Store is licensed under the [GNU General Public License v3.0](LICENSE). The complete source of every published build, including all submodules, is public; [Source provenance](docs/SOURCE-PROVENANCE.md) maps each release to its exact commits.
 
+
+## ❤️ Support Zag Store
+
+Zag Store is free and open source. If you enjoy the project, you can help support its continued development, infrastructure and future improvements.
+
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub_Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/zagorskey)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/zagstore)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/zagstore)
+[![PayPal](https://img.shields.io/badge/PayPal-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/QDG7HMX4ZDP46)
+[![Stripe](https://img.shields.io/badge/Stripe-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/00wcN494EbB80hl4yYa3u00)
+
+**Supporting Zag Store is entirely optional.** The project remains free and open source.
+
+---
+
 ## Contributing
 
 Bug reports, design feedback and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first. Report security problems privately, as described in [SECURITY.md](SECURITY.md), never in a public issue.
